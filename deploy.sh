@@ -65,21 +65,13 @@ setup_server() {
     print_status "Setting up server..."
     cd "$BASE_DIR/quanta-explorer-go/server" || print_error "Server directory not found"
 
-    # Create .env file
-    cat > .env << EOL
-GIN_MODE=release
-MONGOURI=mongodb://localhost:27017/qrldata?readPreference=primary
-HTTP_PORT=:8080
-NODE_URL=http://REDACTED:8545
-EOL
-
     # Build the server
     print_status "Building server..."
     go build main.go || print_error "Failed to build server"
 
-    # Start server with PM2
+    # Start server with PM2, specifying the working directory and APP_ENV
     print_status "Starting server with PM2..."
-    pm2 start ./main --name "handler" || print_error "Failed to start server"
+    APP_ENV=development pm2 start ./main --name "handler" --cwd "$BASE_DIR/quanta-explorer-go/server" || print_error "Failed to start server"
 }
 
 # Setup frontend environment
@@ -113,7 +105,7 @@ EOL
 
     # Start frontend with PM2
     print_status "Starting frontend with PM2..."
-    pm2 start npm --name "frontend" -- start || print_error "Failed to start frontend"
+    pm2 start npm --name "frontend" -- start --cwd "$BASE_DIR/quanta-explorer-go/frontend" || print_error "Failed to start frontend"
 }
 
 # Setup blockchain synchronizer
@@ -131,8 +123,9 @@ EOL
     print_status "Building synchronizer..."
     go build main.go || print_error "Failed to build synchronizer"
 
+    # Start synchronizer with PM2, specifying the working directory
     print_status "Starting synchronizer with PM2..."
-    pm2 start ./main --name "synchroniser" || print_error "Failed to start synchronizer"
+    pm2 start ./main --name "synchroniser" --cwd "$BASE_DIR/QRLtoMongoDB-PoS" || print_error "Failed to start synchronizer"
 }
 
 # Save PM2 processes
