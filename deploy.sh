@@ -68,9 +68,14 @@ check_port() {
 
 # Clone the repository
 clone_repo() {
-    print_status "Cloning QRL Explorer repository..."
-    git clone https://github.com/moscowchill/qrl-explorer-pos.git || print_error "Failed to clone repository"
-    cd qrl-explorer-pos || print_error "Failed to enter project directory"
+    if [ -d ".git" ]; then
+        print_status "Repository already exists. Pulling latest changes..."
+        git pull || print_error "Failed to pull latest changes"
+    else
+        print_status "Cloning QRL Explorer repository..."
+        git clone https://github.com/moscowchill/qrl-explorer-pos.git ../qrl-explorer-pos || print_error "Failed to clone repository"
+        cd ../qrl-explorer-pos || print_error "Failed to enter project directory"
+    fi
     export BASE_DIR=$(pwd)
 }
 
