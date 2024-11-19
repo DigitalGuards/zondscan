@@ -4,17 +4,17 @@ import AuthProvider from "./components/AuthProvider"
 import Script from 'next/script'
 
 export const metadata = {
-  title: 'QRL ZOND Explorer',
+  title: 'QRL Zond Explorer',
   description: 'QRL ZOND Web3/EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network',
   keywords: 'QRL, ZOND, blockchain explorer, Web3, EVM, quantum resistant, cryptocurrency, blockchain, smart contracts, proof of stake, validators, transactions, blocks',
   themeColor: '#1a1a1a',
   openGraph: {
-    title: 'QRL ZOND Explorer',
+    title: 'QRL Zond Explorer',
     description: 'QRL ZOND Web3/EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network',
     type: 'website',
     locale: 'en_US',
     url: 'https://explorer.theqrl.org',
-    siteName: 'QRL ZOND Explorer',
+    siteName: 'QRL Zond Explorer',
     images: [
       {
         url: '/QRL.png',
@@ -26,7 +26,7 @@ export const metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'QRL ZOND Explorer',
+    title: 'QRL Zond Explorer',
     description: 'QRL ZOND Web3/EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network',
     images: ['/QRL.png'],
     creator: '@QRLedger',
