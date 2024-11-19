@@ -6,16 +6,24 @@ import { toFixed } from "./lib/helpers.js"
 import SearchBar from "./components/SearchBar"
 
 export default async function Home() {
-
-  const response = await axios.get(config.handlerUrl + "/overview");
-  
-  const data = {
-    marketCapUSD: formatNumber(response.data.marketcap),
-    walletCount: response.data.countwallets,
-    volume: response.data.volume,
+  let data = {
+    marketCapUSD: "0",
+    walletCount: "0",
+    volume: "0",
   };
 
-  console.log(response.data.volume);
+  try {
+    if (config.handlerUrl) {
+      const response = await axios.get(config.handlerUrl + "/overview");
+      data = {
+        marketCapUSD: formatNumber(response.data.marketcap),
+        walletCount: response.data.countwallets,
+        volume: response.data.volume,
+      };
+    }
+  } catch (error) {
+    console.error("Failed to fetch overview data:", error);
+  }
 
   const stats = [
     {
@@ -29,24 +37,34 @@ export default async function Home() {
   ]
 
   return (
-    <>
-    < SearchBar />
-    <section className="py-14">
-      <div className="max-w-screen-l mx-auto px-4 md:px-8">
-        <div className="mt-12">
-          <ul className="flex flex-col items-center justify-center gap-y-10 sm:flex-row sm:flex-wrap lg:divide-x">
-            {
-              stats.map((item, idx) => (
-                <li key={idx} className="text-center px-12 md:px-16">
-                  <h4 className="text-2xl font-semibold" style={{ color: "#FFA729" }}>{item.data}</h4>
-                  <p className="mt-3 font-medium">{item.title}</p>
-                </li>
-              ))
-            }
-          </ul>
+    <div className="min-h-screen">
+      <div className="max-w-[1200px] mx-auto p-8">
+        <div className="mb-10">
+          <SearchBar />
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {stats.map((item, idx) => (
+            <div key={idx} 
+                className="relative overflow-hidden rounded-2xl 
+                         bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
+                         border border-[#3d3d3d] shadow-xl
+                         hover:border-[#ffa729] transition-all duration-300
+                         group">
+              <div className="absolute inset-0 bg-[url('/circuit-board.svg')] opacity-5"></div>
+              <div className="relative p-10 text-center min-h-[200px] flex flex-col justify-center">
+                <h4 className="text-5xl font-bold mb-4 text-[#ffa729] 
+                             group-hover:scale-110 transition-transform duration-300">
+                  {item.data}
+                </h4>
+                <p className="text-lg text-gray-300 font-medium">
+                  {item.title}
+                </p>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
-    </section>
-    </>
+    </div>
   )
 };

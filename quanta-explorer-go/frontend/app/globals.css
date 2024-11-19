@@ -2,340 +2,96 @@
 @tailwind components;
 @tailwind utilities;
 
-.flex{
-  flex-wrap: wrap;
-  max-width: 100%; /* Ensures container does not exceed viewport width */
+@layer base {
+  body {
+    @apply bg-white text-black dark:bg-primary-dark dark:text-text-dark;
+  }
 }
 
-.flex-container {
-  display: flex;
-  flex-direction: row;
-  text-align: center;
-  flex: 100%;
-  max-width: 100%;
+/* Default dark theme */
+:root {
+  color-scheme: dark;
 }
 
-.flex-item-left {
-  flex-direction: column;
-  background-color: #f1f1f1;
-  padding: 10px;
-  flex: 25%;
+@layer components {
+  .card {
+    @apply bg-white dark:bg-secondary-dark 
+           border border-gray-200 dark:border-secondary-dark 
+           rounded-lg shadow-lg p-6;
+  }
+
+  .nav-link {
+    @apply text-gray-700 dark:text-text-dark 
+           hover:text-gray-900 dark:hover:text-text-darkSecondary;
+  }
+
+  .button {
+    @apply bg-blue-500 dark:bg-secondary-dark
+           text-white dark:text-text-dark
+           hover:bg-blue-600 dark:hover:border-accent
+           px-4 py-2 rounded-lg
+           border border-transparent dark:border-secondary-dark
+           transition-colors duration-200;
+  }
+
+  .input {
+    @apply bg-white dark:bg-secondary-dark
+           text-black dark:text-text-dark
+           border border-gray-300 dark:border-secondary-dark
+           rounded-lg px-4 py-2
+           focus:ring-2 focus:ring-blue-500 dark:focus:ring-accent
+           focus:border-transparent;
+  }
+
+  .flex-container {
+    @apply flex flex-row text-center w-full max-w-full 
+           dark:bg-secondary-dark rounded-lg shadow-lg;
+  }
+
+  .flex-item-left {
+    @apply flex flex-col p-4 flex-[25%] 
+           dark:bg-secondary-dark rounded-lg;
+  }
+
+  .flex-item-center {
+    @apply p-4 flex-[50%] overflow-hidden 
+           dark:bg-secondary-dark rounded-lg;
+  }
+
+  .flex-item-right {
+    @apply p-4 flex-[25%] 
+           dark:bg-secondary-dark rounded-lg;
+  }
 }
 
-.flex-item-center {
-  background-color: #f1f1f1;
-  padding: 10px;
-  flex: 50%;
-  text-overflow: ellipsis;
-  overflow: hidden;
-  white-space: wrap;
-  max-width: 100%;
+/* Custom scrollbar for dark mode */
+@layer utilities {
+  .scrollbar-dark {
+    scrollbar-color: theme('colors.secondary.dark') theme('colors.primary.dark');
+  }
+  
+  .scrollbar-dark::-webkit-scrollbar {
+    @apply w-3;
+  }
+  
+  .scrollbar-dark::-webkit-scrollbar-track {
+    @apply bg-primary-dark;
+  }
+  
+  .scrollbar-dark::-webkit-scrollbar-thumb {
+    @apply bg-secondary-dark rounded-md border-2 border-primary-dark;
+  }
 }
 
-.flex-item-right {
-  background-color: #f1f1f1;
-  padding: 10px;
-  flex: 25%;
-}
-
+/* Responsive Design */
 @media (min-width: 250px) and (max-width: 1000px) {
   .flex-container {
-    flex-direction: column;
+    @apply flex-col;
   }
 }
 
 @media (min-width: 250px) and (max-width: 750px) {
   .flex-container-tx {
-    flex-direction: column;
+    @apply flex-col;
   }
-}
-
-.collapsible {
-  background-color: #777;
-  color: white;
-  cursor: pointer;
-  padding: 18px;
-  width: 100%;
-  border: none;
-  text-align: left;
-  outline: none;
-  font-size: 15px;
-}
-
-.active, .collapsible:hover {
-  background-color: #555;
-}
-
-.content {
-  padding: 0 18px;
-  display: none;
-  overflow: hidden;
-  background-color: #f1f1f1;
-}
-
-body {
-    margin: 0;
-    /* font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-      sans-serif; */
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-  
-  code {
-    /* font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-      monospace; */
-  }
-  
-  img {
-    display: block;
-    margin-left: auto;
-    margin-right: auto;
-  }
-  
-  .color-nav{
-    background-color: #f7f8fa;
-  }
-  
-  .nav-link{
-    /* font-family: 'Roboto', sans-serif; */
-    color: #041521 !important;
-  }
-  
-  .dropdown-item{
-    /* font-family: 'Roboto', sans-serif; */
-    background-color: white !important;
-    color: black !important;
-  }
-  
-  .dropdown-menu{
-    /* font-family: 'Roboto', sans-serif; */
-    background-color: white !important;
-    color: black !important;
-    border-style: solid;
-    border-color: #ffa729 !important;
-  }
-  
-  .main{
-    background-image: url("/images/website_header.webp");
-    height: 200px;
-  }
-  
-  .sc-bczRLJ.hhBAN{
-    height: 50%;
-  }
-  
-  h3{
-    padding-top: 20px;
-    width: 25%;
-    margin: auto;
-    color: white;
-  }
-  
-  .card{
-    width: 50%;
-    height: 25%;
-    margin: auto;
-    border-style: solid;
-    border-color: black !important;
-    border-width: 2px;
-    background-color: white;
-  }
-  
-  .qrl-card.card{
-    position: relative;
-    bottom: 33%;
-    width: 25%;
-    margin: auto;
-    border-style: solid;
-    border-color: black !important;
-    border-width: 2px;
-  }
-  
-  .search{
-    width: 30%;
-    margin: auto;
-    border-style: solid;
-    border-color: orange !important;
-    border-width: 1px;
-    background-color: white;
-  }
-  
-  
-  form.example input[type=text] {
-    width: 30%;
-    border-style: solid;
-    border-color: orange !important;
-    border-width: 1px;
-    background-color: white;
-    padding: 10px;
-    font-size: 17px;
-    border: 1px solid grey;
-    background: #f1f1f1;
-    margin: 25px;
-    position: absolute;
-    left: 45%;
-    -ms-transform: translate(-50%, -50%);
-    transform: translate(-50%, -50%);
-  }
-  
-  form.example button {
-    margin: 25px;
-    position: absolute;
-    left: 65%;
-    -ms-transform: translate(-50%, -50%);
-    transform: translate(-50%, -50%);
-    width: 10%;
-    padding: 10px;
-    background: #2196F3;
-    color: white;
-    font-size: 17px;
-    border: 1px solid grey;
-    border-left: none;
-    cursor: pointer;
-  }
-  
-  form.example button:hover {
-    background: #0b7dda;
-  }
-  
-  .cardone.card{
-    margin-top: 1%;
-    padding-top: 25px;
-    width: 50%;
-    border-style: solid;
-    border-color: orange !important;
-    border-width: 2px;
-    height: 400px;
-  }
-  
-  .card-img-right{
-    position: relative;
-    top: -50%;
-    bottom: 50%;
-    float: right;
-    width: 250px;
-    height: 250px;
-  }
-  
-  .dubai-image {
-    padding-top: 25px;
-    margin-right: 25px;
-    float: right;
-  }
-  
-  .dubai-title {
-    margin-left: 25%;
-    float: left;
-  }
-  
-  @media screen and (min-width: 1224px){
-    .dubai-description {
-      padding-top: 25px;
-      margin-left: 15%;
-      float: left;
-      color: white;
-    }
-  }
-  
-  @media screen and (min-width: 1824px){
-    .dubai-description {
-      padding-top: 25px;
-      margin-left: 25%;
-      float: left;
-      color: white;
-    }
-  }
-  
-  .vision-description{
-    padding: 30px;
-    color: white;
-  }
-  
-  .vision-image{
-    border-style: solid;
-    border-color: orange !important;
-    border-width: 2px;
-  }
-  
-  .latest-blocks{
-    float: left;
-    margin: 25px;
-    border-style: solid;
-    border-color: orange !important;
-    border-width: 2px;
-  }
-  
-  .latest-transactions{
-    float: left;
-    margin: 25px;
-    border-style: solid;
-    border-color: orange !important;
-    border-width: 2px;
-  }
-  
-  .card{
-    border-style: solid;
-    border-color: orange !important;
-    border-width: 2px;
-    width: 650px;
-    height: 370px;
-    margin: 30px auto;
-  }
-  .scrollable{
-    overflow-y: auto;
-    max-height: 300px;
-  }
-  
-  .button-transactions{
-    width: 100%;
-    border-style: solid;
-    border-color: black !important;
-    border-width: 5px;
-  }
-  
-  .card-title{
-    font-weight: bold;
-  }
-  
-  .blocks-card{
-    float: right;
-  }
-  
-  .fade.tab-pane.active,show{
-    border-color: orange;
-  }
-  
-  .footer{
-    position:relative;
-    left:0;
-    right:0;
-    bottom: 0;
-    /* margin-top: 150vh; */
-  }
-  
-  .nav-link.active {
-    color: white !important;
-    background-color: #041521 !important;
-  }
-  
-  .react-tabs__tab{
-    color: grey
-  }
-  
-  /* styles/globals.css */
-.tab-button {
-  @apply px-4 py-2 bg-gray-200 rounded-md;
-}
-
-.tab-button:hover {
-  @apply bg-gray-300;
-}
-
-.tab-active {
-  @apply bg-blue-500 text-white;
-}
-
-.tab-content {
-  @apply p-4 border rounded-md border-gray-300;
 }
