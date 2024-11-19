@@ -9,17 +9,36 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// remove ReturnHashToBlockNumber in db.go
-
 func UserRoute(router *gin.Engine) {
 	router.GET("/overview", func(c *gin.Context) {
+		// Get market cap with default value
+		marketCap := db.GetMarketCap()
+
+		// Get wallet count with default value
+		walletCount := db.GetWalletCount()
+
+		// Get circulating supply with default value
+		circulating := db.ReturnTotalCirculatingSupply()
+		if circulating == "" {
+			circulating = "0" // Default value when no data is available
+		}
+
+		// Get daily transaction volume with default value
+		volume := db.ReturnDailyTransactionsVolume()
+
+		// Return response with default values if data isn't available
 		c.JSON(http.StatusOK, gin.H{
-			"marketcap":    db.GetMarketCap(),
-			"countwallets": db.GetWalletCount(),
-			"circulating":  db.ReturnTotalCirculatingSupply(),
-			"volume":       db.ReturnDailyTransactionsVolume(),
+			"marketcap":    marketCap,   // Returns 0 if not available
+			"countwallets": walletCount, // Returns 0 if not available
+			"circulating":  circulating, // Returns "0" if not available
+			"volume":       volume,      // Returns 0 if not available
+			"status": gin.H{
+				"syncing":         true, // Indicate that data is still being synced
+				"dataInitialized": marketCap > 0 || walletCount > 0 || circulating != "0" || volume > 0,
+			},
 		})
 	})
+
 	router.POST("/getBalance", func(c *gin.Context) {
 		address := c.PostForm("address")
 
@@ -34,6 +53,7 @@ func UserRoute(router *gin.Engine) {
 			})
 		}
 	})
+
 	router.GET("/txs", func(c *gin.Context) {
 		pageStr := c.Query("page")
 
@@ -58,6 +78,7 @@ func UserRoute(router *gin.Engine) {
 			"total": countTransactions,
 		})
 	})
+
 	router.GET("/walletdistribution/:query", func(c *gin.Context) {
 		value := c.Param("query")
 		wallets, err := strconv.ParseUint(value, 10, 64)
@@ -70,14 +91,9 @@ func UserRoute(router *gin.Engine) {
 		}
 		c.JSON(http.StatusOK, gin.H{"response": query})
 	})
+
 	router.GET("/address/aggregate/:query", func(c *gin.Context) {
 		param := c.Param("query")
-
-		// page := c.Request.URL.Query().Get("page")
-		// pageStr, err := strconv.Atoi(page)
-		// if err != nil {
-		// 	fmt.Println(err)
-		// }
 
 		// Single Address data
 		addressData, err := db.ReturnSingleAddress(param)
@@ -109,12 +125,6 @@ func UserRoute(router *gin.Engine) {
 			fmt.Println(err)
 		}
 
-		// // Transactions for the address
-		// transactions, err := db.ReturnTransactions(param, pageStr, 15)
-		// if err != nil {
-		// 	fmt.Println(err)
-		// }
-
 		// Contract code (if applicable)
 		contractCodeData, err := db.ReturnContractCode(param)
 		if err != nil {
@@ -129,10 +139,9 @@ func UserRoute(router *gin.Engine) {
 			"transactions_by_address":          TransactionsByAddress,
 			"internal_transactions_by_address": InternalTransactionsByAddress,
 			"contract_code":                    contractCodeData,
-			// "transactions":            transactions,
 		})
 	})
-	// "latest_transactions": db.ReturnLastSixTransactions(),
+
 	router.GET("/tx/:query", func(c *gin.Context) {
 		value := c.Param("query")
 		query, err := db.ReturnSingleTransfer(value)
@@ -149,7 +158,7 @@ func UserRoute(router *gin.Engine) {
 			"latestBlock": latestBlock,
 		})
 	})
-	// "latest_transactions": db.ReturnLastSixTransactions(),
+
 	router.GET("/latestblock", func(c *gin.Context) {
 		latestBlock, err := db.ReturnLatestBlock()
 		if err != nil {
@@ -159,6 +168,7 @@ func UserRoute(router *gin.Engine) {
 			"response": latestBlock,
 		})
 	})
+
 	router.GET("/coinbase/:query", func(c *gin.Context) {
 		value := c.Param("query")
 		query, err := db.ReturnSingleTransfer(value)
@@ -167,9 +177,11 @@ func UserRoute(router *gin.Engine) {
 		}
 		c.JSON(http.StatusOK, gin.H{"response": query})
 	})
+
 	router.GET("/richlist", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"richlist": db.ReturnRichlist()})
 	})
+
 	router.GET("/blocks", func(c *gin.Context) {
 		pageStr := c.Query("page")
 
@@ -193,6 +205,7 @@ func UserRoute(router *gin.Engine) {
 			"total":  countBlocks,
 		})
 	})
+
 	router.GET("/blocksizes", func(c *gin.Context) {
 		query, err := db.ReturnBlockSizes()
 		if err != nil {
@@ -200,6 +213,7 @@ func UserRoute(router *gin.Engine) {
 		}
 		c.JSON(http.StatusOK, gin.H{"response": query})
 	})
+
 	router.GET("/validators", func(c *gin.Context) {
 		query, err := db.ReturnValidators()
 		if err != nil {
@@ -207,6 +221,7 @@ func UserRoute(router *gin.Engine) {
 		}
 		c.JSON(http.StatusOK, gin.H{"response": query})
 	})
+
 	router.GET("/transactions", func(c *gin.Context) {
 		query, err := db.ReturnLatestTransactions()
 		if err != nil {
@@ -214,6 +229,7 @@ func UserRoute(router *gin.Engine) {
 		}
 		c.JSON(http.StatusOK, gin.H{"response": query})
 	})
+
 	router.GET("/contracts", func(c *gin.Context) {
 		query, err := db.ReturnContracts()
 		if err != nil {
@@ -221,6 +237,7 @@ func UserRoute(router *gin.Engine) {
 		}
 		c.JSON(http.StatusOK, gin.H{"response": query})
 	})
+
 	router.GET("/block/:query", func(c *gin.Context) {
 		value := c.Param("query")
 		intValue, err := strconv.ParseUint(value, 10, 64)

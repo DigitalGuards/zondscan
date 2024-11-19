@@ -51,10 +51,10 @@ check_mongodb() {
 check_zond_node() {
     RESPONSE=$(curl --silent --fail -X POST -H "Content-Type: application/json" \
         --data '{"jsonrpc":"2.0","id":1,"method":"net_listening","params":[]}' \
-        http://REDACTED:8545)
+        http://127.0.0.1:8545)
 
     if [[ $? -ne 0 || -z "$RESPONSE" ]]; then
-        print_error "Zond node is not accessible at http://REDACTED:8545."
+        print_error "Zond node is not accessible at http://127.0.0.1:8545."
     fi
 }
 
@@ -69,7 +69,7 @@ check_port() {
 # Clone the repository
 clone_repo() {
     print_status "Cloning QRL Explorer repository..."
-    git clone https://github.com/successor1/qrl-explorer-pos.git || print_error "Failed to clone repository"
+    git clone https://github.com/moscowchill/qrl-explorer-pos.git || print_error "Failed to clone repository"
     cd qrl-explorer-pos || print_error "Failed to enter project directory"
     export BASE_DIR=$(pwd)
 }
@@ -131,7 +131,7 @@ setup_synchronizer() {
     # Create .env file
     cat > .env << EOL
 MONGOURI=mongodb://localhost:27017
-NODE_URL=http://REDACTED:8545
+NODE_URL=http://127.0.0.1:8545
 EOL
 
     # Build and start synchronizer
@@ -185,7 +185,7 @@ main() {
     echo "- Server API: http://localhost:8080"
     echo -e "\nMake sure you have:"
     echo "1. MongoDB running on localhost:27017"
-    echo "2. Zond node accessible at http://REDACTED:8545"
+    echo "2. Zond node accessible at http://127.0.0.1:8545"
     echo -e "\nTo monitor services:"
     echo "pm2 status"
     echo -e "\nTo view logs:"
