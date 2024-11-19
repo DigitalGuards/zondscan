@@ -1,0 +1,5 @@
+quanta-explorer-go/server/main.exe
+quanta-explorer-go/.env
+.DS_Store
+quanta-explorer-go/frontend/.next
+deploy.sh
