@@ -46,7 +46,7 @@ export default function Sidebar() {
             />
           </div>
           <span className="text-lg font-semibold text-gray-300 group-hover:text-[#ffa729] transition-colors">
-            QRL Explorer
+            Zond Explorer
           </span>
         </Link>
 
@@ -61,7 +61,7 @@ export default function Sidebar() {
                                            shadow-md">
                   <span>Blockchain</span>
                   <ChevronDownIcon
-                    className={classNames(open ? 'rotate-180' : '', 'h-5 w-5 text-gray-400 transition-transform duration-200')}
+                    className={classNames(open ? 'rotate-180' : '', 'h-5 w-5 text-[#ffa729] transition-transform duration-200')}
                   />
                 </Disclosure.Button>
                 <Disclosure.Panel className="mt-3 space-y-2 pl-3">
@@ -80,7 +80,9 @@ export default function Sidebar() {
                           fill
                           sizes="20px"
                           style={{ objectFit: 'contain' }}
-                          className="opacity-70 group-hover:opacity-100 transition-opacity"
+                          className="[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(105%)] 
+                                   group-hover:[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(125%)] 
+                                   transition-[filter]"
                         />
                       </div>
                       <span className="truncate">{item.name}</span>
@@ -101,7 +103,7 @@ export default function Sidebar() {
                                            shadow-md">
                   <span>Tools</span>
                   <ChevronDownIcon
-                    className={classNames(open ? 'rotate-180' : '', 'h-5 w-5 text-gray-400 transition-transform duration-200')}
+                    className={classNames(open ? 'rotate-180' : '', 'h-5 w-5 text-[#ffa729] transition-transform duration-200')}
                   />
                 </Disclosure.Button>
                 <Disclosure.Panel className="mt-3 space-y-2 pl-3">
@@ -120,7 +122,9 @@ export default function Sidebar() {
                           fill
                           sizes="20px"
                           style={{ objectFit: 'contain' }}
-                          className="opacity-70 group-hover:opacity-100 transition-opacity"
+                          className="[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(105%)] 
+                                   group-hover:[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(125%)] 
+                                   transition-[filter]"
                         />
                       </div>
                       <span className="truncate">{item.name}</span>
