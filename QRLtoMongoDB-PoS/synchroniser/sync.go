@@ -163,6 +163,36 @@ func processBlockAndUpdateValidators(sum uint64, ZondNew models.ZondDatabaseBloc
 	db.UpdateValidators(sum, previousHash)
 }
 
+func runPeriodicTask(task func(), interval time.Duration, taskName string) {
+	go func() {
+		// Recover from panics to keep the goroutine running
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("Recovered from panic in periodic task",
+					zap.String("task", taskName),
+					zap.Any("error", r))
+			}
+		}()
+
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			func() {
+				// Additional recovery for each tick
+				defer func() {
+					if r := recover(); r != nil {
+						logger.Error("Recovered from panic in periodic task tick",
+							zap.String("task", taskName),
+							zap.Any("error", r))
+					}
+				}()
+				task()
+			}()
+		}
+	}()
+}
+
 func singleBlockInsertion() {
 	sum := db.GetLatestBlockNumberFromDB() + 1
 
@@ -173,40 +203,37 @@ func singleBlockInsertion() {
 
 	isCollectionsExist := db.IsCollectionsExist()
 
-	go func() {
-		ticker := time.NewTicker(60 * time.Second)
-		defer ticker.Stop()
-
-		for range ticker.C {
-			if isCollectionsExist != true {
-				processInitialBlock()
-				isCollectionsExist = true
+	// Block processing goroutine
+	runPeriodicTask(func() {
+		if isCollectionsExist != true {
+			processInitialBlock()
+			isCollectionsExist = true
+		} else {
+			if sum <= latestBlockNumber {
+				processSubsequentBlocks(sum, latestBlockNumber)
+				sum++
 			} else {
-				if sum <= latestBlockNumber {
-					processSubsequentBlocks(sum, latestBlockNumber)
-					sum++
-				} else {
-					latestBlockNumber, err = rpc.GetLatestBlock()
-					if err != nil {
-						fmt.Println(err)
-					}
+				latestBlockNumber, err = rpc.GetLatestBlock()
+				if err != nil {
+					logger.Error("Failed to get latest block", zap.Error(err))
 				}
 			}
 		}
-	}()
+	}, 60*time.Second, "block_processing")
 
-	go func() {
-		ticker := time.NewTicker(5 * time.Minute)
-		defer ticker.Stop()
-
-		for range ticker.C {
+	// Data update goroutine
+	runPeriodicTask(func() {
+		// Run each task independently so one failure doesn't affect others
+		func() {
 			db.PeriodicallyUpdateCoinGeckoData()
+		}()
+		func() {
 			db.CountWallets()
-			// db.UpdateTotalBalance()
+		}()
+		func() {
 			db.GetDailyTransactionVolume()
-			// db.CalculateAndStoreAverageVolume()
-		}
-	}()
+		}()
+	}, 5*time.Minute, "data_updates")
 
 	select {}
 }

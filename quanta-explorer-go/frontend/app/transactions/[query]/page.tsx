@@ -7,6 +7,13 @@ import config from '../../../config';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
+interface Transaction {
+  TxHash: string;
+  TimeStamp: number;
+  InOut: number;
+  Amount: number;
+}
+
 const ReceiveIcon = () => (
   <svg width="73px" height="73px" viewBox="0 0 73 73" version="1.1" xmlns="http://www.w3.org/2000/svg">
     <title>WallettTansactionSendReceive</title>
@@ -20,7 +27,7 @@ const ReceiveIcon = () => (
         <polygon id="Path" fill="#6EBFFF" fill-rule="nonzero" points="11 33 15 33 15 43 11 43"></polygon>
         <polygon id="Path" fill="#6EBFFF" fill-rule="nonzero" points="20.9342105 13 11 13 11 23 14.6184211 23 14.6184211 16.5761589 21 16.5761589 21 13"></polygon>
         <polygon id="Path" fill="#6EBFFF" fill-rule="nonzero" points="14.5761589 58.4238411 14.5761589 52 11 52 11 62 21 62 21 58.3576159 14.5761589 58.3576159"></polygon>
-        <polygon id="Path" fill="#4AAFFF" fill-rule="nonzero" points="41.7037037 37.1035422 41.7037037 26 30.2962963 26 30.2962963 37.1035422 25 37.1035422 36 51 47 37.1035422"></polygon>
+        <polygon id="Path" fill="#6EBFFF" fill-rule="nonzero" points="41.7037037 37.1035422 41.7037037 26 30.2962963 26 30.2962963 37.1035422 25 37.1035422 36 51 47 37.1035422"></polygon>
         <rect id="Rectangle" x="5.68434189e-14" y="0" width="73" height="73"></rect>
       </g>
     </g>
@@ -47,14 +54,18 @@ const SendIcon = () => (
   </svg>
 );
 
-const TransactionCard = ({ transaction }) => {
+interface TransactionCardProps {
+  transaction: Transaction;
+}
+
+const TransactionCard = ({ transaction }: TransactionCardProps) => {
   const isSending = transaction.InOut === 0; 
   const date = new Date(transaction.TimeStamp * 1000).toLocaleString(); 
 
   return (
     <div className='flex-container border bg-gray-100 border p-4 rounded-lg mb-2 hover:bg-gray-200 hover:shadow-lg transition duration-75 ease-in-out'>
       <div className="flex flex-item-left items-center flex-col ml-4">
-        {transaction.isSending ? <SendIcon /> : <ReceiveIcon />}
+        {isSending ? <SendIcon /> : <ReceiveIcon />}
         <p className="text-lg font-semibold">Transfer</p>
         <p>Confirmed</p>
         <p>{date}</p>
@@ -73,47 +84,99 @@ const TransactionCard = ({ transaction }) => {
 
 export default function TransactionsList({ params }: { params: { query: string } }) {
   const router = useRouter()
-  const [transactions, setTransactions] = useState([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [currentPage, setCurrentPage] = useState(parseInt(params.query));
   const [totalPages, setTotalPages] = useState(10);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setIsLoading(true);
+    setError(null);
+    
     axios.get(config.handlerUrl + `/txs?page=${currentPage}`)
       .then(response => {
-        setTransactions(response.data.txs);
-        setTotalPages(Math.round(response.data.total / 15))
+        if (response.data && Array.isArray(response.data.txs)) {
+          setTransactions(response.data.txs);
+          setTotalPages(Math.max(1, Math.round(response.data.total / 15)));
+        } else {
+          setTransactions([]);
+          setError("Invalid data format received from server");
+        }
       })
-      .catch(error => console.error('Error fetching transactions:', error));
+      .catch(error => {
+        console.error('Error fetching transactions:', error);
+        setError("Failed to load transactions");
+        setTransactions([]);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   }, [currentPage]);
 
-  console.log(transactions);
-
   const goToNextPage = () => {
-    const nextPage = Math.min(parseInt(params.query) + 1, totalPages);
+    const nextPage = Math.min(currentPage + 1, totalPages);
     setCurrentPage(nextPage);
     router.push(`/transactions/${nextPage}`);
   };
 
   const goToPreviousPage = () => {
-    const prevPage = Math.max(parseInt(params.query) - 1, 1);
+    const prevPage = Math.max(currentPage - 1, 1);
     setCurrentPage(prevPage);
     router.push(`/transactions/${prevPage}`);
   };
 
-  console.log(transactions);
+  if (isLoading) {
+    return (
+      <div className="container mx-auto p-4 text-center">
+        <p>Loading transactions...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto p-4 text-center text-red-500">
+        <p>{error}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto p-4">
-      <div className="mb-4">
-        {transactions.map(transaction => (
-          <TransactionCard key={transaction} transaction={transaction} />
-        ))}
-      </div>
-      <div className="flex justify-center items-center">
-        <button onClick={goToPreviousPage} disabled={currentPage === 1} className="bg-blue-500 text-white px-4 py-2 rounded mr-2 md:px-6 md:py-3">Previous</button>
-        <span>Page {currentPage} of {totalPages}</span>
-        <button onClick={goToNextPage} disabled={currentPage === totalPages} className="bg-blue-500 text-white px-4 py-2 rounded ml-2">Next</button>
-      </div>
+      {transactions.length === 0 ? (
+        <div className="text-center py-4">
+          <p>No transactions found</p>
+        </div>
+      ) : (
+        <>
+          <div className="mb-4">
+            {transactions.map(transaction => (
+              <TransactionCard 
+                key={transaction.TxHash} 
+                transaction={transaction} 
+              />
+            ))}
+          </div>
+          <div className="flex justify-center items-center">
+            <button 
+              onClick={goToPreviousPage} 
+              disabled={currentPage === 1} 
+              className={`px-4 py-2 rounded mr-2 md:px-6 md:py-3 ${currentPage === 1 ? 'bg-gray-400' : 'bg-blue-500 text-white'}`}
+            >
+              Previous
+            </button>
+            <span>Page {currentPage} of {totalPages}</span>
+            <button 
+              onClick={goToNextPage} 
+              disabled={currentPage === totalPages} 
+              className={`px-4 py-2 rounded ml-2 ${currentPage === totalPages ? 'bg-gray-400' : 'bg-blue-500 text-white'}`}
+            >
+              Next
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

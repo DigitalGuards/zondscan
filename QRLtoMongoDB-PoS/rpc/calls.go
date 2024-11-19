@@ -55,60 +55,6 @@ func GetLatestBlock() (uint64, error) {
 	return blockNumber.Uint64(), nil
 }
 
-// func GetLatestBlock(client *mock_rpc.MockMyHTTPClient) (uint64, error) {
-// 	// define the parameters for the RPC call
-// 	params := []interface{}{"latest", true}
-
-// 	// create the request for the RPC call
-// 	request := models.JsonRPC{
-// 		Jsonrpc: "2.0",
-// 		Method:  "zond_getBlockByNumber",
-// 		Params:  params,
-// 		ID:      1,
-// 	}
-
-// 	// marshal the request to JSON
-// 	b, err := json.Marshal(request)
-// 	if err != nil {
-// 		return 0, fmt.Errorf("error marshalling request: %v", err)
-// 	}
-
-// 	// create a new HTTP request with the RPC request as the body
-// 	httpRequest, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
-// 	if err != nil {
-// 		return 0, fmt.Errorf("error creating HTTP request: %v", err)
-// 	}
-// 	httpRequest.Header.Set("Content-Type", "application/json")
-
-// 	// make the RPC call using the HTTP client
-// 	resp, err := client.Do(httpRequest)
-// 	if err != nil {
-// 		return 0, fmt.Errorf("error making RPC call: %v", err)
-// 	}
-// 	defer resp.Body.Close()
-
-// 	// read the response body
-// 	body, err := io.ReadAll(resp.Body)
-// 	if err != nil {
-// 		return 0, fmt.Errorf("error reading response body: %v", err)
-// 	}
-
-// 	// unmarshal the response to a Zond struct
-// 	var zond models.Zond
-// 	if err := json.Unmarshal([]byte(string(body)), &zond); err != nil {
-// 		return 0, fmt.Errorf("error unmarshalling response: %v", err)
-// 	}
-
-// 	fmt.Println(zond.ResultOld.Number)
-
-// 	// convert the block
-// 	// convert the block number from hexadecimal to uint64
-// 	blockNumber := new(big.Int)
-// 	blockNumber.SetString(zond.ResultOld.Number[2:], 16)
-
-// 	return blockNumber.Uint64(), nil
-// }
-
 func GetContractAddress(txHash string) (string, string, error) {
 	group := models.JsonRPC{
 		Jsonrpc: "2.0",
@@ -186,110 +132,154 @@ func CallDebugTraceTransaction(hash string) (transactionType []byte, callType []
 
 	b, err := json.Marshal(group)
 	if err != nil {
-		logger.Info("Failed JSON marshal", zap.Error(err))
+		logger.Error("Failed JSON marshal", zap.Error(err))
+		return nil, nil, nil, nil, 0, 0, nil, 0, 0, 0, nil, 0
 	}
 
-	req, _ := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
+	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
+	if err != nil {
+		logger.Error("Failed to create request", zap.Error(err))
+		return nil, nil, nil, nil, 0, 0, nil, 0, 0, 0, nil, 0
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		panic(err)
+		logger.Error("Failed to execute request", zap.Error(err))
+		return nil, nil, nil, nil, 0, 0, nil, 0, 0, 0, nil, 0
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Error("Failed to read response body", zap.Error(err))
+		return nil, nil, nil, nil, 0, 0, nil, 0, 0, 0, nil, 0
+	}
 
 	err = json.Unmarshal([]byte(string(body)), &tracerResponse)
-
-	gas, err = strconv.ParseUint(tracerResponse.Result.Gas[2:], 16, 64)
 	if err != nil {
-		configs.Logger.Warn("Failed to ParseUint: ", zap.Error(err))
+		logger.Error("Failed to unmarshal response", zap.Error(err))
+		return nil, nil, nil, nil, 0, 0, nil, 0, 0, 0, nil, 0
 	}
 
-	gasUsed, err = strconv.ParseUint(tracerResponse.Result.GasUsed[2:], 16, 64)
-	if err != nil {
-		configs.Logger.Warn("Failed to ParseUint: ", zap.Error(err))
+	// Initialize default values for gas and gasUsed
+	gas = 0
+	gasUsed = 0
+
+	// Safely parse gas and gasUsed if they exist
+	if tracerResponse.Result.Gas != "" {
+		gas, err = strconv.ParseUint(tracerResponse.Result.Gas[2:], 16, 64)
+		if err != nil {
+			logger.Warn("Failed to parse gas value", zap.Error(err))
+		}
 	}
 
-	if len(tracerResponse.Result.Calls) > 0 && tracerResponse.Result.Calls[0].From != "" && tracerResponse.Result.Output != "" || tracerResponse.Result.CallType == "delegatecall" && tracerResponse.Result.Output != "" || tracerResponse.Result.Type == "CALL" {
-		var output uint64
-
-		from, err := hex.DecodeString(tracerResponse.Result.From[2:])
+	if tracerResponse.Result.GasUsed != "" {
+		gasUsed, err = strconv.ParseUint(tracerResponse.Result.GasUsed[2:], 16, 64)
 		if err != nil {
-			configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
+			logger.Warn("Failed to parse gasUsed value", zap.Error(err))
 		}
+	}
 
-		to, err := hex.DecodeString(tracerResponse.Result.To[2:])
+	// Check if we have valid call data
+	hasValidCallData := (len(tracerResponse.Result.Calls) > 0 &&
+		tracerResponse.Result.Calls[0].From != "" &&
+		tracerResponse.Result.Output != "") ||
+		(tracerResponse.Result.CallType == "delegatecall" &&
+			tracerResponse.Result.Output != "") ||
+		tracerResponse.Result.Type == "CALL"
+
+	if !hasValidCallData {
+		return nil, nil, nil, nil, 0, 0, nil, 0, 0, gasUsed, nil, 0
+	}
+
+	// Process From and To addresses
+	from, err = hex.DecodeString(tracerResponse.Result.From[2:])
+	if err != nil {
+		logger.Warn("Failed to decode From address", zap.Error(err))
+		from = []byte{}
+	}
+
+	to, err = hex.DecodeString(tracerResponse.Result.To[2:])
+	if err != nil {
+		logger.Warn("Failed to decode To address", zap.Error(err))
+		to = []byte{}
+	}
+
+	// Process output
+	output = 1
+	if tracerResponse.Result.Output != "0x" && len(tracerResponse.Result.Output) > 2 {
+		output, err = strconv.ParseUint(tracerResponse.Result.Output[2:], 16, 64)
 		if err != nil {
-			configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
+			logger.Warn("Failed to parse output value", zap.Error(err))
+			output = 0
 		}
+	}
 
-		if tracerResponse.Result.Output != "0x" && len(tracerResponse.Result.Output) > 2 {
-			output, err = strconv.ParseUint(tracerResponse.Result.Output[2:], 16, 64)
-			if err != nil {
-				fmt.Println(tracerResponse.Result.Output)
-				configs.Logger.Warn("Failed to ParseUint: ", zap.Error(err))
-			}
-		} else {
-			output = 1
-		}
-
-		// divisor := new(big.Float).SetFloat64(float64(configs.QUANTA))
-
-		bigInt := new(big.Int)
+	// Process value
+	bigInt := new(big.Int)
+	if tracerResponse.Result.Value != "" {
 		_, ok := bigInt.SetString(tracerResponse.Result.Value[2:], 16)
 		if !ok {
-			fmt.Println("Failed to parse hexadecimal string.")
-		}
-
-		// bigFloat := new(big.Float).SetInt(bigInt)
-
-		// // result := new(big.Float).Quo(bigFloat, divisor)
-
-		// value, _ := result.Float64()
-
-		const prefixLength = 2
-		const methodIDLength = 8
-		const addressLength = 64
-		const minimumLength = prefixLength + methodIDLength + addressLength
-
-		if len(tracerResponse.Result.Input) > minimumLength {
-
-			// Strip the '0x' prefix and method ID (first 10 bytes, or 20 characters in the string)
-			data := tracerResponse.Result.Input[10:]
-
-			// The next 64 characters are the address, padded to 32 bytes, but only the last 40 characters represent the address
-			addressHex := data[24:64]
-			addressFunctionidentifier, err := hex.DecodeString(addressHex)
-			if err != nil {
-				panic(err)
-			}
-
-			// The next 64 characters represent the amount, also padded to 32 bytes
-			amountHex := data[64:]
-			amountBytes, err := hex.DecodeString(amountHex)
-			if err != nil {
-				panic(err)
-			}
-			amountFunctionIdentifier := new(big.Int).SetBytes(amountBytes)
-
-			// addressFunctionidentifier, err := hex.DecodeString(strings.TrimLeft(address, "0"))
-			// if err != nil {
-			// 	configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
-			// }
-
-			// amountFunctionIdentifier, err := strconv.ParseUint(amountHex, 16, 64)
-			// if err != nil {
-			// 	configs.Logger.Warn("Failed to ParseUint: ", zap.Error(err))
-			// }
-			return []byte(tracerResponse.Result.Type), []byte(tracerResponse.Result.CallType), from, to, input, output, tracerResponse.Result.TraceAddress[:], value, gas, gasUsed, addressFunctionidentifier, amountFunctionIdentifier.Uint64()
-		} else {
-			return []byte(tracerResponse.Result.Type), []byte(tracerResponse.Result.CallType), from, to, input, output, tracerResponse.Result.TraceAddress[:], value, gas, gasUsed, nil, 0
+			logger.Warn("Failed to parse value")
 		}
 	}
-	return nil, nil, nil, nil, 0, 0, nil, 0, 0, gasUsed, nil, 0
+
+	// Safely handle TraceAddress
+	traceAddress = nil
+	if tracerResponse.Result.TraceAddress != nil {
+		traceAddress = make([]int, len(tracerResponse.Result.TraceAddress))
+		copy(traceAddress, tracerResponse.Result.TraceAddress)
+	}
+
+	// Process input data if it exists and has sufficient length
+	const prefixLength = 2
+	const methodIDLength = 8
+	const addressLength = 64
+	const minimumLength = prefixLength + methodIDLength + addressLength
+
+	addressFunctionidentifier = nil
+	amountFunctionIdentifier = 0
+
+	if len(tracerResponse.Result.Input) > minimumLength {
+		// Strip the '0x' prefix and method ID
+		data := tracerResponse.Result.Input[10:]
+
+		// Extract address (next 64 characters, but only last 40 are significant)
+		if len(data) >= 64 {
+			addressHex := data[24:64]
+			addressFunctionidentifier, err = hex.DecodeString(addressHex)
+			if err != nil {
+				logger.Warn("Failed to decode address from input", zap.Error(err))
+			}
+
+			// Extract amount if there's enough data
+			if len(data) >= 128 {
+				amountHex := data[64:128]
+				amountBytes, err := hex.DecodeString(amountHex)
+				if err != nil {
+					logger.Warn("Failed to decode amount from input", zap.Error(err))
+				} else {
+					amountBigInt := new(big.Int).SetBytes(amountBytes)
+					amountFunctionIdentifier = amountBigInt.Uint64()
+				}
+			}
+		}
+	}
+
+	return []byte(tracerResponse.Result.Type),
+		[]byte(tracerResponse.Result.CallType),
+		from,
+		to,
+		0, // input is not used in the current implementation
+		output,
+		traceAddress,
+		0, // value is not used in the current implementation
+		gas,
+		gasUsed,
+		addressFunctionidentifier,
+		amountFunctionIdentifier
 }
 
 func GetBalance(address string) (string, error) {
@@ -384,7 +374,6 @@ func GetCode(address string, blockNrOrHash string) (string, error) {
 }
 
 func ZondCall(contractAddress string) *models.ZondResponse {
-
 	data := map[string]interface{}{
 		"from":     "0x20748ad4e06597dbca756e2731cd26094c05273a",
 		"chainId":  "0x0",
@@ -428,7 +417,6 @@ func ZondCall(contractAddress string) *models.ZondResponse {
 }
 
 func ZondGetLogs(contractAddress string) *models.ZondResponse {
-	// Assuming the contract address is one of the parameters
 	payload := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"method":  "zond_getLogs",
