@@ -22,14 +22,18 @@
         "name": "next"
       }
     ],
-    "strictNullChecks": true
+    "strictNullChecks": true,
+    "types": ["node", "jest"],
+    "ignoreDeprecations": "5.0",
+    "skipDefaultLibCheck": true
   },
   "include": [
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts"
-, "app/api/auth/[...nextauth]/route.js"  ],
+    ".next/types/**/*.ts",
+    "app/api/auth/[...nextauth]/route.js"
+  ],
   "exclude": [
     "node_modules"
   ]
