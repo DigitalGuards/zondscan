@@ -4,6 +4,7 @@ import AuthProvider from "./components/AuthProvider"
 import Script from 'next/script'
 
 export const metadata = {
+  metadataBase: new URL('https://zondscan.com'),
   title: 'QRL Zond Explorer',
   description: 'QRL ZOND Web3/EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network',
   keywords: 'QRL, ZOND, blockchain explorer, Web3, EVM, quantum resistant, cryptocurrency, blockchain, smart contracts, proof of stake, validators, transactions, blocks',
@@ -13,7 +14,7 @@ export const metadata = {
     description: 'QRL ZOND Web3/EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network',
     type: 'website',
     locale: 'en_US',
-    url: 'https://explorer.theqrl.org',
+    url: 'https://zondscan.com',
     siteName: 'QRL Zond Explorer',
     images: [
       {
@@ -46,7 +47,7 @@ export const metadata = {
     apple: '/QRL.png',
   },
   alternates: {
-    canonical: 'https://explorer.theqrl.org',
+    canonical: 'https://zondscan.com',
   },
 }
 
@@ -66,7 +67,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
                 "@type": "WebApplication",
                 "name": "QRL ZOND Explorer",
                 "description": "QRL ZOND Web3/EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network",
-                "url": "https://explorer.theqrl.org",
+                "url": "https://zondscan.com",
                 "applicationCategory": "Blockchain Explorer",
                 "operatingSystem": "All",
                 "browserRequirements": "Requires JavaScript",
