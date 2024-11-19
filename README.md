@@ -129,6 +129,118 @@ pm2 save
 ```
 Great! That is all. The explorer should now be live. (Don't forget to use tmux or pm2 for Zond too!)
 
+## System Architecture and Data Flow
+
+### Backend Architecture
+
+The backend consists of three main components that work together to provide blockchain data to the frontend:
+
+1. **QRL Zond Node**
+   - The source of blockchain data
+   - Runs the QRL blockchain protocol
+   - Exposes RPC endpoints for data access
+   - Handles consensus and network communication
+
+2. **QRLtoMongoDB-PoS (Synchronizer)**
+   - Connects to Zond node via RPC
+   - Continuously syncs blockchain data to MongoDB
+   - Components:
+     * Block synchronization (blocks, transactions)
+     * Validator data collection
+     * Market data aggregation (CoinGecko integration)
+     * Wallet statistics
+   - Uses producer/consumer pattern for efficient data processing
+   - Maintains data consistency with rollback capability
+
+3. **Server (Handler)**
+   - REST API server built with Gin framework
+   - Provides endpoints for frontend data access
+   - Aggregates data from MongoDB collections
+   - Handles real-time data requests
+   - Manages API rate limiting and caching
+
+### Data Flow
+
+1. **Blockchain to MongoDB**:
+   ```
+   Zond Node -> RPC Calls -> Synchronizer -> MongoDB
+   ```
+   - Synchronizer polls Zond node for new blocks
+   - Processes block data into structured collections
+   - Updates related collections (transactions, addresses, etc.)
+   - Maintains indexes for efficient querying
+
+2. **MongoDB to Frontend**:
+   ```
+   MongoDB -> Handler -> REST API -> Frontend
+   ```
+   - Handler provides RESTful endpoints
+   - Frontend makes HTTP requests to handler
+   - Data is cached where appropriate
+   - Real-time updates through periodic polling
+
+### Key Collections in MongoDB
+
+1. **Blocks Collection**
+   - Stores block headers and metadata
+   - Tracks chain progression
+   - Links to transactions
+
+2. **Transactions Collection**
+   - Stores all transaction data
+   - Includes internal transactions
+   - Maintains address relationships
+
+3. **Addresses Collection**
+   - Tracks account balances
+   - Stores contract metadata
+   - Maintains transaction history
+
+4. **Validators Collection**
+   - Stores validator information
+   - Tracks staking data
+   - Records validator performance
+
+### Frontend Integration
+
+The frontend communicates with the backend through several key endpoints:
+
+1. **Overview Data**
+   - `/overview`: General blockchain statistics
+   - Real-time market data and network status
+
+2. **Block Explorer**
+   - `/blocks`: Block listing and details
+   - `/tx`: Transaction details
+   - `/address`: Address information and history
+
+3. **Validator Information**
+   - `/validators`: Active validator list
+   - Staking statistics and performance metrics
+
+4. **Search Functionality**
+   - Unified search across blocks, transactions, and addresses
+   - Auto-suggestion and quick navigation
+
+### Error Handling and Recovery
+
+The system includes several reliability features:
+
+1. **Synchronizer Recovery**
+   - Automatic recovery from node disconnections
+   - Block chain reorganization handling
+   - Data consistency checks
+
+2. **Handler Resilience**
+   - Graceful error handling
+   - Default values for missing data
+   - Request timeout management
+
+3. **Frontend Fallbacks**
+   - Loading states for async data
+   - Error boundaries for component failures
+   - Retry mechanisms for failed requests
+
 ## License
 
 MIT
