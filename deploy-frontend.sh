@@ -6,7 +6,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${YELLOW}Starting frontend update and deployment...${NC}"
+echo -e "${YELLOW}Starting frontend deployment...${NC}"
 
 # Function to check if a command exists
 command_exists() {
@@ -23,20 +23,6 @@ if ! command_exists pm2; then
     echo -e "${RED}Error: PM2 is not installed${NC}"
     exit 1
 fi
-
-if ! command_exists git; then
-    echo -e "${RED}Error: Git is not installed${NC}"
-    exit 1
-fi
-
-# Update from git
-echo -e "${YELLOW}Pulling latest changes from git...${NC}"
-git pull
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Error: Git pull failed${NC}"
-    exit 1
-fi
-echo -e "${GREEN}Git pull completed successfully${NC}"
 
 # Navigate to frontend directory
 echo -e "${YELLOW}Navigating to frontend directory...${NC}"
@@ -77,7 +63,7 @@ fi
 # Save PM2 configuration
 pm2 save
 
-echo -e "${GREEN}Frontend update and deployment completed successfully!${NC}"
+echo -e "${GREEN}Frontend deployment completed successfully!${NC}"
 echo -e "${YELLOW}PM2 process status:${NC}"
 pm2 list
 
