@@ -10,6 +10,20 @@ print_error() {
     exit 1
 }
 
+# Clean PM2 logs and processes
+clean_pm2() {
+    print_status "Cleaning PM2 logs and processes..."
+    
+    # Delete all PM2 logs
+    pm2 flush || print_status "No logs to flush"
+    
+    # Stop and delete all processes
+    pm2 delete all || print_status "No processes to delete"
+    
+    # Clear PM2 dump file
+    pm2 cleardump || print_status "No dump file to clear"
+}
+
 # Check for required tools
 check_dependencies() {
     print_status "Checking dependencies..."
@@ -96,16 +110,17 @@ DOMAIN_NAME=http://localhost:3000
 HANDLER_URL=http://127.0.0.1:8080
 EOL
 
-    # Install dependencies and build
+    # Install dependencies
     print_status "Installing frontend dependencies..."
     npm install || print_error "Failed to install frontend dependencies"
 
-    print_status "Building frontend..."
-    npm run build || print_error "Failed to build frontend"
+    # Update browserslist database
+    print_status "Updating browserslist database..."
+    npx browserslist@latest --update-db || print_error "Failed to update browserslist"
 
-    # Start frontend with PM2
-    print_status "Starting frontend with PM2..."
-    pm2 start npm --name "frontend" -- start --cwd "$BASE_DIR/quanta-explorer-go/frontend" || print_error "Failed to start frontend"
+    # Start frontend in development mode with PM2
+    print_status "Starting frontend in development mode..."
+    cd "$BASE_DIR/quanta-explorer-go/frontend" && pm2 start "npm run dev" --name "frontend" || print_error "Failed to start frontend"
 }
 
 # Setup blockchain synchronizer
@@ -140,6 +155,9 @@ save_pm2() {
 main() {
     print_status "Starting QRL Explorer deployment..."
 
+    # Clean PM2 logs and processes before starting
+    clean_pm2
+
     # Check for required tools
     check_dependencies
 
@@ -170,6 +188,10 @@ main() {
     echo "2. Zond node accessible at http://REDACTED:8545"
     echo -e "\nTo monitor services:"
     echo "pm2 status"
+    echo -e "\nTo view logs:"
+    echo "pm2 logs"
+    echo -e "\nTo clear logs:"
+    echo "pm2 flush"
     echo -e "\nTo stop all services:"
     echo "pm2 stop all"
 }
