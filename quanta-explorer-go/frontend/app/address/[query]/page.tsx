@@ -2,8 +2,8 @@ import React from "react";
 import axios from "axios";
 import config from '../../../config';
 import { STAKING_QUANTA } from '../../lib/constants'
-import {toFixed} from '../../lib/helpers.js';
-import { epochToISO } from '../../lib/helpers';
+import { toFixed } from '../../lib/helpers.js';
+import { epochToISO } from '../../lib/helpers.js';
 import { headers } from "next/headers";
 import CopyAddressButton from "../../components/CopyAddressButton";
 import TanStackTable from "../../components/TanStackTable";
@@ -11,17 +11,11 @@ import TanStackTable from "../../components/TanStackTable";
 const getData = async (url: string | URL) => {
     try {
         const path = new URL(url).pathname;
-
-        // Check for favicon and return early
-        if (path.endsWith('favicon.ico')) {
-            return null;
-        }
-
+        if (path.endsWith('favicon.ico')) return null;
         if (!path.startsWith('/address/')) {
             console.error(`Invalid path: ${path}`);
             return null;
         }
-        console.log(`${config.handlerUrl}/address/aggregate${path.replace('/address/', '/')}`)
         const response = await axios.get(`${config.handlerUrl}/address/aggregate${path.replace('/address/', '/')}`);
         return response.data;
     } catch (error) {
@@ -35,15 +29,8 @@ export default async function Address() {
     const header_url = headersList.get('x-url') || "";
     const addressData = await getData(header_url);
 
-    const {
-        balance,
-    } = addressData["address"];
-
-    console.log(addressData["internal_transactions_by_address"]);
-
-    const {
-        rank
-    } = addressData;
+    const { balance } = addressData["address"];
+    const { rank } = addressData;
 
     let firstSeen = 0;
     let lastSeen = 0;
@@ -53,52 +40,111 @@ export default async function Address() {
         lastSeen = Math.max(...timestamps);
     }
 
-
     const addressSegmentParts = new URL(header_url).pathname.split('/');
     const addressSegment = addressSegmentParts.length > 0 ? addressSegmentParts.pop()! : "";
 
     let addressType = "";
+    let addressIcon = null;
     if (addressSegment.slice(0, 3) === "0x2") {
-        addressType = "Dilithium Address - ";
+        addressType = "Dilithium Address";
+        addressIcon = (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+        );
     } else if (addressSegment.slice(0, 3) === "0x1") {
-        addressType = "XMSS Address - ";
+        addressType = "XMSS Address";
+        addressIcon = (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+        );
     } else if (addressData.response !== null) {
-        addressType = "Contract -  ";
+        addressType = "Contract";
+        addressIcon = (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+        );
     }
 
     return (
-        <>
-            <div className="border-b mb-4">
-                <div className="text-xl m-2 break-words items-center">
-                    {addressType}{addressSegment}
-                    <span className="ml-2 mr-6">
-                        <CopyAddressButton address={addressSegment} />
-                    </span>
-                </div>
-            </div><div className="border-b mb-4">
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="m-2 p-4 border rounded">
-                        <div className="text-lg font-bold mb-2">Overview</div>
-                        <div className="text-sm text-gray-600 mb-2">QRL BALANCE: </div>
-                        <div>{toFixed(balance)}</div>
-                        <br/>
-                        <div><p><small>Note: Paid fees are always paid by the sending party</small></p></div>
+        <div className="py-8">
+            <div className="relative overflow-hidden rounded-2xl 
+                        bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
+                        border border-[#3d3d3d] shadow-xl mb-8">
+                <div className="p-8">
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-8 pb-6 border-b border-gray-700">
+                        <div className="flex items-center">
+                            {addressIcon}
+                            <div className="ml-4">
+                                <div className="text-sm font-medium text-gray-400">{addressType}</div>
+                                <div className="flex items-center mt-1">
+                                    <div className="text-lg font-mono text-gray-300">{addressSegment}</div>
+                                    <div className="ml-2">
+                                        <CopyAddressButton address={addressSegment} />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="px-4 py-2 rounded-xl bg-[#3d3d3d] bg-opacity-20">
+                            <span className="text-sm font-medium text-[#ffa729]">Rank #{rank}</span>
+                        </div>
                     </div>
 
-                    <div className="m-2 p-4 border rounded">
-                        <div className="text-lg font-bold mb-2">Additional Information</div>
-                        <div className="mb-2">
-                            {(epochToISO(firstSeen) === "1970-01-01" && epochToISO(lastSeen) === "1970-01-01")
-                                ? "No transactions were signed from this wallet yet."
-                                : `This wallet's first activity was on ${epochToISO(firstSeen).split('T')[0]} and was last seen on ${epochToISO(lastSeen).split('T')[0]}. Current rank is #${rank}. This wallet is ${balance > STAKING_QUANTA ? '' : 'not'} qualified to stake on the QRL Blockchain! ${balance > STAKING_QUANTA ? 'Congratulations!' : ''}`}
+                    {/* Content Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {/* Balance Card */}
+                        <div className="relative overflow-hidden rounded-xl 
+                                    bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
+                                    border border-[#3d3d3d] p-6">
+                            <h2 className="text-sm font-semibold text-gray-400 mb-4">Balance</h2>
+                            <div className="flex items-baseline">
+                                <span className="text-3xl font-bold text-[#ffa729]">{toFixed(balance)}</span>
+                                <span className="ml-2 text-sm text-gray-400">QUANTA</span>
+                            </div>
+                            {balance > STAKING_QUANTA && (
+                                <div className="mt-4 px-3 py-1 bg-green-500/10 text-green-400 text-sm rounded-lg inline-block">
+                                    Qualified for Staking
+                                </div>
+                            )}
                         </div>
 
-                        <button className="text-blue-500 hover:underline text-sm">Learn More</button>
+                        {/* Activity Card */}
+                        <div className="relative overflow-hidden rounded-xl 
+                                    bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
+                                    border border-[#3d3d3d] p-6">
+                            <h2 className="text-sm font-semibold text-gray-400 mb-4">Activity</h2>
+                            {(epochToISO(firstSeen) === "1970-01-01" && epochToISO(lastSeen) === "1970-01-01") ? (
+                                <p className="text-gray-300">No transactions were signed from this wallet yet.</p>
+                            ) : (
+                                <div className="space-y-2">
+                                    <div>
+                                        <div className="text-sm text-gray-400">First Activity</div>
+                                        <div className="text-gray-300">{epochToISO(firstSeen).split('T')[0]}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-sm text-gray-400">Last Activity</div>
+                                        <div className="text-gray-300">{epochToISO(lastSeen).split('T')[0]}</div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <TanStackTable transactions={addressData["transactions_by_address"]} internalt={addressData["internal_transactions_by_address"]} />
-        </>
+            {/* Transactions Table */}
+            <div className="relative overflow-hidden rounded-2xl 
+                        bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
+                        border border-[#3d3d3d] shadow-xl p-8">
+                <h2 className="text-xl font-bold text-[#ffa729] mb-6">Transactions</h2>
+                <TanStackTable 
+                    transactions={addressData["transactions_by_address"]} 
+                    internalt={addressData["internal_transactions_by_address"]} 
+                />
+            </div>
+        </div>
     );
 }

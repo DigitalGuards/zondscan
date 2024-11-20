@@ -1,6 +1,6 @@
 "use client";
 
-export default function TransactionLayout({
+export default function AddressLayout({
   children,
 }: {
   children: React.ReactNode;

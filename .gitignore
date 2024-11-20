@@ -7,3 +7,6 @@ QRLtoMongoDB-PoS/main.exe
 QRLtoMongoDB-PoS/logs.log
 QRLtoMongoDB-PoS/rpc/.env
 quanta-explorer-go/frontend/package-lock.json
+package.json
+package-lock.json
+quanta-explorer-go/frontend/package.json
