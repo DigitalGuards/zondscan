@@ -2,8 +2,8 @@ quanta-explorer-go/server/main.exe
 quanta-explorer-go/.env
 .DS_Store
 quanta-explorer-go/frontend/.next
-deploy.sh
 quanta-explorer-go/frontend/.env
 QRLtoMongoDB-PoS/.env
 QRLtoMongoDB-PoS/main.exe
 QRLtoMongoDB-PoS/logs.log
+QRLtoMongoDB-PoS/rpc/.env
