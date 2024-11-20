@@ -4,8 +4,8 @@ try {
     
     // Get collection stats
     const blockCount = db.blocks.countDocuments();
-    const txCount = db.transactions.countDocuments();
-    const walletCount = db.wallets.countDocuments();
+    const txCount = db.transactionByAddress.countDocuments();
+    const walletCount = db.addresses.countDocuments();
     
     // Get the latest block
     const latestBlock = db.blocks.find().sort({_id:-1}).limit(1).toArray();
