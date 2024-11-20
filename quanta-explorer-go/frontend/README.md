@@ -1,70 +1,164 @@
-# Getting Started with Create React App
+# QRL Zond Explorer Frontend
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A Next.js-based frontend for the QRL Zond Explorer, providing a user interface to explore blockchain data.
 
-## Available Scripts
+## Project Structure
 
-In the project directory, you can run:
+```
+frontend/
+├── app/                    # Next.js 13+ App Router
+│   ├── components/         # Shared components
+│   │   ├── Alert.tsx
+│   │   ├── AreaChart.tsx
+│   │   ├── AuthProfileIcon.tsx
+│   │   └── Sidebar.tsx    # Main navigation sidebar
+│   │
+│   ├── blocks/            # Blocks feature
+│   │   ├── layout.tsx     # Blocks layout wrapper
+│   │   ├── loading.tsx    # Loading state
+│   │   └── [query]/       # Dynamic block routes
+│   │       ├── page.tsx   # Block list page
+│   │       └── types.ts   # Block-related types
+│   │
+│   ├── transactions/      # Transactions feature
+│   │   ├── layout.tsx
+│   │   ├── loading.tsx
+│   │   └── [query]/
+│   │       ├── page.tsx
+│   │       ├── TransactionsList.tsx
+│   │       └── types.ts
+│   │
+│   ├── contracts/         # Smart contracts feature
+│   │   ├── layout.tsx
+│   │   └── page.tsx
+│   │
+│   ├── checker/          # Balance checker tool
+│   │   └── page.tsx
+│   │
+│   ├── converter/        # Unit converter tool
+│   │   └── page.tsx
+│   │
+│   ├── richlist/         # Rich list feature
+│   │   └── page.tsx
+│   │
+│   ├── layout.tsx        # Root layout (includes Sidebar)
+│   └── page.tsx          # Homepage
+│
+├── public/               # Static assets
+│   ├── ABI.json         # Contract ABIs
+│   ├── blockchain-icon.svg
+│   └── ...
+│
+├── lib/                 # Utility functions
+│   └── helpers.ts       # Common helper functions
+│
+├── types/               # Global TypeScript types
+└── config.js           # App configuration
+```
 
-### `npm start`
+## Layout System
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+The app uses a nested layout structure:
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+1. **Root Layout** (`app/layout.tsx`)
+   - Provides the base structure
+   - Includes the Sidebar component
+   - Handles the main grid layout with sidebar spacing
 
-### `npm test`
+2. **Feature Layouts** (e.g., `blocks/layout.tsx`, `transactions/layout.tsx`)
+   - Wrap specific feature content
+   - Handle feature-specific spacing and styling
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Key Components
 
-### `npm run build`
+### Sidebar (`components/Sidebar.tsx`)
+- Main navigation component
+- Fixed position with width of 256px (w-64)
+- Contains links to all major features
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+### Block Components
+- `BlockCard`: Displays individual block information
+- Uses a flex layout with responsive design
+- Maximum width constraints to prevent content stretching
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+### Transaction Components
+- `TransactionsList`: Manages transaction display and pagination
+- `TransactionCard`: Individual transaction display
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## Styling
 
-### `npm run eject`
+- Uses Tailwind CSS for styling
+- Dark theme with consistent color scheme:
+  - Background: #1a1a1a
+  - Accent: #ffa729
+  - Card backgrounds: #2d2d2d
+  - Hover states: #3d3d3d
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+## Page Organization
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+1. **List Pages** (e.g., blocks/[query]/page.tsx)
+   - Display paginated lists of items
+   - Include navigation controls
+   - Maximum width constraints for readability
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+2. **Detail Pages** (e.g., block/[id]/page.tsx)
+   - Show detailed information for individual items
+   - Responsive layouts for different screen sizes
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+3. **Tool Pages** (e.g., checker/, converter/)
+   - Utility tools for specific functions
+   - Self-contained functionality
 
-## Learn More
+## Development Guidelines
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+1. **Layout Consistency**
+   - Use the root layout's sidebar spacing (ml-64)
+   - Avoid duplicate margin/padding in nested layouts
+   - Maintain consistent max-width constraints
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+2. **Component Structure**
+   - Keep components focused and single-responsibility
+   - Use TypeScript interfaces for props
+   - Implement loading states
 
-### Code Splitting
+3. **Styling Best Practices**
+   - Use Tailwind utility classes
+   - Maintain dark theme consistency
+   - Follow responsive design patterns
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+4. **State Management**
+   - Use React hooks for local state
+   - Implement proper loading and error states
+   - Handle pagination efficiently
 
-### Analyzing the Bundle Size
+## Getting Started
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+1. Install dependencies:
+```bash
+npm install
+```
 
-### Making a Progressive Web App
+2. Run development server:
+```bash
+npm run dev
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+3. Build for production:
+```bash
+npm run build
+```
 
-### Advanced Configuration
+## Configuration
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+The app uses `config.js` for environment-specific settings:
+- API endpoints
+- Feature flags
+- Environment variables
 
-### Deployment
+## Contributing
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+1. Follow the existing file structure
+2. Maintain TypeScript types
+3. Include loading states for async operations
+4. Test responsive layouts
+5. Update documentation for significant changes

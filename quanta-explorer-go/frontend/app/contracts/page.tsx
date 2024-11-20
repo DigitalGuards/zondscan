@@ -3,45 +3,75 @@
 import * as React from 'react';
 import { Buffer } from 'buffer';
 import axios from "axios";
-import { DataGrid, GridToolbar } from '@mui/x-data-grid';
+import { DataGrid, GridToolbar, GridRenderCellParams } from '@mui/x-data-grid';
 import Typography from '@mui/material/Typography';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Box from '@mui/material/Box';
 import config from '../../config.js';
 import Link from 'next/link.js';
 
-const DecoderAddress = (params) => {
+interface ContractData {
+  id: number;
+  from: string;
+  txHash: string;
+  pk: string;
+  signature: string;
+  nonce: string;
+  value: string;
+  contractAddress: string;
+}
+
+const darkTheme = createTheme({
+  palette: {
+    mode: 'dark',
+    background: {
+      default: '#1a1b1e',
+      paper: '#2c2d31',
+    },
+    text: {
+      primary: '#ffffff',
+      secondary: '#9ca3af',
+    },
+  },
+});
+
+const DecoderAddress = (params: { row: { from: string } }): string => {
   const buffer = Buffer.from(params.row.from, 'base64');
   const bufString = buffer.toString('hex');
   return "0x" + bufString;
 };
 
-const DecoderTxHash = (params) => {
+const DecoderTxHash = (params: { row: { txHash: string } }): string => {
   const buffer = Buffer.from(params.row.txHash, 'base64');
   const bufString = buffer.toString('hex');
   return "0x" + bufString;
 };
 
-const Decoder = (params) => {
-  const buffer = Buffer.from(params.row.pk || params.row.signature, 'base64');
+const Decoder = (params: { row: { pk?: string; signature?: string } }): string => {
+  const buffer = Buffer.from(params.row.pk || params.row.signature || '', 'base64');
   const bufString = buffer.toString('hex');
   return "0x" + bufString;
 };
 
 export default function Contracts() {
-  const [post, setPost] = React.useState(null);
+  const [post, setPost] = React.useState<ContractData[] | null>(null);
+  const [paginationModel, setPaginationModel] = React.useState({
+    pageSize: 10,
+    page: 0,
+  });
 
   React.useEffect(() => {
     axios.get(config.handlerUrl + "/contracts").then((response) => {
       const data = response.data.response;
   
-      const transformedData = data.map((item, index) => ({
+      const transformedData = data.map((item: any, index: number) => ({
         id: index,
         ...item,
         from: DecoderAddress({row: item}),
         txHash: DecoderTxHash({row: item}),
-        pk: Decoder({row: item, key: 'pk'}),
-        signature: Decoder({row: item, key: 'signature'}),
-        contractAddress: DecoderAddress({row: item, key: 'contractAddress'})
+        pk: Decoder({row: { pk: item.pk }}),
+        signature: Decoder({row: { signature: item.signature }}),
+        contractAddress: DecoderAddress({row: item})
       }));
   
       setPost(transformedData);
@@ -51,50 +81,66 @@ export default function Contracts() {
   const columns = [
     {
       field: 'from', 
-      headerName: 'From (Contract Creator Address)', 
+      headerName: 'From (Contract Creator)', 
       flex: 1,
-      renderCell: (params: string) => (
-        <Link href={config.siteUrl + "/address/" + params.row.from}>
+      minWidth: 200,
+      renderCell: (params: GridRenderCellParams<ContractData>) => (
+        <Link 
+          href={config.siteUrl + "/address/" + params.row.from}
+          className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+        >
           {params.row.from}
         </Link>
       ),
     },
     { 
       field: 'txHash', 
-      headerName: 'txHash', 
-      flex: 1, 
-      renderCell: (params: string) => (
-        <Link href={config.siteUrl + "/tx/" + params.row.txHash}>
+      headerName: 'Transaction Hash', 
+      flex: 1,
+      minWidth: 200,
+      renderCell: (params: GridRenderCellParams<ContractData>) => (
+        <Link 
+          href={config.siteUrl + "/tx/" + params.row.txHash}
+          className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+        >
           {params.row.txHash}
         </Link>
       ),
     },
     { 
       field: 'pk', 
-      headerName: 'Pk', 
-      flex: 1 
+      headerName: 'Public Key', 
+      flex: 1,
+      minWidth: 150,
     },
     { 
       field: 'signature', 
       headerName: 'Signature', 
-      flex: 1 
+      flex: 1,
+      minWidth: 150,
     },
     { 
       field: 'nonce', 
       headerName: 'Nonce', 
-      flex: 1 
+      flex: 0.5,
+      minWidth: 100,
     },
     { 
       field: 'value', 
       headerName: 'Value', 
-      flex: 1 
+      flex: 0.5,
+      minWidth: 100,
     },
     { 
       field: 'contractAddress', 
       headerName: 'Contract Address', 
       flex: 1,
-      renderCell: (params: string) => (
-        <Link href={config.siteUrl + "/address/" + params.row.contractAddress}>
+      minWidth: 200,
+      renderCell: (params: GridRenderCellParams<ContractData>) => (
+        <Link 
+          href={config.siteUrl + "/address/" + params.row.contractAddress}
+          className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+        >
           {params.row.contractAddress}
         </Link>
       ),
@@ -102,26 +148,52 @@ export default function Contracts() {
   ];
 
   return (
-    <>
-      <Box m={2}>
-        <Typography variant="h6" component="div" align="center">
-          Contracts
+    <ThemeProvider theme={darkTheme}>
+      <Box className="p-4">
+        <Typography 
+          variant="h5" 
+          component="h1" 
+          className="mb-6 text-center font-bold text-gray-900 dark:text-white"
+        >
+          Smart Contracts
         </Typography>
-        <Box height={500} width='100%'>
+        <Box className="h-[600px] w-full">
           {post && 
             <DataGrid
               rows={post}
               columns={columns}
-              pageSize={10}
-              rowHeight={50} 
-              rowsPerPageOptions={[5, 10, 25]}
+              paginationModel={paginationModel}
+              onPaginationModelChange={setPaginationModel}
+              pageSizeOptions={[5, 10, 25, 50]}
+              checkboxSelection={false}
+              disableRowSelectionOnClick
               components={{
                 Toolbar: GridToolbar,
+              }}
+              componentsProps={{
+                toolbar: {
+                  showQuickFilter: true,
+                  quickFilterProps: { debounceMs: 500 },
+                },
+              }}
+              className="dark:bg-secondary-dark rounded-lg shadow-lg"
+              sx={{
+                border: 'none',
+                '& .MuiDataGrid-cell': {
+                  borderColor: 'rgba(255, 255, 255, 0.1)',
+                },
+                '& .MuiDataGrid-columnHeaders': {
+                  backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                  color: 'white',
+                },
+                '& .MuiDataGrid-row:hover': {
+                  backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                },
               }}
             />
           }
         </Box>
       </Box>
-    </>
+    </ThemeProvider>
   );
 }
