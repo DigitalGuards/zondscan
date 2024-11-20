@@ -1,5 +1,4 @@
 quanta-explorer-go/server/main.exe
-quanta-explorer-go/.env
 .DS_Store
 quanta-explorer-go/frontend/.next
 quanta-explorer-go/frontend/.env
@@ -7,3 +6,4 @@ QRLtoMongoDB-PoS/.env
 QRLtoMongoDB-PoS/main.exe
 QRLtoMongoDB-PoS/logs.log
 QRLtoMongoDB-PoS/rpc/.env
+quanta-explorer-go/frontend/package-lock.json

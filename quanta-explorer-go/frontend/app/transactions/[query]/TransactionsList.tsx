@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { decodeBase64ToHexadecimal, toFixed } from "../../lib/helpers";
 import { Transaction, TransactionsListProps } from './types';
@@ -65,6 +64,12 @@ interface TransactionCardProps {
 const TransactionCard = ({ transaction }: TransactionCardProps) => {
   const isSending = transaction.InOut === 0; 
   const date = formatDate(transaction.TimeStamp);
+  const txHash = "0x" + decodeBase64ToHexadecimal(transaction.TxHash);
+
+  const handleTxClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    window.location.href = `/tx/${txHash}`;
+  };
 
   return (
     <div className='flex-container border bg-gray-100 border p-4 rounded-lg mb-2 hover:bg-gray-200 hover:shadow-lg transition duration-75 ease-in-out'>
@@ -76,7 +81,15 @@ const TransactionCard = ({ transaction }: TransactionCardProps) => {
       </div>
       <div className="flex-item-center flex-1">
         <p className="text-lg font-semibold">Hash</p>
-        <p className="text-sm"><Link href={`/tx/${"0x" + decodeBase64ToHexadecimal(transaction.TxHash)}`}>{"0x" + decodeBase64ToHexadecimal(transaction.TxHash)}</Link></p>
+        <p className="text-sm">
+          <a 
+            href={`/tx/${txHash}`}
+            onClick={handleTxClick}
+            className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
+          >
+            {txHash}
+          </a>
+        </p>
       </div>
       <div className="flex-item-right flex-1">
         <p className="text-lg font-semibold">Quanta</p>

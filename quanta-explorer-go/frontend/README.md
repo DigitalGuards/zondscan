@@ -28,6 +28,17 @@ frontend/
 │   │       ├── TransactionsList.tsx
 │   │       └── types.ts
 │   │
+│   ├── tx/               # Transaction details feature
+│   │   ├── layout.tsx    # Transaction detail layout
+│   │   ├── loading.tsx   # Loading state
+│   │   └── [query]/      # Dynamic transaction routes
+│   │       ├── page.tsx  # Transaction detail page
+│   │       └── types.ts  # Transaction detail types
+│   │
+│   ├── api/              # API routes
+│   │   └── transaction/  # Transaction-related endpoints
+│   │       └── [hash]/   # Dynamic transaction API routes
+│   │
 │   ├── contracts/         # Smart contracts feature
 │   │   ├── layout.tsx
 │   │   └── page.tsx
@@ -65,7 +76,7 @@ The app uses a nested layout structure:
    - Includes the Sidebar component
    - Handles the main grid layout with sidebar spacing
 
-2. **Feature Layouts** (e.g., `blocks/layout.tsx`, `transactions/layout.tsx`)
+2. **Feature Layouts** (e.g., `blocks/layout.tsx`, `transactions/layout.tsx`, `tx/layout.tsx`)
    - Wrap specific feature content
    - Handle feature-specific spacing and styling
 
@@ -83,7 +94,11 @@ The app uses a nested layout structure:
 
 ### Transaction Components
 - `TransactionsList`: Manages transaction display and pagination
-- `TransactionCard`: Individual transaction display
+- `TransactionCard`: Individual transaction display in list view
+- Transaction detail page: Shows comprehensive transaction information
+  - Hash, status, block number, from/to addresses
+  - Transaction value and timestamp
+  - Gas information when available
 
 ## Styling
 
@@ -96,14 +111,15 @@ The app uses a nested layout structure:
 
 ## Page Organization
 
-1. **List Pages** (e.g., blocks/[query]/page.tsx)
+1. **List Pages** (e.g., blocks/[query]/page.tsx, transactions/[query]/page.tsx)
    - Display paginated lists of items
    - Include navigation controls
    - Maximum width constraints for readability
 
-2. **Detail Pages** (e.g., block/[id]/page.tsx)
+2. **Detail Pages** (e.g., block/[id]/page.tsx, tx/[query]/page.tsx)
    - Show detailed information for individual items
    - Responsive layouts for different screen sizes
+   - Comprehensive data display with error handling
 
 3. **Tool Pages** (e.g., checker/, converter/)
    - Utility tools for specific functions
