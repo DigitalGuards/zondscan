@@ -8,9 +8,7 @@ import (
 	"QRLtoMongoDB-PoS/rpc"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"os"
 	"sync"
 	"time"
 
@@ -42,7 +40,8 @@ func Sync() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		consumer(os.Stdout, producers)
+		// Removed os.Stdout parameter since logging is now handled by Zap logger
+		consumer(producers)
 	}()
 
 	// Start producers in correct order.
@@ -60,11 +59,10 @@ func Sync() {
 	db.GetDailyTransactionVolume()
 
 	singleBlockInsertion()
-
-	// rpc.ZondGetLogs("0xcEF0271647F8887358e00527aB8D9205a87F5fd3")
 }
 
-func consumer(w io.Writer, ch <-chan (<-chan Data)) {
+// Removed io.Writer parameter since we use Zap logger for all logging
+func consumer(ch <-chan (<-chan Data)) {
 	// Consume the producer channels.
 	for Datas := range ch {
 		// Consume the Datas.
@@ -132,7 +130,8 @@ func processInitialBlock() {
 	db.ProcessTransactions(ZondNew)
 }
 
-func processSubsequentBlocks(sum uint64, latestBlockNumber uint64) {
+// Removed latestBlockNumber parameter since block validation is handled via parent hash
+func processSubsequentBlocks(sum uint64) {
 	var Zond models.Zond
 	var ZondNew models.ZondDatabaseBlock
 
@@ -210,7 +209,8 @@ func singleBlockInsertion() {
 			isCollectionsExist = true
 		} else {
 			if sum <= latestBlockNumber {
-				processSubsequentBlocks(sum, latestBlockNumber)
+				// Removed latestBlockNumber parameter since it's not needed for block processing
+				processSubsequentBlocks(sum)
 				sum++
 			} else {
 				latestBlockNumber, err = rpc.GetLatestBlock()
