@@ -1,7 +1,6 @@
 "use client"
 
 import React, { useCallback } from 'react';
-import { useRouter, usePathname } from 'next/navigation'
 
 function onlyNumbers(str) {
   return /^[0-9]+$/.test(str);
@@ -9,8 +8,6 @@ function onlyNumbers(str) {
 
 export default function SearchBar() {
   const [searchValue, setSearchValue] = React.useState('');
-  const router = useRouter();
-  const pathname = router.asPath;
 
   function handleInputChange(event) {
     setSearchValue(event.target.value);
@@ -30,8 +27,8 @@ export default function SearchBar() {
       div.innerHTML += '<div class="p-4 mb-4 text-sm text-red-400 rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-red-400 shadow-lg" role="alert"><span class="font-medium">Invalid input!</span></div>';
       return
     }
-    router.push(newPath);
-  }, [router, pathname, searchValue]);
+    window.location.href = newPath;
+  }, [searchValue]);
 
   React.useEffect(() => {
     const listener = event => {

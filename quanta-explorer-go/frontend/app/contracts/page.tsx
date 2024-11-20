@@ -8,7 +8,6 @@ import Typography from '@mui/material/Typography';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Box from '@mui/material/Box';
 import config from '../../config.js';
-import Link from 'next/link.js';
 
 interface ContractData {
   id: number;
@@ -85,12 +84,12 @@ export default function Contracts() {
       flex: 1,
       minWidth: 200,
       renderCell: (params: GridRenderCellParams<ContractData>) => (
-        <Link 
-          href={config.siteUrl + "/address/" + params.row.from}
-          className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+        <a 
+          href={`/address/${params.row.from}`}
+          className="text-[#ffa729] hover:text-[#ffb954] transition-colors"
         >
           {params.row.from}
-        </Link>
+        </a>
       ),
     },
     { 
@@ -99,12 +98,12 @@ export default function Contracts() {
       flex: 1,
       minWidth: 200,
       renderCell: (params: GridRenderCellParams<ContractData>) => (
-        <Link 
-          href={config.siteUrl + "/tx/" + params.row.txHash}
-          className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+        <a 
+          href={`/tx/${params.row.txHash}`}
+          className="text-[#ffa729] hover:text-[#ffb954] transition-colors"
         >
           {params.row.txHash}
-        </Link>
+        </a>
       ),
     },
     { 
@@ -137,12 +136,12 @@ export default function Contracts() {
       flex: 1,
       minWidth: 200,
       renderCell: (params: GridRenderCellParams<ContractData>) => (
-        <Link 
-          href={config.siteUrl + "/address/" + params.row.contractAddress}
-          className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+        <a 
+          href={`/address/${params.row.contractAddress}`}
+          className="text-[#ffa729] hover:text-[#ffb954] transition-colors"
         >
           {params.row.contractAddress}
-        </Link>
+        </a>
       ),
     },
   ];

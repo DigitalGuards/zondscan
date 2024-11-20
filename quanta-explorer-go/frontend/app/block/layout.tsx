@@ -1,6 +1,6 @@
 "use client";
 
-export default function BlocksLayout({
+export default function BlockLayout({
   children,
 }: {
   children: React.ReactNode;

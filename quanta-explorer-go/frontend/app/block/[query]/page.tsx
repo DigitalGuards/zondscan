@@ -2,8 +2,9 @@
 
 import axios from 'axios';
 import { usePathname } from 'next/navigation'
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import config from '../../../config';
+import Link from 'next/link';
 
 type Block = {
   baseFeePerGas: number;
@@ -15,7 +16,12 @@ type Block = {
   receiptsRoot: string;
   stateRoot: string;
   timestamp: number;
-  transactions: any[]; // Specify more detailed type if the structure of transactions is known
+  transactions: Array<{
+    hash: string;
+    from: string;
+    to: string;
+    value: string;
+  }>;
   transactionsRoot: string;
   difficulty: number;
   extraData: string;
@@ -26,124 +32,183 @@ type Block = {
   sha3Uncles: string;
   size: number;
   totalDifficulty: number;
-  uncles: any[]; // Specify more detailed type if the structure of uncles is known
-  withdrawals: any[]; // Specify more detailed type if the structure of withdrawals is known
+  uncles: string[];
+  withdrawals: any[];
   withdrawalsRoot: string;
 };
 
-export default function Home() {
-  const [blockData, setBlockData] = useState({} as Block);
-  const pathname = usePathname()
-
-  function renderTransactions() {
-    if (Array.isArray(blockData.transactions != null)) {
-      return blockData.transactions.map((ptx, index) => (
-        <div key={index} className="mb-4">
-          Hash: {ptx.hash} <br />
-          From: {ptx.from} <br />
-        </div>
-      ));
-    } else {
-      return "No transactions found";
-    }
-  }
+export default function BlockDetail() {
+  const [blockData, setBlockData] = useState<Block | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const pathname = usePathname();
+  const blockNumber = pathname?.replace("/block/", "");
 
   useEffect(() => {
-    axios.get(`${config.handlerUrl}${pathname}`)
-      .then(response => {
+    const fetchBlock = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get(`${config.handlerUrl}${pathname}`);
         setBlockData(response.data.response.result);
-      })
-      .catch(error => console.error('Error fetching block:', error));
-  }, []);
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching block:', err);
+        setError('Failed to load block details');
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  console.log(blockData);
+    if (pathname) {
+      fetchBlock();
+    }
+  }, [pathname]);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#ffa729]"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8">
+        <div className="bg-red-900/50 border border-red-500 text-red-200 px-6 py-4 rounded-xl">
+          <p className="font-bold">Error:</p>
+          <p>{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!blockData) {
+    return (
+      <div className="p-8">
+        <div className="bg-yellow-900/50 border border-yellow-500 text-yellow-200 px-6 py-4 rounded-xl">
+          <p>Block not found</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <>
-        <div className="overflow-x-auto bg-gray-100 py-4 flex items-center justify-center">
-          <div className="bg-white p-6 rounded-lg shadow-md w-full lg:w-5/6">
-            <h1 className="text-2xl font-bold mb-8 border-b pb-4">Block {pathname?.replace("/block/", "")} - { new Date(blockData.timestamp * 1000).toLocaleDateString('en-GB', {
-              day: '2-digit', month: 'short', year: 'numeric'
-            }).replace(/ /g, ' ')
-          }</h1>
-            <table className="min-w-max w-full table-auto">
-              <thead>
-                <tr className="bg-gray-200 text-gray-600 uppercase text-sm leading-normal">
-                  <th className="py-3 px-6 text-left">Field</th>
-                  <th className="py-3 px-6 text-left">Value</th>
-                </tr>
-              </thead>
-              <tbody className="text-gray-600 text-sm font-light">
-                {blockData && (
-                  <>
-                    <tr className="border-b border-gray-200 hover:bg-gray-100 even:bg-gray-50">
-                      <td className="py-3 px-6 text-left">Gas Limit</td>
-                      <td className="py-3 px-6 text-left">{blockData.gasLimit}</td>
-                    </tr>
-                    <tr className="border-b border-gray-200 hover:bg-gray-100 even:bg-gray-50">
-                      <td className="py-3 px-6 text-left">Total Difficulty</td>
-                      <td className="py-3 px-6 text-left">{blockData.totalDifficulty}</td>
-                    </tr>
-                    <tr className="border-b border-gray-200 hover:bg-gray-100 even:bg-gray-50">
-                      <td className="py-3 px-6 text-left">Gas Used</td>
-                      <td className="py-3 px-6 text-left">{blockData.gasUsed}</td>
-                    </tr>
-                    <tr className="border-b border-gray-200 hover:bg-gray-100 even:bg-gray-50">
-                      <td className="py-3 px-6 text-left">Gas Limit</td>
-                      <td className="py-3 px-6 text-left">{blockData.gasLimit}</td>
-                    </tr>
-                    <tr className="border-b border-gray-200 hover:bg-gray-100 even:bg-gray-50">
-                      <td className="py-3 px-6 text-left">Base Fee Per Gas</td>
-                      <td className="py-3 px-6 text-left">{blockData.baseFeePerGas}</td>
-                    </tr>
-                    <tr className="border-b border-gray-200 hover:bg-gray-100 even:bg-gray-50">
-                      <td className="py-3 px-6 text-left">Extra Data</td>
-                      <td className="py-3 px-6 text-left">{blockData.extraData}</td>
-                    </tr>
-                    <tr className="border-b border-gray-200 hover:bg-gray-100 even:bg-gray-50">
-                      <td className="py-3 px-6 text-left">Transactions</td>
-                      <td className="py-3 px-6 text-left">
-                      {renderTransactions()}
-                      </td>
-                    </tr>
-                    <tr className="border-b border-gray-200 hover:bg-gray-100 even:bg-gray-50">
-                      <td className="py-3 px-6 text-left">Hash</td>
-                      <td className="py-3 px-6 text-left">{blockData.hash}</td>
-                    </tr>
-                    <tr className="border-b border-gray-200 hover:bg-gray-100 even:bg-gray-50">
-                      <td className="py-3 px-6 text-left">Parent Hash</td>
-                      <td className="py-3 px-6 text-left">{blockData.parentHash}</td>
-                    </tr>
-                    <tr className="border-b border-gray-200 hover:bg-gray-100 even:bg-gray-50">
-                      <td className="py-3 px-6 text-left">Transactions Root</td>
-                      <td className="py-3 px-6 text-left">{blockData.transactionsRoot}</td>
-                    </tr>
-                    <tr className="border-b border-gray-200 hover:bg-gray-100 even:bg-gray-50">
-                      <td className="py-3 px-6 text-left">State Root</td>
-                      <td className="py-3 px-6 text-left">{blockData.stateRoot}</td>
-                    </tr>
-                    <tr className="border-b border-gray-200 hover:bg-gray-100 even:bg-gray-50">
-                      <td className="py-3 px-6 text-left">Receipts Root</td>
-                      <td className="py-3 px-6 text-left">{blockData.receiptsRoot}</td>
-                    </tr>
-                    <tr className="border-b border-gray-200 hover:bg-gray-100 even:bg-gray-50">
-                      <td className="py-3 px-6 text-left">Withdrawls Root</td>
-                      <td className="py-3 px-6 text-left">{blockData.withdrawalsRoot}</td>
-                    </tr>
-                    <tr className="border-b border-gray-200 hover:bg-gray-100 even:bg-gray-50">
-                      <td className="py-3 px-6 text-left">Nonce</td>
-                      <td className="py-3 px-6 text-left">{blockData.nonce}</td>
-                    </tr>
-                    <tr className="border-b border-gray-200 hover:bg-gray-100 even:bg-gray-50">
-                      <td className="py-3 px-6 text-left">Sha3Uncles</td>
-                      <td className="py-3 px-6 text-left">{blockData.sha3Uncles}</td>
-                    </tr>
-                  </>
+    <div className="p-8">
+      <div className="relative overflow-hidden rounded-2xl 
+                    bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
+                    border border-[#3d3d3d] shadow-xl">
+        <div className="p-6">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-8 pb-6 border-b border-gray-700">
+            <div className="flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#ffa729] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+              </svg>
+              <div>
+                <h1 className="text-2xl font-bold text-[#ffa729]">Block #{blockNumber}</h1>
+                <p className="text-gray-400 mt-1">
+                  {new Date(blockData.timestamp * 1000).toLocaleString()}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Block Details */}
+          <div className="space-y-6">
+            {/* Basic Info */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-400 mb-2">Hash</h2>
+                <p className="text-gray-300 break-all font-mono">{blockData.hash}</p>
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-gray-400 mb-2">Parent Hash</h2>
+                <Link 
+                  href={`/block/${blockData.number - 1}`}
+                  className="text-gray-300 hover:text-[#ffa729] break-all font-mono transition-colors"
+                >
+                  {blockData.parentHash}
+                </Link>
+              </div>
+            </div>
+
+            {/* Gas Info */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-400 mb-2">Gas Used</h2>
+                <p className="text-gray-300">{blockData.gasUsed.toLocaleString()}</p>
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-gray-400 mb-2">Gas Limit</h2>
+                <p className="text-gray-300">{blockData.gasLimit.toLocaleString()}</p>
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-gray-400 mb-2">Base Fee</h2>
+                <p className="text-gray-300">{blockData.baseFeePerGas || 'N/A'}</p>
+              </div>
+            </div>
+
+            {/* Transactions */}
+            <div>
+              <h2 className="text-lg font-semibold text-[#ffa729] mb-4">Transactions</h2>
+              <div className="space-y-2">
+                {blockData.transactions && blockData.transactions.length > 0 ? (
+                  blockData.transactions.map((tx, index) => (
+                    <div 
+                      key={tx.hash} 
+                      className="p-4 rounded-lg bg-[#2d2d2d] border border-[#3d3d3d] hover:border-[#ffa729] transition-colors"
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-sm text-gray-400">Hash</p>
+                          <Link 
+                            href={`/tx/${tx.hash}`}
+                            className="text-gray-300 hover:text-[#ffa729] break-all font-mono transition-colors"
+                          >
+                            {tx.hash}
+                          </Link>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-400">From</p>
+                          <Link 
+                            href={`/address/${tx.from}`}
+                            className="text-gray-300 hover:text-[#ffa729] break-all font-mono transition-colors"
+                          >
+                            {tx.from}
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-gray-400">No transactions in this block</p>
                 )}
-              </tbody>
-            </table>
+              </div>
+            </div>
+
+            {/* Additional Details */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-400 mb-2">State Root</h2>
+                <p className="text-gray-300 break-all font-mono">{blockData.stateRoot}</p>
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-gray-400 mb-2">Receipts Root</h2>
+                <p className="text-gray-300 break-all font-mono">{blockData.receiptsRoot}</p>
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-gray-400 mb-2">Transactions Root</h2>
+                <p className="text-gray-300 break-all font-mono">{blockData.transactionsRoot}</p>
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-gray-400 mb-2">Extra Data</h2>
+                <p className="text-gray-300 break-all font-mono">{blockData.extraData}</p>
+              </div>
+            </div>
           </div>
         </div>
-    </>
+      </div>
+    </div>
   );
 }
