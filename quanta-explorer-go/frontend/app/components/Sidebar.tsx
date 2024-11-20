@@ -28,6 +28,10 @@ function classNames(...classes: string[]) {
 }
 
 export default function Sidebar() {
+  const navigateTo = (href: string) => {
+    window.location.href = href;
+  };
+
   return (
     <aside className="fixed left-0 top-0 h-full w-64 overflow-y-auto z-50
                       bg-gradient-to-b from-[#1a1a1a] via-[#1a1a1a] to-[#1f1f1f]
@@ -66,10 +70,10 @@ export default function Sidebar() {
                 </Disclosure.Button>
                 <Disclosure.Panel className="mt-3 space-y-2 pl-3">
                   {blockchain.map((item) => (
-                    <Link
+                    <button
                       key={item.name}
-                      href={item.href}
-                      className="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 
+                      onClick={() => navigateTo(item.href)}
+                      className="flex w-full items-center gap-3 px-4 py-3 text-sm text-gray-300 
                                hover:bg-[#2d2d2d] rounded-lg transition-all duration-200
                                hover:text-[#ffa729] group"
                     >
@@ -86,7 +90,7 @@ export default function Sidebar() {
                         />
                       </div>
                       <span className="truncate">{item.name}</span>
-                    </Link>
+                    </button>
                   ))}
                 </Disclosure.Panel>
               </>
@@ -108,10 +112,10 @@ export default function Sidebar() {
                 </Disclosure.Button>
                 <Disclosure.Panel className="mt-3 space-y-2 pl-3">
                   {tools.map((item) => (
-                    <Link
+                    <button
                       key={item.name}
-                      href={item.href}
-                      className="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 
+                      onClick={() => navigateTo(item.href)}
+                      className="flex w-full items-center gap-3 px-4 py-3 text-sm text-gray-300 
                                hover:bg-[#2d2d2d] rounded-lg transition-all duration-200
                                hover:text-[#ffa729] group"
                     >
@@ -128,21 +132,21 @@ export default function Sidebar() {
                         />
                       </div>
                       <span className="truncate">{item.name}</span>
-                    </Link>
+                    </button>
                   ))}
                 </Disclosure.Panel>
               </>
             )}
           </Disclosure>
 
-          <Link
-            href="/richlist"
+          <button
+            onClick={() => navigateTo('/richlist')}
             className="flex w-full items-center px-5 py-4 text-sm font-medium 
                      text-gray-300 hover:text-[#ffa729] hover:bg-[#2d2d2d] 
                      rounded-xl transition-all duration-200"
           >
             Richlist
-          </Link>
+          </button>
         </nav>
       </div>
     </aside>
