@@ -83,7 +83,6 @@ export default function RootLayout({ children }: RootLayoutProps) {
           <div className="flex min-h-screen">
             <Sidebar />
             <main className="flex-1 ml-64 min-h-screen relative">
-              <div className="absolute inset-0 bg-[url('/circuit-board.svg')] opacity-[0.02]"></div>
               <div className="relative">
                 {children}
               </div>

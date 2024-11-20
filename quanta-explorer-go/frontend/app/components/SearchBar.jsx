@@ -48,7 +48,6 @@ export default function SearchBar() {
 
   return (
     <div className="relative w-full">
-      <div className="absolute inset-0 bg-[url('/circuit-board.svg')] opacity-5 rounded-2xl"></div>
       <div className="relative bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-2xl p-6 
                     shadow-xl border border-[#3d3d3d] hover:border-[#4d4d4d] transition-colors">
         <form

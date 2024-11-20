@@ -72,28 +72,44 @@ const TransactionCard = ({ transaction }: TransactionCardProps) => {
   };
 
   return (
-    <div className='flex-container border bg-gray-100 border p-4 rounded-lg mb-2 hover:bg-gray-200 hover:shadow-lg transition duration-75 ease-in-out'>
-      <div className="flex flex-item-left items-center flex-col ml-4">
-        {isSending ? <SendIcon /> : <ReceiveIcon />}
-        <p className="text-lg font-semibold">Transfer</p>
-        <p>Confirmed</p>
-        <p>{date}</p>
-      </div>
-      <div className="flex-item-center flex-1">
-        <p className="text-lg font-semibold">Hash</p>
-        <p className="text-sm">
+    <div className='relative overflow-hidden rounded-2xl 
+                    bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
+                    border border-[#3d3d3d] shadow-xl
+                    hover:border-[#ffa729] transition-all duration-300
+                    group mb-4'>
+      <div className="flex items-center p-6">
+        {/* Left Section - Icon and Status */}
+        <div className="flex flex-col items-center w-48">
+          <div className="mb-2">
+            {isSending ? <SendIcon /> : <ReceiveIcon />}
+          </div>
+          <div className="text-center">
+            <p className="text-lg font-semibold text-[#ffa729] mb-1">Transfer</p>
+            <p className="text-sm text-gray-400 mb-1">Confirmed</p>
+            <p className="text-sm text-gray-400">{date}</p>
+          </div>
+        </div>
+
+        {/* Middle Section - Hash */}
+        <div className="flex-1 px-8 border-l border-r border-[#3d3d3d]">
+          <p className="text-sm font-medium text-gray-400 mb-2">Transaction Hash</p>
           <a 
             href={`/tx/${txHash}`}
             onClick={handleTxClick}
-            className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
+            className="text-gray-300 hover:text-[#ffa729] transition-colors break-all font-mono"
           >
             {txHash}
           </a>
-        </p>
-      </div>
-      <div className="flex-item-right flex-1">
-        <p className="text-lg font-semibold">Quanta</p>
-        <p className="text-lg font-medium">{toFixed(transaction.Amount)}</p>
+        </div>
+
+        {/* Right Section - Amount */}
+        <div className="w-48 text-right">
+          <p className="text-sm font-medium text-gray-400 mb-2">Amount</p>
+          <p className="text-2xl font-semibold text-[#ffa729]">
+            {toFixed(transaction.Amount)}
+            <span className="text-sm text-gray-400 ml-2">QRL</span>
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -121,12 +137,12 @@ export default function TransactionsList({ initialData, currentPage }: Transacti
   return (
     <div className="container mx-auto p-4">
       {transactions.length === 0 ? (
-        <div className="text-center py-4">
-          <p>No transactions found</p>
+        <div className="text-center py-8">
+          <p className="text-gray-300">No transactions found</p>
         </div>
       ) : (
         <>
-          <div className="mb-4">
+          <div className="mb-8">
             {transactions.map(transaction => (
               <TransactionCard 
                 key={transaction.TxHash} 
@@ -134,19 +150,27 @@ export default function TransactionsList({ initialData, currentPage }: Transacti
               />
             ))}
           </div>
-          <div className="flex justify-center items-center">
+          <div className="flex justify-center items-center gap-4 text-gray-300">
             <button 
               onClick={goToPreviousPage} 
               disabled={currentPage === 1} 
-              className={`px-4 py-2 rounded mr-2 md:px-6 md:py-3 ${currentPage === 1 ? 'bg-gray-400' : 'bg-blue-500 text-white'}`}
+              className={`px-6 py-3 rounded-xl
+                         ${currentPage === 1 
+                           ? 'bg-gray-700 text-gray-500 cursor-not-allowed' 
+                           : 'bg-[#2d2d2d] hover:bg-[#3d3d3d] text-[#ffa729] hover:text-[#ffb954]'} 
+                         transition-all duration-300`}
             >
               Previous
             </button>
-            <span>Page {currentPage} of {totalPages}</span>
+            <span className="px-4">Page {currentPage} of {totalPages}</span>
             <button 
               onClick={goToNextPage} 
               disabled={currentPage === totalPages} 
-              className={`px-4 py-2 rounded ml-2 ${currentPage === totalPages ? 'bg-gray-400' : 'bg-blue-500 text-white'}`}
+              className={`px-6 py-3 rounded-xl
+                         ${currentPage === totalPages 
+                           ? 'bg-gray-700 text-gray-500 cursor-not-allowed' 
+                           : 'bg-[#2d2d2d] hover:bg-[#3d3d3d] text-[#ffa729] hover:text-[#ffb954]'}
+                         transition-all duration-300`}
             >
               Next
             </button>
