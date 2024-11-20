@@ -32,27 +32,85 @@ func GetLatestBlock() (uint64, error) {
 	b, err := json.Marshal(group)
 	if err != nil {
 		logger.Info("Failed JSON marshal", zap.Error(err))
+		return 0, err
 	}
 
 	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
+	if err != nil {
+		logger.Info("Failed to create request", zap.Error(err))
+		return 0, err
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		logger.Info("Failed to get response from RPC call", zap.Error(err))
+		return 0, err
+	}
+	if resp == nil {
+		return 0, fmt.Errorf("received nil response")
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Info("Failed to read response body", zap.Error(err))
+		return 0, err
+	}
 
 	err = json.Unmarshal([]byte(string(body)), &Zond)
+	if err != nil {
+		logger.Info("Failed to unmarshal response", zap.Error(err))
+		return 0, err
+	}
 
 	blockNumber := new(big.Int)
 	blockNumber.SetString(Zond.Result[2:], 16)
-	blockNumber.Uint64()
-
 	return blockNumber.Uint64(), nil
+}
+
+func GetBlockByNumberMainnet(blocknumber uint64) string {
+	h := fmt.Sprintf("0x%x", blocknumber)
+
+	group := models.JsonRPC{
+		Jsonrpc: "2.0",
+		Method:  "zond_getBlockByNumber",
+		Params:  []interface{}{h, true},
+		ID:      1,
+	}
+	b, err := json.Marshal(group)
+	if err != nil {
+		logger.Info("Failed JSON marshal", zap.Error(err))
+		return ""
+	}
+
+	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
+	if err != nil {
+		logger.Info("Failed to create request", zap.Error(err))
+		return ""
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.Info("Failed to get response from RPC call", zap.Error(err))
+		return ""
+	}
+	if resp == nil {
+		logger.Info("Received nil response")
+		return ""
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Info("Failed to read response body", zap.Error(err))
+		return ""
+	}
+
+	return string(body)
 }
 
 func GetContractAddress(txHash string) (string, string, error) {
@@ -84,35 +142,6 @@ func GetContractAddress(txHash string) (string, string, error) {
 	json.Unmarshal([]byte(string(body)), &ContractAddress)
 
 	return ContractAddress.Result.ContractAddress, ContractAddress.Result.Status, nil
-}
-
-func GetBlockByNumberMainnet(blocknumber uint64) string {
-	h := fmt.Sprintf("0x%x", blocknumber)
-
-	group := models.JsonRPC{
-		Jsonrpc: "2.0",
-		Method:  "zond_getBlockByNumber",
-		Params:  []interface{}{h, true},
-		ID:      1,
-	}
-	b, err := json.Marshal(group)
-	if err != nil {
-		logger.Info("Failed JSON marshal", zap.Error(err))
-	}
-
-	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		logger.Info("Failed to get response from RPC call", zap.Error(err))
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-
-	return string(body)
 }
 
 func CallDebugTraceTransaction(hash string) (transactionType []byte, callType []byte, from []byte, to []byte, input uint64, output uint64, traceAddress []int, value float32, gas uint64, gasUsed uint64, addressFunctionidentifier []byte, amountFunctionIdentifier uint64) {

@@ -32,7 +32,8 @@ func Sync() {
 
 	max, err := rpc.GetLatestBlock()
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Failed to get latest block: %v", err)
+		return
 	}
 
 	// Create a buffered channel of read only channels, with length 8.
@@ -60,8 +61,6 @@ func Sync() {
 	db.GetDailyTransactionVolume()
 
 	singleBlockInsertion()
-
-	// rpc.ZondGetLogs("0xcEF0271647F8887358e00527aB8D9205a87F5fd3")
 }
 
 func consumer(w io.Writer, ch <-chan (<-chan Data)) {
@@ -69,11 +68,12 @@ func consumer(w io.Writer, ch <-chan (<-chan Data)) {
 	for Datas := range ch {
 		// Consume the Datas.
 		for i := range Datas {
+			if i.blockData == nil || len(i.blockData) == 0 {
+				continue
+			}
 			// Do stuff with the Datas, in order.
 			db.InsertManyBlockDocuments(i.blockData)
-			// db.ProcessAverageBlockSize(i.blockData)
 			for x := 0; x < len(i.blockNumbers); x++ {
-				// db.ProcessCreditingFromBlockData(i.blockData[x])
 				db.ProcessTransactions(i.blockData[x])
 			}
 		}
@@ -94,19 +94,23 @@ func producer(start int, end int) <-chan Data {
 		// Produce data.
 		for i := start; i < end; i++ {
 			data := rpc.GetBlockByNumberMainnet(uint64(i))
+			if data == "" {
+				continue
+			}
 
 			var Zond models.Zond
-			var ZondNew models.ZondDatabaseBlock
-
-			json.Unmarshal([]byte(data), &Zond)
+			err := json.Unmarshal([]byte(data), &Zond)
+			if err != nil {
+				continue
+			}
 
 			if Zond.PreResult.ParentHash != "" {
-				ZondNew = db.ConvertModelsUint64(Zond)
+				ZondNew := db.ConvertModelsUint64(Zond)
 				blockData = append(blockData, ZondNew)
 				blockNumbers = append(blockNumbers, i)
 			}
 		}
-		if blockData != nil {
+		if len(blockData) > 0 {
 			ch <- Data{blockData: blockData, blockNumbers: blockNumbers}
 		}
 	}(Datas)
@@ -116,28 +120,29 @@ func producer(start int, end int) <-chan Data {
 }
 
 func processInitialBlock() {
-	var Zond models.Zond
-	var ZondNew models.ZondDatabaseBlock
-
 	blockData := rpc.GetBlockByNumberMainnet(0)
+	if blockData == "" {
+		return
+	}
 
+	var Zond models.Zond
 	err := json.Unmarshal([]byte(blockData), &Zond)
 	if err != nil {
 		glog.Info("%v", err)
 		return
 	}
-	ZondNew = db.ConvertModelsUint64(Zond)
+	ZondNew := db.ConvertModelsUint64(Zond)
 	db.InsertBlockDocument(ZondNew)
-	// db.ProcessSingleCreditingFromBlockData(ZondNew)
 	db.ProcessTransactions(ZondNew)
 }
 
 func processSubsequentBlocks(sum uint64, latestBlockNumber uint64) {
-	var Zond models.Zond
-	var ZondNew models.ZondDatabaseBlock
-
 	blockData := rpc.GetBlockByNumberMainnet(sum)
+	if blockData == "" {
+		return
+	}
 
+	var Zond models.Zond
 	err := json.Unmarshal([]byte(blockData), &Zond)
 	if err != nil {
 		glog.Info("%v", err)
@@ -145,7 +150,7 @@ func processSubsequentBlocks(sum uint64, latestBlockNumber uint64) {
 	}
 
 	if Zond.PreResult.ParentHash != "" {
-		ZondNew = db.ConvertModelsUint64(Zond)
+		ZondNew := db.ConvertModelsUint64(Zond)
 		previousHash := ZondNew.Result.ParentHash
 		if previousHash == db.GetLatestBlockHashHeaderFromDB(db.GetLatestBlockNumberFromDB()) {
 			processBlockAndUpdateValidators(sum, ZondNew, previousHash)
@@ -158,14 +163,12 @@ func processSubsequentBlocks(sum uint64, latestBlockNumber uint64) {
 
 func processBlockAndUpdateValidators(sum uint64, ZondNew models.ZondDatabaseBlock, previousHash string) {
 	db.InsertBlockDocument(ZondNew)
-	// db.ProcessSingleCreditingFromBlockData(ZondNew)
 	db.ProcessTransactions(ZondNew)
 	db.UpdateValidators(sum, previousHash)
 }
 
 func runPeriodicTask(task func(), interval time.Duration, taskName string) {
 	go func() {
-		// Recover from panics to keep the goroutine running
 		defer func() {
 			if r := recover(); r != nil {
 				logger.Error("Recovered from panic in periodic task",
@@ -179,7 +182,6 @@ func runPeriodicTask(task func(), interval time.Duration, taskName string) {
 
 		for range ticker.C {
 			func() {
-				// Additional recovery for each tick
 				defer func() {
 					if r := recover(); r != nil {
 						logger.Error("Recovered from panic in periodic task tick",
@@ -198,14 +200,15 @@ func singleBlockInsertion() {
 
 	latestBlockNumber, err := rpc.GetLatestBlock()
 	if err != nil {
-		fmt.Println(err)
+		logger.Error("Failed to get latest block", zap.Error(err))
+		return
 	}
 
 	isCollectionsExist := db.IsCollectionsExist()
 
 	// Block processing goroutine
 	runPeriodicTask(func() {
-		if isCollectionsExist != true {
+		if !isCollectionsExist {
 			processInitialBlock()
 			isCollectionsExist = true
 		} else {
@@ -223,7 +226,6 @@ func singleBlockInsertion() {
 
 	// Data update goroutine
 	runPeriodicTask(func() {
-		// Run each task independently so one failure doesn't affect others
 		func() {
 			db.PeriodicallyUpdateCoinGeckoData()
 		}()
