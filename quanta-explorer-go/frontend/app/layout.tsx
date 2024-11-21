@@ -1,6 +1,5 @@
 import './globals.css'
 import Sidebar from "./components/Sidebar"
-import AuthProvider from "./components/AuthProvider"
 import Script from 'next/script'
 
 export const metadata = {
@@ -56,40 +55,38 @@ interface RootLayoutProps {
 
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
-    <AuthProvider>
-      <html lang="en" className="dark">
-        <head>
-          <Script id="schema-org" type="application/ld+json" strategy="beforeInteractive">
-            {`
-              {
-                "@context": "https://schema.org",
-                "@type": "WebApplication",
-                "name": "QRL ZOND Explorer",
-                "description": "QRL ZOND Web3/EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network",
-                "url": "https://zondscan.com",
-                "applicationCategory": "Blockchain Explorer",
-                "operatingSystem": "All",
-                "browserRequirements": "Requires JavaScript",
-                "offers": {
-                  "@type": "Offer",
-                  "price": "0",
-                  "priceCurrency": "USD"
+        <html lang="en" className="dark">
+          <head>
+            <Script id="schema-org" type="application/ld+json" strategy="beforeInteractive">
+              {`
+                {
+                  "@context": "https://schema.org",
+                  "@type": "WebApplication",
+                  "name": "QRL ZOND Explorer",
+                  "description": "QRL ZOND Web3/EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network",
+                  "url": "https://zondscan.com",
+                  "applicationCategory": "Blockchain Explorer",
+                  "operatingSystem": "All",
+                  "browserRequirements": "Requires JavaScript",
+                  "offers": {
+                    "@type": "Offer",
+                    "price": "0",
+                    "priceCurrency": "USD"
+                  }
                 }
-              }
-            `}
-          </Script>
-        </head>
-        <body className="min-h-screen bg-[#1a1a1a] text-gray-300">
-          <div className="flex min-h-screen">
-            <Sidebar />
-            <main className="flex-1 ml-64 min-h-screen relative">
-              <div className="relative">
-                {children}
-              </div>
-            </main>
-          </div>
-        </body>
-      </html>
-    </AuthProvider>
+              `}
+            </Script>
+          </head>
+          <body className="min-h-screen bg-[#1a1a1a] text-gray-300">
+            <div className="flex min-h-screen">
+              <Sidebar />
+              <main className="flex-1 ml-64 min-h-screen relative">
+                <div className="relative">
+                  {children}
+                </div>
+              </main>
+            </div>
+          </body>
+        </html>
   )
 }

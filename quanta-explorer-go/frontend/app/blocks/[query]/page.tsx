@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import axios from 'axios';
 import config from '../../../config';
-import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { Block, BlocksResponse } from './types';
+import { useRouter } from 'next/navigation';
 
 interface BlockCardProps {
   blockData: Block;
@@ -53,44 +54,36 @@ const BlockCard: React.FC<BlockCardProps> = ({ blockData }) => {
   );
 };
 
+const fetchBlocks = async (page: string) => {
+  const response = await axios.get<BlocksResponse>(`${config.handlerUrl}/blocks?page=${page}`);
+  return response.data;
+};
+
 export default function BlocksList({ params }: { params: { query: string } }) {
   const router = useRouter();
-  const [blocksData, setBlocksData] = useState<Block[]>([]);
-  const [totalPages, setTotalPages] = useState(10);
-  const [currentPage, setCurrentPage] = useState(parseInt(params.query));
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
-  useEffect(() => {
-    const fetchBlocks = async () => {
-      try {
-        setLoading(true);
-        const response = await axios.get<BlocksResponse>(config.handlerUrl + `/blocks?page=${currentPage}`);
-        setBlocksData(response.data.blocks);
-        setTotalPages(Math.round(response.data.total / 15));
-        setError(null);
-      } catch (err) {
-        console.error('Error fetching blocks:', err);
-        setError('Failed to load blocks');
-      } finally {
-        setLoading(false);
-      }
-    };
+  const currentPage = parseInt(params.query);
 
-    fetchBlocks();
-  }, [currentPage]);
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['blocks', params.query],
+    queryFn: () => fetchBlocks(params.query),
+    staleTime: 30000, // Consider data fresh for 30 seconds
+    cacheTime: 5 * 60 * 1000, // Keep unused data in cache for 5 minutes
+    retry: 2
+  });
+
+  const totalPages = data ? Math.round(data.total / 15) : 10;
 
   const goToNextPage = () => {
     const nextPage = Math.min(currentPage + 1, totalPages);
-    window.location.href = `/blocks/${nextPage}`;
+    router.push(`/blocks/${nextPage}`);
   };
 
   const goToPreviousPage = () => {
     const prevPage = Math.max(currentPage - 1, 1);
-    window.location.href = `/blocks/${prevPage}`;
+    router.push(`/blocks/${prevPage}`);
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="p-8">
         <h1 className="text-2xl font-bold mb-6 text-[#ffa729]">Blocks</h1>
@@ -117,13 +110,13 @@ export default function BlocksList({ params }: { params: { query: string } }) {
     );
   }
 
-  if (error) {
+  if (isError) {
     return (
       <div className="p-8">
         <h1 className="text-2xl font-bold mb-6 text-[#ffa729]">Blocks</h1>
         <div className="bg-red-900/50 border border-red-500 text-red-200 px-6 py-4 rounded-xl">
           <p className="font-bold">Error:</p>
-          <p>{error}</p>
+          <p>{error instanceof Error ? error.message : 'Failed to load blocks'}</p>
         </div>
       </div>
     );
@@ -133,7 +126,7 @@ export default function BlocksList({ params }: { params: { query: string } }) {
     <div className="p-8">
       <h1 className="text-2xl font-bold mb-6 text-[#ffa729]">Blocks</h1>
       <div className="mb-8">
-        {blocksData.map((blockData) => (
+        {data?.blocks.map((blockData) => (
           <BlockCard key={blockData.number} blockData={blockData} />
         ))}
       </div>

@@ -1,8 +1,7 @@
 import * as React from 'react';
 import axios from "axios";
-import { formatNumber, formatNumberWithCommas } from "./lib/helpers";
+import { formatNumber, formatNumberWithCommas, toFixed } from "./lib/helpers";
 import config from "../config.js"
-import { toFixed } from "./lib/helpers.js"
 import SearchBar from "./components/SearchBar"
 
 interface StatsData {
