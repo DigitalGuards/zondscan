@@ -4,6 +4,10 @@ import dynamic from 'next/dynamic';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 
+interface ContractsWrapperProps {
+  initialData: any[];
+}
+
 const ContractsClient = dynamic(() => import('./contracts-client'), {
   ssr: false,
   loading: () => (
@@ -13,6 +17,6 @@ const ContractsClient = dynamic(() => import('./contracts-client'), {
   ),
 });
 
-export default function ContractsWrapper() {
-  return <ContractsClient />;
+export default function ContractsWrapper({ initialData }: ContractsWrapperProps) {
+  return <ContractsClient initialData={initialData} />;
 }

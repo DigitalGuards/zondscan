@@ -2,11 +2,9 @@
 
 import * as React from 'react';
 import { Buffer } from 'buffer';
-import axios from "axios";
 import Link from 'next/link';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import config from '../../config.js';
 
 interface ContractData {
   id: number;
@@ -17,6 +15,10 @@ interface ContractData {
   nonce: string;
   value: string;
   contractAddress: string;
+}
+
+interface ContractsClientProps {
+  initialData: any[];
 }
 
 const ITEMS_PER_PAGE = 10;
@@ -148,60 +150,31 @@ function SearchInput({ value, onChange }: { value: string; onChange: (value: str
   );
 }
 
-export default function ContractsClient() {
-  const [post, setPost] = React.useState<ContractData[] | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(true);
+export default function ContractsClient({ initialData }: ContractsClientProps) {
   const [filterValue, setFilterValue] = React.useState('');
   const [currentPage, setCurrentPage] = React.useState(0);
 
-  React.useEffect(() => {
-    const fetchContracts = async () => {
-      try {
-        setLoading(true);
-        const response = await axios.get(`${config.handlerUrl}/contracts`, {
-          timeout: 30000 // 30 second timeout
-        });
-
-        if (!response.data || !response.data.response) {
-          throw new Error('Invalid response format');
-        }
-
-        const data = response.data.response;
-        const transformedData = data.map((item: any, index: number) => ({
-          id: index,
-          ...item,
-          from: DecoderAddress({row: item}),
-          txHash: DecoderTxHash({row: item}),
-          pk: Decoder({row: { pk: item.pk }}),
-          signature: Decoder({row: { signature: item.signature }}),
-          contractAddress: DecoderAddress({row: item})
-        }));
-    
-        setPost(transformedData);
-        setError(null);
-      } catch (err) {
-        console.error('Error fetching contracts:', err);
-        setError(err instanceof Error ? err.message : 'Failed to fetch contracts');
-        setPost(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchContracts();
-  }, []);
+  const transformedData = React.useMemo(() => {
+    return initialData.map((item: any, index: number) => ({
+      id: index,
+      ...item,
+      from: DecoderAddress({row: item}),
+      txHash: DecoderTxHash({row: item}),
+      pk: Decoder({row: { pk: item.pk }}),
+      signature: Decoder({row: { signature: item.signature }}),
+      contractAddress: DecoderAddress({row: item})
+    }));
+  }, [initialData]);
 
   const filteredData = React.useMemo(() => {
-    if (!post) return [];
-    if (!filterValue) return post;
+    if (!filterValue) return transformedData;
     
-    return post.filter(row => 
+    return transformedData.filter(row => 
       Object.values(row).some(value => 
         value?.toString().toLowerCase().includes(filterValue.toLowerCase())
       )
     );
-  }, [post, filterValue]);
+  }, [transformedData, filterValue]);
 
   const paginatedData = React.useMemo(() => {
     const startIndex = currentPage * ITEMS_PER_PAGE;
@@ -210,25 +183,7 @@ export default function ContractsClient() {
 
   const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
 
-  if (error) {
-    return (
-      <Box className="p-4 text-center">
-        <Typography color="error" variant="h6">
-          Error: {error}
-        </Typography>
-      </Box>
-    );
-  }
-
-  if (loading) {
-    return (
-      <Box className="p-4 text-center">
-        <Typography>Loading contracts...</Typography>
-      </Box>
-    );
-  }
-
-  if (!post || post.length === 0) {
+  if (!initialData || initialData.length === 0) {
     return (
       <Box className="p-4 text-center">
         <Typography>No contracts found.</Typography>
