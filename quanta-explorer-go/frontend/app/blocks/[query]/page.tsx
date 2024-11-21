@@ -67,7 +67,7 @@ export default function BlocksList({ params }: { params: { query: string } }) {
     queryKey: ['blocks', params.query],
     queryFn: () => fetchBlocks(params.query),
     staleTime: 30000, // Consider data fresh for 30 seconds
-    cacheTime: 5 * 60 * 1000, // Keep unused data in cache for 5 minutes
+    gcTime: 5 * 60 * 1000, // Keep unused data in cache for 5 minutes (formerly cacheTime)
     retry: 2
   });
 
