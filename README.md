@@ -10,21 +10,18 @@ Zond node (It can be either external or local).
 
 Note: These instructions are only for the explorer related components. Are you trying to get your Zond up and running? Visit https://test-zond.theqrl.org/linux.html
 
-Make sure to clone quanta-explorer-go and QRLtoMongoDB-PoS first:
-
 ```
-git clone https://github.com/moscowchill/qrl-explorer-pos.git
+git clone [https://github.com/moscowchill/zondexplorer.git](https://github.com/DigitalGuards/zondexplorer.git)
 ```
 
 #### Requirements
 - Install golang, mongodb/mongosh, pm2 packages - check their documentations
-- Ubuntu 20.04 LTS system
 
 ### Frontend
-Now cd into quanta-explorer-go
+Now cd into ExplorerFrontend
 
 ```
-cd quanta-explorer-go/frontend
+cd zondexplorer/ExplorerFrontend
 ```
 
 Create the .env files if you don't have them
@@ -63,7 +60,7 @@ End of instructions for Frontend
 
 ### Server (Handler)
 
-Cd into the server folder and create two .env files if you don't have them: 
+Cd into the backendAPI folder and create two .env files if you don't have them: 
 ```
 touch .env.development && touch .env.production
 ```
@@ -152,7 +149,7 @@ The backend consists of three main components that work together to provide bloc
    - Uses producer/consumer pattern for efficient data processing
    - Maintains data consistency with rollback capability
 
-3. **Server (Handler)**
+3. **backendAPI Server (Handler)**
    - REST API server built with Gin framework
    - Provides endpoints for frontend data access
    - Aggregates data from MongoDB collections
