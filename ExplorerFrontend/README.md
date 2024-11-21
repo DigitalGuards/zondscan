@@ -10,8 +10,6 @@ frontend/
 │   ├── components/         # Shared components
 │   │   ├── Alert.tsx      # Alert component for notifications
 │   │   ├── AreaChart.tsx  # Chart component for data visualization
-│   │   ├── AuthProfileIcon.tsx # User profile icon component
-│   │   ├── AuthProvider.tsx    # Authentication provider
 │   │   ├── SearchBar.tsx      # Global search component
 │   │   └── Sidebar.tsx        # Main navigation sidebar
 │   │
@@ -44,7 +42,6 @@ frontend/
 │   │       └── types.ts # Transaction detail types
 │   │
 │   ├── api/             # API routes
-│   │   ├── auth/        # Authentication endpoints
 │   │   ├── generate/    # Data generation endpoints
 │   │   └── transaction/ # Transaction-related endpoints
 │   │       └── [hash]/  # Dynamic transaction API routes

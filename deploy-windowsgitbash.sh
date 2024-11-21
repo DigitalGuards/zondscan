@@ -70,8 +70,8 @@ clone_repo() {
         fi
     else
         print_status "Cloning QRL Explorer repository..."
-        git clone https://github.com/moscowchill/qrl-explorer-pos.git ../qrl-explorer-pos || print_error "Failed to clone repository"
-        cd ../qrl-explorer-pos || print_error "Failed to enter project directory"
+        git clone https://github.com/DigitalGuards/zondexplorer.git ../zondexplorer || print_error "Failed to clone repository"
+        cd ../backendAPI || print_error "Failed to enter project directory"
     fi
     export BASE_DIR=$(pwd)
 }
@@ -79,7 +79,7 @@ clone_repo() {
 # Setup server environment
 setup_server() {
     print_status "Setting up server..."
-    cd "$BASE_DIR/quanta-explorer-go/server" || print_error "Server directory not found"
+    cd "$BASE_DIR/backendAPI" || print_error "Server directory not found"
 
     # Build the server
     print_status "Building server..."
@@ -87,13 +87,13 @@ setup_server() {
 
     # Start server with PM2, specifying the working directory and APP_ENV
     print_status "Starting server with PM2..."
-    APP_ENV=development pm2 start ./main.exe --name "handler" --cwd "$BASE_DIR/quanta-explorer-go/server" || print_error "Failed to start server"
+    APP_ENV=development pm2 start ./main.exe --name "handler" --cwd "$BASE_DIR/backendAPI" || print_error "Failed to start server"
 }
 
 # Setup frontend environment
 setup_frontend() {
     print_status "Setting up frontend..."
-    cd "$BASE_DIR/quanta-explorer-go/frontend" || print_error "Frontend directory not found"
+    cd "$BASE_DIR/ExplorerFrontend" || print_error "Frontend directory not found"
 
     # Create .env file
     cat > .env << EOL
@@ -122,7 +122,7 @@ EOL
 
     # Start frontend in development mode with PM2
     print_status "Starting frontend in development mode..."
-    cd "$BASE_DIR/quanta-explorer-go/frontend" && pm2 start "npm run dev" --name "frontend" || print_error "Failed to start frontend"
+    cd "$BASE_DIR/ExplorerFrontend" && pm2 start "npm run dev" --name "frontend" || print_error "Failed to start frontend"
 }
 
 # Setup blockchain synchronizer
@@ -176,9 +176,6 @@ main() {
     # Check if MongoDB and Zond node are running
     check_mongodb
     check_zond_node
-
-    # Create a clean working directory
-    rm -rf qrl-explorer-pos
 
     # Clone and setup
     clone_repo
