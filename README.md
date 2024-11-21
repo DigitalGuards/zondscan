@@ -2,11 +2,26 @@
 
 Quantum Resistant Ledger Proof-of-Stake explorer. It is blazing fast with a modern frontend using NextJS and Golang for the backend, stable and compatible with the Ethereum network. Very easy to setup. Synchronising the blockchain node to MongoDB takes only 3 to 5 seconds, depending on your hardware, network speed, and size of the blockchain. Which makes it incredibly easy debug the system, as you can easily delete the blockchain data from MongoDB and simply restart to sync it again. Saves a lot of time.
 
-There are four components you will need:
+## Project Structure
 
-quanta-explorer-go containing two components, frontend and server (handler), 
-QRLtoMongoDB-PoS - which is a blockchain synchroniser to MongoDB and
-Zond node (It can be either external or local). 
+The project consists of three main components:
+
+1. **ExplorerFrontend**: Next.js-based frontend application
+   - Modern UI with TypeScript support
+   - Real-time data updates
+   - Responsive design for all devices
+
+2. **backendAPI**: Golang-based API server
+   - RESTful API endpoints
+   - MongoDB data aggregation
+   - Real-time blockchain data serving
+
+3. **QRLtoMongoDB-PoS**: Blockchain synchronizer
+   - Syncs blockchain data to MongoDB
+   - Handles chain reorganization
+   - Maintains data consistency
+
+Plus a Zond node (can be either external or local).
 
 Note: These instructions are only for the explorer related components. Are you trying to get your Zond up and running? Visit https://test-zond.theqrl.org/linux.html
 
@@ -17,14 +32,14 @@ git clone https://github.com/DigitalGuards/zondexplorer.git
 #### Requirements
 - Install golang, mongodb/mongosh, pm2 packages - check their documentations
 
-### Frontend
-Now cd into ExplorerFrontend
+### ExplorerFrontend Setup
+Navigate to the frontend directory:
 
 ```
 cd zondexplorer/ExplorerFrontend
 ```
 
-Create the .env files if you don't have them
+Create the environment files:
 ```
 touch .env && touch .env.local
 ```
@@ -48,20 +63,18 @@ touch .env && touch .env.local
 | DOMAIN_NAME | http://localhost:3000 (dev) OR http://your_domain_name.io (prod) |
 | HANDLER_URL | http://localhost:8080 (dev) OR http://your_domain_name.io:8443 (prod) |
 
-Next, run the following command
+Build and start the frontend:
 ```
-npm run build
-```
-
-```
+npm install
+npm run dev
 pm2 start npm --name "frontend" -- start
 ```
-End of instructions for Frontend
 
-### Server (Handler)
+### backendAPI Setup
 
-Cd into the backendAPI folder and create two .env files if you don't have them: 
+Navigate to the backend directory and create environment files:
 ```
+cd ../backendAPI
 touch .env.development && touch .env.production
 ```
 
@@ -85,21 +98,22 @@ touch .env.development && touch .env.production
 | HTTPS_PORT | :8443 |
 | NODE_URL | http://localhost:8545 |
 
-Now we need to build the main.go file
-```
-go build main.go
-```
-Now we have a main executable. We can add it to pm2.
+Build and start the backendAPI:
+```bash
+# On Unix-like systems
+go build -o backendAPI main.go
+pm2 start ./backendAPI --name "handler"
 
+# On Windows
+go build -o backendAPI.exe main.go
+pm2 start ./backendAPI.exe --name "handler"
 ```
-pm2 start ./main --name "handler" -- start
-```
-End of Server (Handler) instructions
 
-### QRLtoMongoDB-PoS (Blockchain to MongoDB Synchroniser) 
+### QRLtoMongoDB-PoS Setup
 
-Cd into the QRLtoMongoDB-PoS directory
+Navigate to the synchronizer directory:
 ```
+cd ../QRLtoMongoDB-PoS
 touch .env
 ```
 
@@ -109,22 +123,23 @@ touch .env
 | MONGOURI | mongodb://localhost:27017 |
 | NODE_URL | http://localhost:8545 |
 
-```
-go build main.go
+Build and start the synchronizer:
+```bash
+# On Unix-like systems
+go build -o synchroniser main.go
+pm2 start ./synchroniser --name "synchroniser"
+
+# On Windows
+go build -o synchroniser.exe main.go
+pm2 start ./synchroniser.exe --name "synchroniser"
 ```
 
-Now you have a main executable. We can add it to pm2 
-
-```
-pm2 start ./main --name "synchroniser" -- start
-```
-
-##### Optional
-To save the pm2 processes, run the following command
+##### Optional: Save PM2 Processes
 ```
 pm2 save
 ```
-Great! That is all. The explorer should now be live. (Don't forget to use tmux or pm2 for Zond too!)
+
+Great! The explorer should now be live. (Don't forget to use tmux or pm2 for Zond too!)
 
 ## System Architecture and Data Flow
 
@@ -149,7 +164,7 @@ The backend consists of three main components that work together to provide bloc
    - Uses producer/consumer pattern for efficient data processing
    - Maintains data consistency with rollback capability
 
-3. **backendAPI Server (Handler)**
+3. **backendAPI**
    - REST API server built with Gin framework
    - Provides endpoints for frontend data access
    - Aggregates data from MongoDB collections
@@ -169,9 +184,9 @@ The backend consists of three main components that work together to provide bloc
 
 2. **MongoDB to Frontend**:
    ```
-   MongoDB -> Handler -> REST API -> Frontend
+   MongoDB -> backendAPI -> REST API -> ExplorerFrontend
    ```
-   - Handler provides RESTful endpoints
+   - backendAPI provides RESTful endpoints
    - Frontend makes HTTP requests to handler
    - Data is cached where appropriate
    - Real-time updates through periodic polling
@@ -228,7 +243,7 @@ The system includes several reliability features:
    - Block chain reorganization handling
    - Data consistency checks
 
-2. **Handler Resilience**
+2. **backendAPI Resilience**
    - Graceful error handling
    - Default values for missing data
    - Request timeout management

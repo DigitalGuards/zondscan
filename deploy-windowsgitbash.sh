@@ -81,13 +81,13 @@ setup_server() {
     print_status "Setting up server..."
     cd "$BASE_DIR/backendAPI" || print_error "Server directory not found"
 
-    # Build the server
+    # Build the server with explicit output name
     print_status "Building server..."
-    go build main.go || print_error "Failed to build server"
+    go build -o backendAPI.exe main.go || print_error "Failed to build server"
 
     # Start server with PM2, specifying the working directory and APP_ENV
     print_status "Starting server with PM2..."
-    APP_ENV=development pm2 start ./main.exe --name "handler" --cwd "$BASE_DIR/backendAPI" || print_error "Failed to start server"
+    APP_ENV=development pm2 start ./backendAPI.exe --name "handler" --cwd "$BASE_DIR/backendAPI" || print_error "Failed to start server"
 }
 
 # Setup frontend environment
@@ -143,13 +143,13 @@ MONGOURI=mongodb://localhost:27017
 NODE_URL=http://REDACTED:8545
 EOL
 
-    # Build synchronizer
+    # Build synchronizer with explicit output name
     print_status "Building synchronizer..."
-    go build main.go || print_error "Failed to build synchronizer"
+    go build -o synchroniser.exe main.go || print_error "Failed to build synchronizer"
 
     # Start synchronizer with PM2, explicitly setting environment variables
     print_status "Starting synchronizer with PM2..."
-    MONGOURI=mongodb://localhost:27017 NODE_URL=http://REDACTED:8545 pm2 start ./main.exe \
+    MONGOURI=mongodb://localhost:27017 NODE_URL=http://REDACTED:8545 pm2 start ./synchroniser.exe \
         --name "synchroniser" \
         --cwd "$BASE_DIR/QRLtoMongoDB-PoS" \
         --env MONGOURI=mongodb://localhost:27017 \

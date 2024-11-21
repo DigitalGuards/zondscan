@@ -1,9 +1,9 @@
 package routes
 
 import (
+	"backendAPI/db"
 	"fmt"
 	"net/http"
-	"quanta-explorer-go/db"
 	"strconv"
 
 	"github.com/gin-gonic/gin"

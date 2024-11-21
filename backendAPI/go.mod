@@ -1,4 +1,4 @@
-module quanta-explorer-go
+module backendAPI
 
 go 1.17
 

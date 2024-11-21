@@ -1,11 +1,11 @@
-# Quanta Explorer Server
+# Quanta Explorer Backend API
 
-The backend server component of the Quanta Explorer application, written in Go. This server provides API endpoints for the frontend to fetch blockchain data and interact with the QRL Zond network.
+The backend API component of the Quanta Explorer application, written in Go. This server provides API endpoints for the frontend to fetch blockchain data and interact with the QRL Zond network.
 
 ## Project Structure
 
 ```
-server/
+backendAPI/
 ├── configs/           # Configuration management
 │   ├── const.go      # Constants and configuration values
 │   ├── env.go        # Environment variable handling
@@ -73,24 +73,58 @@ Defines API endpoints and their corresponding handlers:
 
 ## Environment Configuration
 
-The server uses two environment files:
+The API uses two environment files:
 - `.env.development` for development environment
 - `.env.production` for production environment
+
+### Development Environment Variables
+| VARIABLE | VALUE |
+| ------ | ------ |
+| GIN_MODE | release |
+| MONGOURI | mongodb://localhost:27017/qrldata?readPreference=primary |
+| HTTP_PORT | :8080 |
+| NODE_URL | http://localhost:8545 |
+
+### Production Environment Variables
+| VARIABLE | VALUE |
+| ------ | ------ |
+| GIN_MODE | release |
+| MONGOURI | mongodb://localhost:27017/qrldata?readPreference=primary |
+| CERT_PATH | PATH_TO_CERT |
+| KEY_PATH | PATH_TO_KEY |
+| HTTPS_PORT | :8443 |
+| NODE_URL | http://localhost:8545 |
 
 ## Getting Started
 
 1. Ensure Go is installed on your system
 2. Clone the repository
-3. Navigate to the server directory
+3. Navigate to the backendAPI directory
 4. Install dependencies:
    ```bash
    go mod download
    ```
-5. Set up appropriate environment variables
-6. Run the server:
+5. Set up environment files:
    ```bash
-   go run main.go
+   touch .env.development .env.production
    ```
+6. Build the application:
+   ```bash
+   # On Unix-like systems
+   go build -o backendAPI main.go
+
+   # On Windows
+   go build -o backendAPI.exe main.go
+   ```
+
+For production deployment, use PM2:
+```bash
+# On Unix-like systems
+pm2 start ./backendAPI --name "handler"
+
+# On Windows
+pm2 start ./backendAPI.exe --name "handler"
+```
 
 ## Development
 
@@ -102,11 +136,22 @@ The server uses two environment files:
 ## API Documentation
 
 The server provides various API endpoints for:
-- Block information
-- Transaction data
-- Address details
-- Smart contract interaction
-- Validator information
-- Network statistics
+
+### Overview Data
+- `/overview`: General blockchain statistics
+- Real-time market data and network status
+
+### Block Explorer
+- `/blocks`: Block listing and details
+- `/tx`: Transaction details
+- `/address`: Address information and history
+
+### Validator Information
+- `/validators`: Active validator list
+- Staking statistics and performance metrics
+
+### Search Functionality
+- Unified search across blocks, transactions, and addresses
+- Auto-suggestion and quick navigation
 
 For detailed API documentation, refer to the handler implementations in `handler/handler.go` and route definitions in `routes/routes.go`.

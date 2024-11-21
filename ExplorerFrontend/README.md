@@ -5,19 +5,19 @@ A Next.js-based frontend for the QRL Zond Explorer, providing a user interface t
 ## Project Structure
 
 ```
-frontend/
+ExplorerFrontend/
 ├── app/                    # Next.js 13+ App Router
 │   ├── components/         # Shared components
 │   │   ├── Alert.tsx      # Alert component for notifications
 │   │   ├── AreaChart.tsx  # Chart component for data visualization
-│   │   ├── SearchBar.tsx      # Global search component
-│   │   └── Sidebar.tsx        # Main navigation sidebar
+│   │   ├── SearchBar.tsx  # Global search component
+│   │   └── Sidebar.tsx    # Main navigation sidebar
 │   │
 │   ├── lib/               # Utility functions
 │   │   └── helpers.ts     # Common helper functions (formatting, conversion)
 │   │
-│   ├── models/           # Data models and types
-│   │   └── index.ts      # Shared type definitions
+│   ├── providers/         # React providers
+│   │   └── index.tsx      # Provider wrappers (React Query, etc.)
 │   │
 │   ├── blocks/           # Blocks feature
 │   │   ├── layout.tsx    # Blocks layout wrapper
@@ -94,6 +94,29 @@ frontend/
 ├── tailwind.config.js # Tailwind CSS configuration
 └── tsconfig.json     # TypeScript configuration
 ```
+
+## Environment Configuration
+
+The frontend uses two environment files:
+- `.env` for shared environment variables
+- `.env.local` for local development overrides
+
+### .env fields
+| VARIABLE | VALUE |
+| ------ | ------ |
+| DATABASE_URL | mongodb://localhost:27017/qrldata?readPreference=primary |
+| NEXTAUTH_URL | 127.0.0.1 |
+| NEXT_PUBLIC_DOMAIN_NAME | http://localhost:3000 (dev) OR http://your_domain_name.io (prod) |
+| NEXT_PUBLIC_HANDLER_URL | http://localhost:8080 (dev) OR http://your_domain_name.io:8443 (prod) |
+
+### .env.local fields
+| VARIABLE | VALUE |
+| ------ | ------ |
+| DATABASE_URL | mongodb://localhost:27017/qrldata?readPreference=primary |
+| NEXTAUTH_SECRET | YOUR_SECRET |
+| ADMIN_PUBLIC_ADDRESS | YOUR_SECRET |
+| DOMAIN_NAME | http://localhost:3000 (dev) OR http://your_domain_name.io (prod) |
+| HANDLER_URL | http://localhost:8080 (dev) OR http://your_domain_name.io:8443 (prod) |
 
 ## Features
 
@@ -178,6 +201,7 @@ frontend/
    - Implement proper error boundaries
 
 2. **State Management**
+   - Use React Query for server state
    - Use React hooks for local state
    - Implement loading states
    - Handle errors gracefully
@@ -204,7 +228,7 @@ npm install
 
 2. Set up environment variables:
 ```bash
-cp .env.example .env.local
+touch .env .env.local
 ```
 
 3. Run development server:
@@ -212,15 +236,14 @@ cp .env.example .env.local
 npm run dev
 ```
 
-4. Build for production:
+4. For production deployment, use PM2:
 ```bash
-npm run build
+pm2 start npm --name "frontend" -- start
 ```
 
 ## Configuration
 
 The app uses several configuration files:
-
 - `config.js`: Environment-specific settings
 - `next.config.js`: Next.js configuration
 - `tailwind.config.js`: Tailwind CSS configuration
@@ -250,18 +273,6 @@ npm test
 2. Run linting:
 ```bash
 npm run lint
-```
-
-## Deployment
-
-1. Build the application:
-```bash
-npm run build
-```
-
-2. Start production server:
-```bash
-npm start
 ```
 
 ## License

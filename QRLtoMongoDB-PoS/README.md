@@ -83,17 +83,29 @@ NODE_URL=http://localhost:8545
 
 2. Build the application:
 ```bash
-go build main.go
+# On Unix-like systems
+go build -o synchroniser main.go
+
+# On Windows
+go build -o synchroniser.exe main.go
 ```
 
 3. Run the synchronizer:
 ```bash
-./main
+# On Unix-like systems
+./synchroniser
+
+# On Windows
+./synchroniser.exe
 ```
 
 For production deployment, it's recommended to use a process manager like PM2:
 ```bash
-pm2 start ./main --name "synchroniser"
+# On Unix-like systems
+pm2 start ./synchroniser --name "synchroniser"
+
+# On Windows
+pm2 start ./synchroniser.exe --name "synchroniser"
 ```
 
 ## Key Components
