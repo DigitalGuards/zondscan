@@ -7,7 +7,26 @@ export async function GET(
   { params }: { params: { hash: string } }
 ) {
   try {
-    const response = await fetch(`${config.handlerUrl}/tx/${params.hash}`);
+    // Get the params object first
+    const resolvedParams = await Promise.resolve(params);
+    
+    // Then destructure the hash after awaiting
+    const { hash } = resolvedParams;
+
+    if (!hash) {
+      return NextResponse.json(
+        { error: 'Transaction hash is required' },
+        { status: 400 }
+      );
+    }
+
+    const response = await fetch(`${config.handlerUrl}/tx/${hash}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json'
+      },
+      cache: 'no-store'
+    });
     
     if (!response.ok) {
       throw new Error('Failed to fetch transaction');

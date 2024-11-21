@@ -3,12 +3,15 @@ import Sidebar from "./components/Sidebar"
 import Script from 'next/script'
 import Providers from './providers'
 
+export const viewport = {
+  themeColor: '#1a1a1a',
+}
+
 export const metadata = {
   metadataBase: new URL('https://zondscan.com'),
   title: 'QRL Zond Explorer',
   description: 'QRL ZOND Web3/EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network',
   keywords: 'QRL, ZOND, blockchain explorer, Web3, EVM, quantum resistant, cryptocurrency, blockchain, smart contracts, proof of stake, validators, transactions, blocks',
-  themeColor: '#1a1a1a',
   openGraph: {
     title: 'QRL Zond Explorer',
     description: 'QRL ZOND Web3/EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network',

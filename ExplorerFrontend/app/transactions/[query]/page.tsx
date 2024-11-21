@@ -1,8 +1,7 @@
-import React from 'react';
-import TransactionsList from './TransactionsList';
+import { Suspense } from 'react';
+import { notFound } from 'next/navigation';
+import TransactionsClient from './transactions-client';
 import { Transaction } from './types';
-
-export const dynamic = 'force-dynamic';
 
 interface TransactionsResponse {
   txs: Transaction[];
@@ -11,19 +10,69 @@ interface TransactionsResponse {
 
 async function getTransactions(page: string): Promise<TransactionsResponse> {
   const handlerUrl = process.env.NEXT_PUBLIC_HANDLER_URL || 'http://localhost:8080';
-  const response = await fetch(`${handlerUrl}/txs?page=${page}`, {
-    next: { revalidate: 10 }
-  });
   
-  if (!response.ok) {
-    throw new Error('Failed to fetch transactions');
-  }
+  try {
+    const response = await fetch(`${handlerUrl}/txs?page=${page}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json'
+      },
+      next: {
+        revalidate: 0
+      }
+    });
 
-  return response.json();
+    if (!response.ok) {
+      if (response.status === 404) {
+        notFound();
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error('Error fetching transactions:', error);
+    throw error;
+  }
+}
+
+function LoadingUI() {
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="text-lg">Loading transactions...</div>
+    </div>
+  );
 }
 
 export default async function Page({ params }: { params: { query: string } }) {
-  const data = await getTransactions(params.query);
-  
-  return <TransactionsList initialData={data} currentPage={parseInt(params.query)} />;
+  const resolvedParams = await Promise.resolve(params);
+  const pageNumber = resolvedParams?.query || '1';
+
+  try {
+    const data = await getTransactions(pageNumber);
+
+    return (
+      <main>
+        <h1 className="sr-only">Transactions - Page {pageNumber}</h1>
+        <Suspense fallback={<LoadingUI />}>
+          <TransactionsClient 
+            initialData={data} 
+            pageNumber={pageNumber} 
+          />
+        </Suspense>
+      </main>
+    );
+  } catch (error) {
+    return (
+      <div role="alert" className="p-4">
+        <h1 className="text-xl font-bold mb-2">Error</h1>
+        <p>Failed to load transactions. Please try again later.</p>
+        {process.env.NODE_ENV === 'development' && (
+          <pre className="mt-2 text-sm text-red-500">
+            {error instanceof Error ? error.message : 'Unknown error'}
+          </pre>
+        )}
+      </div>
+    );
+  }
 }
