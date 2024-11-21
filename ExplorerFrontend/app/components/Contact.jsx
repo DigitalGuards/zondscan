@@ -1,5 +1,4 @@
 import Image from 'next/image'
-import team from '../../public/team.png';
 
 function Contact() {
   return (
