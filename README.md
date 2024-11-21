@@ -11,7 +11,7 @@ Zond node (It can be either external or local).
 Note: These instructions are only for the explorer related components. Are you trying to get your Zond up and running? Visit https://test-zond.theqrl.org/linux.html
 
 ```
-git clone [https://github.com/moscowchill/zondexplorer.git](https://github.com/DigitalGuards/zondexplorer.git)
+git clone https://github.com/DigitalGuards/zondexplorer.git
 ```
 
 #### Requirements
