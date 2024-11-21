@@ -1,6 +1,8 @@
 package db
 
 import (
+	"backendAPI/configs"
+	"backendAPI/models"
 	"bytes"
 	"context"
 	"encoding/hex"
@@ -9,8 +11,6 @@ import (
 	"io"
 	"math/big"
 	"net/http"
-	"quanta-explorer-go/configs"
-	"quanta-explorer-go/models"
 	"reflect"
 	"time"
 

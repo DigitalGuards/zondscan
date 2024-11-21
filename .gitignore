@@ -11,3 +11,4 @@ package-lock.json
 backendAPI/main.exe
 backendAPI/.env.production
 backendAPI/.env.development
+*.exe

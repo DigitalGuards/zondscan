@@ -1,11 +1,12 @@
 package handler
 
 import (
-	"quanta-explorer-go/configs"
-	"quanta-explorer-go/routes"
-	"time"
-	"os"
+	"backendAPI/configs"
+	"backendAPI/routes"
 	"log"
+	"os"
+	"time"
+
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
