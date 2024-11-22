@@ -1,7 +1,6 @@
 ExplorerFrontend/.next
 ExplorerFrontend/.env
 ExplorerFrontend/package-lock.json
-ExplorerFrontend/package.json
 QRLtoMongoDB-PoS/.env
 QRLtoMongoDB-PoS/main.exe
 QRLtoMongoDB-PoS/logs.log
