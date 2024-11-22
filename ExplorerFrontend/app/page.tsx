@@ -76,7 +76,7 @@ export default async function Home() {
   const stats = [
     {
       data: formatNumberWithCommas(data.walletCount.value),
-      title: "Network Wallet Count",
+      title: "Network Bagholder Count",
       loading: data.walletCount.isLoading,
       error: data.walletCount.error,
       icon: (

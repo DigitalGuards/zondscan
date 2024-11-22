@@ -295,46 +295,41 @@ func ReturnLatestBlock() ([]models.ZondUint64Version, error) {
 	return blocks, nil
 }
 
-func ReturnLatestBlocks(page int) ([]models.Result, error) {
+func ReturnLatestBlocks(page int, limit int) ([]models.Result, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	var blocks []models.Result
 	defer cancel()
 
-	indexModel := mongo.IndexModel{Keys: bson.D{{"result.number", -1}, {"result.timestamp", 1}}}
-
-	name, err := configs.BlocksCollection.Indexes().CreateOne(context.TODO(), indexModel)
-	if err != nil {
-		panic(err)
+	if limit <= 0 {
+		limit = 5 // Default to 5 blocks per page
 	}
-	fmt.Println("Name of Index Created: " + name)
 
-	limit := 15
+	options := options.Find().
+		SetProjection(bson.M{
+			"result.number":       1,
+			"result.timestamp":    1,
+			"result.hash":         1,
+			"result.transactions": 1,
+		}).
+		SetSort(bson.D{{"result.timestamp", -1}})
 
-	options := options.Find().SetProjection(bson.M{"result.number": 1, "result.timestamp": 1})
-
-	options.SetSort(bson.D{{"result.timestamp", -1}})
-
-	if limit != 0 {
-		if page == 0 {
-			page = 1
-		}
-		options.SetSkip(int64((page - 1) * limit))
-		options.SetLimit(int64(limit))
+	if page == 0 {
+		page = 1
 	}
+	options.SetSkip(int64((page - 1) * limit))
+	options.SetLimit(int64(limit))
 
 	results, err := configs.BlocksCollection.Find(ctx, bson.D{}, options)
-
 	if err != nil {
-		fmt.Println(err)
+		return nil, err
 	}
 
 	defer results.Close(ctx)
 	for results.Next(ctx) {
 		var singleBlock models.ZondUint64Version
 		if err = results.Decode(&singleBlock); err != nil {
-			fmt.Println(err)
+			continue
 		}
-
 		blocks = append(blocks, singleBlock.Result)
 	}
 
@@ -424,33 +419,17 @@ func ReturnTransactions(address string, page, limit int) ([]models.TransactionBy
 	return transactions, nil
 }
 
-func CountBlocksNetwork() (int, error) {
+func CountBlocksNetwork() (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	var transactions []models.TransactionByAddress
 	defer cancel()
 
-	options := options.Find().SetProjection(bson.M{"result.number": 1})
-
-	options.SetSort(bson.D{{"result.number", -1}})
-
-	results, err := configs.BlocksCollection.Find(ctx, bson.D{}, options)
-
+	// Use CountDocuments instead of loading all blocks
+	count, err := configs.BlocksCollection.CountDocuments(ctx, bson.D{})
 	if err != nil {
-		fmt.Println(err)
+		return 0, err
 	}
 
-	//reading from the db in an optimal way
-	defer results.Close(ctx)
-	for results.Next(ctx) {
-		var singleTransaction models.TransactionByAddress
-		if err = results.Decode(&singleTransaction); err != nil {
-			fmt.Println(err)
-		}
-
-		transactions = append(transactions, singleTransaction)
-	}
-
-	return len(transactions), nil
+	return count, nil
 }
 
 func CountTransactionsNetwork() (int, error) {

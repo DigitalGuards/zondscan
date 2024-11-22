@@ -67,7 +67,7 @@ const BlockCard: React.FC<BlockCardProps> = ({ blockData }) => {
 };
 
 const fetchBlocks = async (page: string) => {
-  const response = await axios.get<BlocksResponse>(`${config.handlerUrl}/blocks?page=${page}`);
+  const response = await axios.get<BlocksResponse>(`${config.handlerUrl}/blocks?page=${page}&limit=5`);
   return response.data;
 };
 
@@ -83,13 +83,14 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['blocks', initialPage],
     queryFn: () => fetchBlocks(initialPage),
-    staleTime: 30000, // Consider data fresh for 30 seconds
+    staleTime: 60000, // Consider data fresh for 60 seconds (increased from 30s)
     gcTime: 5 * 60 * 1000, // Keep unused data in cache for 5 minutes
     retry: 2,
     initialData // Use server-fetched data as initial data
   });
 
-  const totalPages = data ? Math.round(data.total / 15) : 10;
+  // Limit total pages to 300 and calculate based on 5 blocks per page
+  const totalPages = data ? Math.min(Math.round(data.total / 5), 300) : 300;
 
   const goToNextPage = () => {
     const nextPage = Math.min(currentPage + 1, totalPages);
