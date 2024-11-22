@@ -5,8 +5,6 @@ QRLtoMongoDB-PoS/.env
 QRLtoMongoDB-PoS/main.exe
 QRLtoMongoDB-PoS/logs.log
 QRLtoMongoDB-PoS/rpc/.env
-package.json
-package-lock.json
 backendAPI/main.exe
 backendAPI/.env.production
 backendAPI/.env.development
