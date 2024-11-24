@@ -22,6 +22,37 @@ export function toFixed(x: number): string {
   return x.toString();
 }
 
+export function formatAmount(amount: number | string): [string, string] {
+  // Handle zero amount
+  if (amount === 0 || amount === '0') {
+    return ['0', 'QRL'];
+  }
+
+  // Convert string to number if needed
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+
+  // Handle NaN
+  if (isNaN(num)) {
+    return ['0', 'QRL'];
+  }
+
+  // Convert to shor (1 QRL = 1e9 shor)
+  const shorValue = num * 1e9;
+
+  // If it's >= 1 QRL, show in QRL
+  if (num >= 1) {
+    return [num.toString(), 'QRL'];
+  }
+
+  // If it's less than 1 shor or 0, show "0 shor"
+  if (shorValue < 1) {
+    return ['0', 'shor'];
+  }
+
+  // Otherwise show the exact number of shor
+  return [Math.floor(shorValue).toString(), 'shor'];
+}
+
 export function decodeBase64ToHexadecimal(rawData: string): string {
   const buffer = Buffer.from(rawData, 'base64');
   return buffer.toString('hex');

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { decodeBase64ToHexadecimal, toFixed } from "../../lib/helpers";
+import { decodeBase64ToHexadecimal, formatAmount } from "../../lib/helpers";
 import { Transaction, TransactionsListProps } from './types';
 
 const formatDate = (timestamp: number) => {
@@ -65,6 +65,14 @@ const TransactionCard = ({ transaction }: TransactionCardProps) => {
   const isSending = transaction.InOut === 0; 
   const date = formatDate(transaction.TimeStamp);
   const txHash = "0x" + decodeBase64ToHexadecimal(transaction.TxHash);
+  
+  // Parse amount and handle potential string values
+  const amount = typeof transaction.Amount === 'string' 
+    ? parseFloat(transaction.Amount) 
+    : transaction.Amount || 0;
+
+  // Get formatted amount and unit
+  const [formattedAmount, unit] = formatAmount(amount);
 
   const handleTxClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -106,8 +114,8 @@ const TransactionCard = ({ transaction }: TransactionCardProps) => {
         <div className="w-48 text-right">
           <p className="text-sm font-medium text-gray-400 mb-2">Amount</p>
           <p className="text-2xl font-semibold text-[#ffa729]">
-            {toFixed(transaction.Amount)}
-            <span className="text-sm text-gray-400 ml-2">QRL</span>
+            {formattedAmount}
+            <span className="text-sm text-gray-400 ml-2">{unit}</span>
           </p>
         </div>
       </div>
