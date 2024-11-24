@@ -11,6 +11,7 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"os"
 	"reflect"
 	"time"
 
@@ -797,7 +798,12 @@ func GetBalance(address string) (float64, string) {
 		fmt.Println("error:", err)
 	}
 
-	req, err := http.NewRequest("POST", "http://127.0.0.1:8545", bytes.NewBuffer([]byte(b)))
+	nodeURL := os.Getenv("NODE_URL")
+	if nodeURL == "" {
+		nodeURL = "http://127.0.0.1:8545" // fallback to default if not set
+	}
+
+	req, err := http.NewRequest("POST", nodeURL, bytes.NewBuffer([]byte(b)))
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
@@ -825,13 +831,9 @@ func GetBalance(address string) (float64, string) {
 		}
 
 		balanceFloat := new(big.Float).SetInt(balance)
-
 		divisor := new(big.Float).SetFloat64(1e18)
-
 		result := new(big.Float).Quo(balanceFloat, divisor)
-
 		float64Value, _ := result.Float64()
-
 		return float64Value, ""
 	}
 }
