@@ -753,6 +753,21 @@ func GetMarketCap() float64 {
 	return result.MarketCapUSD
 }
 
+func GetCurrentPrice() float64 {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var result models.CoinGecko
+
+	err := configs.CoinGeckoCollection.FindOne(ctx, bson.M{}).Decode(&result)
+	if err != nil {
+		fmt.Println(err)
+		return 0
+	}
+
+	return result.PriceUSD
+}
+
 func GetWalletCount() int64 {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

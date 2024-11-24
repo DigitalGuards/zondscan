@@ -14,6 +14,9 @@ func UserRoute(router *gin.Engine) {
 		// Get market cap with default value
 		marketCap := db.GetMarketCap()
 
+		// Get current price with default value
+		currentPrice := db.GetCurrentPrice()
+
 		// Get wallet count with default value
 		walletCount := db.GetWalletCount()
 
@@ -28,13 +31,14 @@ func UserRoute(router *gin.Engine) {
 
 		// Return response with default values if data isn't available
 		c.JSON(http.StatusOK, gin.H{
-			"marketcap":    marketCap,   // Returns 0 if not available
-			"countwallets": walletCount, // Returns 0 if not available
-			"circulating":  circulating, // Returns "0" if not available
-			"volume":       volume,      // Returns 0 if not available
+			"marketcap":    marketCap,    // Returns 0 if not available
+			"currentPrice": currentPrice, // Returns 0 if not available
+			"countwallets": walletCount,  // Returns 0 if not available
+			"circulating":  circulating,  // Returns "0" if not available
+			"volume":       volume,       // Returns 0 if not available
 			"status": gin.H{
 				"syncing":         true, // Indicate that data is still being synced
-				"dataInitialized": marketCap > 0 || walletCount > 0 || circulating != "0" || volume > 0,
+				"dataInitialized": marketCap > 0 || currentPrice > 0 || walletCount > 0 || circulating != "0" || volume > 0,
 			},
 		})
 	})
