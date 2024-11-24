@@ -82,7 +82,7 @@ export default async function Home() {
     console.error("Failed to fetch overview data:", error);
   }
 
-  const stats = [
+  const blockchainStats = [
     {
       data: formatNumberWithCommas(data.walletCount.value),
       title: "Network Bagholder Count",
@@ -126,7 +126,10 @@ export default async function Home() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
         </svg>
       )
-    },
+    }
+  ];
+
+  const financialStats = [
     {
       data: "$" + formatNumberWithCommas(data.marketCap.value),
       title: "Market Cap",
@@ -149,7 +152,42 @@ export default async function Home() {
         </svg>
       )
     }
-  ]
+  ];
+
+  const StatCard = ({ item }: { item: any }) => (
+    <div className={`relative overflow-hidden rounded-2xl 
+                   bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
+                   border border-[#3d3d3d] shadow-xl
+                   hover:border-[#ffa729] transition-all duration-300
+                   group ${!data.dataInitialized ? 'opacity-50' : ''}`}>
+      <div className="relative p-6 text-center min-h-[160px] flex flex-col justify-center">
+        {item.loading ? (
+          <div className="flex flex-col items-center justify-center space-y-2">
+            <div className="w-32 h-8 bg-gray-700/50 rounded animate-pulse"></div>
+            <div className="w-24 h-4 bg-gray-700/50 rounded animate-pulse"></div>
+          </div>
+        ) : item.error ? (
+          <div className="flex flex-col items-center justify-center text-red-400">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-sm">Failed to load data</span>
+          </div>
+        ) : (
+          <>
+            <div className="flex justify-center">{item.icon}</div>
+            <h4 className="text-3xl font-bold mb-3 text-[#ffa729] 
+                        group-hover:scale-110 transition-transform duration-300">
+              {item.data}
+            </h4>
+            <p className="text-sm text-gray-300 font-medium">
+              {item.title}
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen">
@@ -170,42 +208,26 @@ export default async function Home() {
           </div>
         )}
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-          {stats.map((item, idx) => (
-            <div key={idx} 
-                className={`relative overflow-hidden rounded-2xl 
-                         bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
-                         border border-[#3d3d3d] shadow-xl
-                         hover:border-[#ffa729] transition-all duration-300
-                         group ${!data.dataInitialized ? 'opacity-50' : ''}`}>
-              <div className="relative p-6 text-center min-h-[160px] flex flex-col justify-center">
-                {item.loading ? (
-                  <div className="flex flex-col items-center justify-center space-y-2">
-                    <div className="w-32 h-8 bg-gray-700/50 rounded animate-pulse"></div>
-                    <div className="w-24 h-4 bg-gray-700/50 rounded animate-pulse"></div>
-                  </div>
-                ) : item.error ? (
-                  <div className="flex flex-col items-center justify-center text-red-400">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span className="text-sm">Failed to load data</span>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex justify-center">{item.icon}</div>
-                    <h4 className="text-3xl font-bold mb-3 text-[#ffa729] 
-                                group-hover:scale-110 transition-transform duration-300">
-                      {item.data}
-                    </h4>
-                    <p className="text-sm text-gray-300 font-medium">
-                      {item.title}
-                    </p>
-                  </>
-                )}
-              </div>
+        <div className="space-y-8">
+          {/* Blockchain Stats */}
+          <div>
+            <h2 className="text-xl font-bold mb-4 text-[#ffa729]">Blockchain Statistics</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {blockchainStats.map((item, idx) => (
+                <StatCard key={idx} item={item} />
+              ))}
             </div>
-          ))}
+          </div>
+
+          {/* Financial Stats */}
+          <div>
+            <h2 className="text-xl font-bold mb-4 text-[#ffa729]">Financial Statistics</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {financialStats.map((item, idx) => (
+                <StatCard key={idx} item={item} />
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
