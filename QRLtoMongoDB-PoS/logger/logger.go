@@ -1,9 +1,10 @@
 package logger
 
 import (
+	"os"
 	"path/filepath"
 	"time"
-	"os"
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -27,7 +28,9 @@ func FileLogger(filename string) *zap.Logger {
 	cfg := zap.NewProductionConfig()
 
 	cfg.Encoding = "console"
-	cfg.OutputPaths = []string{fullpath}
+	// Output to both file and stdout
+	cfg.OutputPaths = []string{fullpath, "stdout"}
+	cfg.ErrorOutputPaths = []string{fullpath, "stderr"}
 	cfg.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
 	cfg.EncoderConfig.EncodeTime = SyslogTimeEncoder
 	cfg.EncoderConfig.EncodeLevel = CustomLevelEncoder
