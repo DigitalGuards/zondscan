@@ -71,21 +71,21 @@ function Pagination({
   onPageChange: (page: number) => void;
 }) {
   return (
-    <div className="flex justify-center gap-2 mt-4">
+    <div className="flex justify-center gap-4 mt-6">
       <button
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage === 0}
-        className="px-3 py-1 rounded bg-[#1a1b1e] text-white disabled:opacity-50"
+        className="px-4 py-2 rounded-lg bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] text-white border border-[#3d3d3d] hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d] transition-all duration-300"
       >
         Previous
       </button>
-      <span className="px-3 py-1 text-white">
+      <span className="px-4 py-2 text-white bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-lg border border-[#3d3d3d]">
         Page {currentPage + 1} of {totalPages}
       </span>
       <button
         onClick={() => onPageChange(currentPage + 1)}
         disabled={currentPage >= totalPages - 1}
-        className="px-3 py-1 rounded bg-[#1a1b1e] text-white disabled:opacity-50"
+        className="px-4 py-2 rounded-lg bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] text-white border border-[#3d3d3d] hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d] transition-all duration-300"
       >
         Next
       </button>
@@ -95,37 +95,37 @@ function Pagination({
 
 function CustomTable({ data }: { data: ContractData[] }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full bg-[#2c2d31] rounded-lg">
+    <div className="overflow-x-auto rounded-lg border border-[#3d3d3d] bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]">
+      <table className="min-w-full">
         <thead>
-          <tr className="bg-[rgba(0,0,0,0.2)] text-white">
-            <th className="px-4 py-3 text-left">From (Contract Creator)</th>
-            <th className="px-4 py-3 text-left">Transaction Hash</th>
-            <th className="px-4 py-3 text-left">Public Key</th>
-            <th className="px-4 py-3 text-left">Signature</th>
-            <th className="px-4 py-3 text-left">Nonce</th>
-            <th className="px-4 py-3 text-left">Value</th>
-            <th className="px-4 py-3 text-left">Contract Address</th>
+          <tr className="border-b border-[#3d3d3d]">
+            <th className="px-6 py-4 text-left text-sm font-medium text-[#ffa729]">From (Contract Creator)</th>
+            <th className="px-6 py-4 text-left text-sm font-medium text-[#ffa729]">Transaction Hash</th>
+            <th className="px-6 py-4 text-left text-sm font-medium text-[#ffa729]">Public Key</th>
+            <th className="px-6 py-4 text-left text-sm font-medium text-[#ffa729]">Signature</th>
+            <th className="px-6 py-4 text-left text-sm font-medium text-[#ffa729]">Nonce</th>
+            <th className="px-6 py-4 text-left text-sm font-medium text-[#ffa729]">Value</th>
+            <th className="px-6 py-4 text-left text-sm font-medium text-[#ffa729]">Contract Address</th>
           </tr>
         </thead>
         <tbody>
           {data.map((row) => (
-            <tr key={row.id} className="border-t border-[rgba(255,255,255,0.1)] hover:bg-[rgba(255,255,255,0.04)]">
-              <td className="px-4 py-3">
+            <tr key={row.id} className="border-b border-[#3d3d3d] hover:bg-[rgba(255,167,41,0.05)] transition-colors">
+              <td className="px-6 py-4 whitespace-nowrap">
                 <Link href={`/address/${row.from}`} className="text-[#ffa729] hover:text-[#ffb954] transition-colors">
                   {truncateMiddle(row.from, 8, 8)}
                 </Link>
               </td>
-              <td className="px-4 py-3">
+              <td className="px-6 py-4 whitespace-nowrap">
                 <Link href={`/tx/${row.txHash}`} className="text-[#ffa729] hover:text-[#ffb954] transition-colors">
                   {truncateMiddle(row.txHash, 8, 8)}
                 </Link>
               </td>
-              <td className="px-4 py-3 text-white">{truncateMiddle(row.pk, 8, 8)}</td>
-              <td className="px-4 py-3 text-white">{truncateMiddle(row.signature, 8, 8)}</td>
-              <td className="px-4 py-3 text-white">{row.nonce}</td>
-              <td className="px-4 py-3 text-white">{row.value}</td>
-              <td className="px-4 py-3">
+              <td className="px-6 py-4 whitespace-nowrap text-gray-300">{truncateMiddle(row.pk, 8, 8)}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-gray-300">{truncateMiddle(row.signature, 8, 8)}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-gray-300">{row.nonce}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-gray-300">{row.value}</td>
+              <td className="px-6 py-4 whitespace-nowrap">
                 <Link href={`/address/${row.contractAddress}`} className="text-[#ffa729] hover:text-[#ffb954] transition-colors">
                   {truncateMiddle(row.contractAddress, 8, 8)}
                 </Link>
@@ -140,13 +140,29 @@ function CustomTable({ data }: { data: ContractData[] }) {
 
 function SearchInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return (
-    <input
-      type="text"
-      placeholder="Search..."
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full max-w-md px-4 py-2 mb-4 rounded-lg bg-[#1a1b1e] text-white border border-[rgba(255,255,255,0.1)] focus:outline-none focus:border-[#ffa729]"
-    />
+    <div className="relative">
+      <input
+        type="text"
+        placeholder="Search contracts..."
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full max-w-md px-4 py-3 rounded-lg bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] text-white border border-[#3d3d3d] focus:outline-none focus:border-[#ffa729] transition-all duration-300 pl-10"
+      />
+      <svg
+        className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-[#ffa729]"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+        />
+      </svg>
+    </div>
   );
 }
 
@@ -185,25 +201,25 @@ export default function ContractsClient({ initialData }: ContractsClientProps) {
 
   if (!initialData || initialData.length === 0) {
     return (
-      <Box className="p-4 text-center">
-        <Typography>No contracts found.</Typography>
+      <Box className="p-8 text-center">
+        <Typography className="text-gray-300">No contracts found.</Typography>
       </Box>
     );
   }
 
   return (
-    <div className="p-4">
+    <div className="p-8 max-w-[1200px] mx-auto">
       <Typography 
         variant="h5" 
         component="h1" 
-        className="mb-6 text-center font-bold text-gray-900 dark:text-white"
+        className="mb-8 text-center font-bold text-[#ffa729] text-2xl"
       >
         Smart Contracts
       </Typography>
-      <div className="mb-4">
+      <div className="mb-6 flex justify-center">
         <SearchInput value={filterValue} onChange={setFilterValue} />
       </div>
-      <div className="overflow-hidden rounded-lg shadow-lg">
+      <div className="mb-6">
         <CustomTable data={paginatedData} />
       </div>
       <Pagination 
