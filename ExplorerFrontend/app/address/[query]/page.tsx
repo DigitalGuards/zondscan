@@ -25,7 +25,7 @@ const getData = async (url: string | URL) => {
 };
 
 export default async function Address() {
-    const headersList = headers();
+    const headersList = await headers();
     const header_url = headersList.get('x-url') || "";
     const addressData = await getData(header_url);
 

@@ -4,21 +4,33 @@ export function decodeToHex(input, format) {
 }
 
 export function toFixed(x) {
-  if (Math.abs(x) < 1.0) {
-    var e = parseInt(x.toString().split('e-')[1]);
+  if (x === undefined || x === null) {
+    return "0";
+  }
+
+  // Convert to number if it's a string
+  const num = typeof x === 'string' ? parseFloat(x) : x;
+
+  // Check if it's a valid number
+  if (isNaN(num)) {
+    return "0";
+  }
+
+  if (Math.abs(num) < 1.0) {
+    var e = parseInt(num.toString().split('e-')[1]);
     if (e) {
-        x *= Math.pow(10,e-1);
-        x = '0.' + (new Array(e)).join('0') + x.toString().substring(2);
+        let val = num * Math.pow(10, e-1);
+        return '0.' + (new Array(e)).join('0') + val.toString().substring(2);
     }
   } else {
-    var e = parseInt(x.toString().split('+')[1]);
+    var e = parseInt(num.toString().split('+')[1]);
     if (e > 20) {
         e -= 20;
-        x /= Math.pow(10,e);
-        x += (new Array(e+1)).join('0');
+        let val = num / Math.pow(10, e);
+        return val + (new Array(e+1)).join('0');
     }
   }
-  return x;
+  return num.toString();
 }
 
 export function decodeBase64ToHexadecimal(rawData) {
@@ -65,5 +77,8 @@ export function formatNumber(value) {
 }
 
 export function formatNumberWithCommas(x) {
+  if (x === undefined || x === null) {
+    return "0";
+  }
   return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }

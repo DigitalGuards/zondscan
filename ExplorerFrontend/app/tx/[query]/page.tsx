@@ -20,16 +20,25 @@ const formatTimestamp = (timestamp: number): string => {
   }).format(date);
 };
 
-const getStatusColor = (status: string): string => {
-  switch (status.toLowerCase()) {
-    case 'success':
-      return 'bg-green-500';
-    case 'failed':
-      return 'bg-red-500';
-    case 'pending':
-      return 'bg-yellow-500';
-    default:
-      return 'bg-blue-500';
+const getStatusColor = (status: any): string => {
+  // Return default color if status is undefined, null, or not a string
+  if (!status || typeof status !== 'string') return 'bg-blue-500';
+  
+  try {
+    const statusLower = status.toLowerCase();
+    switch (statusLower) {
+      case 'success':
+        return 'bg-green-500';
+      case 'failed':
+        return 'bg-red-500';
+      case 'pending':
+        return 'bg-yellow-500';
+      default:
+        return 'bg-blue-500';
+    }
+  } catch (error) {
+    // If any error occurs while processing the status, return default color
+    return 'bg-blue-500';
   }
 };
 
@@ -59,18 +68,37 @@ export default function TransactionPage() {
         return;
       }
 
+      const txHash = Array.isArray(params.query) ? params.query[0] : params.query;
+
+      // Validate transaction hash format
+      const hashRegex = /^0x[0-9a-fA-F]{64}$/;
+      if (!hashRegex.test(txHash)) {
+        setError('Invalid transaction hash format');
+        setLoading(false);
+        return;
+      }
+
       try {
-        const response = await fetch(`/api/transaction/${params.query}`);
+        const response = await fetch(`/api/transaction/${txHash}`);
         if (!response.ok) {
-          throw new Error('Failed to fetch transaction details');
+          throw new Error(response.statusText || 'Failed to fetch transaction details');
         }
+        
         const data = await response.json();
         if (data.error) {
           throw new Error(data.error);
         }
+        
+        if (!data.response) {
+          throw new Error('Transaction not found');
+        }
+
+        // Log the response to understand its structure
+        console.log('Transaction data:', data.response);
+
         const txData = data.response;
         setTransaction({
-          hash: txData.hash || params.query,
+          hash: txData.hash || txHash,
           blockNumber: txData.blockNumber || '',
           from: txData.from || '',
           to: txData.to || '',
@@ -82,7 +110,7 @@ export default function TransactionPage() {
           nonce: txData.nonce
         });
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred');
+        setError(err instanceof Error ? err.message : 'An error occurred while fetching transaction details');
       } finally {
         setLoading(false);
       }
@@ -91,7 +119,13 @@ export default function TransactionPage() {
     fetchTransaction();
   }, [params?.query]);
 
-  if (loading) return null;
+  if (loading) return (
+    <div className="py-8">
+      <div className="bg-[#2d2d2d] border border-[#3d3d3d] text-gray-200 px-6 py-4 rounded-xl">
+        Loading transaction details...
+      </div>
+    </div>
+  );
 
   if (error) {
     return (
@@ -134,7 +168,7 @@ export default function TransactionPage() {
             <div className={`px-4 py-2 rounded-xl ${statusColor} bg-opacity-20 border border-opacity-20 
                            flex items-center ${statusColor.replace('bg-', 'border-')}`}>
               <div className={`w-2 h-2 rounded-full ${statusColor} mr-2`}></div>
-              <span className="text-sm font-medium">{transaction.status}</span>
+              <span className="text-sm font-medium">{transaction.status || 'Unknown'}</span>
             </div>
           </div>
           
