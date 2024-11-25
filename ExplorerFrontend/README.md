@@ -108,7 +108,6 @@ The frontend uses two environment files:
 | VARIABLE | VALUE |
 | ------ | ------ |
 | DATABASE_URL | mongodb://localhost:27017/qrldata?readPreference=primary |
-| NEXTAUTH_URL | 127.0.0.1 |
 | NEXT_PUBLIC_DOMAIN_NAME | http://localhost:3000 (dev) OR http://your_domain_name.io (prod) |
 | NEXT_PUBLIC_HANDLER_URL | http://localhost:8080 (dev) OR http://your_domain_name.io:8443 (prod) |
 
@@ -116,8 +115,6 @@ The frontend uses two environment files:
 | VARIABLE | VALUE |
 | ------ | ------ |
 | DATABASE_URL | mongodb://localhost:27017/qrldata?readPreference=primary |
-| NEXTAUTH_SECRET | YOUR_SECRET |
-| ADMIN_PUBLIC_ADDRESS | YOUR_SECRET |
 | DOMAIN_NAME | http://localhost:3000 (dev) OR http://your_domain_name.io (prod) |
 | HANDLER_URL | http://localhost:8080 (dev) OR http://your_domain_name.io:8443 (prod) |
 
