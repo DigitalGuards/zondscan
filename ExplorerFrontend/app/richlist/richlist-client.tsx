@@ -1,17 +1,22 @@
+'use client';
+
 import React from "react";
 import Link from "next/link";
-import { Buffer } from 'buffer';
 import config from "../../config";
-import { toFixed } from "../lib/helpers.js";
+import { toFixed } from "../lib/helpers";
 
 interface RichlistProps {
   richlist: any[];
 }
 
-function ReturnAddress(address: string): string {
-  const buffer = Buffer.from(address, 'base64');
-  const bufString = buffer.toString('hex');
-  return bufString;
+function decodeBase64ToHexadecimal(rawData: string): string {
+  const decoded = atob(rawData);
+  let hex = '';
+  for (let i = 0; i < decoded.length; i++) {
+    const byte = decoded.charCodeAt(i).toString(16);
+    hex += byte.length === 1 ? '0' + byte : byte;
+  }
+  return hex;
 }
 
 export default function RichlistClient({ richlist }: RichlistProps) {
@@ -29,10 +34,10 @@ export default function RichlistClient({ richlist }: RichlistProps) {
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
         <Link 
-          href={config.siteUrl + "/address/" + "0x" + ReturnAddress(item.id)}
+          href={config.siteUrl + "/address/" + "0x" + decodeBase64ToHexadecimal(item.id)}
           className="text-[#ffa729] hover:text-[#ffb954] transition-colors"
         >
-          0x{ReturnAddress(item.id)}
+          0x{decodeBase64ToHexadecimal(item.id)}
         </Link>
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-right text-gray-300">

@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation';
 import BlocksClient from './blocks-client';
-import { BlocksResponse } from './types';
+import type { BlocksResponse } from './types';
+
+export const dynamic = 'force-dynamic';
 
 async function getBlocks(page: string): Promise<BlocksResponse> {
   const handlerUrl = process.env.NEXT_PUBLIC_HANDLER_URL || 'http://localhost:8080';
@@ -10,9 +12,6 @@ async function getBlocks(page: string): Promise<BlocksResponse> {
       method: 'GET',
       headers: {
         'Accept': 'application/json'
-      },
-      next: {
-        revalidate: 0
       }
     });
 
@@ -30,9 +29,13 @@ async function getBlocks(page: string): Promise<BlocksResponse> {
   }
 }
 
-export default async function BlocksPage({ params }: { params: { query: string } }) {
-  const resolvedParams = await Promise.resolve(params);
-  const pageNumber = resolvedParams?.query || '1';
+interface PageProps {
+    params: Promise<{ query: string }>;
+}
+
+export default async function BlocksPage({ params }: PageProps): Promise<JSX.Element> {
+  const resolvedParams = await params;
+  const pageNumber = resolvedParams.query || '1';
 
   try {
     const data = await getBlocks(pageNumber);
@@ -59,12 +62,4 @@ export default async function BlocksPage({ params }: { params: { query: string }
       </div>
     );
   }
-}
-
-// Generate static params for common page numbers
-export async function generateStaticParams() {
-  // Pre-render the first 10 pages
-  return Array.from({ length: 10 }, (_, i) => ({
-    query: String(i + 1),
-  }));
 }

@@ -1,10 +1,10 @@
 "use client"
 
 import * as React from 'react';
-import { Buffer } from 'buffer';
 import Link from 'next/link';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import { decodeBase64ToHexadecimal } from '../lib/helpers';
 
 interface ContractData {
   id: number;
@@ -30,9 +30,7 @@ const truncateMiddle = (str: string, startChars = 6, endChars = 6): string => {
 
 const DecoderAddress = (params: { row: { from: string } }): string => {
   try {
-    const buffer = Buffer.from(params.row.from, 'base64');
-    const bufString = buffer.toString('hex');
-    return "0x" + bufString;
+    return "0x" + decodeBase64ToHexadecimal(params.row.from);
   } catch (error) {
     console.error('Error decoding address:', error);
     return 'Error decoding address';
@@ -41,9 +39,7 @@ const DecoderAddress = (params: { row: { from: string } }): string => {
 
 const DecoderTxHash = (params: { row: { txHash: string } }): string => {
   try {
-    const buffer = Buffer.from(params.row.txHash, 'base64');
-    const bufString = buffer.toString('hex');
-    return "0x" + bufString;
+    return "0x" + decodeBase64ToHexadecimal(params.row.txHash);
   } catch (error) {
     console.error('Error decoding transaction hash:', error);
     return 'Error decoding transaction hash';
@@ -52,9 +48,7 @@ const DecoderTxHash = (params: { row: { txHash: string } }): string => {
 
 const Decoder = (params: { row: { pk?: string; signature?: string } }): string => {
   try {
-    const buffer = Buffer.from(params.row.pk || params.row.signature || '', 'base64');
-    const bufString = buffer.toString('hex');
-    return "0x" + bufString;
+    return "0x" + decodeBase64ToHexadecimal(params.row.pk || params.row.signature || '');
   } catch (error) {
     console.error('Error decoding data:', error);
     return 'Error decoding data';

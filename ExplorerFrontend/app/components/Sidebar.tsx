@@ -3,6 +3,7 @@
 import React from "react"
 import Link from 'next/link'
 import Image from 'next/image'
+import { useRouter } from 'next/navigation'
 import { Disclosure } from '@headlessui/react'
 import { ChevronDownIcon } from '@heroicons/react/20/solid'
 import LookUpIcon from '../../public/lookup.svg'
@@ -28,8 +29,10 @@ function classNames(...classes: string[]) {
 }
 
 export default function Sidebar() {
+  const router = useRouter();
+
   const navigateTo = (href: string) => {
-    window.location.href = href;
+    router.push(href);
   };
 
   return (
@@ -45,7 +48,7 @@ export default function Sidebar() {
               fill
               sizes="32px"
               style={{ objectFit: 'contain' }}
-              priority
+              loading="eager"
               className="group-hover:scale-110 transition-transform duration-300"
             />
           </div>

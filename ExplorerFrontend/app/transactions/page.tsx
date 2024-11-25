@@ -22,13 +22,16 @@ async function getTransactions(page: string): Promise<TransactionsResponse> {
   return response.json();
 }
 
-export default async function Page({
-  searchParams,
-}: {
-  searchParams: { page?: string };
-}) {
+interface PageProps {
+  searchParams: Promise<{ page?: string }>;
+}
+
+export default async function Page({ searchParams }: PageProps): Promise<JSX.Element> {
+  // Await searchParams
+  const resolvedParams = await searchParams;
+  
   // Get page from searchParams or default to '1'
-  const page = searchParams.page || '1';
+  const page = resolvedParams.page || '1';
   
   // Fetch data
   const data = await getTransactions(page);

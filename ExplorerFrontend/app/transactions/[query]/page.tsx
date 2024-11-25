@@ -1,12 +1,7 @@
 import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import TransactionsClient from './transactions-client';
-import { Transaction } from './types';
-
-interface TransactionsResponse {
-  txs: Transaction[];
-  total: number;
-}
+import type { TransactionsResponse } from './types';
 
 async function getTransactions(page: string): Promise<TransactionsResponse> {
   const handlerUrl = process.env.NEXT_PUBLIC_HANDLER_URL || 'http://localhost:8080';
@@ -36,7 +31,7 @@ async function getTransactions(page: string): Promise<TransactionsResponse> {
   }
 }
 
-function LoadingUI() {
+function LoadingUI(): JSX.Element {
   return (
     <div className="flex items-center justify-center min-h-screen">
       <div className="text-lg">Loading transactions...</div>
@@ -44,9 +39,13 @@ function LoadingUI() {
   );
 }
 
-export default async function Page({ params }: { params: { query: string } }) {
-  const resolvedParams = await Promise.resolve(params);
-  const pageNumber = resolvedParams?.query || '1';
+interface PageProps {
+    params: Promise<{ query: string }>;
+}
+
+export default async function Page({ params }: PageProps): Promise<JSX.Element> {
+  const resolvedParams = await params;
+  const pageNumber = resolvedParams.query || '1';
 
   try {
     const data = await getTransactions(pageNumber);

@@ -1,26 +1,39 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-explicit-any */
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
-// FIX LATER ESLINT
-import { NextResponse} from "next/server";
-import { PrismaClient } from '@prisma/client'
-import crypto from 'crypto';
+export const runtime = 'edge';
 
-const prisma = new PrismaClient()
+interface GenerateRequest {
+  address: string;
+}
 
-// Make this a POST request and store challenge and associated fields:
-// blockchain_address, challenge, timestamp, and status in MongoDB
-export async function POST (req: any, res: any){
-    // const body = await req.json()
-    // const randomMessage = crypto.randomBytes(64).toString('hex');
+function generateRandomHex(length: number): string {
+  const array = new Uint8Array(length);
+  crypto.getRandomValues(array);
+  return Array.from(array)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
 
-    // const challenge = await prisma.challenge.create({
-    //     data: {
-    //       blockchain_address: body.address,
-    //       challenge: "jsdkfsnkfnsdkfjsbnfj",
-    //       status: 0,
-    //     },
-    //   })
-      
-    return NextResponse.json("jsdkfsnkfnsdkfjsbnfj");
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  try {
+    const body = await request.json() as GenerateRequest;
+    
+    if (!body.address) {
+      return NextResponse.json(
+        { error: 'Address is required' },
+        { status: 400 }
+      );
+    }
+    
+    const randomMessage = generateRandomHex(32); // 32 bytes = 64 hex chars
+
+    return NextResponse.json({ challenge: randomMessage });
+  } catch (error) {
+    console.error('Error generating challenge:', error);
+    return NextResponse.json(
+      { error: 'Failed to generate challenge' },
+      { status: 500 }
+    );
+  }
 }

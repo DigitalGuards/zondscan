@@ -1,28 +1,45 @@
-export function decodeToHex(input: string, format: BufferEncoding): string {
-  const buffer = Buffer.from(input, format);
-  return buffer.toString('hex');
+'use client';
+
+export function decodeToHex(input: string, format?: string): string {
+  const decoded = atob(input);
+  let hex = '';
+  for (let i = 0; i < decoded.length; i++) {
+    const byte = decoded.charCodeAt(i).toString(16);
+    hex += byte.length === 1 ? '0' + byte : byte;
+  }
+  return hex;
 }
 
-export function toFixed(x: number): string {
-  if (Math.abs(x) < 1.0) {
-    let e = parseInt(x.toString().split('e-')[1]);
+export function toFixed(x: string | number | undefined | null): string {
+  if (x === undefined || x === null) {
+    return "0";
+  }
+
+  // Convert to number if it's a string
+  const num = typeof x === 'string' ? parseFloat(x) : x;
+
+  // Check if it's a valid number
+  if (isNaN(num)) {
+    return "0";
+  }
+
+  if (Math.abs(num) < 1.0) {
+    const e = parseInt(num.toString().split('e-')[1]);
     if (e) {
-      x *= Math.pow(10, e-1);
-      const zeros = new Array(e).join('0');
-      return '0.' + zeros + x.toString().substring(2);
+      const val = num * Math.pow(10, e-1);
+      return '0.' + (new Array(e)).join('0') + val.toString().substring(2);
     }
   } else {
-    let e = parseInt(x.toString().split('+')[1]);
+    const e = parseInt(num.toString().split('+')[1]);
     if (e > 20) {
-      e -= 20;
-      x /= Math.pow(10, e);
-      x = Number(x.toString() + (new Array(e+1)).join('0'));
+      const val = num / Math.pow(10, e-20);
+      return val + (new Array(e+1)).join('0');
     }
   }
-  return x.toString();
+  return num.toString();
 }
 
-export function formatAmount(amount: number | string): [string, string] {
+export function formatAmount(amount: string | number): [string, string] {
   // Handle zero amount
   if (amount === 0 || amount === '0') {
     return ['0', 'QRL'];
@@ -54,13 +71,19 @@ export function formatAmount(amount: number | string): [string, string] {
 }
 
 export function decodeBase64ToHexadecimal(rawData: string): string {
-  const buffer = Buffer.from(rawData, 'base64');
-  return buffer.toString('hex');
+  const decoded = atob(rawData);
+  let hex = '';
+  for (let i = 0; i < decoded.length; i++) {
+    const byte = decoded.charCodeAt(i).toString(16);
+    hex += byte.length === 1 ? '0' + byte : byte;
+  }
+  return hex;
 }
 
 export function epochToISO(timestamp: number): string {
   const date = new Date(timestamp * 1000); 
-  return date.toISOString().split('T')[0];
+  const datePart = date.toISOString().split('T')[0];
+  return datePart;
 }
 
 export function formatTimestamp(timestamp: number): string {
@@ -95,6 +118,9 @@ export function formatNumber(value: number): string {
   return '$' + formattedValue;
 }
 
-export function formatNumberWithCommas(x: string | number): string {
+export function formatNumberWithCommas(x: string | number | undefined | null): string {
+  if (x === undefined || x === null) {
+    return "0";
+  }
   return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }

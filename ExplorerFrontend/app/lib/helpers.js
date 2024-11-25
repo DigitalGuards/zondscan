@@ -1,6 +1,14 @@
+'use client';
+
 export function decodeToHex(input, format) {
-  const buffer = Buffer.from(input, format);
-  return buffer.toString('hex');
+  // Using browser's built-in atob for base64 decoding
+  const decoded = atob(input);
+  let hex = '';
+  for (let i = 0; i < decoded.length; i++) {
+    const byte = decoded.charCodeAt(i).toString(16);
+    hex += byte.length === 1 ? '0' + byte : byte;
+  }
+  return hex;
 }
 
 export function toFixed(x) {
@@ -65,15 +73,20 @@ export function formatAmount(amount) {
 }
 
 export function decodeBase64ToHexadecimal(rawData) {
-  const buffer = Buffer.from(rawData, 'base64');
-  const bufString = buffer.toString('hex');
-  return bufString
+  // Using browser's built-in atob for base64 decoding
+  const decoded = atob(rawData);
+  let hex = '';
+  for (let i = 0; i < decoded.length; i++) {
+    const byte = decoded.charCodeAt(i).toString(16);
+    hex += byte.length === 1 ? '0' + byte : byte;
+  }
+  return hex;
 }
 
 export function epochToISO(timestamp) {
   const date = new Date(timestamp * 1000); 
   const datePart = date.toISOString().split('T')[0];
-  return datePart
+  return datePart;
 }
 
 export function formatTimestamp(timestamp) {

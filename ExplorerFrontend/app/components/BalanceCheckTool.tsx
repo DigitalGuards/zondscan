@@ -1,16 +1,21 @@
-import React, { useState } from 'react';
-import axios from 'axios';
+'use client';
+
+import { useState, FormEvent, ChangeEvent } from 'react';
+import axios, { AxiosError } from 'axios';
 import config from '../../config';
-import {toFixed} from '../lib/helpers.js';
+import { toFixed } from '../lib/helpers';
 
-function BalanceCheckTool() {
-    const [address, setAddress] = useState("");
-    const [blockNrOrHash, setBlockNrOrHash] = useState(null);
-    const [balance, setBalance] = useState(null);
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState(null);
+interface BalanceResponse {
+  balance: string;
+}
 
-    const handleSubmit = async (event) => {
+export default function BalanceCheckTool(): JSX.Element {
+    const [address, setAddress] = useState<string>('');
+    const [balance, setBalance] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState<boolean>(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const handleSubmit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
         event.preventDefault();
         setIsLoading(true);
         setError(null);
@@ -19,26 +24,37 @@ function BalanceCheckTool() {
         formData.append('address', address.replace(/\s/g, ''));
 
         try {
-            const response = await axios.post(`${config.handlerUrl}/getBalance`, formData, {
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
+            const response = await axios.post<BalanceResponse>(
+                `${config.handlerUrl}/getBalance`,
+                formData,
+                {
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    }
                 }
-            });
+            );
 
-            if (response.data.balance != "header not found") {
-                setBalance(toFixed(response.data.balance) + " QRL");
+            if (response.data.balance !== "header not found") {
+                setBalance(`${toFixed(response.data.balance)} QRL`);
                 setError(null);
             } else {
                 setBalance(null);
                 setError("Address not found on the blockchain");
             }
-        } catch (error) {
-            console.error('Error fetching balance:', error);
+        } catch (err) {
+            console.error('Error fetching balance:', err);
             setBalance(null);
-            setError("Failed to fetch balance. Please try again.");
+            setError(err instanceof AxiosError 
+                ? err.response?.data?.message || "Failed to fetch balance. Please try again."
+                : "Failed to fetch balance. Please try again."
+            );
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handleAddressChange = (e: ChangeEvent<HTMLInputElement>): void => {
+        setAddress(e.target.value);
     };
 
     return (
@@ -55,7 +71,7 @@ function BalanceCheckTool() {
                                 className="w-full px-4 py-3 bg-[#1a1b1e] text-white rounded-lg border border-[#3d3d3d] focus:outline-none focus:border-[#ffa729] transition-all duration-300 pl-10"
                                 type="text" 
                                 value={address} 
-                                onChange={(e) => setAddress(e.target.value)} 
+                                onChange={handleAddressChange} 
                                 placeholder="Enter QRL address"
                                 required 
                             />
@@ -117,5 +133,3 @@ function BalanceCheckTool() {
         </div>
     );
 }
-
-export default BalanceCheckTool;

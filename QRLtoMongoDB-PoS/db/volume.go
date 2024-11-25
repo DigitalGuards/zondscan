@@ -28,6 +28,7 @@ func CalculateAndStoreAverageVolume() {
 
 	volume := GetVolumeFromBlockTimestamps(targetBlockTimestamp, currentBlockTimestamp, latestBlock.Number)
 
+	// Store volume directly as int64 since we're already working with the correct units
 	update := bson.M{
 		"$set": bson.M{
 			"volume": volume,
@@ -42,9 +43,9 @@ func CalculateAndStoreAverageVolume() {
 	}
 }
 
-func GetVolumeFromBlockTimestamps(targetBlockTimestamp uint64, currentBlockTimestamp uint64, latestBlockNumber uint64) float32 {
+func GetVolumeFromBlockTimestamps(targetBlockTimestamp uint64, currentBlockTimestamp uint64, latestBlockNumber uint64) int64 {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	var volume float32
+	var volume int64
 	defer cancel()
 
 	options := options.Find().SetProjection(bson.M{"blockNumber": 1, "blockTimestamp": 1, "value": 1}).SetSort(bson.D{{"blockNumber", -1}})
@@ -63,7 +64,8 @@ func GetVolumeFromBlockTimestamps(targetBlockTimestamp uint64, currentBlockTimes
 		}
 
 		if singleTransfer.BlockTimestamp >= targetBlockTimestamp {
-			volume += float32(singleTransfer.Value) / configs.QUANTA
+			// Convert uint64 to int64 safely and add to volume
+			volume += int64(singleTransfer.Value)
 		} else if singleTransfer.BlockTimestamp <= targetBlockTimestamp {
 			break
 		} else {
