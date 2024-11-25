@@ -160,10 +160,14 @@ EOL
     print_status "Building synchronizer..."
     go build -o synchroniser main.go || print_error "Failed to build synchronizer"
 
+    # Make the binary executable
+    chmod +x ./synchroniser
+
     # Start synchronizer with PM2, explicitly setting environment variables
     print_status "Starting synchronizer with PM2..."
     MONGOURI=mongodb://localhost:27017 NODE_URL=http://REDACTED:8545 pm2 start ./synchroniser \
         --name "synchroniser" \
+        --type binary \
         --cwd "$BASE_DIR/QRLtoMongoDB-PoS" \
         --env MONGOURI=mongodb://localhost:27017 \
         --env NODE_URL=http://REDACTED:8545 \
