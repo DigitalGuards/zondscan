@@ -98,12 +98,9 @@ EOL
     print_status "Building server..."
     go build -o backendAPI main.go || print_error "Failed to build server"
 
-    # Make the binary executable
-    chmod +x ./backendAPI
-
     # Start server with PM2, specifying the working directory and APP_ENV
     print_status "Starting server with PM2..."
-    APP_ENV=development pm2 start ./backendAPI --name "handler" --interpreter none --cwd "$BASE_DIR/backendAPI" || print_error "Failed to start server"
+    APP_ENV=development pm2 start ./backendAPI --name "handler" --cwd "$BASE_DIR/backendAPI" || print_error "Failed to start server"
 }
 
 # Setup frontend environment
@@ -152,26 +149,25 @@ MONGOURI=mongodb://localhost:27017
 NODE_URL=http://REDACTED:8545
 EOL
 
-    # Build and start synchronizer
+    # Also create .env in the rpc directory to ensure it's available
+    mkdir -p rpc
+    cat > rpc/.env << EOL
+MONGOURI=mongodb://localhost:27017
+NODE_URL=http://REDACTED:8545
+EOL
+
+    # Build synchronizer
     print_status "Building synchronizer..."
     go build -o synchroniser main.go || print_error "Failed to build synchronizer"
 
-    # Make the binary executable
-    chmod +x ./synchroniser
-
-    # Stop any existing process
-    pm2 stop synchroniser 2>/dev/null
-    pm2 delete synchroniser 2>/dev/null
-
-    # Start synchronizer with PM2, specifying the working directory and interpreter
+    # Start synchronizer with PM2, explicitly setting environment variables
     print_status "Starting synchronizer with PM2..."
-    pm2 start --name "synchroniser" \
-        --interpreter none \
+    MONGOURI=mongodb://localhost:27017 NODE_URL=http://REDACTED:8545 pm2 start ./synchroniser \
+        --name "synchroniser" \
         --cwd "$BASE_DIR/QRLtoMongoDB-PoS" \
-        -- ./synchroniser || print_error "Failed to start synchronizer"
-
-    # Wait for process to start
-    sleep 2
+        --env MONGOURI=mongodb://localhost:27017 \
+        --env NODE_URL=http://REDACTED:8545 \
+        || print_error "Failed to start synchronizer"
 }
 
 # Save PM2 processes
