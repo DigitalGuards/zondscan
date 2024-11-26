@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 # Print colored output
@@ -104,7 +103,6 @@ setup_frontend() {
     # Create .env file
     cat > .env << EOL
 DATABASE_URL=mongodb://localhost:27017/qrldata?readPreference=primary
-NEXTAUTH_URL=127.0.0.1
 NEXT_PUBLIC_DOMAIN_NAME=http://localhost:3000
 NEXT_PUBLIC_HANDLER_URL=http://127.0.0.1:8080
 EOL
@@ -112,8 +110,6 @@ EOL
     # Create .env.local file
     cat > .env.local << EOL
 DATABASE_URL=mongodb://localhost:27017/qrldata?readPreference=primary
-NEXTAUTH_SECRET=developmentsecretpassword123
-ADMIN_PUBLIC_ADDRESS=development
 DOMAIN_NAME=http://localhost:3000
 HANDLER_URL=http://127.0.0.1:8080
 EOL
@@ -148,7 +144,7 @@ EOL
 
     # Start synchronizer with PM2, specifying the working directory
     print_status "Starting synchronizer with PM2..."
-    pm2 start ./main --name "synchroniser" --cwd "$BASE_DIR/QRLtoMongoDB-PoS" || print_error "Failed to start synchronizer"
+     pm2 start ./synchroniser --name "synchroniser" --cwd "$BASE_DIR/QRLtoMongoDB-PoS" || print_error "Failed to start synchronizer"
 }
 
 # Save PM2 processes
