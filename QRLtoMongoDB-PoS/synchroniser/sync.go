@@ -230,6 +230,9 @@ func runPeriodicTask(task func(), interval time.Duration, taskName string) {
 				logger.Error("Recovered from panic in periodic task",
 					zap.String("task", taskName),
 					zap.Any("error", r))
+				// Restart the task after a short delay
+				time.Sleep(5 * time.Second)
+				runPeriodicTask(task, interval, taskName)
 			}
 		}()
 
@@ -237,24 +240,56 @@ func runPeriodicTask(task func(), interval time.Duration, taskName string) {
 			zap.String("task", taskName),
 			zap.Duration("interval", interval))
 
+		// Run immediately on start
+		runTaskWithRetry(task, taskName)
+
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
 		for range ticker.C {
-			func() {
-				defer func() {
-					if r := recover(); r != nil {
-						logger.Error("Recovered from panic in periodic task tick",
-							zap.String("task", taskName),
-							zap.Any("error", r))
-					}
-				}()
-				logger.Info("Running periodic task", zap.String("task", taskName))
-				task()
-				logger.Info("Completed periodic task", zap.String("task", taskName))
-			}()
+			runTaskWithRetry(task, taskName)
 		}
 	}()
+}
+
+func runTaskWithRetry(task func(), taskName string) {
+	const maxRetries = 3
+	const retryDelay = 10 * time.Second
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					logger.Error("Recovered from panic in task execution",
+						zap.String("task", taskName),
+						zap.Any("error", r),
+						zap.Int("attempt", attempt))
+				}
+			}()
+
+			logger.Info("Running periodic task",
+				zap.String("task", taskName),
+				zap.Int("attempt", attempt))
+
+			task()
+
+			logger.Info("Completed periodic task",
+				zap.String("task", taskName),
+				zap.Int("attempt", attempt))
+
+			// If we get here, task completed successfully
+			return
+		}()
+
+		// If we get here and it's not the last attempt, retry after delay
+		if attempt < maxRetries {
+			logger.Warn("Retrying task after failure",
+				zap.String("task", taskName),
+				zap.Int("attempt", attempt),
+				zap.Duration("delay", retryDelay))
+			time.Sleep(retryDelay)
+		}
+	}
 }
 
 func singleBlockInsertion() {
@@ -270,33 +305,48 @@ func singleBlockInsertion() {
 
 	isCollectionsExist := db.IsCollectionsExist()
 
+	// Initialize data before starting periodic updates
+	if !isCollectionsExist {
+		processInitialBlock()
+		isCollectionsExist = true
+	}
+
+	// Ensure initial data is present
+	logger.Info("Initializing market data...")
+	db.PeriodicallyUpdateCoinGeckoData()
+	logger.Info("Initializing wallet count...")
+	db.CountWallets()
+	logger.Info("Initializing transaction volume...")
+	db.GetDailyTransactionVolume()
+
 	// Block processing goroutine
 	runPeriodicTask(func() {
-		if !isCollectionsExist {
-			processInitialBlock()
-			isCollectionsExist = true
+		if sum <= latestBlockNumber {
+			sum = processSubsequentBlocks(sum, latestBlockNumber)
 		} else {
-			if sum <= latestBlockNumber {
-				sum = processSubsequentBlocks(sum, latestBlockNumber)
-			} else {
-				latestBlockNumber, err = rpc.GetLatestBlock()
-				if err != nil {
-					logger.Error("Failed to get latest block", zap.Error(err))
-				}
+			var err error
+			latestBlockNumber, err = rpc.GetLatestBlock()
+			if err != nil {
+				logger.Error("Failed to get latest block", zap.Error(err))
 			}
 		}
 	}, 60*time.Second, "block_processing")
 
-	// Data update goroutine
+	// Data update goroutine with individual error handling
 	runPeriodicTask(func() {
+		// Update market data
 		func() {
 			logger.Info("Updating CoinGecko data...")
 			db.PeriodicallyUpdateCoinGeckoData()
 		}()
+
+		// Update wallet count
 		func() {
 			logger.Info("Counting wallets...")
 			db.CountWallets()
 		}()
+
+		// Update transaction volume
 		func() {
 			logger.Info("Calculating daily transaction volume...")
 			db.GetDailyTransactionVolume()

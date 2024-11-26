@@ -15,7 +15,6 @@ import (
 	"reflect"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -27,16 +26,8 @@ func ReturnSingleBlock(block uint64) (models.ZondUint64Version, error) {
 
 	var result models.ZondUint64Version
 
-	// indexModel := mongo.IndexModel{Keys: bson.D{{"result.number", 1}}}
-
-	// name, err := configs.BlocksCollection.Indexes().CreateOne(context.TODO(), indexModel)
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	// fmt.Println("Name of Index Created: " + name)
-
-	err := configs.BlocksCollection.FindOne(ctx, bson.M{"result.number": block}).Decode(&result)
+	filter := primitive.D{{Key: "result.number", Value: block}}
+	err := configs.BlocksCollection.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -49,22 +40,19 @@ func ReturnContracts() ([]models.Transfer, error) {
 	var transactions []models.Transfer
 	defer cancel()
 
-	options := options.Find()
-
-	results, err := configs.TransferCollections.Find(ctx, bson.M{"contractAddress": bson.M{"$exists": true}}, options)
+	filter := primitive.D{{Key: "contractAddress", Value: primitive.D{{Key: "$exists", Value: true}}}}
+	results, err := configs.TransferCollections.Find(ctx, filter, options.Find())
 
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	//reading from the db in an optimal way
 	defer results.Close(ctx)
 	for results.Next(ctx) {
 		var singleTransfer models.Transfer
 		if err = results.Decode(&singleTransfer); err != nil {
 			fmt.Println(err)
 		}
-
 		transactions = append(transactions, singleTransfer)
 	}
 
@@ -76,12 +64,20 @@ func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
 	var transactions []models.TransactionByAddress
 	defer cancel()
 
-	options := options.Find().SetProjection(bson.M{"inOut": 1, "txType": 1, "address": 1, "txHash": 1, "timeStamp": 1, "amount": 1})
+	projection := primitive.D{
+		{Key: "inOut", Value: 1},
+		{Key: "txType", Value: 1},
+		{Key: "address", Value: 1},
+		{Key: "txHash", Value: 1},
+		{Key: "timeStamp", Value: 1},
+		{Key: "amount", Value: 1},
+	}
 
-	options.SetSort(bson.D{{"timeStamp", -1}})
+	opts := options.Find().
+		SetProjection(projection).
+		SetSort(primitive.D{{Key: "timeStamp", Value: -1}})
 
-	results, err := configs.TransactionByAddressCollection.Find(ctx, bson.M{}, options)
-
+	results, err := configs.TransactionByAddressCollection.Find(ctx, primitive.D{}, opts)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -92,7 +88,6 @@ func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
 		if err = results.Decode(&singleTransaction); err != nil {
 			fmt.Println(err)
 		}
-
 		transactions = append(transactions, singleTransaction)
 	}
 
@@ -104,13 +99,21 @@ func ReturnLastSixTransactions() []models.TransactionByAddress {
 	var transactions []models.TransactionByAddress
 	defer cancel()
 
-	options := options.Find().SetProjection(bson.M{"inOut": 1, "txType": 1, "address": 1, "txHash": 1, "timeStamp": 1, "amount": 1})
+	projection := primitive.D{
+		{Key: "inOut", Value: 1},
+		{Key: "txType", Value: 1},
+		{Key: "address", Value: 1},
+		{Key: "txHash", Value: 1},
+		{Key: "timeStamp", Value: 1},
+		{Key: "amount", Value: 1},
+	}
 
-	options.SetSort(bson.D{{"timeStamp", -1}})
-	options.SetLimit(6)
+	opts := options.Find().
+		SetProjection(projection).
+		SetSort(primitive.D{{Key: "timeStamp", Value: -1}}).
+		SetLimit(6)
 
-	results, err := configs.TransactionByAddressCollection.Find(ctx, bson.M{}, options)
-
+	results, err := configs.TransactionByAddressCollection.Find(ctx, primitive.D{}, opts)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -121,7 +124,6 @@ func ReturnLastSixTransactions() []models.TransactionByAddress {
 		if err = results.Decode(&singleTransaction); err != nil {
 			fmt.Println(err)
 		}
-
 		transactions = append(transactions, singleTransaction)
 	}
 
@@ -139,35 +141,35 @@ func ReturnAllInternalTransactionsByAddress(address string) ([]models.TraceResul
 		return nil, err
 	}
 
-	query := bson.M{
-		"$or": []bson.M{
-			{"from": decoded},
-			{"to": decoded},
-		},
+	filter := primitive.D{{Key: "$or", Value: []primitive.D{
+		{{Key: "from", Value: decoded}},
+		{{Key: "to", Value: decoded}},
+	}}}
+
+	projection := primitive.D{
+		{Key: "type", Value: 1},
+		{Key: "callType", Value: 1},
+		{Key: "hash", Value: 1},
+		{Key: "from", Value: 1},
+		{Key: "to", Value: 1},
+		{Key: "input", Value: 1},
+		{Key: "output", Value: 1},
+		{Key: "traceAddress", Value: 1},
+		{Key: "value", Value: 1},
+		{Key: "gas", Value: 1},
+		{Key: "gasUsed", Value: 1},
+		{Key: "addressFunctionIdentifier", Value: 1},
+		{Key: "amountFunctionIdentifier", Value: 1},
+		{Key: "blockTimestamp", Value: 1},
 	}
 
-	options := options.Find().
-		SetProjection(bson.M{
-			"type":                      1,
-			"callType":                  1,
-			"hash":                      1,
-			"from":                      1,
-			"to":                        1,
-			"input":                     1,
-			"output":                    1,
-			"traceAddress":              1,
-			"value":                     1,
-			"gas":                       1,
-			"gasUsed":                   1,
-			"addressFunctionIdentifier": 1,
-			"amountFunctionIdentifier":  1,
-			"blockTimestamp":            1,
-		}).
-		SetSort(bson.D{{"blockTimestamp", -1}})
+	opts := options.Find().
+		SetProjection(projection).
+		SetSort(primitive.D{{Key: "blockTimestamp", Value: -1}})
 
-	results, err := configs.InternalTransactionByAddressCollection.Find(ctx, query, options)
+	results, err := configs.InternalTransactionByAddressCollection.Find(ctx, filter, opts)
 	if err != nil {
-		return nil, err // Return the error if the query fails
+		return nil, err
 	}
 	defer results.Close(ctx)
 
@@ -178,7 +180,6 @@ func ReturnAllInternalTransactionsByAddress(address string) ([]models.TraceResul
 		}
 
 		from := hex.EncodeToString([]byte(singleTransaction.From))
-
 		fmt.Println(singleTransaction.Output)
 
 		if from == address[2:] {
@@ -206,27 +207,27 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 		return nil, err
 	}
 
-	query := bson.M{
-		"$or": []bson.M{
-			{"from": decoded},
-			{"to": decoded},
-		},
+	filter := primitive.D{{Key: "$or", Value: []primitive.D{
+		{{Key: "from", Value: decoded}},
+		{{Key: "to", Value: decoded}},
+	}}}
+
+	projection := primitive.D{
+		{Key: "timeStamp", Value: 1},
+		{Key: "amount", Value: 1},
+		{Key: "inOut", Value: 1},
+		{Key: "txHash", Value: 1},
+		{Key: "txType", Value: 1},
+		{Key: "from", Value: 1},
+		{Key: "to", Value: 1},
+		{Key: "paidFees", Value: 1},
 	}
 
-	options := options.Find().
-		SetProjection(bson.M{
-			"timeStamp": 1,
-			"amount":    1,
-			"inOut":     1,
-			"txHash":    1,
-			"txType":    1,
-			"from":      1,
-			"to":        1,
-			"paidFees":  1,
-		}).
-		SetSort(bson.D{{"timeStamp", -1}})
+	opts := options.Find().
+		SetProjection(projection).
+		SetSort(primitive.D{{Key: "timeStamp", Value: -1}})
 
-	results, err := configs.TransactionByAddressCollection.Find(ctx, query, options)
+	results, err := configs.TransactionByAddressCollection.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -264,7 +265,12 @@ func ReturnLatestBlock() ([]models.ZondUint64Version, error) {
 	var blocks []models.ZondUint64Version
 	defer cancel()
 
-	indexModel := mongo.IndexModel{Keys: bson.D{{"result.number", -1}, {"result.timestamp", 1}}}
+	indexModel := mongo.IndexModel{
+		Keys: primitive.D{
+			{Key: "result.number", Value: -1},
+			{Key: "result.timestamp", Value: 1},
+		},
+	}
 
 	name, err := configs.BlocksCollection.Indexes().CreateOne(context.TODO(), indexModel)
 	if err != nil {
@@ -272,24 +278,27 @@ func ReturnLatestBlock() ([]models.ZondUint64Version, error) {
 	}
 	fmt.Println("Name of Index Created: " + name)
 
-	options := options.Find().SetProjection(bson.M{"result.number": 1, "result.timestamp": 1})
+	projection := primitive.D{
+		{Key: "result.number", Value: 1},
+		{Key: "result.timestamp", Value: 1},
+	}
 
-	options.SetSort(bson.D{{"result.number", -1}}).SetLimit(1)
+	opts := options.Find().
+		SetProjection(projection).
+		SetSort(primitive.D{{Key: "result.number", Value: -1}}).
+		SetLimit(1)
 
-	results, err := configs.BlocksCollection.Find(ctx, bson.M{}, options)
-
+	results, err := configs.BlocksCollection.Find(ctx, primitive.D{}, opts)
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	//reading from the db in an optimal way
 	defer results.Close(ctx)
 	for results.Next(ctx) {
 		var singleBlock models.ZondUint64Version
 		if err = results.Decode(&singleBlock); err != nil {
 			fmt.Println(err)
 		}
-
 		blocks = append(blocks, singleBlock)
 	}
 
@@ -305,22 +314,24 @@ func ReturnLatestBlocks(page int, limit int) ([]models.Result, error) {
 		limit = 5 // Default to 5 blocks per page
 	}
 
-	options := options.Find().
-		SetProjection(bson.M{
-			"result.number":       1,
-			"result.timestamp":    1,
-			"result.hash":         1,
-			"result.transactions": 1,
-		}).
-		SetSort(bson.D{{"result.timestamp", -1}})
+	projection := primitive.D{
+		{Key: "result.number", Value: 1},
+		{Key: "result.timestamp", Value: 1},
+		{Key: "result.hash", Value: 1},
+		{Key: "result.transactions", Value: 1},
+	}
+
+	opts := options.Find().
+		SetProjection(projection).
+		SetSort(primitive.D{{Key: "result.timestamp", Value: -1}})
 
 	if page == 0 {
 		page = 1
 	}
-	options.SetSkip(int64((page - 1) * limit))
-	options.SetLimit(int64(limit))
+	opts.SetSkip(int64((page - 1) * limit))
+	opts.SetLimit(int64(limit))
 
-	results, err := configs.BlocksCollection.Find(ctx, bson.D{}, options)
+	results, err := configs.BlocksCollection.Find(ctx, primitive.D{}, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -344,32 +355,38 @@ func ReturnTransactionsNetwork(page int) ([]models.TransactionByAddress, error) 
 
 	limit := 15
 
-	options := options.Find().SetProjection(bson.M{"inOut": 1, "txType": 1, "address": 1, "txHash": 1, "timeStamp": 1, "amount": 1})
+	projection := primitive.D{
+		{Key: "inOut", Value: 1},
+		{Key: "txType", Value: 1},
+		{Key: "address", Value: 1},
+		{Key: "txHash", Value: 1},
+		{Key: "timeStamp", Value: 1},
+		{Key: "amount", Value: 1},
+	}
+
+	opts := options.Find().
+		SetProjection(projection).
+		SetSort(primitive.D{{Key: "timeStamp", Value: -1}})
 
 	if limit != 0 {
 		if page == 0 {
 			page = 1
 		}
-		options.SetSkip(int64((page - 1) * limit))
-		options.SetLimit(int64(limit))
+		opts.SetSkip(int64((page - 1) * limit))
+		opts.SetLimit(int64(limit))
 	}
 
-	options.SetSort(bson.D{{"timeStamp", -1}})
-
-	results, err := configs.TransactionByAddressCollection.Find(ctx, bson.D{}, options)
-
+	results, err := configs.TransactionByAddressCollection.Find(ctx, primitive.D{}, opts)
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	//reading from the db in an optimal way
 	defer results.Close(ctx)
 	for results.Next(ctx) {
 		var singleTransaction models.TransactionByAddress
 		if err = results.Decode(&singleTransaction); err != nil {
 			fmt.Println(err)
 		}
-
 		transactions = append(transactions, singleTransaction)
 	}
 
@@ -383,37 +400,44 @@ func ReturnTransactions(address string, page, limit int) ([]models.TransactionBy
 
 	fmt.Println(address, page, limit)
 
-	options := options.Find().SetProjection(bson.M{"inOut": 1, "txType": 1, "address": 1, "txHash": 1, "timeStamp": 1, "amount": 1})
+	projection := primitive.D{
+		{Key: "inOut", Value: 1},
+		{Key: "txType", Value: 1},
+		{Key: "address", Value: 1},
+		{Key: "txHash", Value: 1},
+		{Key: "timeStamp", Value: 1},
+		{Key: "amount", Value: 1},
+	}
+
+	opts := options.Find().
+		SetProjection(projection).
+		SetSort(primitive.D{{Key: "timeStamp", Value: -1}})
 
 	if limit != 0 {
 		if page == 0 {
 			page = 1
 		}
-		options.SetSkip(int64((page - 1) * limit))
-		options.SetLimit(int64(limit))
+		opts.SetSkip(int64((page - 1) * limit))
+		opts.SetLimit(int64(limit))
 	}
-
-	options.SetSort(bson.D{{"timeStamp", -1}})
 
 	decoded, err := hex.DecodeString(address[2:])
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	results, err := configs.TransactionByAddressCollection.Find(ctx, bson.M{"address": decoded}, options)
-
+	filter := primitive.D{{Key: "address", Value: decoded}}
+	results, err := configs.TransactionByAddressCollection.Find(ctx, filter, opts)
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	//reading from the db in an optimal way
 	defer results.Close(ctx)
 	for results.Next(ctx) {
 		var singleTransaction models.TransactionByAddress
 		if err = results.Decode(&singleTransaction); err != nil {
 			fmt.Println(err)
 		}
-
 		transactions = append(transactions, singleTransaction)
 	}
 
@@ -424,8 +448,7 @@ func CountBlocksNetwork() (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Use CountDocuments instead of loading all blocks
-	count, err := configs.BlocksCollection.CountDocuments(ctx, bson.D{})
+	count, err := configs.BlocksCollection.CountDocuments(ctx, primitive.D{})
 	if err != nil {
 		return 0, err
 	}
@@ -438,24 +461,30 @@ func CountTransactionsNetwork() (int, error) {
 	var transactions []models.TransactionByAddress
 	defer cancel()
 
-	options := options.Find().SetProjection(bson.M{"inOut": 1, "txType": 1, "address": 1, "txHash": 1, "timeStamp": 1, "amount": 1})
+	projection := primitive.D{
+		{Key: "inOut", Value: 1},
+		{Key: "txType", Value: 1},
+		{Key: "address", Value: 1},
+		{Key: "txHash", Value: 1},
+		{Key: "timeStamp", Value: 1},
+		{Key: "amount", Value: 1},
+	}
 
-	options.SetSort(bson.D{{"timeStamp", -1}})
+	opts := options.Find().
+		SetProjection(projection).
+		SetSort(primitive.D{{Key: "timeStamp", Value: -1}})
 
-	results, err := configs.TransactionByAddressCollection.Find(ctx, bson.D{}, options)
-
+	results, err := configs.TransactionByAddressCollection.Find(ctx, primitive.D{}, opts)
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	//reading from the db in an optimal way
 	defer results.Close(ctx)
 	for results.Next(ctx) {
 		var singleTransaction models.TransactionByAddress
 		if err = results.Decode(&singleTransaction); err != nil {
 			fmt.Println(err)
 		}
-
 		transactions = append(transactions, singleTransaction)
 	}
 
@@ -467,29 +496,36 @@ func CountTransactions(address string) (int, error) {
 	var transactions []models.TransactionByAddress
 	defer cancel()
 
-	options := options.Find().SetProjection(bson.M{"inOut": 1, "txType": 1, "address": 1, "txHash": 1, "timeStamp": 1, "amount": 1})
+	projection := primitive.D{
+		{Key: "inOut", Value: 1},
+		{Key: "txType", Value: 1},
+		{Key: "address", Value: 1},
+		{Key: "txHash", Value: 1},
+		{Key: "timeStamp", Value: 1},
+		{Key: "amount", Value: 1},
+	}
 
-	options.SetSort(bson.D{{"timeStamp", -1}})
+	opts := options.Find().
+		SetProjection(projection).
+		SetSort(primitive.D{{Key: "timeStamp", Value: -1}})
 
 	decoded, err := hex.DecodeString(address[2:])
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	results, err := configs.TransactionByAddressCollection.Find(ctx, bson.M{"address": decoded}, options)
-
+	filter := primitive.D{{Key: "address", Value: decoded}}
+	results, err := configs.TransactionByAddressCollection.Find(ctx, filter, opts)
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	//reading from the db in an optimal way
 	defer results.Close(ctx)
 	for results.Next(ctx) {
 		var singleTransaction models.TransactionByAddress
 		if err = results.Decode(&singleTransaction); err != nil {
 			fmt.Println(err)
 		}
-
 		transactions = append(transactions, singleTransaction)
 	}
 
@@ -507,7 +543,8 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 		fmt.Println(err)
 	}
 
-	err = configs.TransferCollections.FindOne(ctx, bson.M{"txHash": decoded}).Decode(&result)
+	filter := primitive.D{{Key: "txHash", Value: decoded}}
+	err = configs.TransferCollections.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -519,7 +556,9 @@ func ReturnWalletDistribution(query uint64) (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := bson.M{"balance": bson.M{"$gt": (query * 1000000000000)}}
+	filter := primitive.D{{Key: "balance", Value: primitive.D{
+		{Key: "$gt", Value: (query * 1000000000000)},
+	}}}
 
 	results, err := configs.AddressesCollection.CountDocuments(ctx, filter)
 	if err != nil {
@@ -540,7 +579,8 @@ func ReturnSingleCoinbaseTransfer(query string) (models.Transfer, error) {
 		fmt.Println(err)
 	}
 
-	err = configs.CoinbaseCollection.FindOne(ctx, bson.M{"txHash": decoded}).Decode(&result)
+	filter := primitive.D{{Key: "txHash", Value: decoded}}
+	err = configs.CoinbaseCollection.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -554,7 +594,8 @@ func ReturnHashToBlockNumber(query string) (uint64, error) {
 
 	var result models.ZondUint64Version
 
-	err := configs.BlocksCollection.FindOne(ctx, bson.M{"result.hash": query}).Decode(&result)
+	filter := primitive.D{{Key: "result.hash", Value: query}}
+	err := configs.BlocksCollection.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -567,22 +608,27 @@ func ReturnRichlist() []models.Address {
 	var addresses []models.Address
 	defer cancel()
 
-	options := options.Find().SetProjection(bson.M{"id": 1, "balance": 1}).SetSort(bson.D{{"balance", -1}}).SetLimit(50)
+	projection := primitive.D{
+		{Key: "id", Value: 1},
+		{Key: "balance", Value: 1},
+	}
 
-	results, err := configs.AddressesCollection.Find(ctx, bson.D{}, options)
+	opts := options.Find().
+		SetProjection(projection).
+		SetSort(primitive.D{{Key: "balance", Value: -1}}).
+		SetLimit(50)
 
+	results, err := configs.AddressesCollection.Find(ctx, primitive.D{}, opts)
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	//reading from the db in an optimal way
 	defer results.Close(ctx)
 	for results.Next(ctx) {
 		var singleAddress models.Address
 		if err = results.Decode(&singleAddress); err != nil {
 			fmt.Println(err)
 		}
-
 		addresses = append(addresses, singleAddress)
 	}
 
@@ -595,7 +641,7 @@ func ReturnValidators() (models.AutoGenerated, error) {
 
 	var result models.AutoGenerated
 
-	err := configs.ValidatorsCollections.FindOne(ctx, bson.M{}).Decode(&result)
+	err := configs.ValidatorsCollections.FindOne(ctx, primitive.D{}).Decode(&result)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -615,7 +661,8 @@ func ReturnSingleAddress(query string) (models.Address, error) {
 		fmt.Println(err)
 	}
 
-	err = configs.AddressesCollection.FindOne(ctx, bson.M{"id": address}).Decode(&result)
+	filter := primitive.D{{Key: "id", Value: address}}
+	err = configs.AddressesCollection.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -633,10 +680,16 @@ func ReturnRankAddress(address string) (int64, error) {
 		fmt.Println(err)
 	}
 
-	options := options.Find().SetProjection(bson.M{"id": 1, "balance": 1}).SetSort(bson.D{{"balance", -1}})
+	projection := primitive.D{
+		{Key: "id", Value: 1},
+		{Key: "balance", Value: 1},
+	}
 
-	results, err := configs.AddressesCollection.Find(ctx, bson.M{}, options)
+	opts := options.Find().
+		SetProjection(projection).
+		SetSort(primitive.D{{Key: "balance", Value: -1}})
 
+	results, err := configs.AddressesCollection.Find(ctx, primitive.D{}, opts)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -647,7 +700,6 @@ func ReturnRankAddress(address string) (int64, error) {
 		if err = results.Decode(&singleAddress); err != nil {
 			fmt.Println(err)
 		}
-
 		addresses = append(addresses, singleAddress)
 	}
 
@@ -665,7 +717,6 @@ func ReturnRankAddress(address string) (int64, error) {
 
 func ReturnDateTime() string {
 	currentTime := time.Now()
-
 	return currentTime.Format("2006-01-02 3:4:5 PM")
 }
 
@@ -680,7 +731,8 @@ func ReturnContractCode(query string) (models.ContractCode, error) {
 		fmt.Println(err)
 	}
 
-	err = configs.ContractCodeCollection.FindOne(ctx, bson.M{"contractAddress": address}).Decode(&result)
+	filter := primitive.D{{Key: "contractAddress", Value: address}}
+	err = configs.ContractCodeCollection.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -692,16 +744,14 @@ func ReturnBlockSizes() ([]primitive.M, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := bson.D{}
-	opts := options.Find().SetSort(bson.D{{"timestamp", 1}})
+	opts := options.Find().SetSort(primitive.D{{Key: "timestamp", Value: 1}})
 
-	cursor, err := configs.BlockSizesCollection.Find(ctx, filter, opts)
+	cursor, err := configs.BlockSizesCollection.Find(ctx, primitive.D{}, opts)
 	if err != nil {
 		panic(err)
 	}
 
-	var episodes []bson.M
-
+	var episodes []primitive.M
 	if err = cursor.All(ctx, &episodes); err != nil {
 		fmt.Println(err)
 	}
@@ -715,7 +765,7 @@ func ReturnTotalCirculatingSupply() string {
 
 	var result models.CirculatingSupply
 
-	err := configs.TotalCirculatingSupplyCollection.FindOne(ctx, bson.M{}).Decode(&result)
+	err := configs.TotalCirculatingSupplyCollection.FindOne(ctx, primitive.D{}).Decode(&result)
 	if err != nil {
 		fmt.Println(err)
 		return ""
@@ -730,7 +780,7 @@ func ReturnDailyTransactionsVolume() int64 {
 
 	var result models.TransactionsVolume
 
-	err := configs.DailyTransactionsVolumeCollection.FindOne(ctx, bson.M{}).Decode(&result)
+	err := configs.DailyTransactionsVolumeCollection.FindOne(ctx, primitive.D{}).Decode(&result)
 	if err != nil {
 		fmt.Println(err)
 		return 0
@@ -745,7 +795,7 @@ func GetMarketCap() float64 {
 
 	var result models.CoinGecko
 
-	err := configs.CoinGeckoCollection.FindOne(ctx, bson.M{}).Decode(&result)
+	err := configs.CoinGeckoCollection.FindOne(ctx, primitive.D{}).Decode(&result)
 	if err != nil {
 		fmt.Println(err)
 		return 0
@@ -760,7 +810,7 @@ func GetCurrentPrice() float64 {
 
 	var result models.CoinGecko
 
-	err := configs.CoinGeckoCollection.FindOne(ctx, bson.M{}).Decode(&result)
+	err := configs.CoinGeckoCollection.FindOne(ctx, primitive.D{}).Decode(&result)
 	if err != nil {
 		fmt.Println(err)
 		return 0
@@ -775,7 +825,7 @@ func GetWalletCount() int64 {
 
 	var result models.WalletCount
 
-	err := configs.WalletCountCollection.FindOne(ctx, bson.M{}).Decode(&result)
+	err := configs.WalletCountCollection.FindOne(ctx, primitive.D{}).Decode(&result)
 	if err != nil {
 		fmt.Println(err)
 		return 0
@@ -814,7 +864,6 @@ func GetBalance(address string) (float64, string) {
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
-
 	fmt.Println(string(body))
 
 	err = json.Unmarshal([]byte(string(body)), &result)
