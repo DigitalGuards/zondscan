@@ -81,6 +81,15 @@ setup_server() {
     print_status "Setting up server..."
     cd "$BASE_DIR/backendAPI" || print_error "Server directory not found"
 
+    # Create .env.development file
+    print_status "Creating .env.development file..."
+    cat > .env.development << EOL
+GIN_MODE=release
+MONGOURI=mongodb://localhost:27017/qrldata?readPreference=primary
+HTTP_PORT=:8080
+NODE_URL=http://REDACTED:8545
+EOL
+
     # Build the server with explicit output name
     print_status "Building server..."
     go build -o backendAPI.exe main.go || print_error "Failed to build server"
@@ -98,7 +107,6 @@ setup_frontend() {
     # Create .env file
     cat > .env << EOL
 DATABASE_URL=mongodb://localhost:27017/qrldata?readPreference=primary
-NEXTAUTH_URL=127.0.0.1
 NEXT_PUBLIC_DOMAIN_NAME=http://localhost:3000
 NEXT_PUBLIC_HANDLER_URL=http://127.0.0.1:8080
 EOL
@@ -106,8 +114,6 @@ EOL
     # Create .env.local file
     cat > .env.local << EOL
 DATABASE_URL=mongodb://localhost:27017/qrldata?readPreference=primary
-NEXTAUTH_SECRET=development_secret
-ADMIN_PUBLIC_ADDRESS=development_address
 DOMAIN_NAME=http://localhost:3000
 HANDLER_URL=http://127.0.0.1:8080
 EOL

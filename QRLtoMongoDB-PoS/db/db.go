@@ -6,7 +6,6 @@ import (
 	"QRLtoMongoDB-PoS/rpc"
 	"context"
 	"encoding/json"
-
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -145,7 +144,11 @@ func updateWalletCountInDB(count int64) error {
 	return err
 }
 
-func GetDailyTransactionVolume() float32 {
+type TransactionsVolume struct {
+	Volume int64 `bson:"volume"`
+}
+
+func GetDailyTransactionVolume() int64 {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -170,23 +173,26 @@ func GetDailyTransactionVolume() float32 {
 	}
 	defer cursor.Close(ctx)
 
-	totalVolume := float32(0)
+	var totalVolume int64
 	for cursor.Next(ctx) {
 		var transaction models.TransactionByAddress
 		if err = cursor.Decode(&transaction); err != nil {
 			configs.Logger.Warn("Failed to decode transaction: ", zap.Error(err))
 			continue
 		}
-		totalVolume += transaction.Amount
+		// Convert float32 amount to int64, values are already in smallest unit
+		totalVolume += int64(transaction.Amount)
 		configs.Logger.Info("Transaction Amount: ", zap.Float32("Amount", transaction.Amount))
 	}
 
-	configs.Logger.Info("Total Transaction Volume: ", zap.Float32("TotalVolume", totalVolume))
+	configs.Logger.Info("Total Transaction Volume: ", zap.Int64("TotalVolume", totalVolume))
+
+	volumeDoc := TransactionsVolume{
+		Volume: totalVolume,
+	}
 
 	update := bson.M{
-		"$set": bson.M{
-			"volume": totalVolume,
-		},
+		"$set": volumeDoc,
 	}
 
 	updateResult, err := configs.DailyTransactionsVolumeCollections.UpdateOne(ctx, bson.M{}, update, options.Update().SetUpsert(true))

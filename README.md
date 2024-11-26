@@ -1,6 +1,6 @@
 # QRL Proof-Of-Stake Explorer
 
-Quantum Resistant Ledger Proof-of-Stake explorer. It is blazing fast with a modern frontend using NextJS and Golang for the backend, stable and compatible with the Ethereum network. Very easy to setup. Synchronising the blockchain node to MongoDB takes only 3 to 5 seconds, depending on your hardware, network speed, and size of the blockchain. Which makes it incredibly easy debug the system, as you can easily delete the blockchain data from MongoDB and simply restart to sync it again. Saves a lot of time.
+Quantum Resistant Ledger Proof-of-Stake explorer. It is blazing fast with a modern frontend using NextJS and Golang for the backend, stable and compatible with the Zond QRL network. Very easy to setup. Synchronising the blockchain node to MongoDB takes only 3 to 5 seconds, depending on your hardware, network speed, and size of the blockchain. Which makes it incredibly easy debug the system, as you can easily delete the blockchain data from MongoDB and simply restart to sync it again. Saves a lot of time.
 
 ## Project Structure
 
@@ -49,7 +49,6 @@ touch .env && touch .env.local
 | VARIABLE | VALUE |
 | ------ | ------ |
 | DATABASE_URL | mongodb://localhost:27017/qrldata?readPreference=primary |
-| NEXTAUTH_URL | 127.0.0.1 |
 | NEXT_PUBLIC_DOMAIN_NAME | http://localhost:3000 (dev) OR http://your_domain_name.io (prod) |
 | NEXT_PUBLIC_HANDLER_URL | http://localhost:8080 (dev) OR http://your_domain_name.io:8443 (prod) |
 
@@ -58,8 +57,6 @@ touch .env && touch .env.local
 | VARIABLE | VALUE |
 | ------ | ------ |
 | DATABASE_URL | mongodb://localhost:27017/qrldata?readPreference=primary |
-| NEXTAUTH_SECRET | YOUR_SECRET |
-| ADMIN_PUBLIC_ADDRESS | YOUR_SECRET |
 | DOMAIN_NAME | http://localhost:3000 (dev) OR http://your_domain_name.io (prod) |
 | HANDLER_URL | http://localhost:8080 (dev) OR http://your_domain_name.io:8443 (prod) |
 

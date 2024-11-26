@@ -1,14 +1,14 @@
 import React from "react";
 import axios from "axios";
 import config from '../../../config';
-import { STAKING_QUANTA } from '../../lib/constants'
-import { toFixed } from '../../lib/helpers.js';
-import { epochToISO } from '../../lib/helpers.js';
 import { headers } from "next/headers";
 import CopyAddressButton from "../../components/CopyAddressButton";
 import TanStackTable from "../../components/TanStackTable";
+import BalanceDisplay from "./balance-display";
+import ActivityDisplay from "./activity-display";
+import type { AddressData } from "./types";
 
-const getData = async (url: string | URL) => {
+const getData = async (url: string | URL): Promise<AddressData | null> => {
     try {
         const path = new URL(url).pathname;
         if (path.endsWith('favicon.ico')) return null;
@@ -24,18 +24,26 @@ const getData = async (url: string | URL) => {
     }
 };
 
-export default async function Address() {
-    const headersList = headers();
+interface PageProps {
+    params: Promise<{ query: string }>;
+}
+
+export default async function Address({ params }: PageProps): Promise<JSX.Element> {
+    const headersList = await headers();
     const header_url = headersList.get('x-url') || "";
     const addressData = await getData(header_url);
 
-    const { balance } = addressData["address"];
+    if (!addressData) {
+        return <div>Error loading address data</div>;
+    }
+
+    const { balance } = addressData.address;
     const { rank } = addressData;
 
     let firstSeen = 0;
     let lastSeen = 0;
-    if (addressData["transactions_by_address"] && Array.isArray(addressData["transactions_by_address"]) && addressData["transactions_by_address"].length > 0) {
-        const timestamps = addressData["transactions_by_address"].map(tx => tx.TimeStamp);
+    if (addressData.transactions_by_address && Array.isArray(addressData.transactions_by_address) && addressData.transactions_by_address.length > 0) {
+        const timestamps = addressData.transactions_by_address.map(tx => tx.TimeStamp);
         firstSeen = Math.min(...timestamps);
         lastSeen = Math.max(...timestamps);
     }
@@ -95,42 +103,8 @@ export default async function Address() {
 
                     {/* Content Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        {/* Balance Card */}
-                        <div className="relative overflow-hidden rounded-xl 
-                                    bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
-                                    border border-[#3d3d3d] p-6">
-                            <h2 className="text-sm font-semibold text-gray-400 mb-4">Balance</h2>
-                            <div className="flex items-baseline">
-                                <span className="text-3xl font-bold text-[#ffa729]">{toFixed(balance)}</span>
-                                <span className="ml-2 text-sm text-gray-400">QUANTA</span>
-                            </div>
-                            {balance > STAKING_QUANTA && (
-                                <div className="mt-4 px-3 py-1 bg-green-500/10 text-green-400 text-sm rounded-lg inline-block">
-                                    Qualified for Staking
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Activity Card */}
-                        <div className="relative overflow-hidden rounded-xl 
-                                    bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
-                                    border border-[#3d3d3d] p-6">
-                            <h2 className="text-sm font-semibold text-gray-400 mb-4">Activity</h2>
-                            {(epochToISO(firstSeen) === "1970-01-01" && epochToISO(lastSeen) === "1970-01-01") ? (
-                                <p className="text-gray-300">No transactions were signed from this wallet yet.</p>
-                            ) : (
-                                <div className="space-y-2">
-                                    <div>
-                                        <div className="text-sm text-gray-400">First Activity</div>
-                                        <div className="text-gray-300">{epochToISO(firstSeen).split('T')[0]}</div>
-                                    </div>
-                                    <div>
-                                        <div className="text-sm text-gray-400">Last Activity</div>
-                                        <div className="text-gray-300">{epochToISO(lastSeen).split('T')[0]}</div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
+                        <BalanceDisplay balance={balance} />
+                        <ActivityDisplay firstSeen={firstSeen} lastSeen={lastSeen} />
                     </div>
                 </div>
             </div>
@@ -141,8 +115,8 @@ export default async function Address() {
                         border border-[#3d3d3d] shadow-xl p-8">
                 <h2 className="text-xl font-bold text-[#ffa729] mb-6">Transactions</h2>
                 <TanStackTable 
-                    transactions={addressData["transactions_by_address"]} 
-                    internalt={addressData["internal_transactions_by_address"]} 
+                    transactions={addressData.transactions_by_address} 
+                    internalt={addressData.internal_transactions_by_address} 
                 />
             </div>
         </div>

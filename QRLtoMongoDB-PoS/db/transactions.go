@@ -132,8 +132,12 @@ func processTransactionData(tx *models.Transaction, blockTimestamp uint64, to []
 	if string(transactionType[:]) == "CALL" || InternalTracerAddress != nil {
 		InternalTransactionByAddressCollection(transactionType, callType, txHash, fromInternal, toInternal, inputInternal, outputInternal, InternalTracerAddress, float32(valueInternal), gasInternal, gasUsedInternal, addressFunctionIdentifier, amountFunctionIdentifier, blockTimestamp)
 	}
-	TransactionByAddressCollection(blockTimestamp, uint8(txType), from, to, txHash, valueFloat32, (float32(gasPrice*gasUsedInternal) / configs.QUANTA))
-	TransferCollection(blockNumber, blockTimestamp, from, to, txHash, pk, signature, nonce, valueFloat32, data, contractAddressByte, uint8(statusTx), size, (float32(gasPrice*gasUsedInternal) / configs.QUANTA))
+
+	// Calculate fees using float64 first, then convert to float32
+	fees := float32((float64(gasPrice) * float64(gasUsedInternal)) / float64(configs.QUANTA))
+
+	TransactionByAddressCollection(blockTimestamp, uint8(txType), from, to, txHash, valueFloat32, fees)
+	TransferCollection(blockNumber, blockTimestamp, from, to, txHash, pk, signature, nonce, valueFloat32, data, contractAddressByte, uint8(statusTx), size, fees)
 }
 
 func TransferCollection(blockNumber uint64, blockTimestamp uint64, from []byte, to []byte, hash []byte, pk []byte, signature []byte, nonce uint64, value float32, data []byte, contractAddress []byte, status uint8, size uint64, paidFees float32) (*mongo.InsertOneResult, error) {

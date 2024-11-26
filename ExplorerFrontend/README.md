@@ -6,7 +6,7 @@ A Next.js-based frontend for the QRL Zond Explorer, providing a user interface t
 
 ```
 ExplorerFrontend/
-├── app/                    # Next.js 13+ App Router
+├── app/                    # Next.js 15 App Router
 │   ├── components/         # Shared components
 │   │   ├── Alert.tsx      # Alert component for notifications
 │   │   ├── AreaChart.tsx  # Chart component for data visualization
@@ -24,14 +24,15 @@ ExplorerFrontend/
 │   │   ├── loading.tsx   # Loading state
 │   │   └── [query]/      # Dynamic block routes
 │   │       ├── page.tsx  # Block list page
+│   │       ├── blocks-client.tsx # Client-side block component
 │   │       └── types.ts  # Block-related types
 │   │
 │   ├── transactions/     # Transactions feature
 │   │   ├── layout.tsx    # Layout for transactions
 │   │   ├── loading.tsx   # Loading state
 │   │   └── [query]/      # Dynamic transaction routes
-│   │       ├── page.tsx  # Transaction list page
-│   │       ├── TransactionsList.tsx # Transaction list component
+│   │       ├── page.tsx  # Server component with data fetching
+│   │       ├── transactions-client.tsx # Client-side transaction component
 │   │       └── types.ts  # Transaction-related types
 │   │
 │   ├── tx/              # Transaction details feature
@@ -45,7 +46,7 @@ ExplorerFrontend/
 │   │   ├── generate/    # Data generation endpoints
 │   │   └── transaction/ # Transaction-related endpoints
 │   │       └── [hash]/  # Dynamic transaction API routes
-│   │           └── route.ts # Transaction API handler
+│   │           └── route.ts # Transaction API handler with improved caching
 │   │
 │   ├── address/         # Address feature
 │   │   └── [query]/     # Dynamic address routes
@@ -54,7 +55,9 @@ ExplorerFrontend/
 │   │
 │   ├── contracts/       # Smart contracts feature
 │   │   ├── layout.tsx   # Contracts layout
-│   │   └── page.tsx     # Contracts list page
+│   │   ├── page.tsx     # Server component with data fetching
+│   │   ├── contracts-wrapper.tsx # Client wrapper component
+│   │   └── contracts-client.tsx  # Client-side contracts component
 │   │
 │   ├── checker/         # Balance checker tool
 │   │   └── page.tsx     # Balance checker page
@@ -105,7 +108,6 @@ The frontend uses two environment files:
 | VARIABLE | VALUE |
 | ------ | ------ |
 | DATABASE_URL | mongodb://localhost:27017/qrldata?readPreference=primary |
-| NEXTAUTH_URL | 127.0.0.1 |
 | NEXT_PUBLIC_DOMAIN_NAME | http://localhost:3000 (dev) OR http://your_domain_name.io (prod) |
 | NEXT_PUBLIC_HANDLER_URL | http://localhost:8080 (dev) OR http://your_domain_name.io:8443 (prod) |
 
@@ -113,8 +115,6 @@ The frontend uses two environment files:
 | VARIABLE | VALUE |
 | ------ | ------ |
 | DATABASE_URL | mongodb://localhost:27017/qrldata?readPreference=primary |
-| NEXTAUTH_SECRET | YOUR_SECRET |
-| ADMIN_PUBLIC_ADDRESS | YOUR_SECRET |
 | DOMAIN_NAME | http://localhost:3000 (dev) OR http://your_domain_name.io (prod) |
 | HANDLER_URL | http://localhost:8080 (dev) OR http://your_domain_name.io:8443 (prod) |
 
@@ -133,6 +133,7 @@ The frontend uses two environment files:
 - Block details with transactions
 - Pagination support
 - Search by block number
+- Client-side state management with blocks-client.tsx
 
 ### Transaction Explorer
 - View latest transactions
@@ -142,12 +143,22 @@ The frontend uses two environment files:
   - Gas information
   - Timestamp
 - Support for different transaction types
+- Improved error handling and loading states
+- Separated client/server concerns with transactions-client.tsx
 
 ### Address Explorer
 - Address details and balance
 - Transaction history
 - Token holdings
 - Contract interactions
+
+### Smart Contracts
+- View deployed contracts
+- Contract details and interactions
+- Improved component separation:
+  - Server-side data fetching in page.tsx
+  - Client-side rendering with contracts-client.tsx
+  - Wrapper component for dynamic imports
 
 ### Tools
 - Balance Checker: Check address balances
@@ -170,16 +181,17 @@ The frontend uses two environment files:
   - Transaction hash
   - Block number
 
-### TransactionsList (`transactions/[query]/TransactionsList.tsx`)
-- Paginated transaction display
-- Transaction type indicators
-- Value formatting
-- Link to transaction details
+### Client Components
+- Separated client-side logic for better performance
+- Proper suspense boundaries
+- Improved error handling
+- TypeScript type safety
 
 ### Loading States
 - Each feature has dedicated loading components
 - Skeleton loaders for better UX
 - Error boundaries for graceful error handling
+- Suspense integration for smoother transitions
 
 ## Styling
 
@@ -195,7 +207,8 @@ The frontend uses two environment files:
 ## Development Guidelines
 
 1. **Code Organization**
-   - Follow Next.js 13+ App Router conventions
+   - Follow Next.js 15 App Router conventions
+   - Separate client and server components
    - Keep components focused and reusable
    - Use TypeScript for type safety
    - Implement proper error boundaries
@@ -212,12 +225,14 @@ The frontend uses two environment files:
    - Implement proper error handling
    - Cache responses where appropriate
    - Handle loading states
+   - Proper params handling with Promise.resolve
 
 4. **Performance**
    - Optimize images and assets
    - Implement proper caching
    - Use dynamic imports where appropriate
    - Monitor and optimize bundle size
+   - Separate client/server components
 
 ## Getting Started
 

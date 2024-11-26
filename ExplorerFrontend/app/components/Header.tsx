@@ -11,7 +11,6 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { ChevronDownIcon, PhoneIcon, PlayCircleIcon } from '@heroicons/react/20/solid'
-import AuthProfileIcon from "./AuthProfileIcon"
 import Link from 'next/link'
 import Image from 'next/image'
 import LookUpIcon from '../../public/lookup.svg'
@@ -155,7 +154,6 @@ export default function Header() {
               Richlist
             </Link>
           </Popover.Group>
-          <AuthProfileIcon />
         </nav>
         <Dialog as="div" className="lg:hidden" open={mobileMenuOpen} onClose={setMobileMenuOpen}>
           <div className="fixed inset-0 z-10" />

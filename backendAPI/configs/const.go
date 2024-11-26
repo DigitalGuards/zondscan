@@ -7,6 +7,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+const QUANTA float64 = 1000000000000000000
+
 var Url string = os.Getenv("NODE_URL")
 var TransferCollections *mongo.Collection = GetCollection(DB, "transfer")
 var TransactionByAddressCollection *mongo.Collection = GetCollection(DB, "transactionByAddress")

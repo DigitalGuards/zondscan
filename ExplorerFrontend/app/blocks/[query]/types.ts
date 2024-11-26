@@ -16,3 +16,8 @@ export interface BlocksResponse {
   blocks: Block[];
   total: number;
 }
+
+export interface PageProps {
+  params: { query: string };
+  searchParams: { [key: string]: string | string[] | undefined };
+}
