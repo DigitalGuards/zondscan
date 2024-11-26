@@ -17,7 +17,9 @@ func ConnectDB() *mongo.Client {
 		log.Fatal(err)
 	}
 
-	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	err = client.Connect(ctx)
 	if err != nil {
 		log.Fatal(err)
@@ -30,9 +32,11 @@ func ConnectDB() *mongo.Client {
 	}
 	fmt.Println("Connected to MongoDB")
 
-	// Set up schema validation for dailyTransactionsVolume collection
+	// Initialize collections with validators
 	db := client.Database("qrldata")
-	validator := bson.M{
+
+	// Daily Transactions Volume
+	volumeValidator := bson.M{
 		"$jsonSchema": bson.M{
 			"bsonType": "object",
 			"required": []string{"volume"},
@@ -44,28 +48,88 @@ func ConnectDB() *mongo.Client {
 			},
 		},
 	}
+	ensureCollection(db, "dailyTransactionsVolume", volumeValidator)
 
+	// CoinGecko Data
+	coingeckoValidator := bson.M{
+		"$jsonSchema": bson.M{
+			"bsonType": "object",
+			"required": []string{"marketCapUSD", "priceUSD", "lastUpdated"},
+			"properties": bson.M{
+				"marketCapUSD": bson.M{
+					"bsonType":    "double",
+					"description": "must be a double and is required",
+				},
+				"priceUSD": bson.M{
+					"bsonType":    "double",
+					"description": "must be a double and is required",
+				},
+				"lastUpdated": bson.M{
+					"bsonType":    "date",
+					"description": "must be a date and is required",
+				},
+			},
+		},
+	}
+	ensureCollection(db, "coingecko", coingeckoValidator)
+
+	// Wallet Count
+	walletValidator := bson.M{
+		"$jsonSchema": bson.M{
+			"bsonType": "object",
+			"required": []string{"count"},
+			"properties": bson.M{
+				"count": bson.M{
+					"bsonType":    "long",
+					"description": "must be a long/int64 and is required",
+				},
+			},
+		},
+	}
+	ensureCollection(db, "walletCount", walletValidator)
+
+	// Total Circulating Supply
+	circulatingValidator := bson.M{
+		"$jsonSchema": bson.M{
+			"bsonType": "object",
+			"required": []string{"circulating"},
+			"properties": bson.M{
+				"circulating": bson.M{
+					"bsonType":    "string",
+					"description": "must be a string and is required",
+				},
+			},
+		},
+	}
+	ensureCollection(db, "totalCirculatingSupply", circulatingValidator)
+
+	return client
+}
+
+func ensureCollection(db *mongo.Database, name string, validator bson.M) {
 	cmd := bson.D{
-		{"collMod", "dailyTransactionsVolume"},
-		{"validator", validator},
-		{"validationLevel", "strict"},
+		{Key: "collMod", Value: name},
+		{Key: "validator", Value: validator},
+		{Key: "validationLevel", Value: "strict"},
 	}
 
-	err = db.RunCommand(context.Background(), cmd).Err()
+	err := db.RunCommand(context.Background(), cmd).Err()
 	if err != nil {
 		// If collection doesn't exist, create it with the validator
 		if err.Error() == "not found" {
 			opts := options.CreateCollection().SetValidator(validator)
-			err = db.CreateCollection(context.Background(), "dailyTransactionsVolume", opts)
+			err = db.CreateCollection(context.Background(), name, opts)
 			if err != nil {
-				log.Printf("Warning: Could not create collection with validator: %v", err)
+				log.Printf("Warning: Could not create collection %s with validator: %v", name, err)
+			} else {
+				log.Printf("Created collection %s with validator", name)
 			}
 		} else {
-			log.Printf("Warning: Could not set up validator: %v", err)
+			log.Printf("Warning: Could not set up validator for %s: %v", name, err)
 		}
+	} else {
+		log.Printf("Updated validator for collection %s", name)
 	}
-
-	return client
 }
 
 // Client instance
