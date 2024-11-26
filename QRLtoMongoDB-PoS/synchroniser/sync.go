@@ -155,35 +155,56 @@ func processInitialBlock() {
 }
 
 func processSubsequentBlocks(sum uint64, latestBlockNumber uint64) uint64 {
-	blockData := rpc.GetBlockByNumberMainnet(sum)
-	if blockData == "" {
-		logger.Warn("Empty block data received", zap.Uint64("block", sum))
-		// Back off a bit on empty data
-		time.Sleep(1 * time.Second)
-		return sum
-	}
+	const (
+		maxRetries  = 3
+		retryDelay  = 2 * time.Second
+		maxRollback = uint64(50)
+	)
 
-	var Zond models.Zond
-	err := json.Unmarshal([]byte(blockData), &Zond)
-	if err != nil {
-		logger.Error("Failed to unmarshal block",
-			zap.Uint64("block", sum),
-			zap.Error(err))
-		return sum
-	}
+	for retry := 0; retry < maxRetries; retry++ {
+		blockData := rpc.GetBlockByNumberMainnet(sum)
+		if blockData == "" {
+			logger.Warn("Empty block data received",
+				zap.Uint64("block", sum),
+				zap.Int("retry", retry+1))
+			time.Sleep(retryDelay)
+			continue
+		}
 
-	if Zond.PreResult.ParentHash != "" {
+		var Zond models.Zond
+		err := json.Unmarshal([]byte(blockData), &Zond)
+		if err != nil {
+			logger.Error("Failed to unmarshal block",
+				zap.Uint64("block", sum),
+				zap.Error(err),
+				zap.Int("retry", retry+1))
+			time.Sleep(retryDelay)
+			continue
+		}
+
+		if Zond.PreResult.ParentHash == "" {
+			logger.Warn("Block has no parent hash",
+				zap.Uint64("block", sum),
+				zap.Int("retry", retry+1))
+			time.Sleep(retryDelay)
+			continue
+		}
+
 		ZondNew := db.ConvertModelsUint64(Zond)
 		previousHash := ZondNew.Result.ParentHash
 		currentDBHash := db.GetLatestBlockHashHeaderFromDB(db.GetLatestBlockNumberFromDB())
 
 		if previousHash == currentDBHash {
 			processBlockAndUpdateValidators(sum, ZondNew, previousHash)
-			logger.Info("Block processed successfully", zap.Uint64("block", sum))
+			logger.Info("Block processed successfully",
+				zap.Uint64("block", sum),
+				zap.String("hash", ZondNew.Result.Hash))
 			return sum + 1
-		} else {
-			// Chain reorganization detected
-			logger.Warn("Chain reorganization detected",
+		}
+
+		// If we've tried multiple times and still have hash mismatch
+		if retry == maxRetries-1 {
+			logger.Warn("Potential chain reorganization after retries",
 				zap.Uint64("block", sum),
 				zap.String("expected_parent", currentDBHash),
 				zap.String("actual_parent", previousHash))
@@ -191,7 +212,6 @@ func processSubsequentBlocks(sum uint64, latestBlockNumber uint64) uint64 {
 			// Walk back through the chain until we find a matching block
 			var lastValidBlock uint64
 			var foundFork bool
-			maxRollback := uint64(50) // Limit how far back we'll roll
 			startRollback := sum - 1
 
 			for blockNum := startRollback; blockNum > 0 && blockNum > (startRollback-maxRollback); blockNum-- {
@@ -225,7 +245,7 @@ func processSubsequentBlocks(sum uint64, latestBlockNumber uint64) uint64 {
 					zap.Uint64("start_block", startRollback),
 					zap.Uint64("end_block", startRollback-maxRollback))
 				// Back off to allow network to stabilize
-				time.Sleep(5 * time.Second)
+				time.Sleep(10 * time.Second)
 				return startRollback - maxRollback
 			}
 
@@ -233,11 +253,20 @@ func processSubsequentBlocks(sum uint64, latestBlockNumber uint64) uint64 {
 				zap.Uint64("last_valid_block", lastValidBlock),
 				zap.Uint64("blocks_rolled_back", sum-lastValidBlock))
 
-			// Add a small delay to allow network to stabilize
-			time.Sleep(1 * time.Second)
+			// Add a delay to allow network to stabilize
+			time.Sleep(5 * time.Second)
 			return lastValidBlock + 1
 		}
+
+		// If we get here, we'll retry with the same block
+		logger.Info("Retrying block due to hash mismatch",
+			zap.Uint64("block", sum),
+			zap.Int("retry", retry+1),
+			zap.String("expected_parent", currentDBHash),
+			zap.String("actual_parent", previousHash))
+		time.Sleep(retryDelay)
 	}
+
 	return sum
 }
 func processBlockAndUpdateValidators(sum uint64, ZondNew models.ZondDatabaseBlock, previousHash string) {
