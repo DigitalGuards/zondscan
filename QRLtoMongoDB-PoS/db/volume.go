@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
 )
@@ -29,13 +29,13 @@ func CalculateAndStoreAverageVolume() {
 	volume := GetVolumeFromBlockTimestamps(targetBlockTimestamp, currentBlockTimestamp, latestBlock.Number)
 
 	// Store volume directly as int64 since we're already working with the correct units
-	update := bson.M{
-		"$set": bson.M{
-			"volume": volume,
-		},
+	update := primitive.D{
+		{Key: "$set", Value: primitive.D{
+			{Key: "volume", Value: volume},
+		}},
 	}
 
-	updateResult, err := configs.DailyTransactionsVolumeCollections.UpdateOne(ctx, bson.M{}, update, options.Update().SetUpsert(true))
+	updateResult, err := configs.DailyTransactionsVolumeCollections.UpdateOne(ctx, primitive.D{}, update, options.Update().SetUpsert(true))
 	if err != nil {
 		configs.Logger.Warn("Failed to update daily transaction volume: ", zap.Error(err))
 	} else {
@@ -48,9 +48,15 @@ func GetVolumeFromBlockTimestamps(targetBlockTimestamp uint64, currentBlockTimes
 	var volume int64
 	defer cancel()
 
-	options := options.Find().SetProjection(bson.M{"blockNumber": 1, "blockTimestamp": 1, "value": 1}).SetSort(bson.D{{"blockNumber", -1}})
+	projection := primitive.D{
+		{Key: "blockNumber", Value: 1},
+		{Key: "blockTimestamp", Value: 1},
+		{Key: "value", Value: 1},
+	}
+	sortOpt := primitive.D{{Key: "blockNumber", Value: -1}}
+	options := options.Find().SetProjection(projection).SetSort(sortOpt)
 
-	results, err := configs.TransferCollections.Find(ctx, bson.D{}, options)
+	results, err := configs.TransferCollections.Find(ctx, primitive.D{}, options)
 
 	if err != nil {
 		configs.Logger.Info("Error finding documents in Transfer collections", zap.Error(err))

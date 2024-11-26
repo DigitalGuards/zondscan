@@ -7,20 +7,17 @@ import (
 	"context"
 	"fmt"
 
-	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
 )
 
 func InsertValidators(validators models.ResultValidator) {
-	filter := bson.D{{"jsonrpc", 2.0}}
-	update := bson.D{
-		{
-			Key: "$set",
-			Value: bson.D{
-				{Key: "resultvalidator", Value: validators},
-			},
-		},
+	filter := primitive.D{{Key: "jsonrpc", Value: 2.0}}
+	update := primitive.D{
+		{Key: "$set", Value: primitive.D{
+			{Key: "resultvalidator", Value: validators},
+		}},
 	}
 	opts := options.Update().SetUpsert(true)
 	_, err := configs.ValidatorsCollections.UpdateOne(context.TODO(), filter, update, opts)

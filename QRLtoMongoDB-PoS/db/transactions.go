@@ -11,7 +11,6 @@ import (
 	"math/big"
 	"strconv"
 
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -143,17 +142,29 @@ func processTransactionData(tx *models.Transaction, blockTimestamp uint64, to []
 func TransferCollection(blockNumber uint64, blockTimestamp uint64, from []byte, to []byte, hash []byte, pk []byte, signature []byte, nonce uint64, value float32, data []byte, contractAddress []byte, status uint8, size uint64, paidFees float32) (*mongo.InsertOneResult, error) {
 	var doc primitive.D
 
-	if contractAddress == nil {
-		doc = bson.D{{"blockNumber", blockNumber}, {"blockTimestamp", blockTimestamp}, {"from", from}, {"to", to}, {"txHash", hash}, {"pk", pk}, {"signature", signature}, {"nonce", nonce}, {"value", value}, {"status", status}, {"size", size}, {"paidFees", paidFees}}
+	baseDoc := primitive.D{
+		{Key: "blockNumber", Value: blockNumber},
+		{Key: "blockTimestamp", Value: blockTimestamp},
+		{Key: "from", Value: from},
+		{Key: "txHash", Value: hash},
+		{Key: "pk", Value: pk},
+		{Key: "signature", Value: signature},
+		{Key: "nonce", Value: nonce},
+		{Key: "value", Value: value},
+		{Key: "status", Value: status},
+		{Key: "size", Value: size},
+		{Key: "paidFees", Value: paidFees},
+	}
 
+	if contractAddress == nil {
+		doc = append(baseDoc, primitive.E{Key: "to", Value: to})
 		if data != nil {
-			doc = bson.D{{"blockNumber", blockNumber}, {"blockTimestamp", blockTimestamp}, {"from", from}, {"to", to}, {"txHash", hash}, {"pk", pk}, {"signature", signature}, {"nonce", nonce}, {"value", value}, {"data", data}, {"status", status}, {"size", size}, {"paidFees", paidFees}}
+			doc = append(doc, primitive.E{Key: "data", Value: data})
 		}
 	} else {
-		doc = bson.D{{"blockNumber", blockNumber}, {"blockTimestamp", blockTimestamp}, {"from", from}, {"txHash", hash}, {"pk", pk}, {"signature", signature}, {"nonce", nonce}, {"value", value}, {"contractAddress", contractAddress}, {"status", status}, {"size", size}, {"paidFees", paidFees}}
-
+		doc = append(baseDoc, primitive.E{Key: "contractAddress", Value: contractAddress})
 		if data != nil {
-			doc = bson.D{{"blockNumber", blockNumber}, {"blockTimestamp", blockTimestamp}, {"from", from}, {"txHash", hash}, {"pk", pk}, {"signature", signature}, {"nonce", nonce}, {"value", value}, {"contractAddress", contractAddress}, {"data", data}, {"status", status}, {"size", size}, {"paidFees", paidFees}}
+			doc = append(doc, primitive.E{Key: "data", Value: data})
 		}
 	}
 
@@ -166,21 +177,21 @@ func TransferCollection(blockNumber uint64, blockTimestamp uint64, from []byte, 
 }
 
 func InternalTransactionByAddressCollection(transactionType []byte, callType []byte, hash []byte, from []byte, to []byte, input uint64, output uint64, traceAddress []int, value float32, gas uint64, gasUsed uint64, addressFunctionIdentifier []byte, amountFunctionIdentifier uint64, blockTimestamp uint64) (*mongo.InsertOneResult, error) {
-	doc := bson.D{
-		{"type", transactionType},
-		{"callType", callType},
-		{"hash", hash},
-		{"from", from},
-		{"to", to},
-		{"input", input},
-		{"output", output},
-		{"traceAddress", traceAddress},
-		{"value", value},
-		{"gas", gas},
-		{"gasUsed", gasUsed},
-		{"addressFunctionIdentifier", addressFunctionIdentifier},
-		{"amountFunctionIdentifier", amountFunctionIdentifier},
-		{"blockTimestamp", blockTimestamp},
+	doc := primitive.D{
+		{Key: "type", Value: transactionType},
+		{Key: "callType", Value: callType},
+		{Key: "hash", Value: hash},
+		{Key: "from", Value: from},
+		{Key: "to", Value: to},
+		{Key: "input", Value: input},
+		{Key: "output", Value: output},
+		{Key: "traceAddress", Value: traceAddress},
+		{Key: "value", Value: value},
+		{Key: "gas", Value: gas},
+		{Key: "gasUsed", Value: gasUsed},
+		{Key: "addressFunctionIdentifier", Value: addressFunctionIdentifier},
+		{Key: "amountFunctionIdentifier", Value: amountFunctionIdentifier},
+		{Key: "blockTimestamp", Value: blockTimestamp},
 	}
 
 	result, err := configs.InternalTransactionByAddressCollections.InsertOne(context.TODO(), doc)
@@ -195,12 +206,17 @@ func InternalTransactionByAddressCollection(transactionType []byte, callType []b
 }
 
 func TransactionByAddressCollection(timeStamp uint64, txType uint8, from []byte, to []byte, hash []byte, amount float32, paidFees float32) (*mongo.InsertOneResult, error) {
-	var doc primitive.D
-	var result *mongo.InsertOneResult
-	var err error
+	doc := primitive.D{
+		{Key: "txType", Value: txType},
+		{Key: "from", Value: from},
+		{Key: "to", Value: to},
+		{Key: "txHash", Value: hash},
+		{Key: "timeStamp", Value: timeStamp},
+		{Key: "amount", Value: amount},
+		{Key: "paidFees", Value: paidFees},
+	}
 
-	doc = bson.D{{"txType", txType}, {"from", from}, {"to", to}, {"txHash", hash}, {"timeStamp", timeStamp}, {"amount", amount}, {"paidFees", paidFees}}
-	result, err = configs.TransactionByAddressCollections.InsertOne(context.TODO(), doc)
+	result, err := configs.TransactionByAddressCollections.InsertOne(context.TODO(), doc)
 	if err != nil {
 		configs.Logger.Warn("Failed to insert in the transactionByAddress collection: ", zap.Error(err))
 	}
@@ -209,26 +225,13 @@ func TransactionByAddressCollection(timeStamp uint64, txType uint8, from []byte,
 }
 
 func UpsertTransactions(address []byte, value float32, isContract bool) (*mongo.UpdateResult, error) {
-	filter := bson.D{{"id", address}}
-	update := bson.D{
-		{
-			Key: "$set",
-			Value: bson.D{
-				{Key: "id", Value: address},
-			},
-		},
-		{
-			Key: "$set",
-			Value: bson.D{
-				{Key: "balance", Value: value},
-			},
-		},
-		{
-			Key: "$set",
-			Value: bson.D{
-				{Key: "isContract", Value: isContract},
-			},
-		},
+	filter := primitive.D{{Key: "id", Value: address}}
+	update := primitive.D{
+		{Key: "$set", Value: primitive.D{
+			{Key: "id", Value: address},
+			{Key: "balance", Value: value},
+			{Key: "isContract", Value: isContract},
+		}},
 	}
 	opts := options.Update().SetUpsert(true)
 	result, err := configs.AddressesCollections.UpdateOne(context.TODO(), filter, update, opts)

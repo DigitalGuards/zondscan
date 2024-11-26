@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"strconv"
 
-	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
 )
@@ -80,7 +80,11 @@ func processContracts(tx *models.Transaction) ([]byte, []byte, uint8, bool) {
 }
 
 func ContractCodeCollection(contractCreatorAddress []byte, contractAddress []byte, code []byte) (*mongo.InsertOneResult, error) {
-	doc := bson.D{{"contractCreatorAddress", contractCreatorAddress}, {"contractAddress", contractAddress}, {"contractCode", code}}
+	doc := primitive.D{
+		{Key: "contractCreatorAddress", Value: contractCreatorAddress},
+		{Key: "contractAddress", Value: contractAddress},
+		{Key: "contractCode", Value: code},
+	}
 	result, err := configs.ContractCodeCollections.InsertOne(context.TODO(), doc)
 	if err != nil {
 		configs.Logger.Warn("Failed to insert in the contractcode collection: ", zap.Error(err))

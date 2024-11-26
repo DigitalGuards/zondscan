@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
@@ -36,7 +36,10 @@ func processXMSSBitfield(from string, signature string) {
 }
 
 func insertBitfieldByteArray(address_pagenumber string, ots_bitfield bitfield.Bitfield) (*mongo.InsertOneResult, error) {
-	doc := bson.D{{"address_pagenumber", address_pagenumber}, {"ots_bitfield", ots_bitfield}}
+	doc := primitive.D{
+		{Key: "address_pagenumber", Value: address_pagenumber},
+		{Key: "ots_bitfield", Value: ots_bitfield},
+	}
 	result, err := configs.BitfieldCollections.InsertOne(context.TODO(), doc)
 	if err != nil {
 		configs.Logger.Warn("Failed to insert in the bitfield collection: ", zap.Error(err))
@@ -50,11 +53,17 @@ func GetAddressPageNumber(address string) (string, error) {
 	var addresses []models.Address
 	defer cancel()
 
-	options := options.Find().SetSort(bson.D{{"address_pagenumber", -1}}).SetLimit(1)
+	sortOpt := primitive.D{{Key: "address_pagenumber", Value: -1}}
+	options := options.Find().SetSort(sortOpt).SetLimit(1)
 
 	regexQuery := "\\w{39}_[0-9][0-9]"
-	results, err := configs.BitfieldCollections.Find(ctx, bson.M{"address_pagenumber": bson.M{"$regex": regexQuery}}, options)
+	filter := primitive.D{
+		{Key: "address_pagenumber", Value: primitive.D{
+			{Key: "$regex", Value: regexQuery},
+		}},
+	}
 
+	results, err := configs.BitfieldCollections.Find(ctx, filter, options)
 	if err != nil {
 		configs.Logger.Warn("Failed to do Bitfield find: ", zap.Error(err))
 	}
