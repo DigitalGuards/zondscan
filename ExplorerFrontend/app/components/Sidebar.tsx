@@ -13,7 +13,7 @@ import BlockchainIcon from '../../public/blockchain-icon.svg'
 import ContractIcon from '../../public/contract.svg'
 import QRLFavicon from '../../public/favicon.ico'
 import UserCircleIcon from '../../public/send.svg'
-import YellowIcon from '../../public/favicon.svg'
+import RichIcon from '../../public/favicon.svg'
 
 const blockchain = [
   { name: 'View Transactions', description: 'View all Transactions', href: '/transactions/1', imgSrc: PartnerHandshakeIcon },
@@ -24,7 +24,7 @@ const blockchain = [
 const tools = [
   { name: 'Balance Checker', description: 'Check Account balance', href: '/checker', imgSrc: LookUpIcon },
   { name: 'Unit Converter', description: 'Convert QRL currencies', href: '/converter', imgSrc: TokenIcon },
-  { name: 'Richlist', description: 'Top QRL holders', href: '/richlist', imgSrc: YellowIcon },
+  { name: 'Richlist', description: 'Top QRL holders', href: '/richlist', imgSrc: RichIcon },
 ]
 
 function classNames(...classes: string[]) {
@@ -132,9 +132,9 @@ export default function Sidebar() {
                           fill
                           sizes="20px"
                           style={{ objectFit: 'contain' }}
-                          className="[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(105%)] 
-                                   group-hover:[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(125%)] 
-                                   transition-[filter]"
+                          className={`${item.name === 'Richlist' ? '' : '[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(105%)]'} 
+                                   ${item.name === 'Richlist' ? '' : 'group-hover:[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(125%)]'} 
+                                   transition-[filter]`}
                         />
                       </div>
                       <span className="truncate">{item.name}</span>
@@ -145,13 +145,13 @@ export default function Sidebar() {
             )}
           </Disclosure>
 
-          <Link
+          <a
             href="https://qrlwallet.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex w-full items-center gap-3 px-5 py-4 text-sm font-medium 
-                     text-gray-300 hover:text-[#ffa729] hover:bg-[#2d2d2d] 
-                     rounded-xl transition-all duration-200 group"
+            className="flex w-full items-center gap-3 px-5 py-4 text-sm text-gray-300 
+                     hover:bg-[#2d2d2d] rounded-xl transition-all duration-200
+                     hover:text-[#ffa729] group"
           >
             <div className="w-5 h-5 relative">
               <Image
@@ -160,13 +160,10 @@ export default function Sidebar() {
                 fill
                 sizes="20px"
                 style={{ objectFit: 'contain' }}
-                className="[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(105%)] 
-                         group-hover:[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(125%)] 
-                         transition-[filter]"
               />
             </div>
-            QRL Zond Web Wallet
-          </Link>
+            <span className="truncate">QRL Web Wallet</span>
+          </a>
         </nav>
       </div>
     </aside>
