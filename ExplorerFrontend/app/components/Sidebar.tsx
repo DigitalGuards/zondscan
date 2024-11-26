@@ -13,6 +13,7 @@ import BlockchainIcon from '../../public/blockchain-icon.svg'
 import ContractIcon from '../../public/contract.svg'
 import QRLFavicon from '../../public/favicon.ico'
 import UserCircleIcon from '../../public/send.svg'
+import YellowIcon from '../../public/favicon.svg'
 
 const blockchain = [
   { name: 'View Transactions', description: 'View all Transactions', href: '/transactions/1', imgSrc: PartnerHandshakeIcon },
@@ -23,6 +24,7 @@ const blockchain = [
 const tools = [
   { name: 'Balance Checker', description: 'Check Account balance', href: '/checker', imgSrc: LookUpIcon },
   { name: 'Unit Converter', description: 'Convert QRL currencies', href: '/converter', imgSrc: TokenIcon },
+  { name: 'Richlist', description: 'Top QRL holders', href: '/richlist', imgSrc: YellowIcon },
 ]
 
 function classNames(...classes: string[]) {
@@ -142,15 +144,6 @@ export default function Sidebar() {
               </>
             )}
           </Disclosure>
-
-          <button
-            onClick={() => navigateTo('/richlist')}
-            className="flex w-full items-center px-5 py-4 text-sm font-medium 
-                     text-gray-300 hover:text-[#ffa729] hover:bg-[#2d2d2d] 
-                     rounded-xl transition-all duration-200"
-          >
-            Richlist
-          </button>
 
           <Link
             href="https://qrlwallet.com"
