@@ -154,11 +154,11 @@ func processInitialBlock() {
 	logger.Info("Genesis block processed successfully")
 }
 
-func processSubsequentBlocks(sum uint64, latestBlockNumber uint64) {
+func processSubsequentBlocks(sum uint64, latestBlockNumber uint64) uint64 {
 	blockData := rpc.GetBlockByNumberMainnet(sum)
 	if blockData == "" {
 		logger.Warn("Empty block data received", zap.Uint64("block", sum))
-		return
+		return sum
 	}
 
 	var Zond models.Zond
@@ -167,7 +167,7 @@ func processSubsequentBlocks(sum uint64, latestBlockNumber uint64) {
 		logger.Error("Failed to unmarshal block",
 			zap.Uint64("block", sum),
 			zap.Error(err))
-		return
+		return sum
 	}
 
 	if Zond.PreResult.ParentHash != "" {
@@ -176,13 +176,45 @@ func processSubsequentBlocks(sum uint64, latestBlockNumber uint64) {
 		if previousHash == db.GetLatestBlockHashHeaderFromDB(db.GetLatestBlockNumberFromDB()) {
 			processBlockAndUpdateValidators(sum, ZondNew, previousHash)
 			logger.Info("Block processed successfully", zap.Uint64("block", sum))
+			return sum + 1
 		} else {
-			logger.Warn("Chain reorganization detected, rolling back",
+			// Chain reorganization detected
+			logger.Warn("Chain reorganization detected, rolling back and finding fork point",
 				zap.Uint64("block", sum))
-			db.Rollback(sum)
-			sum = sum - 2
+
+			// Walk back through the chain until we find a matching block
+			var lastValidBlock uint64
+			for blockNum := sum - 1; blockNum > 0; blockNum-- {
+				prevBlockData := rpc.GetBlockByNumberMainnet(blockNum)
+				if prevBlockData == "" {
+					continue
+				}
+
+				var prevZond models.Zond
+				if err := json.Unmarshal([]byte(prevBlockData), &prevZond); err != nil {
+					continue
+				}
+
+				prevZondNew := db.ConvertModelsUint64(prevZond)
+				dbHash := db.GetLatestBlockHashHeaderFromDB(blockNum)
+
+				if dbHash == prevZondNew.Result.Hash {
+					lastValidBlock = blockNum
+					break
+				}
+
+				logger.Info("Rolling back block", zap.Uint64("block", blockNum))
+				db.Rollback(blockNum)
+			}
+
+			logger.Info("Found last valid block, resuming sync",
+				zap.Uint64("last_valid_block", lastValidBlock))
+
+			// Return next block to process
+			return lastValidBlock + 1
 		}
 	}
+	return sum
 }
 
 func processBlockAndUpdateValidators(sum uint64, ZondNew models.ZondDatabaseBlock, previousHash string) {
@@ -245,8 +277,7 @@ func singleBlockInsertion() {
 			isCollectionsExist = true
 		} else {
 			if sum <= latestBlockNumber {
-				processSubsequentBlocks(sum, latestBlockNumber)
-				sum++
+				sum = processSubsequentBlocks(sum, latestBlockNumber)
 			} else {
 				latestBlockNumber, err = rpc.GetLatestBlock()
 				if err != nil {
