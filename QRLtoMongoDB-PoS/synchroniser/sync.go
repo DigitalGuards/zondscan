@@ -158,6 +158,8 @@ func processSubsequentBlocks(sum uint64, latestBlockNumber uint64) uint64 {
 	blockData := rpc.GetBlockByNumberMainnet(sum)
 	if blockData == "" {
 		logger.Warn("Empty block data received", zap.Uint64("block", sum))
+		// Back off a bit on empty data
+		time.Sleep(1 * time.Second)
 		return sum
 	}
 
@@ -173,18 +175,26 @@ func processSubsequentBlocks(sum uint64, latestBlockNumber uint64) uint64 {
 	if Zond.PreResult.ParentHash != "" {
 		ZondNew := db.ConvertModelsUint64(Zond)
 		previousHash := ZondNew.Result.ParentHash
-		if previousHash == db.GetLatestBlockHashHeaderFromDB(db.GetLatestBlockNumberFromDB()) {
+		currentDBHash := db.GetLatestBlockHashHeaderFromDB(db.GetLatestBlockNumberFromDB())
+
+		if previousHash == currentDBHash {
 			processBlockAndUpdateValidators(sum, ZondNew, previousHash)
 			logger.Info("Block processed successfully", zap.Uint64("block", sum))
 			return sum + 1
 		} else {
 			// Chain reorganization detected
-			logger.Warn("Chain reorganization detected, rolling back and finding fork point",
-				zap.Uint64("block", sum))
+			logger.Warn("Chain reorganization detected",
+				zap.Uint64("block", sum),
+				zap.String("expected_parent", currentDBHash),
+				zap.String("actual_parent", previousHash))
 
 			// Walk back through the chain until we find a matching block
 			var lastValidBlock uint64
-			for blockNum := sum - 1; blockNum > 0; blockNum-- {
+			var foundFork bool
+			maxRollback := uint64(50) // Limit how far back we'll roll
+			startRollback := sum - 1
+
+			for blockNum := startRollback; blockNum > 0 && blockNum > (startRollback-maxRollback); blockNum-- {
 				prevBlockData := rpc.GetBlockByNumberMainnet(blockNum)
 				if prevBlockData == "" {
 					continue
@@ -200,23 +210,36 @@ func processSubsequentBlocks(sum uint64, latestBlockNumber uint64) uint64 {
 
 				if dbHash == prevZondNew.Result.Hash {
 					lastValidBlock = blockNum
+					foundFork = true
 					break
 				}
 
-				logger.Info("Rolling back block", zap.Uint64("block", blockNum))
+				logger.Info("Rolling back block",
+					zap.Uint64("block", blockNum),
+					zap.String("hash", dbHash))
 				db.Rollback(blockNum)
 			}
 
-			logger.Info("Found last valid block, resuming sync",
-				zap.Uint64("last_valid_block", lastValidBlock))
+			if !foundFork {
+				logger.Error("Failed to find fork point within reasonable range",
+					zap.Uint64("start_block", startRollback),
+					zap.Uint64("end_block", startRollback-maxRollback))
+				// Back off to allow network to stabilize
+				time.Sleep(5 * time.Second)
+				return startRollback - maxRollback
+			}
 
-			// Return next block to process
+			logger.Info("Found fork point, resuming sync",
+				zap.Uint64("last_valid_block", lastValidBlock),
+				zap.Uint64("blocks_rolled_back", sum-lastValidBlock))
+
+			// Add a small delay to allow network to stabilize
+			time.Sleep(1 * time.Second)
 			return lastValidBlock + 1
 		}
 	}
 	return sum
 }
-
 func processBlockAndUpdateValidators(sum uint64, ZondNew models.ZondDatabaseBlock, previousHash string) {
 	db.InsertBlockDocument(ZondNew)
 	db.ProcessTransactions(ZondNew)

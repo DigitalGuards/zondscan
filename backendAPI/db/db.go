@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -265,19 +264,6 @@ func ReturnLatestBlock() ([]models.ZondUint64Version, error) {
 	var blocks []models.ZondUint64Version
 	defer cancel()
 
-	indexModel := mongo.IndexModel{
-		Keys: primitive.D{
-			{Key: "result.number", Value: -1},
-			{Key: "result.timestamp", Value: 1},
-		},
-	}
-
-	name, err := configs.BlocksCollection.Indexes().CreateOne(context.TODO(), indexModel)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("Name of Index Created: " + name)
-
 	projection := primitive.D{
 		{Key: "result.number", Value: 1},
 		{Key: "result.timestamp", Value: 1},
@@ -304,7 +290,6 @@ func ReturnLatestBlock() ([]models.ZondUint64Version, error) {
 
 	return blocks, nil
 }
-
 func ReturnLatestBlocks(page int, limit int) ([]models.Result, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	var blocks []models.Result
