@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 func UserRoute(router *gin.Engine) {
@@ -101,38 +102,40 @@ func UserRoute(router *gin.Engine) {
 
 		// Single Address data
 		addressData, err := db.ReturnSingleAddress(param)
-		if err != nil {
-			fmt.Println(err)
+		if err != nil && err != mongo.ErrNoDocuments {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error querying address: %v", err)})
+			return
 		}
 
 		// Transaction count for the address
 		countTransactions, err := db.CountTransactions(param)
 		if err != nil {
-			fmt.Println(err)
+			fmt.Printf("Error counting transactions: %v\n", err)
 		}
 
 		// Rank of the address
 		rank, err := db.ReturnRankAddress(param)
 		if err != nil {
-			fmt.Println(err)
+			fmt.Printf("Error getting rank: %v\n", err)
 		}
 
 		// All transactions by the address
 		TransactionsByAddress, err := db.ReturnAllTransactionsByAddress(param)
 		if err != nil {
-			fmt.Println(err)
+			fmt.Printf("Error getting transactions: %v\n", err)
 		}
 
-		// All transactions by the address
+		// All internal transactions by the address
 		InternalTransactionsByAddress, err := db.ReturnAllInternalTransactionsByAddress(param)
 		if err != nil {
-			fmt.Println(err)
+			fmt.Printf("Error getting internal transactions: %v\n", err)
 		}
 
 		// Contract code (if applicable)
 		contractCodeData, err := db.ReturnContractCode(param)
-		if err != nil {
-			fmt.Println(err)
+		// Don't treat missing contract code as an error since not all addresses are contracts
+		if err != nil && err != mongo.ErrNoDocuments {
+			fmt.Printf("Error getting contract code: %v\n", err)
 		}
 
 		// Response aggregation

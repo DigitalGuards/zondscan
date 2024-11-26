@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -643,16 +644,22 @@ func ReturnSingleAddress(query string) (models.Address, error) {
 
 	address, err := hex.DecodeString(query[2:])
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("Error decoding address %s: %v\n", query, err)
+		return result, err
 	}
 
 	filter := primitive.D{{Key: "id", Value: address}}
 	err = configs.AddressesCollection.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
-		fmt.Println(err)
+		if err == mongo.ErrNoDocuments {
+			fmt.Printf("No address found for %s\n", query)
+		} else {
+			fmt.Printf("Error querying address %s: %v\n", query, err)
+		}
+		return result, err
 	}
 
-	return result, err
+	return result, nil
 }
 
 func ReturnRankAddress(address string) (int64, error) {
@@ -713,18 +720,23 @@ func ReturnContractCode(query string) (models.ContractCode, error) {
 
 	address, err := hex.DecodeString(query[2:])
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("Error decoding contract address %s: %v\n", query, err)
+		return result, err
 	}
 
 	filter := primitive.D{{Key: "contractAddress", Value: address}}
 	err = configs.ContractCodeCollection.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
-		fmt.Println(err)
+		if err == mongo.ErrNoDocuments {
+			fmt.Printf("No contract code found for %s\n", query)
+		} else {
+			fmt.Printf("Error querying contract code %s: %v\n", query, err)
+		}
+		return result, err
 	}
 
-	return result, err
+	return result, nil
 }
-
 func ReturnBlockSizes() ([]primitive.M, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
