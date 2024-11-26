@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	maxRetries    = 3
-	retryInterval = 5 * time.Second
-	timeout       = 10 * time.Second
+	maxRetries = 3
+	baseDelay  = 30 * time.Second // Increased base delay
+	maxDelay   = 5 * time.Minute  // Maximum delay between retries
+	timeout    = 10 * time.Second
 )
 
 func FetchCoinGeckoData() (*models.MarketDataResponse, error) {
@@ -34,7 +35,17 @@ func FetchCoinGeckoData() (*models.MarketDataResponse, error) {
 			zap.Int("maxRetries", maxRetries))
 
 		if attempt < maxRetries {
-			time.Sleep(retryInterval)
+			// Exponential backoff with jitter
+			delay := time.Duration(float64(baseDelay) * float64(attempt) * (1 + 0.2*(float64(time.Now().UnixNano()%100)/100.0)))
+			if delay > maxDelay {
+				delay = maxDelay
+			}
+
+			configs.Logger.Info("Waiting before next retry",
+				zap.Duration("delay", delay),
+				zap.Int("attempt", attempt))
+
+			time.Sleep(delay)
 		}
 	}
 
@@ -56,6 +67,10 @@ func fetchWithTimeout() (*models.MarketDataResponse, error) {
 		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, fmt.Errorf("rate limit exceeded (429), please wait before retrying")
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

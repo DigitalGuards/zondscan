@@ -403,7 +403,7 @@ func singleBlockInsertion() {
 			logger.Info("Calculating daily transaction volume...")
 			db.GetDailyTransactionVolume()
 		}()
-	}, 5*time.Minute, "data_updates")
+	}, 35*time.Minute, "data_updates")
 
 	select {}
 }
