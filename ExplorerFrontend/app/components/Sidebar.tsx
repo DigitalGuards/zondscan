@@ -12,6 +12,7 @@ import PartnerHandshakeIcon from '../../public/partner-handshake-icon.svg'
 import BlockchainIcon from '../../public/blockchain-icon.svg'
 import ContractIcon from '../../public/contract.svg'
 import QRLFavicon from '../../public/favicon.ico'
+import UserCircleIcon from '../../public/send.svg'
 
 const blockchain = [
   { name: 'View Transactions', description: 'View all Transactions', href: '/transactions/1', imgSrc: PartnerHandshakeIcon },
@@ -150,6 +151,29 @@ export default function Sidebar() {
           >
             Richlist
           </button>
+
+          <Link
+            href="https://qrlwallet.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex w-full items-center gap-3 px-5 py-4 text-sm font-medium 
+                     text-gray-300 hover:text-[#ffa729] hover:bg-[#2d2d2d] 
+                     rounded-xl transition-all duration-200 group"
+          >
+            <div className="w-5 h-5 relative">
+              <Image
+                src={UserCircleIcon}
+                alt="Wallet"
+                fill
+                sizes="20px"
+                style={{ objectFit: 'contain' }}
+                className="[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(105%)] 
+                         group-hover:[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(125%)] 
+                         transition-[filter]"
+              />
+            </div>
+            QRL Zond Web Wallet
+          </Link>
         </nav>
       </div>
     </aside>

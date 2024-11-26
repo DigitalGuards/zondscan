@@ -34,7 +34,7 @@ export default function RichlistClient({ richlist }: RichlistProps) {
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
         <Link 
-          href={config.siteUrl + "/address/" + "0x" + decodeBase64ToHexadecimal(item.id)}
+          href={`/address/0x${decodeBase64ToHexadecimal(item.id)}`}
           className="text-[#ffa729] hover:text-[#ffb954] transition-colors"
         >
           0x{decodeBase64ToHexadecimal(item.id)}
