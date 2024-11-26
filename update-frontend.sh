@@ -40,14 +40,15 @@ echo -e "${GREEN}Git pull completed successfully${NC}"
 
 # Navigate to frontend directory
 echo -e "${YELLOW}Navigating to frontend directory...${NC}"
-cd quanta-explorer-go/frontend
+cd ExplorerFrontend
 if [ $? -ne 0 ]; then
-    echo -e "${RED}Error: Could not find frontend directory${NC}"
+    echo -e "${RED}Error: Could not find ExplorerFrontend directory${NC}"
     exit 1
 fi
 
-# Install dependencies
-echo -e "${YELLOW}Installing dependencies...${NC}"
+# Clean install dependencies
+echo -e "${YELLOW}Clean installing dependencies...${NC}"
+rm -rf node_modules package-lock.json
 npm install
 if [ $? -ne 0 ]; then
     echo -e "${RED}Error: npm install failed${NC}"
@@ -62,24 +63,33 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Stop existing PM2 process if it exists
-pm2 stop frontend 2>/dev/null
-pm2 delete frontend 2>/dev/null
+# Stop and delete existing PM2 process if it exists
+echo -e "${YELLOW}Stopping existing PM2 process...${NC}"
+pm2 describe frontend > /dev/null
+if [ $? -eq 0 ]; then
+    echo -e "${YELLOW}Stopping and removing existing frontend process...${NC}"
+    pm2 stop frontend
+    pm2 delete frontend
+fi
 
 # Start frontend with PM2
 echo -e "${YELLOW}Starting frontend with PM2...${NC}"
-pm2 start npm --name frontend -- start
+pm2 start npm --name "frontend" -- start
 if [ $? -ne 0 ]; then
     echo -e "${RED}Error: Failed to start frontend with PM2${NC}"
     exit 1
 fi
 
 # Save PM2 configuration
+echo -e "${YELLOW}Saving PM2 configuration...${NC}"
 pm2 save
+if [ $? -ne 0 ]; then
+    echo -e "${RED}Warning: Failed to save PM2 configuration${NC}"
+fi
 
 echo -e "${GREEN}Frontend update and deployment completed successfully!${NC}"
 echo -e "${YELLOW}PM2 process status:${NC}"
 pm2 list
 
 # Return to original directory
-cd ../../
+cd ..
