@@ -12,6 +12,16 @@ export interface TransactionDetails {
 }
 
 export interface TransactionResponse {
-  transaction: TransactionDetails;
-  error?: string;
+  response: {
+    hash?: string;
+    blockNumber?: string;
+    from?: string;
+    to?: string;
+    value?: string;
+    timestamp?: number;
+    status?: string;
+    gasUsed?: string;
+    gasPrice?: string;
+    nonce?: string;
+  };
 }

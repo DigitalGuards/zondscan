@@ -23,16 +23,20 @@
       }
     ],
     "strictNullChecks": true,
-    "types": ["node", "jest"],
+    "types": [
+      "node",
+      "jest"
+    ],
     "ignoreDeprecations": "5.0",
-    "skipDefaultLibCheck": true
+    "skipDefaultLibCheck": true,
+    "target": "ES2017"
   },
   "include": [
-    "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    "app/api/auth/[...nextauth]/route.js"
+    "next-env.d.ts",
+    "build/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

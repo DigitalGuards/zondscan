@@ -32,7 +32,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-go build -o synchroniser
+go build -o synchroniser main.go
 if [ $? -ne 0 ]; then
     echo -e "${RED}Error: Failed to build synchroniser${NC}"
     exit 1
@@ -50,17 +50,17 @@ if [ $? -ne 0 ]; then
 fi
 echo -e "${GREEN}Synchroniser deployed successfully${NC}"
 
-# Deploy quanta-explorer-go server
+# Deploy backendAPI server
 echo -e "${YELLOW}Building and deploying server...${NC}"
-cd ../quanta-explorer-go/server
+cd ../backendAPI
 if [ $? -ne 0 ]; then
-    echo -e "${RED}Error: Could not find quanta-explorer-go/server directory${NC}"
+    echo -e "${RED}Error: Could not find backendAPI directory${NC}"
     exit 1
 fi
 
-go build -o handler
+go build -o backendAPI main.go
 if [ $? -ne 0 ]; then
-    echo -e "${RED}Error: Failed to build handler${NC}"
+    echo -e "${RED}Error: Failed to build backendAPI${NC}"
     exit 1
 fi
 
@@ -69,12 +69,12 @@ pm2 stop handler 2>/dev/null
 pm2 delete handler 2>/dev/null
 
 # Start handler with PM2
-pm2 start ./handler --name handler
+pm2 start ./backendAPI --name handler
 if [ $? -ne 0 ]; then
-    echo -e "${RED}Error: Failed to start handler with PM2${NC}"
+    echo -e "${RED}Error: Failed to start backendAPI with PM2${NC}"
     exit 1
 fi
-echo -e "${GREEN}Handler deployed successfully${NC}"
+echo -e "${GREEN}Backend API deployed successfully${NC}"
 
 # Save PM2 configuration
 pm2 save
@@ -84,4 +84,4 @@ echo -e "${YELLOW}PM2 process status:${NC}"
 pm2 list
 
 # Return to original directory
-cd ../../
+cd ../

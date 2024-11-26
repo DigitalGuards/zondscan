@@ -1,15 +1,48 @@
-import React from 'react';
-import { Card, CardContent, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Button, Box } from '@mui/material';
+import { 
+  Card, 
+  CardContent, 
+  Typography, 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableContainer, 
+  TableHead, 
+  TableRow, 
+  Button 
+} from '@mui/material';
 
-const TransactionCard = ({ transactions, title, buttonLabel }) => {
+interface Transaction {
+  hash: string;
+  from: string;
+  to: string;
+  value: string;
+}
+
+interface TransactionCardProps {
+  transactions: Transaction[];
+  title: string;
+  buttonLabel: string;
+}
+
+export default function TransactionCard({ 
+  transactions, 
+  title, 
+  buttonLabel 
+}: TransactionCardProps): JSX.Element {
   return (
-    <Card sx={{ maxWidth: "auto", height: 'auto', marginBottom: 2, marginLeft: 2, marginRight: 2 }}>
+    <Card sx={{ 
+      maxWidth: "auto", 
+      height: 'auto', 
+      marginBottom: 2, 
+      marginLeft: 2, 
+      marginRight: 2 
+    }}>
       <CardContent>
         <Typography variant="h5" component="div">
           {title}
         </Typography>
         <TableContainer>
-          <Table size="small" aria-label="a dense table">
+          <Table size="small" aria-label="transactions table">
             <TableHead>
               <TableRow>
                 <TableCell>Hash</TableCell>
@@ -31,11 +64,14 @@ const TransactionCard = ({ transactions, title, buttonLabel }) => {
           </Table>
         </TableContainer>
       </CardContent>
-      <Button sx={{width: "100%"}} variant="contained" color="primary" onClick={() => {}}>
+      <Button 
+        sx={{ width: "100%" }} 
+        variant="contained" 
+        color="primary" 
+        onClick={() => {}}
+      >
         {buttonLabel}
       </Button>
     </Card>
   );
-};
-
-export default TransactionCard;
+}

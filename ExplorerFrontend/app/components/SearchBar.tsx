@@ -1,45 +1,47 @@
-"use client"
+'use client';
 
-import React, { useCallback } from 'react';
+import { useState, useCallback, useEffect, ChangeEvent, FormEvent } from 'react';
+import { useRouter } from 'next/navigation';
 
-function onlyNumbers(str) {
+function onlyNumbers(str: string): boolean {
   return /^[0-9]+$/.test(str);
 }
 
-export default function SearchBar() {
-  const [searchValue, setSearchValue] = React.useState('');
+export default function SearchBar(): JSX.Element {
+  const [searchValue, setSearchValue] = useState<string>('');
+  const [error, setError] = useState<string>('');
+  const router = useRouter();
 
-  function handleInputChange(event) {
+  function handleInputChange(event: ChangeEvent<HTMLInputElement>): void {
     setSearchValue(event.target.value);
+    setError('');
   }
 
-  const navigateHandler = useCallback(() => {
-    let newPath;
+  const navigateHandler = useCallback((): void => {
+    let newPath: string;
     if (onlyNumbers(searchValue)) {
       newPath = "/block/" + searchValue;
-    } else if (searchValue.length == 66) {
+    } else if (searchValue.length === 66) {
       newPath = "/tx/" + searchValue;
-    } else if (searchValue.slice(0, 2) == "0x" && searchValue.length == 42) {
+    } else if (searchValue.slice(0, 2) === "0x" && searchValue.length === 42) {
       newPath = "/address/" + searchValue;
     } else {
-      var div = document.getElementById('error-box');
-      div.innerHTML = ""
-      div.innerHTML += '<div class="p-4 mb-4 text-sm text-red-400 rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-red-400 shadow-lg" role="alert"><span class="font-medium">Invalid input!</span></div>';
-      return
+      setError('Invalid input!');
+      return;
     }
-    window.location.href = newPath;
-  }, [searchValue]);
+    router.push(newPath);
+  }, [searchValue, router]);
 
-  React.useEffect(() => {
-    const listener = event => {
+  useEffect(() => {
+    const listener = (event: KeyboardEvent): void => {
       if (event.code === "Enter" || event.code === "NumpadEnter") {
         event.preventDefault();
         navigateHandler();
       }
     };
-    document.addEventListener("keydown", listener);
+    window.addEventListener("keydown", listener);
     return () => {
-      document.removeEventListener("keydown", listener);
+      window.removeEventListener("keydown", listener);
     };
   }, [navigateHandler]);
 
@@ -48,7 +50,7 @@ export default function SearchBar() {
       <div className="relative bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-2xl p-6 
                     shadow-xl border border-[#3d3d3d] hover:border-[#4d4d4d] transition-colors">
         <form
-          onSubmit={(e) => {
+          onSubmit={(e: FormEvent<HTMLFormElement>) => {
             e.preventDefault();
             navigateHandler();
           }}
@@ -67,17 +69,23 @@ export default function SearchBar() {
             onChange={handleInputChange}
           />
           <button
+            type="submit"
             className="px-8 py-4 bg-[#ffa729] text-white 
                      rounded-xl shadow-lg font-medium whitespace-nowrap
                      hover:bg-[#ff9709] hover:shadow-2xl hover:scale-105 
                      active:scale-95 transition-all duration-300 
                      sm:w-auto w-full"
-            onClick={navigateHandler}
           >
             Search
           </button>
         </form>
-        <div id="error-box" className="mt-4"></div>
+        {error && (
+          <div className="mt-4">
+            <div className="p-4 mb-4 text-sm text-red-400 rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-red-400 shadow-lg" role="alert">
+              <span className="font-medium">{error}</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -22,6 +22,7 @@ func UpdateCoinGeckoDataInDB(data *models.MarketDataResponse) error {
 
 	updateData := map[string]interface{}{
 		"marketCapUSD": data.MarketData.MarketCap.USD,
+		"priceUSD":     data.MarketData.CurrentPrice.USD,
 	}
 
 	_, err := configs.CoinGeckoCollections.UpdateOne(ctx, map[string]interface{}{}, map[string]interface{}{"$set": updateData}, options.Update().SetUpsert(true))
@@ -32,6 +33,40 @@ func UpdateCoinGeckoDataInDB(data *models.MarketDataResponse) error {
 	}
 
 	return nil
+}
+
+func GetCurrentPrice() float32 {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var result struct {
+		PriceUSD float32 `bson:"priceUSD"`
+	}
+
+	err := configs.CoinGeckoCollections.FindOne(ctx, map[string]interface{}{}).Decode(&result)
+	if err != nil {
+		configs.Logger.Error("Failed to get current price from database", zap.Error(err))
+		return 0
+	}
+
+	return result.PriceUSD
+}
+
+func GetMarketCap() float32 {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var result struct {
+		MarketCapUSD float32 `bson:"marketCapUSD"`
+	}
+
+	err := configs.CoinGeckoCollections.FindOne(ctx, map[string]interface{}{}).Decode(&result)
+	if err != nil {
+		configs.Logger.Error("Failed to get market cap from database", zap.Error(err))
+		return 0
+	}
+
+	return result.MarketCapUSD
 }
 
 func PeriodicallyUpdateCoinGeckoData() {

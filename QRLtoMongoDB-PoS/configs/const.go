@@ -10,7 +10,8 @@ import (
 // http://209.250.255.226:8545
 
 // sudo mongod --dbpath /System/Volumes/Data/data/db
-var QUANTA float32 = 1000000000000000000
+const QUANTA float64 = 1000000000000000000
+
 var COINGECKO_URL string = "https://api.coingecko.com/api/v3/coins/quantum-resistant-ledger?tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false"
 var Filename = "logs.log"
 var AddressesCollections *mongo.Collection = GetCollection(DB, "addresses")

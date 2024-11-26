@@ -67,7 +67,6 @@ check_port() {
 }
 
 # Clone the repository
-
 clone_repo() {
     if [ -d ".git" ]; then
         print_status "Repository already exists. Pulling latest changes..."
@@ -86,13 +85,22 @@ setup_server() {
     print_status "Setting up server..."
     cd "$BASE_DIR/backendAPI" || print_error "Server directory not found"
 
+    # Create .env.development file
+    print_status "Creating .env.development file..."
+    cat > .env.development << EOL
+GIN_MODE=release
+MONGOURI=mongodb://localhost:27017/qrldata?readPreference=primary
+HTTP_PORT=:8080
+NODE_URL=http://REDACTED:8545
+EOL
+
     # Build the server
     print_status "Building server..."
-    go build main.go || print_error "Failed to build server"
+    go build -o backendAPI main.go || print_error "Failed to build server"
 
     # Start server with PM2, specifying the working directory and APP_ENV
     print_status "Starting server with PM2..."
-    APP_ENV=development pm2 start ./main --name "handler" --cwd "$BASE_DIR/backendAPI" || print_error "Failed to start server"
+    APP_ENV=development pm2 start ./backendAPI --name "handler" --cwd "$BASE_DIR/backendAPI" || print_error "Failed to start server"
 }
 
 # Setup frontend environment
@@ -138,11 +146,21 @@ MONGOURI=mongodb://localhost:27017
 NODE_URL=http://REDACTED:8545
 EOL
 
-    # Build and start synchronizer
-    print_status "Building synchronizer..."
-    go build main.go || print_error "Failed to build synchronizer"
+    # Also create .env in the rpc directory to ensure it's available
+    mkdir -p rpc
+    cat > rpc/.env << EOL
+MONGOURI=mongodb://localhost:27017
+NODE_URL=http://REDACTED:8545
+EOL
 
-    # Start synchronizer with PM2, specifying the working directory
+    # Build synchronizer
+    print_status "Building synchronizer..."
+    go build -o synchroniser main.go || print_error "Failed to build synchronizer"
+
+    # Make the binary executable
+    chmod +x ./synchroniser
+
+    # Start synchronizer with PM2, explicitly setting environment variables
     print_status "Starting synchronizer with PM2..."
      pm2 start ./synchroniser --name "synchroniser" --cwd "$BASE_DIR/QRLtoMongoDB-PoS" || print_error "Failed to start synchronizer"
 }
