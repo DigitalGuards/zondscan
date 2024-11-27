@@ -1,7 +1,6 @@
 'use client';
 
 export function decodeToHex(input, format) {
-  // Using browser's built-in atob for base64 decoding
   const decoded = atob(input);
   let hex = '';
   for (let i = 0; i < decoded.length; i++) {
@@ -43,37 +42,57 @@ export function toFixed(x) {
 
 export function formatAmount(amount) {
   // Handle zero amount
-  if (amount === 0 || amount === '0') {
+  if (amount === 0 || amount === '0' || amount === '0x0') {
     return ['0', 'QRL'];
   }
 
-  // Convert string to number if needed
-  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-
-  // Handle NaN
-  if (isNaN(num)) {
+  let value;
+  try {
+    if (typeof amount === 'string') {
+      if (amount.startsWith('0x')) {
+        // Handle hex strings
+        value = BigInt(amount);
+      } else {
+        // Handle decimal strings
+        value = BigInt(amount);
+      }
+    } else if (typeof amount === 'number') {
+      // Handle scientific notation and regular numbers
+      if (amount.toString().includes('e')) {
+        // Convert scientific notation to full decimal string
+        const str = amount.toFixed(20);
+        // Remove trailing zeros after decimal point
+        const cleanStr = str.replace(/\.?0+$/, '');
+        // Convert to shor (multiply by 1e18)
+        const shorAmount = parseFloat(cleanStr) * 1e18;
+        value = BigInt(Math.round(shorAmount));
+      } else {
+        // Regular number - convert to shor
+        const shorAmount = amount * 1e18;
+        value = BigInt(Math.round(shorAmount));
+      }
+    } else {
+      throw new Error('Unsupported amount type');
+    }
+  } catch (error) {
     return ['0', 'QRL'];
   }
 
-  // Convert to shor (1 QRL = 1e9 shor)
-  const shorValue = num * 1e9;
-
-  // If it's >= 1 QRL, show in QRL
-  if (num >= 1) {
-    return [num.toString(), 'QRL'];
+  // Now value is in shor (smallest unit, 18 decimal places)
+  // If it's less than 1 QRL (1e18 shor), show in shor
+  if (value < BigInt(1e18)) {
+    if (value === BigInt(0)) {
+      return ['0', 'shor'];
+    }
+    return [value.toString(), 'shor'];
   }
 
-  // If it's less than 1 shor or 0, show "0 shor"
-  if (shorValue < 1) {
-    return ['0', 'shor'];
-  }
-
-  // Otherwise show the exact number of shor
-  return [Math.floor(shorValue).toString(), 'shor'];
+  // Convert to QRL (divide by 1e18) and show with up to 8 decimal places
+  const qrlValue = Number(value) / 1e18;
+  return [qrlValue.toFixed(8).replace(/\.?0+$/, ''), 'QRL'];
 }
 
 export function decodeBase64ToHexadecimal(rawData) {
-  // Using browser's built-in atob for base64 decoding
   const decoded = atob(rawData);
   let hex = '';
   for (let i = 0; i < decoded.length; i++) {
@@ -103,8 +122,7 @@ export function formatTimestamp(timestamp) {
 
 export function formatNumber(value) {
   if (typeof value !== "number" || isNaN(value)) {
-    console.error("Invalid value passed to formatNumber:", value);
-    return "Error";  // Default value
+    return "Error";
   }
   if (value >= 1e12) {
       value = (value / 1e12).toFixed(2) + 'T';

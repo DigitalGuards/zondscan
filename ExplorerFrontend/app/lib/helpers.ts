@@ -41,33 +41,42 @@ export function toFixed(x: string | number | undefined | null): string {
 
 export function formatAmount(amount: string | number): [string, string] {
   // Handle zero amount
-  if (amount === 0 || amount === '0') {
+  if (amount === 0 || amount === '0' || amount === '0x0') {
     return ['0', 'QRL'];
   }
 
-  // Convert string to number if needed
-  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-
-  // Handle NaN
-  if (isNaN(num)) {
+  let value: bigint;
+  try {
+    // Handle hex strings (e.g., "0x123")
+    if (typeof amount === 'string' && amount.startsWith('0x')) {
+      value = BigInt(amount);
+    }
+    // Handle regular strings or numbers
+    else {
+      value = BigInt(typeof amount === 'string' ? amount : Math.floor(amount));
+    }
+  } catch (error) {
+    console.error('Error converting amount to BigInt:', error);
     return ['0', 'QRL'];
   }
 
-  // Convert to shor (1 QRL = 1e9 shor)
-  const shorValue = num * 1e9;
+  // Convert to QRL (1 QRL = 10^18 shor)
+  const qrl = value / BigInt(1e18);
+  const remainingShor = value % BigInt(1e18);
 
-  // If it's >= 1 QRL, show in QRL
-  if (num >= 1) {
-    return [num.toString(), 'QRL'];
+  // If there's a QRL amount, show it with up to 8 decimal places
+  if (qrl > BigInt(0)) {
+    const shorFraction = Number(remainingShor) / 1e18;
+    const total = Number(qrl) + shorFraction;
+    return [total.toFixed(8).replace(/\.?0+$/, ''), 'QRL'];
   }
 
-  // If it's less than 1 shor or 0, show "0 shor"
-  if (shorValue < 1) {
+  // If it's just shor, show the shor amount
+  if (remainingShor === BigInt(0)) {
     return ['0', 'shor'];
   }
 
-  // Otherwise show the exact number of shor
-  return [Math.floor(shorValue).toString(), 'shor'];
+  return [remainingShor.toString(), 'shor'];
 }
 
 export function decodeBase64ToHexadecimal(rawData: string): string {

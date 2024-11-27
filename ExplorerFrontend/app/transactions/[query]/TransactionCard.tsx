@@ -18,14 +18,7 @@ export default function TransactionCard({ transaction }: TransactionCardProps): 
   });
 
   const txHash = "0x" + decodeBase64ToHexadecimal(transaction.TxHash);
-  
-  // Parse amount and handle potential string values
-  const amount = typeof transaction.Amount === 'string' 
-    ? parseFloat(transaction.Amount) 
-    : transaction.Amount || 0;
-
-  // Get formatted amount and unit
-  const [formattedAmount, unit] = formatAmount(amount);
+  const [formattedAmount, unit] = formatAmount(transaction.Amount);
 
   const handleClick = (): void => {
     router.push(`/tx/${txHash}`);

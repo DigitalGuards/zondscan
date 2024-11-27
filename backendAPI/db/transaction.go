@@ -218,7 +218,7 @@ func ReturnTransactionsNetwork(page int) ([]models.TransactionByAddress, error) 
 	var transactions []models.TransactionByAddress
 	defer cancel()
 
-	limit := 15
+	limit := 5
 
 	projection := primitive.D{
 		{Key: "inOut", Value: 1},

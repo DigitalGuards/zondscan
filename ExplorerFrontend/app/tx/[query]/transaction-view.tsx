@@ -3,6 +3,7 @@
 import React from 'react';
 import type { TransactionDetails } from './types';
 import { getConfirmations, getTransactionStatus } from './types';
+import { formatAmount } from '../../lib/helpers';
 
 const formatTimestamp = (timestamp: number): string => {
   if (!timestamp) return 'Unknown';
@@ -45,6 +46,12 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
   const confirmationText = confirmations === null 
     ? 'Pending' 
     : `${confirmations} Confirmation${confirmations === 1 ? '' : 's'}`;
+
+  // Format transaction value using the helper
+  const [formattedValue, unit] = formatAmount(transaction.value);
+
+  // Format gas price if present
+  const [formattedGasPrice, gasPriceUnit] = transaction.gasPrice ? formatAmount(transaction.gasPrice) : ['0', 'QRL'];
 
   return (
     <div className="py-8">
@@ -116,8 +123,8 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               <div>
                 <h2 className="text-sm font-semibold text-gray-400 mb-2">Value</h2>
                 <p className="text-2xl font-semibold text-[#ffa729]">
-                  {transaction.value}
-                  <span className="text-sm text-gray-400 ml-2">QUANTA</span>
+                  {formattedValue}
+                  <span className="text-sm text-gray-400 ml-2">{unit}</span>
                 </p>
               </div>
 
@@ -133,7 +140,10 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                   {transaction.gasPrice && (
                     <div>
                       <h2 className="text-sm font-semibold text-gray-400 mb-2">Gas Price</h2>
-                      <p className="text-gray-300">{transaction.gasPrice}</p>
+                      <p className="text-gray-300">
+                        {formattedGasPrice}
+                        <span className="text-sm text-gray-400 ml-2">{gasPriceUnit}</span>
+                      </p>
                     </div>
                   )}
                 </div>
