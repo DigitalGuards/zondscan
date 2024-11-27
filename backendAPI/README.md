@@ -11,8 +11,15 @@ backendAPI/
 │   ├── env.go        # Environment variable handling
 │   └── setup.go      # Application setup and initialization
 ├── db/               # Database operations
-│   ├── db.go         # Main database operations
-│   └── db_test.go    # Database tests
+│   ├── address.go    # Address and wallet operations
+│   ├── block.go      # Block-related operations
+│   ├── contract.go   # Smart contract operations
+│   ├── db.go         # Database package declaration
+│   ├── db_test.go    # Database tests
+│   ├── pending.go    # Pending transaction operations
+│   ├── stats.go      # Statistics and utility functions
+│   ├── transaction.go # Transaction operations
+│   └── validator.go  # Validator operations
 ├── handler/          # Request handlers
 │   └── handler.go    # HTTP request handlers
 ├── models/           # Data models
@@ -46,10 +53,15 @@ Handles all configuration-related functionality including:
 - Application setup and initialization
 
 ### Database (db/)
-Manages database operations and interactions:
-- Connection management
-- CRUD operations
-- Database testing
+Manages database operations and interactions, organized into logical modules:
+- address.go: Handles all address and wallet-related database operations
+- block.go: Manages block-related queries and operations
+- contract.go: Handles smart contract interactions and queries
+- pending.go: Manages pending transaction operations
+- stats.go: Provides statistics and utility functions
+- transaction.go: Handles all transaction-related operations
+- validator.go: Manages validator-related queries
+- db_test.go: Contains database operation tests
 
 ### Handlers (handler/)
 Contains HTTP request handlers that process incoming requests and return appropriate responses.
