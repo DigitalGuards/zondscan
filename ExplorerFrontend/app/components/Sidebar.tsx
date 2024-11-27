@@ -16,9 +16,10 @@ import UserCircleIcon from '../../public/send.svg'
 import RichIcon from '../../public/favicon.svg'
 
 const blockchain = [
-  { name: 'View Transactions', description: 'View all Transactions', href: '/transactions/1', imgSrc: PartnerHandshakeIcon },
-  { name: 'View Blocks', description: 'View all Blocks', href: '/blocks/1', imgSrc: BlockchainIcon },
-  { name: 'View Contracts', description: 'Explore QRL contracts', href: '/contracts', imgSrc: ContractIcon },
+  { name: 'Latest Transactions', description: 'View all Transactions', href: '/transactions/1', imgSrc: PartnerHandshakeIcon },
+  { name: 'Pending Transactions', description: 'View pending transactions', href: '/pending/1', imgSrc: PartnerHandshakeIcon },
+  { name: 'Latest Blocks', description: 'View all Blocks', href: '/blocks/1', imgSrc: BlockchainIcon },
+  { name: 'Smart Contracts', description: 'Explore QRL contracts', href: '/contracts', imgSrc: ContractIcon },
 ]
 
 const tools = [

@@ -11,6 +11,19 @@ import (
 )
 
 func UserRoute(router *gin.Engine) {
+	// Add pending transactions endpoint
+	router.GET("/pending-transactions", func(c *gin.Context) {
+		result, err := db.GetPendingTransactions()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to fetch pending transactions: %v", err),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, result.Result)
+	})
+
 	router.GET("/overview", func(c *gin.Context) {
 		// Get market cap with default value
 		marketCap := db.GetMarketCap()
@@ -78,9 +91,21 @@ func UserRoute(router *gin.Engine) {
 			fmt.Println(err)
 		}
 
+		// Get latest block for confirmation count
+		latestBlock, err := db.ReturnLatestBlock()
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		var latestBlockNumber uint64
+		if len(latestBlock) > 0 {
+			latestBlockNumber = latestBlock[0].Result.Number
+		}
+
 		c.JSON(http.StatusOK, gin.H{
-			"txs":   txs,
-			"total": countTransactions,
+			"txs":         txs,
+			"total":       countTransactions,
+			"latestBlock": latestBlockNumber,
 		})
 	})
 
@@ -138,6 +163,17 @@ func UserRoute(router *gin.Engine) {
 			fmt.Printf("Error getting contract code: %v\n", err)
 		}
 
+		// Get latest block for confirmation count
+		latestBlock, err := db.ReturnLatestBlock()
+		if err != nil {
+			fmt.Printf("Error getting latest block: %v\n", err)
+		}
+
+		var latestBlockNumber uint64
+		if len(latestBlock) > 0 {
+			latestBlockNumber = latestBlock[0].Result.Number
+		}
+
 		// Response aggregation
 		c.JSON(http.StatusOK, gin.H{
 			"address":                          addressData,
@@ -146,6 +182,7 @@ func UserRoute(router *gin.Engine) {
 			"transactions_by_address":          TransactionsByAddress,
 			"internal_transactions_by_address": InternalTransactionsByAddress,
 			"contract_code":                    contractCodeData,
+			"latestBlock":                      latestBlockNumber,
 		})
 	})
 
@@ -160,9 +197,15 @@ func UserRoute(router *gin.Engine) {
 		if err != nil {
 			fmt.Println(err)
 		}
+
+		var latestBlockNumber uint64
+		if len(latestBlock) > 0 {
+			latestBlockNumber = latestBlock[0].Result.Number
+		}
+
 		c.JSON(http.StatusOK, gin.H{
 			"response":    query,
-			"latestBlock": latestBlock,
+			"latestBlock": latestBlockNumber,
 		})
 	})
 

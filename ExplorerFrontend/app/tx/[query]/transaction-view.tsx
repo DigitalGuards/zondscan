@@ -2,6 +2,7 @@
 
 import React from 'react';
 import type { TransactionDetails } from './types';
+import { getConfirmations, getTransactionStatus } from './types';
 
 const formatTimestamp = (timestamp: number): string => {
   if (!timestamp) return 'Unknown';
@@ -17,26 +18,6 @@ const formatTimestamp = (timestamp: number): string => {
     second: '2-digit',
     timeZoneName: 'short'
   }).format(date);
-};
-
-const getStatusColor = (status: string | undefined): string => {
-  if (!status) return 'bg-blue-500';
-  
-  try {
-    const statusLower = status.toLowerCase();
-    switch (statusLower) {
-      case 'success':
-        return 'bg-green-500';
-      case 'failed':
-        return 'bg-red-500';
-      case 'pending':
-        return 'bg-yellow-500';
-      default:
-        return 'bg-blue-500';
-    }
-  } catch (error) {
-    return 'bg-blue-500';
-  }
 };
 
 const AddressLink = ({ address }: { address: string }) => (
@@ -56,7 +37,14 @@ interface TransactionViewProps {
 }
 
 export default function TransactionView({ transaction }: TransactionViewProps): JSX.Element {
-  const statusColor = getStatusColor(transaction.status);
+  // Calculate confirmations and get status
+  const confirmations = getConfirmations(transaction.blockNumber, transaction.latestBlock);
+  const status = getTransactionStatus(confirmations);
+
+  // Format confirmation text
+  const confirmationText = confirmations === null 
+    ? 'Pending' 
+    : `${confirmations} Confirmation${confirmations === 1 ? '' : 's'}`;
 
   return (
     <div className="py-8">
@@ -72,10 +60,10 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               </svg>
               <h1 className="text-2xl font-bold text-[#ffa729]">Transaction Details</h1>
             </div>
-            <div className={`px-4 py-2 rounded-xl ${statusColor} bg-opacity-20 border border-opacity-20 
-                           flex items-center ${statusColor.replace('bg-', 'border-')}`}>
-              <div className={`w-2 h-2 rounded-full ${statusColor} mr-2`}></div>
-              <span className="text-sm font-medium">{transaction.status || 'Unknown'}</span>
+            <div className={`px-4 py-2 rounded-xl ${status.color} bg-opacity-20 border border-opacity-20 
+                           flex items-center ${status.color.replace('bg-', 'border-')}`}>
+              <div className={`w-2 h-2 rounded-full ${status.color} mr-2`}></div>
+              <span className="text-sm font-medium">{status.text}</span>
             </div>
           </div>
           
@@ -90,12 +78,19 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
 
               <div>
                 <h2 className="text-sm font-semibold text-gray-400 mb-2">Block</h2>
-                <a 
-                  href={`/block/${transaction.blockNumber}`}
-                  className="text-gray-300 hover:text-[#ffa729] transition-colors duration-300"
-                >
-                  {transaction.blockNumber || 'Pending'}
-                </a>
+                {transaction.blockNumber ? (
+                  <div>
+                    <a 
+                      href={`/block/${transaction.blockNumber}`}
+                      className="text-gray-300 hover:text-[#ffa729] transition-colors duration-300"
+                    >
+                      #{transaction.blockNumber}
+                    </a>
+                    <p className="text-sm text-gray-400 mt-1">{confirmationText}</p>
+                  </div>
+                ) : (
+                  <p className="text-gray-300">Pending</p>
+                )}
               </div>
 
               <div>

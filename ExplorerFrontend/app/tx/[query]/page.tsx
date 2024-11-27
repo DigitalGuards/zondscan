@@ -40,10 +40,10 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
     to: txData.to ? decodeBase64ToHexadecimal(txData.to) : '',
     value: txData.value || '0',
     timestamp: txData.timestamp || 0,
-    status: txData.status || 'Unknown',
     gasUsed: txData.gasUsed,
     gasPrice: txData.gasPrice,
-    nonce: txData.nonce
+    nonce: txData.nonce,
+    latestBlock: data.latestBlock // Include latestBlock from response
   };
 }
 
