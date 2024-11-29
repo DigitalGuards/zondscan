@@ -3,6 +3,7 @@ import axios from 'axios';
 import config from '../../../../config';
 import { redirect } from 'next/navigation';
 import { PendingTransaction } from '../types';
+import { formatAmount } from '../../../lib/helpers';
 
 interface PageProps {
   params: { hash: string };
@@ -54,11 +55,11 @@ export default async function PendingTransactionPage({ params }: PageProps) {
       throw new Error('Transaction not found');
     }
 
-    // Format values for display
-    const value = (parseInt(pendingTx.value, 16) / 1e18).toString();
-    const gasPrice = (parseInt(pendingTx.gasPrice, 16) / 1e18).toString();
-    const maxFeePerGas = pendingTx.maxFeePerGas ? (parseInt(pendingTx.maxFeePerGas, 16) / 1e18).toString() : null;
-    const maxPriorityFeePerGas = pendingTx.maxPriorityFeePerGas ? (parseInt(pendingTx.maxPriorityFeePerGas, 16) / 1e18).toString() : null;
+    // Format values using our helper function
+    const [value, valueUnit] = formatAmount(pendingTx.value);
+    const [gasPrice, gasPriceUnit] = formatAmount(pendingTx.gasPrice);
+    const [maxFeePerGas, maxFeeUnit] = pendingTx.maxFeePerGas ? formatAmount(pendingTx.maxFeePerGas) : ['0', 'QRL'];
+    const [maxPriorityFeePerGas, maxPriorityFeeUnit] = pendingTx.maxPriorityFeePerGas ? formatAmount(pendingTx.maxPriorityFeePerGas) : ['0', 'QRL'];
 
     return (
       <div className="container mx-auto px-4">
@@ -92,7 +93,9 @@ export default async function PendingTransactionPage({ params }: PageProps) {
 
             <div className="flex flex-col space-y-1">
               <span className="text-gray-400">Value</span>
-              <span className="text-gray-200">{value} QRL</span>
+              <span className="text-gray-200">
+                {value} {valueUnit}
+              </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -103,20 +106,26 @@ export default async function PendingTransactionPage({ params }: PageProps) {
 
               <div className="flex flex-col space-y-1">
                 <span className="text-gray-400">Gas Price</span>
-                <span className="text-gray-200">{gasPrice} QRL</span>
+                <span className="text-gray-200">
+                  {gasPrice} {gasPriceUnit}
+                </span>
               </div>
 
-              {maxFeePerGas && (
+              {pendingTx.maxFeePerGas && (
                 <div className="flex flex-col space-y-1">
                   <span className="text-gray-400">Max Fee Per Gas</span>
-                  <span className="text-gray-200">{maxFeePerGas} QRL</span>
+                  <span className="text-gray-200">
+                    {maxFeePerGas} {maxFeeUnit}
+                  </span>
                 </div>
               )}
 
-              {maxPriorityFeePerGas && (
+              {pendingTx.maxPriorityFeePerGas && (
                 <div className="flex flex-col space-y-1">
                   <span className="text-gray-400">Max Priority Fee Per Gas</span>
-                  <span className="text-gray-200">{maxPriorityFeePerGas} QRL</span>
+                  <span className="text-gray-200">
+                    {maxPriorityFeePerGas} {maxPriorityFeeUnit}
+                  </span>
                 </div>
               )}
             </div>

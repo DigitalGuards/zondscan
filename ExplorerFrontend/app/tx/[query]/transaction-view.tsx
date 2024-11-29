@@ -3,7 +3,7 @@
 import React from 'react';
 import type { TransactionDetails } from './types';
 import { getConfirmations, getTransactionStatus } from './types';
-import { formatAmount } from '../../lib/helpers';
+import { formatAmount, formatGas, formatNumberWithCommas } from '../../lib/helpers';
 
 const formatTimestamp = (timestamp: number): string => {
   if (!timestamp) return 'Unknown';
@@ -50,8 +50,9 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
   // Format transaction value using the helper
   const [formattedValue, unit] = formatAmount(transaction.value);
 
-  // Format gas price if present
-  const [formattedGasPrice, gasPriceUnit] = transaction.gasPrice ? formatAmount(transaction.gasPrice) : ['0', 'QRL'];
+  // Format gas values
+  const [formattedGasUsed] = formatGas(transaction.gasUsed);
+  const [formattedGasPrice] = transaction.gasPrice ? formatGas(transaction.gasPrice) : ['0'];
 
   return (
     <div className="py-8">
@@ -133,7 +134,10 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                   {transaction.gasUsed && (
                     <div>
                       <h2 className="text-sm font-semibold text-gray-400 mb-2">Gas Used</h2>
-                      <p className="text-gray-300">{transaction.gasUsed}</p>
+                      <p className="text-gray-300">
+                        {formattedGasUsed}
+                        <span className="text-sm text-gray-400 ml-2">Shor</span>
+                      </p>
                     </div>
                   )}
 
@@ -142,7 +146,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                       <h2 className="text-sm font-semibold text-gray-400 mb-2">Gas Price</h2>
                       <p className="text-gray-300">
                         {formattedGasPrice}
-                        <span className="text-sm text-gray-400 ml-2">{gasPriceUnit}</span>
+                        <span className="text-sm text-gray-400 ml-2">Shor</span>
                       </p>
                     </div>
                   )}

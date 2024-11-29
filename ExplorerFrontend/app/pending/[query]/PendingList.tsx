@@ -6,6 +6,7 @@ import config from '../../../config';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { PendingTransaction, PendingTransactionsResponse } from '../tx/types';
+import { formatAmount } from '../../lib/helpers';
 
 interface PendingTransactionDisplay {
   hash: string;
@@ -33,8 +34,8 @@ const transformPendingData = (data: PendingTransactionsResponse): PendingTransac
                   hash: tx.hash,
                   from: tx.from,
                   to: tx.to || null,
-                  value: (parseInt(tx.value, 16) / 1e18).toString(),
-                  gasPrice: (parseInt(tx.gasPrice, 16) / 1e18).toString(),
+                  value: tx.value,
+                  gasPrice: tx.gasPrice,
                   timestamp: Math.floor(Date.now() / 1000)
                 };
                 console.log('Transformed transaction:', transaction);
@@ -86,6 +87,9 @@ function TransactionCard({ transaction }: { transaction: PendingTransactionDispl
     second: '2-digit'
   });
 
+  const [formattedValue, valueUnit] = formatAmount(transaction.value);
+  const [formattedGasPrice, gasPriceUnit] = formatAmount(transaction.gasPrice);
+
   return (
     <Link 
       href={`/pending/tx/${transaction.hash}`}
@@ -96,7 +100,6 @@ function TransactionCard({ transaction }: { transaction: PendingTransactionDispl
                 group mb-4 block'
     >
       <div className="flex items-center p-6">
-        {/* Left Section - Status and Time */}
         <div className="flex flex-col items-center w-48">
           <div className="mb-2">
             <div className="bg-yellow-500/20 text-yellow-500 px-3 py-1 rounded-lg text-sm">
@@ -109,7 +112,6 @@ function TransactionCard({ transaction }: { transaction: PendingTransactionDispl
           </div>
         </div>
 
-        {/* Middle Section - Hash and Addresses */}
         <div className="flex-1 px-8 border-l border-r border-[#3d3d3d]">
           <div className="mb-2">
             <p className="text-sm font-medium text-gray-400 mb-1">Transaction Hash</p>
@@ -133,15 +135,14 @@ function TransactionCard({ transaction }: { transaction: PendingTransactionDispl
           </div>
         </div>
 
-        {/* Right Section - Amount */}
         <div className="w-48 text-right">
           <p className="text-sm font-medium text-gray-400 mb-2">Amount</p>
           <p className="text-2xl font-semibold text-[#ffa729]">
-            {transaction.value}
-            <span className="text-sm text-gray-400 ml-2">QRL</span>
+            {formattedValue}
+            <span className="text-sm text-gray-400 ml-2">{valueUnit}</span>
           </p>
           <p className="text-sm text-gray-400 mt-2">
-            Gas Price: {transaction.gasPrice} QRL
+            Gas Price: {formattedGasPrice} {gasPriceUnit}
           </p>
         </div>
       </div>
@@ -150,12 +151,11 @@ function TransactionCard({ transaction }: { transaction: PendingTransactionDispl
 }
 
 export default function PendingList({ initialData, currentPage }: PendingListProps) {
-  const { data, isLoading, isError, error, refetch } = useQuery({
+  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: ['pending-transactions'],
     queryFn: fetchPendingTransactions,
-    refetchInterval: 5000, // Refetch every 5 seconds
+    refetchInterval: 5000,
     retry: 2,
-    initialData,
     refetchOnMount: true
   });
 
@@ -168,24 +168,30 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
     console.log('Current data:', data);
   }, [data]);
 
-  if (isLoading) {
+  if (isLoading || isFetching) {
     return (
       <div className="container mx-auto px-4">
         <h1 className="text-2xl font-bold mb-6 text-[#ffa729]">Mempool</h1>
         <div className="space-y-4">
-          {[...Array(5)].map((_, i) => (
+          {[...Array(3)].map((_, i) => (
             <div 
               key={i}
               className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] p-6 animate-pulse"
             >
               <div className="flex flex-col md:flex-row items-center">
                 <div className="w-48 flex flex-col items-center">
-                  <div className="w-8 h-8 bg-gray-700 rounded-lg mb-2"></div>
-                  <div className="h-4 w-20 bg-gray-700 rounded"></div>
+                  <div className="w-20 h-6 bg-gray-700 rounded-lg mb-2"></div>
+                  <div className="h-4 w-24 bg-gray-700 rounded"></div>
                 </div>
-                <div className="flex-1 md:ml-8 space-y-2">
-                  <div className="h-6 w-32 bg-gray-700 rounded"></div>
-                  <div className="h-4 w-full bg-gray-700 rounded"></div>
+                <div className="flex-1 md:mx-8 space-y-2 border-l border-r border-[#3d3d3d] px-8">
+                  <div className="h-4 w-32 bg-gray-700 rounded"></div>
+                  <div className="h-6 w-full bg-gray-700 rounded"></div>
+                  <div className="h-4 w-32 bg-gray-700 rounded mt-4"></div>
+                  <div className="h-6 w-2/3 bg-gray-700 rounded"></div>
+                </div>
+                <div className="w-48 space-y-2">
+                  <div className="h-4 w-20 bg-gray-700 rounded ml-auto"></div>
+                  <div className="h-8 w-32 bg-gray-700 rounded ml-auto"></div>
                 </div>
               </div>
             </div>
@@ -210,15 +216,25 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
   return (
     <div className="container mx-auto px-4">
       <h1 className="text-2xl font-bold mb-6 text-[#ffa729]">Mempool</h1>
-      <p className="text-gray-400 mb-6">
-        Showing unconfirmed transactions waiting to be included in a block. Updates every 5 seconds.
-      </p>
-      {data.txs.length === 0 ? (
-        <div className="text-center py-8">
-          <p className="text-gray-300">No pending transactions in mempool</p>
+      {!data || data.txs.length === 0 ? (
+        <div className="bg-gradient-to-r from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] rounded-xl p-8 text-center">
+          <div className="inline-block p-4 bg-yellow-500/20 rounded-full mb-4">
+            <svg className="w-8 h-8 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold text-[#ffa729] mb-2">No Pending Transactions</h2>
+          <p className="text-gray-400 max-w-lg mx-auto">
+            Showing unconfirmed transactions waiting to be included in a block. Updates every 5 seconds.
+          </p>
         </div>
       ) : (
         <div className="mb-8">
+          <div className="bg-gradient-to-r from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] rounded-xl p-4 mb-6">
+            <p className="text-gray-300">
+              <span className="text-[#ffa729] font-semibold">{data.txs.length}</span> unconfirmed {data.txs.length === 1 ? 'transaction' : 'transactions'} waiting to be included in a block. Updates every 5 seconds.
+            </p>
+          </div>
           {data.txs.map(transaction => (
             <TransactionCard 
               key={transaction.hash} 

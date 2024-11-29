@@ -5,7 +5,7 @@ interface PageProps {
   params: { query: string };
 }
 
-export default async function PendingPage({ params }: PageProps) {
+export default function PendingPage({ params }: PageProps) {
   // Initialize with empty data since we'll fetch it client-side
   const initialData = {
     txs: [],
