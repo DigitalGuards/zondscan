@@ -85,7 +85,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
         <Providers>
           <div className="flex min-h-screen">
             <Sidebar />
-            <main className="flex-1 ml-64 min-h-screen relative">
+            <main className="flex-1 lg:ml-64 min-h-screen relative transition-all duration-300">
               <div className="relative">
                 {children}
               </div>

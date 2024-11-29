@@ -47,18 +47,18 @@ export default function SearchBar(): JSX.Element {
 
   return (
     <div className="relative w-full">
-      <div className="relative bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-2xl p-6 
+      <div className="relative bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-2xl p-3 sm:p-6 
                     shadow-xl border border-[#3d3d3d] hover:border-[#4d4d4d] transition-colors">
         <form
           onSubmit={(e: FormEvent<HTMLFormElement>) => {
             e.preventDefault();
             navigateHandler();
           }}
-          className="flex flex-col sm:flex-row gap-4">
+          className="flex flex-col sm:flex-row gap-3 sm:gap-4">
           <input
             type="text"
             placeholder="Search by Address / Txn Hash / Block.."
-            className="flex-1 py-4 px-5 text-gray-300 
+            className="flex-1 py-3 sm:py-4 px-4 sm:px-5 text-sm sm:text-base text-gray-300 
                      bg-[#1a1a1a] rounded-xl
                      border border-[#3d3d3d]
                      outline-none shadow-lg
@@ -70,7 +70,7 @@ export default function SearchBar(): JSX.Element {
           />
           <button
             type="submit"
-            className="px-8 py-4 bg-[#ffa729] text-white 
+            className="px-6 sm:px-8 py-3 sm:py-4 bg-[#ffa729] text-white text-sm sm:text-base
                      rounded-xl shadow-lg font-medium whitespace-nowrap
                      hover:bg-[#ff9709] hover:shadow-2xl hover:scale-105 
                      active:scale-95 transition-all duration-300 
@@ -80,8 +80,8 @@ export default function SearchBar(): JSX.Element {
           </button>
         </form>
         {error && (
-          <div className="mt-4">
-            <div className="p-4 mb-4 text-sm text-red-400 rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-red-400 shadow-lg" role="alert">
+          <div className="mt-3 sm:mt-4">
+            <div className="p-3 sm:p-4 mb-3 sm:mb-4 text-xs sm:text-sm text-red-400 rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-red-400 shadow-lg" role="alert">
               <span className="font-medium">{error}</span>
             </div>
           </div>
