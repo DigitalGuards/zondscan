@@ -50,8 +50,8 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
   // Format transaction value using the helper
   const [formattedValue, unit] = formatAmount(transaction.value);
 
-  // Format gas values
-  const [formattedGasUsed] = formatGas(transaction.gasUsed);
+  // Format gas values with fallbacks for undefined values
+  const [formattedGasUsed] = transaction.gasUsed ? formatGas(transaction.gasUsed) : ['0'];
   const [formattedGasPrice] = transaction.gasPrice ? formatGas(transaction.gasPrice) : ['0'];
 
   return (

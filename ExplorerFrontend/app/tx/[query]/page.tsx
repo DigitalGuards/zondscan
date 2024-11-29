@@ -167,7 +167,7 @@ export default async function TransactionPage({ params }: PageProps): Promise<JS
             <h2 className="text-red-500 font-semibold mb-2">Invalid Transaction Hash</h2>
             <p className="text-gray-300">
               The provided transaction hash is not in the correct format. 
-              Transaction hashes should start with '0x' followed by 64 hexadecimal characters.
+              Transaction hashes should start with &apos;0x&apos; followed by 64 hexadecimal characters.
             </p>
           </div>
         </div>
