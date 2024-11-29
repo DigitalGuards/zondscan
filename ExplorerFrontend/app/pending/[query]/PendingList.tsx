@@ -18,16 +18,13 @@ interface PendingTransactionDisplay {
 }
 
 const transformPendingData = (data: PendingTransactionsResponse): PendingTransactionDisplay[] => {
-  console.log('Raw response data:', data);
   const transformedTxs: PendingTransactionDisplay[] = [];
   
   try {
     if (data?.pending) {
       Object.entries(data.pending).forEach(([address, nonceTxs]) => {
-        console.log(`Processing address ${address}:`, nonceTxs);
         if (typeof nonceTxs === 'object') {
           Object.entries(nonceTxs).forEach(([nonce, tx]) => {
-            console.log(`Processing nonce ${nonce}:`, tx);
             if (tx && typeof tx === 'object' && 'hash' in tx) {
               try {
                 const transaction: PendingTransactionDisplay = {
@@ -38,10 +35,9 @@ const transformPendingData = (data: PendingTransactionsResponse): PendingTransac
                   gasPrice: tx.gasPrice,
                   timestamp: Math.floor(Date.now() / 1000)
                 };
-                console.log('Transformed transaction:', transaction);
                 transformedTxs.push(transaction);
               } catch (error) {
-                console.error('Error transforming transaction:', error, tx);
+                console.error('Error transforming transaction:', error);
               }
             }
           });
@@ -52,15 +48,11 @@ const transformPendingData = (data: PendingTransactionsResponse): PendingTransac
     console.error('Error in transformPendingData:', error);
   }
   
-  console.log('All transformed transactions:', transformedTxs);
   return transformedTxs;
 };
 
 const fetchPendingTransactions = async () => {
-  console.log('Fetching pending transactions...');
   const response = await axios.get(`${config.handlerUrl}/pending-transactions`);
-  console.log('Raw API response:', response.data);
-  
   const transformedTxs = transformPendingData(response.data);
   
   return {
@@ -160,13 +152,8 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
   });
 
   useEffect(() => {
-    console.log('Component mounted, forcing refetch...');
     refetch();
   }, [refetch]);
-
-  useEffect(() => {
-    console.log('Current data:', data);
-  }, [data]);
 
   if (isLoading || isFetching) {
     return (
