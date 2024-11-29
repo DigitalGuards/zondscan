@@ -69,8 +69,16 @@ check_port() {
 # Clone the repository
 clone_repo() {
     if [ -d ".git" ]; then
-        print_status "Repository already exists. Pulling latest changes..."
-        git pull || print_error "Failed to pull latest changes"
+        print_status "Repository already exists. Checking git status..."
+        git status
+        
+        read -p "Would you like to pull the latest changes? (y/n): " PULL_CHANGES
+        if [[ $PULL_CHANGES =~ ^[Yy]$ ]]; then
+            print_status "Pulling latest changes..."
+            git pull || print_error "Failed to pull latest changes"
+        else
+            print_status "Skipping pull, continuing with existing code..."
+        fi
     else
         print_status "Cloning QRL Explorer repository..."
         git clone https://github.com/DigitalGuards/zondexplorer.git || print_error "Failed to clone repository"
@@ -146,23 +154,16 @@ MONGOURI=mongodb://localhost:27017
 NODE_URL=http://REDACTED:8545
 EOL
 
-    # Also create .env in the rpc directory to ensure it's available
-    mkdir -p rpc
-    cat > rpc/.env << EOL
-MONGOURI=mongodb://localhost:27017
-NODE_URL=http://REDACTED:8545
-EOL
-
     # Build synchronizer
     print_status "Building synchronizer..."
-    go build -o synchroniser main.go || print_error "Failed to build synchronizer"
+    go build -o syncer main.go || print_error "Failed to build synchronizer"
 
     # Make the binary executable
-    chmod +x ./synchroniser
+    chmod +x ./syncer
 
     # Start synchronizer with PM2, explicitly setting environment variables
     print_status "Starting synchronizer with PM2..."
-     pm2 start ./synchroniser --name "synchroniser" --cwd "$BASE_DIR/QRLtoMongoDB-PoS" || print_error "Failed to start synchronizer"
+     pm2 start ./syncer --name "synchroniser" --cwd "$BASE_DIR/QRLtoMongoDB-PoS" || print_error "Failed to start synchronizer"
 }
 
 # Save PM2 processes
@@ -188,7 +189,7 @@ main() {
     check_zond_node
 
     # Check if required ports are available
-    check_port 3000
+    #check_port 3000
     check_port 8080
 
     # Clone and setup
