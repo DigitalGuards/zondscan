@@ -22,6 +22,56 @@ type Data struct {
 	blockNumbers []int
 }
 
+// batchSync handles syncing multiple blocks in parallel
+func batchSync(fromBlock uint64, toBlock uint64) uint64 {
+	// Sanity check to prevent backwards sync
+	if fromBlock >= toBlock {
+		logger.Error("Invalid block range for batch sync",
+			zap.Uint64("from_block", fromBlock),
+			zap.Uint64("to_block", toBlock))
+		return fromBlock
+	}
+
+	logger.Info("Starting batch sync",
+		zap.Uint64("from_block", fromBlock),
+		zap.Uint64("to_block", toBlock))
+
+	wg := sync.WaitGroup{}
+
+	// Create buffered channel for producers
+	producers := make(chan (<-chan Data), 32)
+
+	// Start the consumer
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		consumer(os.Stdout, producers)
+	}()
+
+	// Use larger batch size when far behind
+	batchSize := 32
+	if toBlock-fromBlock > 1000 {
+		batchSize = 64
+	}
+
+	// Start producers in batches
+	for i, size := int(fromBlock), batchSize; i < int(toBlock); i += size {
+		end := i + size
+		if end > int(toBlock) {
+			end = int(toBlock)
+		}
+		producers <- producer(i, end)
+		logger.Info("Processing block range",
+			zap.Int("from", i),
+			zap.Int("to", end))
+	}
+
+	close(producers)
+	wg.Wait()
+
+	return toBlock
+}
+
 func Sync() {
 	var bNum uint64 = db.GetLatestBlockNumberFromDB() + 1
 	logger.Info("Starting sync from block number", zap.Uint64("block", bNum))
@@ -35,8 +85,8 @@ func Sync() {
 	}
 	logger.Info("Latest block from network", zap.Uint64("block", max))
 
-	// Create a buffered channel of read only channels, with length 8.
-	producers := make(chan (<-chan Data), 8)
+	// Create a buffered channel of read only channels, with length 32.
+	producers := make(chan (<-chan Data), 32)
 	logger.Info("Initialized producer channels")
 
 	// Start the consumer.
@@ -47,18 +97,25 @@ func Sync() {
 	}()
 	logger.Info("Started consumer process")
 
-	// Start producers in correct order.
-	for i, size := int(bNum), 8; i < int(max); i += size {
-		// Send the producer's channel over to the consumer.
-		producers <- producer(i, i+size)
+	// Increased batch size for faster initial sync
+	batchSize := 32
+	if max-bNum > 1000 {
+		batchSize = 64
+	}
+
+	// Start producers in correct order with larger batch size
+	for i, size := int(bNum), batchSize; i < int(max); i += size {
+		end := i + size
+		if end > int(max) {
+			end = int(max)
+		}
+		producers <- producer(i, end)
 		logger.Info("Processing block range",
 			zap.Int("from", i),
-			zap.Int("to", i+size))
+			zap.Int("to", end))
 	}
-	// No more producers will be started, so close the channel.
-	close(producers)
 
-	// Wait for consumer!
+	close(producers)
 	wg.Wait()
 	logger.Info("Initial sync completed successfully!")
 
@@ -93,7 +150,7 @@ func consumer(w io.Writer, ch <-chan (<-chan Data)) {
 
 func producer(start int, end int) <-chan Data {
 	// Create a channel which we will send our data.
-	Datas := make(chan Data, 8)
+	Datas := make(chan Data, 32)
 
 	var blockData []interface{}
 	var blockNumbers []int
@@ -130,7 +187,6 @@ func producer(start int, end int) <-chan Data {
 		}
 	}(Datas)
 
-	// Return back to caller.
 	return Datas
 }
 
@@ -269,6 +325,7 @@ func processSubsequentBlocks(sum uint64, latestBlockNumber uint64) uint64 {
 
 	return sum
 }
+
 func processBlockAndUpdateValidators(sum uint64, ZondNew models.ZondDatabaseBlock, previousHash string) {
 	db.InsertBlockDocument(ZondNew)
 	db.ProcessTransactions(ZondNew)
@@ -345,6 +402,11 @@ func runTaskWithRetry(task func(), taskName string) {
 }
 
 func singleBlockInsertion() {
+	const (
+		batchThreshold = 50 // Number of blocks behind before switching to batch mode
+		checkInterval  = 30 * time.Second
+	)
+
 	sum := db.GetLatestBlockNumberFromDB() + 1
 	logger.Info("Starting continuous block monitoring", zap.Uint64("from_block", sum))
 
@@ -373,16 +435,28 @@ func singleBlockInsertion() {
 
 	// Block processing goroutine
 	runPeriodicTask(func() {
-		if sum <= latestBlockNumber {
-			sum = processSubsequentBlocks(sum, latestBlockNumber)
-		} else {
-			var err error
-			latestBlockNumber, err = rpc.GetLatestBlock()
-			if err != nil {
-				logger.Error("Failed to get latest block", zap.Error(err))
+		// Get latest block number
+		newLatestBlock, err := rpc.GetLatestBlock()
+		if err != nil {
+			logger.Error("Failed to get latest block", zap.Error(err))
+			return
+		}
+		latestBlockNumber = newLatestBlock
+
+		// Check how far behind we are
+		if latestBlockNumber > sum {
+			blocksBehind := latestBlockNumber - sum
+			if blocksBehind > batchThreshold {
+				// Use batch sync if we're significantly behind
+				logger.Info("Switching to batch sync mode",
+					zap.Uint64("blocks_behind", blocksBehind))
+				sum = batchSync(sum, latestBlockNumber)
+			} else {
+				// Use single block processing when close to caught up
+				sum = processSubsequentBlocks(sum, latestBlockNumber)
 			}
 		}
-	}, 60*time.Second, "block_processing")
+	}, checkInterval, "block_processing")
 
 	// Data update goroutine with individual error handling
 	runPeriodicTask(func() {

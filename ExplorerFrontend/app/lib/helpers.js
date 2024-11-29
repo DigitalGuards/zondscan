@@ -40,56 +40,101 @@ export function toFixed(x) {
   return num.toString();
 }
 
+export function formatGas(amount) {
+  // Handle zero amount
+  if (amount === 0 || amount === '0' || amount === '0x0') {
+    return ['0', ''];
+  }
+
+  try {
+    // Handle hex strings (e.g., "0x123")
+    if (typeof amount === 'string' && amount.startsWith('0x')) {
+      const value = parseInt(amount, 16);
+      return [value.toString(), ''];
+    }
+    // Handle number values
+    else if (typeof amount === 'number') {
+      return [amount.toString(), ''];
+    }
+    // Handle other formats
+    else {
+      const value = BigInt(amount);
+      return [value.toString(), ''];
+    }
+  } catch (error) {
+    console.error('Error converting gas amount:', error, amount);
+    return ['0', ''];
+  }
+}
+
 export function formatAmount(amount) {
   // Handle zero amount
   if (amount === 0 || amount === '0' || amount === '0x0') {
-    return ['0', 'QRL'];
+    return ['0.00', 'QRL'];
   }
 
-  let value;
+  let totalNum;
   try {
-    if (typeof amount === 'string') {
-      if (amount.startsWith('0x')) {
-        // Handle hex strings
-        value = BigInt(amount);
-      } else {
-        // Handle decimal strings
-        value = BigInt(amount);
-      }
-    } else if (typeof amount === 'number') {
-      // Handle scientific notation and regular numbers
-      if (amount.toString().includes('e')) {
-        // Convert scientific notation to full decimal string
-        const str = amount.toFixed(20);
-        // Remove trailing zeros after decimal point
-        const cleanStr = str.replace(/\.?0+$/, '');
-        // Convert to shor (multiply by 1e18)
-        const shorAmount = parseFloat(cleanStr) * 1e18;
-        value = BigInt(Math.round(shorAmount));
-      } else {
-        // Regular number - convert to shor
-        const shorAmount = amount * 1e18;
-        value = BigInt(Math.round(shorAmount));
-      }
-    } else {
-      throw new Error('Unsupported amount type');
+    // Handle hex strings (e.g., "0x123") from node
+    if (typeof amount === 'string' && amount.startsWith('0x')) {
+      const value = BigInt(amount);
+      const divisor = BigInt('1000000000000000000'); // 10^18
+      const wholePart = value / divisor;
+      const fractionalPart = value % divisor;
+      totalNum = Number(wholePart) + Number(fractionalPart) / Number(divisor);
+    }
+    // Handle float values (already scaled) from database
+    else if (typeof amount === 'number' && amount < 1000000000000000000) {
+      totalNum = amount;
+    }
+    // Handle raw number values (need scaling) from database
+    else if (typeof amount === 'number') {
+      const value = BigInt(Math.floor(amount));
+      const divisor = BigInt('1000000000000000000'); // 10^18
+      const wholePart = value / divisor;
+      const fractionalPart = value % divisor;
+      totalNum = Number(wholePart) + Number(fractionalPart) / Number(divisor);
+    }
+    // Handle other formats
+    else {
+      const value = BigInt(amount);
+      const divisor = BigInt('1000000000000000000'); // 10^18
+      const wholePart = value / divisor;
+      const fractionalPart = value % divisor;
+      totalNum = Number(wholePart) + Number(fractionalPart) / Number(divisor);
     }
   } catch (error) {
-    return ['0', 'QRL'];
+    console.error('Error converting amount:', error, amount);
+    return ['0.00', 'QRL'];
   }
 
-  // Now value is in shor (smallest unit, 18 decimal places)
-  // If it's less than 1 QRL (1e18 shor), show in shor
-  if (value < BigInt(1e18)) {
-    if (value === BigInt(0)) {
-      return ['0', 'shor'];
+  // Format with appropriate decimal places, avoiding scientific notation
+  if (totalNum === 0) {
+    return ['0.00', 'QRL'];
+  } else if (totalNum < 0.000001) {
+    // For very small numbers, show all significant digits without trailing zeros
+    const str = totalNum.toFixed(21).replace(/\.?0+$/, '');
+    // Remove any scientific notation
+    const parts = str.split('e');
+    if (parts.length === 2) {
+      const mantissa = parts[0];
+      const exponent = parseInt(parts[1]);
+      if (exponent < 0) {
+        const abs = Math.abs(exponent);
+        return ['0.' + '0'.repeat(abs-1) + mantissa.replace('.', ''), 'QRL'];
+      }
     }
-    return [value.toString(), 'shor'];
+    return [str, 'QRL'];
+  } else if (totalNum < 1) {
+    // For numbers less than 1, show up to 6 decimal places
+    return [totalNum.toFixed(6).replace(/\.?0+$/, ''), 'QRL'];
+  } else if (totalNum < 1000) {
+    // For numbers between 1 and 999, show up to 4 decimal places
+    return [totalNum.toFixed(4).replace(/\.?0+$/, ''), 'QRL'];
+  } else {
+    // For large numbers, show 2 decimal places
+    return [totalNum.toFixed(2).replace(/\.?0+$/, ''), 'QRL'];
   }
-
-  // Convert to QRL (divide by 1e18) and show with up to 8 decimal places
-  const qrlValue = Number(value) / 1e18;
-  return [qrlValue.toFixed(8).replace(/\.?0+$/, ''), 'QRL'];
 }
 
 export function decodeBase64ToHexadecimal(rawData) {

@@ -293,3 +293,14 @@ npm run lint
 ## License
 
 This project is licensed under the terms of the LICENSE file included in the repository.
+npm test
+```
+
+2. Run linting:
+```bash
+npm run lint
+```
+
+## License
+
+This project is licensed under the terms of the LICENSE file included in the repository.

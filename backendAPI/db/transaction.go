@@ -6,8 +6,10 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"strconv"
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -397,6 +399,151 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 
 	var result models.Transfer
 
+	// First try to find the transaction in the blocks collection
+	var block models.ZondDatabaseBlock
+	blockFilter := bson.M{
+		"result.transactions": bson.M{
+			"$elemMatch": bson.M{
+				"hash": query,
+			},
+		},
+	}
+
+	err := configs.BlocksCollection.FindOne(ctx, blockFilter).Decode(&block)
+	if err == nil {
+		// Found in blocks collection, convert to Transfer model
+		for _, tx := range block.Result.Transactions {
+			if tx.Hash == query {
+				// Convert from address
+				from, err := hex.DecodeString(tx.From[2:])
+				if err != nil {
+					fmt.Println("Error decoding from address:", err)
+				}
+
+				// Convert to address if it exists
+				var to []byte
+				if tx.To != "" {
+					to, err = hex.DecodeString(tx.To[2:])
+					if err != nil {
+						fmt.Println("Error decoding to address:", err)
+					}
+				}
+
+				// Convert transaction hash
+				txHash, err := hex.DecodeString(tx.Hash[2:])
+				if err != nil {
+					fmt.Println("Error decoding transaction hash:", err)
+				}
+
+				// Store original hex value
+				valueStr := tx.Value
+				if valueStr == "" || valueStr == "0x0" {
+					valueStr = "0x0"
+				}
+
+				// Store original gas values
+				gasUsedStr := tx.Gas
+				if gasUsedStr == "" || gasUsedStr == "0x0" {
+					gasUsedStr = "0x0"
+				}
+
+				gasPriceStr := tx.GasPrice
+				if gasPriceStr == "" || gasPriceStr == "0x0" {
+					gasPriceStr = "0x0"
+				}
+
+				// Convert value from hex string to uint64 (for backward compatibility)
+				value := uint64(0)
+				if valueStr != "0x0" {
+					valueHex := valueStr
+					if valueHex[:2] == "0x" {
+						valueHex = valueHex[2:]
+					}
+					value, err = strconv.ParseUint(valueHex, 16, 64)
+					if err != nil {
+						fmt.Println("Error parsing value:", err)
+					}
+				}
+
+				// Convert gas values from hex string to uint64
+				gasUsed := uint64(0)
+				if gasUsedStr != "0x0" {
+					gasHex := gasUsedStr
+					if gasHex[:2] == "0x" {
+						gasHex = gasHex[2:]
+					}
+					gasUsed, err = strconv.ParseUint(gasHex, 16, 64)
+					if err != nil {
+						fmt.Println("Error parsing gas used:", err)
+					}
+				}
+
+				gasPrice := uint64(0)
+				if gasPriceStr != "0x0" {
+					gasPriceHex := gasPriceStr
+					if gasPriceHex[:2] == "0x" {
+						gasPriceHex = gasPriceHex[2:]
+					}
+					gasPrice, err = strconv.ParseUint(gasPriceHex, 16, 64)
+					if err != nil {
+						fmt.Println("Error parsing gas price:", err)
+					}
+				}
+
+				// Convert nonce from hex string to uint64
+				nonce := uint64(0)
+				if tx.Nonce != "" {
+					nonceStr := tx.Nonce
+					if nonceStr[:2] == "0x" {
+						nonceStr = nonceStr[2:]
+					}
+					nonce, err = strconv.ParseUint(nonceStr, 16, 64)
+					if err != nil {
+						fmt.Println("Error parsing nonce:", err)
+					}
+				}
+
+				// Convert signature and public key if available
+				var signature, pk []byte
+				if tx.Signature != "" {
+					signature, err = hex.DecodeString(tx.Signature[2:])
+					if err != nil {
+						fmt.Println("Error decoding signature:", err)
+					}
+				}
+				if tx.PublicKey != "" {
+					pk, err = hex.DecodeString(tx.PublicKey[2:])
+					if err != nil {
+						fmt.Println("Error decoding public key:", err)
+					}
+				}
+
+				result = models.Transfer{
+					ID:             primitive.NewObjectID(),
+					BlockNumber:    block.Result.Number,
+					BlockTimestamp: block.Result.Timestamp,
+					From:           from,
+					To:             to,
+					TxHash:         txHash,
+					Value:          value,
+					ValueStr:       valueStr,
+					GasUsed:        gasUsed,
+					GasPrice:       gasPrice,
+					GasUsedStr:     gasUsedStr,
+					GasPriceStr:    gasPriceStr,
+					Nonce:          nonce,
+					Signature:      signature,
+					Pk:             pk,
+					Size:           block.Result.Size,
+					FromStr:        tx.From,
+					ToStr:          tx.To,
+				}
+				return result, nil
+			}
+		}
+	}
+
+	// If not found in blocks, try the transfers collection (fallback)
 	decoded, err := hex.DecodeString(query[2:])
 	if err != nil {
 		fmt.Println(err)
@@ -406,6 +553,14 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 	err = configs.TransferCollections.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
 		fmt.Println(err)
+	}
+
+	// Add hex string representations for the fallback case too
+	if result.From != nil {
+		result.FromStr = "0x" + hex.EncodeToString(result.From)
+	}
+	if result.To != nil {
+		result.ToStr = "0x" + hex.EncodeToString(result.To)
 	}
 
 	return result, err

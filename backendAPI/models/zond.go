@@ -1,9 +1,16 @@
 package models
 
 import (
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"math/big"
-	)
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
+)
+
+type ZondDatabaseBlock struct {
+	Jsonrpc string `json:"jsonrpc"`
+	ID      int    `json:"id"`
+	Result  Result `json:"result"`
+}
 
 type Withdrawal struct {
 	Index          string   `json:"index"`
@@ -46,6 +53,7 @@ type ProtocolTransactions struct {
 	Signature           string `json:"signature"`
 	Pk                  string `json:"pk"`
 }
+
 type Transactions struct {
 	BlockHash        string `json:"blockHash"`
 	BlockNumber      string `json:"blockNumber"`
@@ -66,55 +74,55 @@ type Transactions struct {
 }
 
 type ResultOld struct {
-    BaseFeePerGas        string                `json:"baseFeePerGas"`
-    GasLimit             string                `json:"gasLimit"`
-    GasUsed              string                `json:"gasUsed"`
-    Hash                 string                `json:"hash"`
-    Number               string                `json:"number"`
-    ParentHash           string                `json:"parentHash"`
-    ReceiptsRoot         string                `json:"receiptsRoot"`
-    StateRoot            string                `json:"stateRoot"`
-    Timestamp            string                `json:"timestamp"`
-    Transactions         []Transaction         `json:"transactions"`
-    TransactionsRoot     string                `json:"transactionsRoot"`
-    Difficulty           string                `json:"difficulty"`
-    ExtraData            string                `json:"extraData"`
-    LogsBloom            string                `json:"logsBloom"`
-    Miner                string                `json:"miner"`
-    MixHash              string                `json:"mixHash"`
-    Nonce                string                `json:"nonce"`
-    Sha3Uncles           string                `json:"sha3Uncles"`
-    Size                 string                `json:"size"`
-    TotalDifficulty      string                `json:"totalDifficulty"`
-    Uncles               []interface{}         `json:"uncles"`
-    Withdrawals          []Withdrawal          `json:"withdrawals"`
-    WithdrawalsRoot      string                `json:"withdrawalsRoot"`
+	BaseFeePerGas    string        `json:"baseFeePerGas"`
+	GasLimit         string        `json:"gasLimit"`
+	GasUsed          string        `json:"gasUsed"`
+	Hash             string        `json:"hash"`
+	Number           string        `json:"number"`
+	ParentHash       string        `json:"parentHash"`
+	ReceiptsRoot     string        `json:"receiptsRoot"`
+	StateRoot        string        `json:"stateRoot"`
+	Timestamp        string        `json:"timestamp"`
+	Transactions     []Transaction `json:"transactions"`
+	TransactionsRoot string        `json:"transactionsRoot"`
+	Difficulty       string        `json:"difficulty"`
+	ExtraData        string        `json:"extraData"`
+	LogsBloom        string        `json:"logsBloom"`
+	Miner            string        `json:"miner"`
+	MixHash          string        `json:"mixHash"`
+	Nonce            string        `json:"nonce"`
+	Sha3Uncles       string        `json:"sha3Uncles"`
+	Size             string        `json:"size"`
+	TotalDifficulty  string        `json:"totalDifficulty"`
+	Uncles           []interface{} `json:"uncles"`
+	Withdrawals      []Withdrawal  `json:"withdrawals"`
+	WithdrawalsRoot  string        `json:"withdrawalsRoot"`
 }
 
 type Result struct {
-    BaseFeePerGas        uint64                `json:"baseFeePerGas"`
-    GasLimit             uint64                `json:"gasLimit"`
-    GasUsed              uint64                `json:"gasUsed"`
-    Hash                 string                `json:"hash"`
-    Number               uint64                `json:"number"`
-    ParentHash           string                `json:"parentHash"`
-    ReceiptsRoot         string                `json:"receiptsRoot"`
-    StateRoot            string                `json:"stateRoot"`
-    Timestamp            uint64                `json:"timestamp"`
-    Transactions         []Transaction         `json:"transactions"`
-    TransactionsRoot     string                `json:"transactionsRoot"`
-    Difficulty           uint64                `json:"difficulty"`
-    ExtraData            string                `json:"extraData"`
-    LogsBloom            string                `json:"logsBloom"`
-    Miner                string                `json:"miner"`
-    MixHash              string                `json:"mixHash"`
-    Nonce                string                `json:"nonce"`
-    Sha3Uncles           string                `json:"sha3Uncles"`
-    Size                 uint64                `json:"size"`
-    TotalDifficulty      uint64                `json:"totalDifficulty"`
-    Uncles               []interface{}         `json:"uncles"`
-    Withdrawals          []Withdrawal          `json:"withdrawals"`
-    WithdrawalsRoot      string                `json:"withdrawalsRoot"`
+	BaseFeePerGas    uint64        `json:"baseFeePerGas"`
+	GasLimit         uint64        `json:"gasLimit"`
+	GasUsed          uint64        `json:"gasUsed"`
+	Hash             string        `json:"hash"`
+	Number           uint64        `json:"number"`
+	ParentHash       string        `json:"parentHash"`
+	ReceiptsRoot     string        `json:"receiptsRoot"`
+	StateRoot        string        `json:"stateRoot"`
+	Timestamp        uint64        `json:"timestamp"`
+	Transactions     []Transaction `json:"transactions"`
+	TransactionsRoot string        `json:"transactionsRoot"`
+	Difficulty       uint64        `json:"difficulty"`
+	ExtraData        string        `json:"extraData"`
+	LogsBloom        string        `json:"logsBloom"`
+	Miner            string        `json:"miner"`
+	MixHash          string        `json:"mixHash"`
+	Nonce            string        `json:"nonce"`
+	Sha3Uncles       string        `json:"sha3Uncles"`
+	Size             uint64        `json:"size"`
+	TotalDifficulty  uint64        `json:"totalDifficulty"`
+	Uncles           []interface{} `json:"uncles"`
+	Withdrawals      []Withdrawal  `json:"withdrawals"`
+	WithdrawalsRoot  string        `json:"withdrawalsRoot"`
 }
 
 type CirculatingSupply struct {

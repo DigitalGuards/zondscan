@@ -20,3 +20,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 nginx.conf
+backendAPI/backendAPI
+QRLtoMongoDB-PoS/syncer
+QRLtoMongoDB-PoS/synchroniser/main
+check-tx.txt
+check-mongodb.txt
+notes.md
