@@ -7,6 +7,14 @@ interface PageProps {
   params: Promise<{ query: string }>;
 }
 
+function isEmptyTransaction(txData: any): boolean {
+  return !txData.hash && 
+         !txData.from && 
+         !txData.to && 
+         (!txData.value || txData.value === 0) &&
+         (!txData.blockNumber || txData.blockNumber === 0);
+}
+
 async function getTransaction(txHash: string): Promise<TransactionDetails> {
   // Validate transaction hash format
   const hashRegex = /^0x[0-9a-fA-F]{64}$/;
@@ -31,8 +39,10 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
   const data = await response.json();
   console.log('Raw API response:', JSON.stringify(data, null, 2));
 
-  if (!data.response) {
-    notFound();
+  // Check if we have a valid transaction response
+  if (!data.response || isEmptyTransaction(data.response)) {
+    console.log('Invalid or missing transaction data');
+    throw new Error('Transaction not found');
   }
 
   const txData = data.response;
@@ -140,20 +150,90 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
 }
 
 export default async function TransactionPage({ params }: PageProps): Promise<JSX.Element> {
+  let resolvedParams;
+  let txHash = '';
+  
   try {
-    const resolvedParams = await params;
-    console.log('Transaction hash from params:', resolvedParams.query);
-    const transaction = await getTransaction(resolvedParams.query);
+    resolvedParams = await params;
+    txHash = resolvedParams.query;
+    console.log('Transaction hash from params:', txHash);
+
+    // Validate transaction hash format
+    const hashRegex = /^0x[0-9a-fA-F]{64}$/;
+    if (!hashRegex.test(txHash)) {
+      return (
+        <div className="container mx-auto px-4">
+          <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg mt-6">
+            <h2 className="text-red-500 font-semibold mb-2">Invalid Transaction Hash</h2>
+            <p className="text-gray-300">
+              The provided transaction hash is not in the correct format. 
+              Transaction hashes should start with '0x' followed by 64 hexadecimal characters.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // Check if transaction is in mempool
+    const pendingResponse = await fetch(`${process.env.NEXT_PUBLIC_HANDLER_URL}/pending-transactions`);
+    if (pendingResponse.ok) {
+      const pendingData = await pendingResponse.json();
+      if (pendingData?.pending) {
+        for (const [address, nonceTxs] of Object.entries(pendingData.pending)) {
+          if (typeof nonceTxs === 'object') {
+            for (const [nonce, tx] of Object.entries(nonceTxs as any)) {
+              if (tx && typeof tx === 'object' && 'hash' in tx && tx.hash === txHash) {
+                // If found in mempool, show pending message with link
+                return (
+                  <div className="container mx-auto px-4">
+                    <div className="bg-yellow-900/20 border border-yellow-500/50 rounded-xl p-6 shadow-lg mt-6">
+                      <h2 className="text-yellow-500 font-semibold mb-2">Transaction Pending</h2>
+                      <p className="text-gray-300 mb-4">
+                        This transaction is still pending and has not been mined yet.
+                      </p>
+                      <a 
+                        href={`/pending/tx/${txHash}`}
+                        className="inline-block bg-yellow-500/20 text-yellow-500 px-4 py-2 rounded-lg hover:bg-yellow-500/30 transition-colors"
+                      >
+                        View Pending Transaction →
+                      </a>
+                    </div>
+                  </div>
+                );
+              }
+            }
+          }
+        }
+      }
+    }
+
+    const transaction = await getTransaction(txHash);
     return <TransactionView transaction={transaction} />;
   } catch (error) {
     console.error('Error in TransactionPage:', error);
     return (
-      <div className="py-8">
-        <div className="bg-red-900/50 border border-red-500 text-red-200 px-6 py-4 rounded-xl" role="alert">
-          <strong className="font-bold">Error: </strong>
-          <span className="block sm:inline">
-            {error instanceof Error ? error.message : 'Failed to load transaction details'}
-          </span>
+      <div className="container mx-auto px-4">
+        <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg mt-6">
+          <h2 className="text-red-500 font-semibold mb-2">Transaction Not Found</h2>
+          <p className="text-gray-300">
+            The transaction could not be found. This could mean:
+          </p>
+          <ul className="list-disc ml-6 mt-2 text-gray-300">
+            <li>The transaction hash is incorrect</li>
+            <li>The transaction has not been mined yet</li>
+            <li>The transaction was dropped from the network</li>
+          </ul>
+          {txHash && (
+            <p className="text-gray-300 mt-4">
+              If you believe this is a pending transaction, you can check the{' '}
+              <a 
+                href={`/pending/tx/${txHash}`}
+                className="text-yellow-500 hover:text-yellow-400 underline"
+              >
+                pending transactions page
+              </a>.
+            </p>
+          )}
         </div>
       </div>
     );
