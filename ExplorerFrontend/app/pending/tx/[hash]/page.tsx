@@ -9,42 +9,28 @@ interface PageProps {
   params: Promise<{ hash: string }>;
 }
 
-async function sleep(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 function validateTransactionHash(hash: string): boolean {
-  // Just check if it starts with 0x and contains valid hex characters
   const hashRegex = /^0x[0-9a-fA-F]+$/;
   return hashRegex.test(hash);
 }
 
-async function checkIfMined(hash: string, retries = 3): Promise<boolean> {
+async function checkIfMined(hash: string): Promise<boolean> {
   console.log(`Checking if transaction ${hash} is mined...`);
-  for (let i = 0; i < retries; i++) {
-    try {
-      const txResponse = await axios.get(`${config.handlerUrl}/tx/${hash}`);
-      console.log(`Mined check attempt ${i + 1}, response:`, txResponse.data);
-      
-      // Check if we have a valid transaction response
-      if (txResponse.data?.response && 
-          txResponse.data.response.hash && 
-          txResponse.data.response.blockNumber) {
-        console.log('Transaction found in blockchain');
-        return true;
-      }
-      
-      console.log('Transaction not found in blockchain');
-      return false;
-    } catch (error) {
-      console.log(`Mined check attempt ${i + 1} failed:`, error);
-      if (i === retries - 1) return false;
-      // Wait longer between each retry
-      await sleep(1000 * (i + 1));
+  try {
+    const txResponse = await axios.get(`${config.handlerUrl}/tx/${hash}`);
+    console.log('Mined check response:', txResponse.data);
+    
+    if (txResponse.data?.response && 
+        txResponse.data.response.blockNumber) {
+      console.log('Transaction found in blockchain');
+      return true;
     }
+    
+    return false;
+  } catch (error) {
+    console.log('Transaction not found in blockchain:', error);
+    return false;
   }
-  console.log('Transaction not found in blockchain after all retries');
-  return false;
 }
 
 async function findPendingTransaction(hash: string): Promise<PendingTransaction | null> {
@@ -56,10 +42,8 @@ async function findPendingTransaction(hash: string): Promise<PendingTransaction 
 
     if (pendingData?.pending) {
       for (const [address, nonceTxs] of Object.entries(pendingData.pending)) {
-        console.log(`Checking address ${address}...`);
         if (typeof nonceTxs === 'object') {
           for (const [nonce, tx] of Object.entries(nonceTxs as any)) {
-            console.log(`Checking nonce ${nonce}:`, tx);
             if (tx && typeof tx === 'object' && 'hash' in tx && tx.hash === hash) {
               console.log('Found matching transaction in mempool');
               return tx as PendingTransaction;
@@ -76,25 +60,50 @@ async function findPendingTransaction(hash: string): Promise<PendingTransaction 
   }
 }
 
-async function getTransactionStatus(hash: string): Promise<{ isPending: boolean; pendingTx?: PendingTransaction; isMined: boolean }> {
+async function getTransactionStatus(hash: string): Promise<{ 
+  isPending: boolean; 
+  pendingTx: PendingTransaction | null; 
+  isMined: boolean;
+  leftMempool: boolean;
+}> {
   console.log(`Getting status for transaction ${hash}...`);
   
-  // Validate transaction hash format
   if (!validateTransactionHash(hash)) {
     console.error('Invalid transaction hash format');
     throw new Error('Invalid transaction hash format');
   }
 
   try {
-    // First check if transaction is in mempool
-    const pendingTx = await findPendingTransaction(hash);
-    if (pendingTx) {
-      return { isPending: true, pendingTx, isMined: false };
+    const [isMined, pendingTx] = await Promise.all([
+      checkIfMined(hash),
+      findPendingTransaction(hash)
+    ]);
+
+    if (isMined) {
+      return { 
+        isPending: false, 
+        pendingTx: null,
+        isMined: true,
+        leftMempool: false
+      };
     }
 
-    // If not in mempool, check if it's been mined with retries
-    const isMined = await checkIfMined(hash);
-    return { isPending: false, isMined };
+    // If not mined and not in mempool, it has likely left mempool and is being processed
+    if (!pendingTx) {
+      return {
+        isPending: true,
+        pendingTx: null,
+        isMined: false,
+        leftMempool: true
+      };
+    }
+
+    return { 
+      isPending: true, 
+      pendingTx,
+      isMined: false,
+      leftMempool: false
+    };
 
   } catch (error) {
     console.error('Error in getTransactionStatus:', error);
@@ -106,12 +115,10 @@ export default async function PendingTransactionPage({ params }: PageProps) {
   console.log('Rendering PendingTransactionPage');
   
   try {
-    // Await params before using them
     const resolvedParams = await params;
     const hash = resolvedParams.hash;
     console.log('Transaction hash:', hash);
 
-    // Validate transaction hash format first
     if (!validateTransactionHash(hash)) {
       return (
         <div className="container mx-auto px-4">
@@ -126,9 +133,8 @@ export default async function PendingTransactionPage({ params }: PageProps) {
       );
     }
 
-    const { isPending, pendingTx, isMined } = await getTransactionStatus(hash);
+    const { isPending, pendingTx, isMined, leftMempool } = await getTransactionStatus(hash);
 
-    // If transaction is confirmed to be mined, show a message with a link instead of redirecting
     if (isMined) {
       console.log('Transaction is mined');
       return (
@@ -149,37 +155,33 @@ export default async function PendingTransactionPage({ params }: PageProps) {
       );
     }
 
-    // If transaction is not pending and not mined, show "Not Found" message with auto-refresh
-    if (!isPending) {
-      console.log('Transaction not found in mempool or blockchain');
+    if (leftMempool) {
       return (
         <div className="container mx-auto px-4">
           <div className="bg-yellow-900/20 border border-yellow-500/50 rounded-xl p-6 shadow-lg mt-6">
-            <h2 className="text-yellow-500 font-semibold mb-2">Transaction Status Unknown</h2>
-            <p className="text-gray-300 mb-4">
-              This transaction was not found in the mempool or blockchain. This could mean:
+            <h2 className="text-yellow-500 font-semibold mb-2">Transaction Processing</h2>
+            <p className="text-gray-300 mb-2">
+              This transaction has left the mempool and is likely being processed into a block.
+              Please wait while the explorer fetches the block data.
             </p>
-            <ul className="list-disc ml-6 mb-4 text-gray-300">
-              <li>The transaction is still propagating through the network</li>
-              <li>The transaction was dropped from the mempool</li>
-              <li>The transaction hash is incorrect</li>
-            </ul>
             <p className="text-gray-300">
+              Transaction Hash: <span className="font-mono">{hash}</span>
+            </p>
+            <p className="text-gray-300 mt-4 text-sm">
               This page will automatically refresh every 10 seconds to check for updates.
             </p>
           </div>
-          {/* Add auto-refresh meta tag */}
           <meta httpEquiv="refresh" content="10" />
         </div>
       );
     }
 
-    if (!pendingTx) {
-      throw new Error('Transaction not found');
-    }
-
-    // Use the client component to render pending transaction details
-    return <PendingTransactionView pendingTx={pendingTx} />;
+    return (
+      <>
+        <PendingTransactionView pendingTx={pendingTx!} />
+        <meta httpEquiv="refresh" content="10" />
+      </>
+    );
 
   } catch (error) {
     console.error('Error in page component:', error);
@@ -194,7 +196,6 @@ export default async function PendingTransactionPage({ params }: PageProps) {
             This page will automatically refresh every 10 seconds to check for updates.
           </p>
         </div>
-        {/* Add auto-refresh meta tag */}
         <meta httpEquiv="refresh" content="10" />
       </div>
     );
