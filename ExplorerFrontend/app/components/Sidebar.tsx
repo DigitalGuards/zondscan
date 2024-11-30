@@ -35,6 +35,38 @@ function classNames(...classes: string[]) {
 export default function Sidebar() {
   const router = useRouter();
   const [isOpen, setIsOpen] = React.useState(false);
+  const [isVisible, setIsVisible] = React.useState(true);
+  const [lastScrollY, setLastScrollY] = React.useState(0);
+
+  // Lock body scroll when menu is open
+  React.useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
+  // Handle scroll behavior
+  React.useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      
+      if (currentScrollY > lastScrollY) {
+        setIsVisible(false); // Scrolling down
+      } else {
+        setIsVisible(true);  // Scrolling up
+      }
+      
+      setLastScrollY(currentScrollY);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [lastScrollY]);
 
   const navigateTo = (href: string) => {
     router.push(href);
@@ -44,17 +76,34 @@ export default function Sidebar() {
   return (
     <>
       {/* Mobile menu button */}
-      <div className="lg:hidden fixed top-4 left-4 z-50">
-        <button
-          onClick={() => setIsOpen(!isOpen)}
-          className="p-2 rounded-lg bg-[#2d2d2d] text-gray-300 hover:bg-[#3d3d3d] transition-colors"
-        >
-          {isOpen ? (
-            <XMarkIcon className="h-6 w-6" />
-          ) : (
-            <Bars3Icon className="h-6 w-6" />
-          )}
-        </button>
+      <div className={`lg:hidden fixed top-0 left-0 right-0 z-50 bg-[#1a1a1a] transition-transform duration-300 ${
+        isVisible ? 'translate-y-0' : '-translate-y-full'
+      }`}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[#2d2d2d]">
+          <button
+            onClick={() => setIsOpen(!isOpen)}
+            className="p-2 rounded-lg bg-[#2d2d2d] text-gray-300 hover:bg-[#3d3d3d] transition-colors"
+            aria-label="Toggle menu"
+          >
+            {isOpen ? (
+              <XMarkIcon className="h-6 w-6" />
+            ) : (
+              <Bars3Icon className="h-6 w-6" />
+            )}
+          </button>
+          <span className="text-lg font-semibold text-gray-300">ZondScan Explorer</span>
+          <div className="relative w-8 h-8">
+            <Image 
+              src={QRLFavicon} 
+              alt="QRL"
+              fill
+              sizes="32px"
+              style={{ objectFit: 'contain' }}
+              loading="eager"
+              className="hover:scale-110 transition-transform duration-300"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Mobile backdrop */}
@@ -65,12 +114,13 @@ export default function Sidebar() {
         />
       )}
 
-      <aside className={`fixed left-0 top-0 h-full overflow-y-auto z-50
+      {/* Sidebar */}
+      <aside className={`fixed left-0 h-full overflow-y-auto z-50
                       bg-gradient-to-b from-[#1a1a1a] via-[#1a1a1a] to-[#1f1f1f]
                       border-r border-[#2d2d2d] shadow-[4px_0_24px_rgba(0,0,0,0.2)]
                       transition-all duration-300 ease-in-out
                       ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-                      w-64`}>
+                      w-64 lg:top-0 top-[53px]`}>
         <div className="p-6">
           <Link href="/" className="flex items-center gap-3 mb-10 px-2 group" onClick={() => setIsOpen(false)}>
             <div className="w-8 h-8 relative">
@@ -85,7 +135,7 @@ export default function Sidebar() {
               />
             </div>
             <span className="text-lg font-semibold text-gray-300 group-hover:text-[#ffa729] transition-colors">
-              Zond Explorer
+              ZondScan Explorer
             </span>
           </Link>
 

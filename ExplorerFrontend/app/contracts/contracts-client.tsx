@@ -88,42 +88,82 @@ function Pagination({
 }
 
 function CustomTable({ data }: { data: ContractData[] }) {
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const [windowWidth, setWindowWidth] = React.useState(typeof window !== 'undefined' ? window.innerWidth : 0);
+
+  React.useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  if (windowWidth < 768) {
+    return (
+      <div className="space-y-4">
+        {data.map((row, index) => (
+          <div key={index} className="p-4 rounded-lg border border-[#3d3d3d] bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]">
+            <div className="space-y-2">
+              <div>
+                <span className="text-[#ffa729] text-sm">From:</span>
+                <Link href={`/address/${DecoderAddress({row})}`} className="ml-2 text-white hover:text-[#ffa729] text-sm break-all">
+                  {truncateMiddle(DecoderAddress({row}))}
+                </Link>
+              </div>
+              <div>
+                <span className="text-[#ffa729] text-sm">Tx Hash:</span>
+                <Link href={`/tx/${DecoderTxHash({row})}`} className="ml-2 text-white hover:text-[#ffa729] text-sm break-all">
+                  {truncateMiddle(DecoderTxHash({row}))}
+                </Link>
+              </div>
+              <div>
+                <span className="text-[#ffa729] text-sm">Public Key:</span>
+                <span className="ml-2 text-white text-sm break-all">{truncateMiddle(Decoder({row: {pk: row.pk}}))}</span>
+              </div>
+              <div>
+                <span className="text-[#ffa729] text-sm">Nonce:</span>
+                <span className="ml-2 text-white text-sm">{row.nonce}</span>
+              </div>
+              <div>
+                <span className="text-[#ffa729] text-sm">Value:</span>
+                <span className="ml-2 text-white text-sm">{row.value}</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="overflow-x-auto rounded-lg border border-[#3d3d3d] bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]">
       <table className="min-w-full">
         <thead>
           <tr className="border-b border-[#3d3d3d]">
-            <th className="px-6 py-4 text-left text-sm font-medium text-[#ffa729]">From (Contract Creator)</th>
-            <th className="px-6 py-4 text-left text-sm font-medium text-[#ffa729]">Transaction Hash</th>
-            <th className="px-6 py-4 text-left text-sm font-medium text-[#ffa729]">Public Key</th>
-            <th className="px-6 py-4 text-left text-sm font-medium text-[#ffa729]">Signature</th>
-            <th className="px-6 py-4 text-left text-sm font-medium text-[#ffa729]">Nonce</th>
-            <th className="px-6 py-4 text-left text-sm font-medium text-[#ffa729]">Value</th>
-            <th className="px-6 py-4 text-left text-sm font-medium text-[#ffa729]">Contract Address</th>
+            <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">From (Contract Creator)</th>
+            <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Transaction Hash</th>
+            <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Public Key</th>
+            <th className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Signature</th>
+            <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Nonce</th>
+            <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Value</th>
           </tr>
         </thead>
         <tbody>
           {data.map((row) => (
             <tr key={row.id} className="border-b border-[#3d3d3d] hover:bg-[rgba(255,167,41,0.05)] transition-colors">
-              <td className="px-6 py-4 whitespace-nowrap">
+              <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap">
                 <Link href={`/address/${row.from}`} className="text-[#ffa729] hover:text-[#ffb954] transition-colors">
                   {truncateMiddle(row.from, 8, 8)}
                 </Link>
               </td>
-              <td className="px-6 py-4 whitespace-nowrap">
+              <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap">
                 <Link href={`/tx/${row.txHash}`} className="text-[#ffa729] hover:text-[#ffb954] transition-colors">
                   {truncateMiddle(row.txHash, 8, 8)}
                 </Link>
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-gray-300">{truncateMiddle(row.pk, 8, 8)}</td>
-              <td className="px-6 py-4 whitespace-nowrap text-gray-300">{truncateMiddle(row.signature, 8, 8)}</td>
-              <td className="px-6 py-4 whitespace-nowrap text-gray-300">{row.nonce}</td>
-              <td className="px-6 py-4 whitespace-nowrap text-gray-300">{row.value}</td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <Link href={`/address/${row.contractAddress}`} className="text-[#ffa729] hover:text-[#ffb954] transition-colors">
-                  {truncateMiddle(row.contractAddress, 8, 8)}
-                </Link>
-              </td>
+              <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{truncateMiddle(row.pk, 8, 8)}</td>
+              <td className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{truncateMiddle(row.signature, 8, 8)}</td>
+              <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{row.nonce}</td>
+              <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{row.value}</td>
             </tr>
           ))}
         </tbody>

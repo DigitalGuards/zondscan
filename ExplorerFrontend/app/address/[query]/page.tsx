@@ -77,47 +77,58 @@ export default async function Address({ params }: PageProps): Promise<JSX.Elemen
     }
 
     return (
-        <div className="py-8">
+        <div className="py-4 md:py-8 px-4 md:px-8">
             <div className="relative overflow-hidden rounded-2xl 
                         bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
-                        border border-[#3d3d3d] shadow-xl mb-8">
-                <div className="p-8">
+                        border border-[#3d3d3d] shadow-xl mb-6 md:mb-8">
+                <div className="p-4 md:p-8">
                     {/* Header */}
-                    <div className="flex items-center justify-between mb-8 pb-6 border-b border-gray-700">
-                        <div className="flex items-center">
-                            {addressIcon}
-                            <div className="ml-4">
-                                <div className="text-sm font-medium text-gray-400">{addressType}</div>
-                                <div className="flex items-center mt-1">
-                                    <div className="text-lg font-mono text-gray-300">{addressSegment}</div>
-                                    <div className="ml-2">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 md:mb-8 pb-4 md:pb-6 border-b border-gray-700">
+                        <div className="flex items-start md:items-center mb-4 md:mb-0">
+                            <div className="hidden md:block">{addressIcon}</div>
+                            <div className="flex-1 md:ml-4">
+                                <div className="flex items-center">
+                                    <div className="block md:hidden mr-2">{addressIcon}</div>
+                                    <div className="text-sm font-medium text-gray-400">{addressType}</div>
+                                </div>
+                                <div className="flex flex-col md:flex-row md:items-center mt-1">
+                                    <div className="text-sm md:text-base font-mono text-gray-300 break-all md:break-normal">
+                                        {addressSegment}
+                                    </div>
+                                    <div className="mt-2 md:mt-0 md:ml-2">
                                         <CopyAddressButton address={addressSegment} />
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        <div className="px-4 py-2 rounded-xl bg-[#3d3d3d] bg-opacity-20">
+                        <div className="px-3 py-1 md:px-4 md:py-2 rounded-xl bg-[#3d3d3d] bg-opacity-20 self-start md:self-center">
                             <span className="text-sm font-medium text-[#ffa729]">Rank #{rank}</span>
                         </div>
                     </div>
 
-                    {/* Content Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                         <BalanceDisplay balance={balance} />
                         <ActivityDisplay firstSeen={firstSeen} lastSeen={lastSeen} />
                     </div>
                 </div>
             </div>
 
-            {/* Transactions Table */}
-            <div className="relative overflow-hidden rounded-2xl 
-                        bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
-                        border border-[#3d3d3d] shadow-xl p-8">
-                <h2 className="text-xl font-bold text-[#ffa729] mb-6">Transactions</h2>
-                <TanStackTable 
-                    transactions={addressData.transactions_by_address} 
-                    internalt={addressData.internal_transactions_by_address} 
-                />
+            {/* Transactions Section */}
+            <div className="space-y-4">
+                <h2 className="text-lg md:text-xl font-semibold text-[#ffa729]">Transactions</h2>
+                <div className="overflow-hidden rounded-xl border border-[#3d3d3d]">
+                    {addressData.transactions_by_address && addressData.transactions_by_address.length > 0 ? (
+                        <TanStackTable 
+                            transactions={addressData.transactions_by_address} 
+                            internalt={addressData.internal_transactions_by_address || []}
+                        />
+                    ) : (
+                        <div className="p-6 text-center text-gray-400">
+                            No transactions found for this address
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

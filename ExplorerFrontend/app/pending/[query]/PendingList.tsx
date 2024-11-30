@@ -143,54 +143,22 @@ function TransactionCard({ transaction }: { transaction: PendingTransactionDispl
 }
 
 export default function PendingList({ initialData, currentPage }: PendingListProps) {
-  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
+  const { data, isError, error, refetch } = useQuery({
     queryKey: ['pending-transactions'],
     queryFn: fetchPendingTransactions,
     refetchInterval: 5000,
     retry: 2,
-    refetchOnMount: true
+    refetchOnMount: true,
+    initialData
   });
 
   useEffect(() => {
     refetch();
   }, [refetch]);
 
-  if (isLoading || isFetching) {
-    return (
-      <div className="container mx-auto px-4">
-        <h1 className="text-2xl font-bold mb-6 text-[#ffa729]">Mempool</h1>
-        <div className="space-y-4">
-          {[...Array(3)].map((_, i) => (
-            <div 
-              key={i}
-              className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] p-6 animate-pulse"
-            >
-              <div className="flex flex-col md:flex-row items-center">
-                <div className="w-48 flex flex-col items-center">
-                  <div className="w-20 h-6 bg-gray-700 rounded-lg mb-2"></div>
-                  <div className="h-4 w-24 bg-gray-700 rounded"></div>
-                </div>
-                <div className="flex-1 md:mx-8 space-y-2 border-l border-r border-[#3d3d3d] px-8">
-                  <div className="h-4 w-32 bg-gray-700 rounded"></div>
-                  <div className="h-6 w-full bg-gray-700 rounded"></div>
-                  <div className="h-4 w-32 bg-gray-700 rounded mt-4"></div>
-                  <div className="h-6 w-2/3 bg-gray-700 rounded"></div>
-                </div>
-                <div className="w-48 space-y-2">
-                  <div className="h-4 w-20 bg-gray-700 rounded ml-auto"></div>
-                  <div className="h-8 w-32 bg-gray-700 rounded ml-auto"></div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
   if (isError) {
     return (
-      <div className="container mx-auto px-4">
+      <div className="px-4 lg:px-6">
         <h1 className="text-2xl font-bold mb-6 text-[#ffa729]">Mempool</h1>
         <div className="bg-red-900/50 border border-red-500 text-red-200 px-6 py-4 rounded-xl">
           <p className="font-bold">Error:</p>
@@ -201,7 +169,7 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
   }
 
   return (
-    <div className="container mx-auto px-4">
+    <div className="px-4 lg:px-6">
       <h1 className="text-2xl font-bold mb-6 text-[#ffa729]">Mempool</h1>
       {!data || data.txs.length === 0 ? (
         <div className="bg-gradient-to-r from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] rounded-xl p-8 text-center">
