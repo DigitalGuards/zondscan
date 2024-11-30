@@ -1,71 +1,107 @@
 #!/bin/bash
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
-echo -e "${YELLOW}Starting frontend deployment...${NC}"
-
-# Function to check if a command exists
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
+# Print colored output
+print_status() {
+    echo -e "\e[1;34m>>> $1\e[0m"
 }
 
-# Check if required commands exist
-if ! command_exists npm; then
-    echo -e "${RED}Error: npm is not installed${NC}"
+print_error() {
+    echo -e "\e[1;31m>>> Error: $1\e[0m"
     exit 1
-fi
+}
 
-if ! command_exists pm2; then
-    echo -e "${RED}Error: PM2 is not installed${NC}"
-    exit 1
-fi
+# Check for required tools
+check_dependencies() {
+    print_status "Checking dependencies..."
+    command -v node >/dev/null 2>&1 || { print_error "Node.js is required but not installed."; }
+    command -v npm >/dev/null 2>&1 || { print_error "npm is required but not installed."; }
+}
 
-# Navigate to frontend directory
-echo -e "${YELLOW}Navigating to frontend directory...${NC}"
-cd quanta-explorer-go/frontend
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Error: Could not find frontend directory${NC}"
-    exit 1
-fi
+# Clone or update repository
+handle_repository() {
+    if [ -d ".git" ]; then
+        print_status "Repository already exists. Checking git status..."
+        git status
+        
+        read -p "Would you like to pull the latest changes? (y/n): " PULL_CHANGES
+        if [[ $PULL_CHANGES =~ ^[Yy]$ ]]; then
+            print_status "Pulling latest changes..."
+            git pull || print_error "Failed to pull latest changes"
+        else
+            print_status "Skipping pull, continuing with existing code..."
+        fi
+    else
+        print_status "Cloning QRL Explorer repository..."
+        git clone https://github.com/DigitalGuards/zondexplorer.git || print_error "Failed to clone repository"
+        cd zondexplorer || print_error "Failed to enter project directory"
+    fi
+}
 
-# Install dependencies
-echo -e "${YELLOW}Installing dependencies...${NC}"
-npm install
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Error: npm install failed${NC}"
-    exit 1
-fi
+# Setup frontend environment
+setup_frontend() {
+    print_status "Setting up frontend..."
+    cd ExplorerFrontend || print_error "Frontend directory not found"
 
-# Build the frontend
-echo -e "${YELLOW}Building frontend...${NC}"
-npm run build
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Error: Frontend build failed${NC}"
-    exit 1
-fi
+    # Create .env file
+    print_status "Creating .env file..."
+    cat > .env << EOL
+DATABASE_URL=mongodb://localhost:27017/qrldata?readPreference=primary
+NEXT_PUBLIC_DOMAIN_NAME=http://localhost:3000
+NEXT_PUBLIC_HANDLER_URL=http://127.0.0.1:8080
+EOL
 
-# Stop existing PM2 process if it exists
-pm2 stop frontend 2>/dev/null
-pm2 delete frontend 2>/dev/null
+    # Create .env.local file
+    print_status "Creating .env.local file..."
+    cat > .env.local << EOL
+DATABASE_URL=mongodb://localhost:27017/qrldata?readPreference=primary
+DOMAIN_NAME=http://localhost:3000
+HANDLER_URL=http://127.0.0.1:8080
+EOL
 
-# Start frontend with PM2
-echo -e "${YELLOW}Starting frontend with PM2...${NC}"
-pm2 start npm --name frontend -- start
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Error: Failed to start frontend with PM2${NC}"
-    exit 1
-fi
+    # Install dependencies
+    print_status "Installing frontend dependencies..."
+    npm install || print_error "Failed to install frontend dependencies"
 
-# Save PM2 configuration
-pm2 save
+    # Update browserslist database
+    print_status "Updating browserslist database..."
+    npx browserslist@latest --update-db || print_status "Browserslist update skipped"
+}
 
-echo -e "${GREEN}Frontend deployment completed successfully!${NC}"
-echo -e "${YELLOW}PM2 process status:${NC}"
-pm2 list
+# Main deployment function
+main() {
+    check_dependencies
 
-# Return to original directory
-cd ../../
+    # Handle repository
+    handle_repository
+
+    # Setup frontend environment
+    setup_frontend
+
+    # Ask user for deployment mode
+    echo "Please select deployment mode:"
+    echo "1) Development (npm run dev)"
+    echo "2) Production build (npm run build)"
+    echo "3) Production start (npm run start)"
+    read -p "Enter your choice (1-3): " DEPLOY_MODE
+
+    case $DEPLOY_MODE in
+        1)
+            print_status "Starting development server..."
+            npm run dev
+            ;;
+        2)
+            print_status "Building for production..."
+            npm run build
+            ;;
+        3)
+            print_status "Starting production server..."
+            npm run build && npm run start
+            ;;
+        *)
+            print_error "Invalid choice"
+            ;;
+    esac
+}
+
+# Run the deployment
+main
