@@ -191,23 +191,35 @@ func producer(start int, end int) <-chan Data {
 }
 
 func processInitialBlock() {
-	logger.Info("Processing genesis block (0)")
-	blockData := rpc.GetBlockByNumberMainnet(0)
-	if blockData == "" {
-		logger.Error("Failed to get genesis block data")
+	configs.Logger.Info("Processing initial block")
+
+	// Initialize validators first
+	configs.Logger.Info("Initializing validators")
+	validators := rpc.GetValidators()
+	if validators.ValidatorsBySlotNumber != nil && len(validators.ValidatorsBySlotNumber) > 0 {
+		db.InsertValidators(validators)
+		configs.Logger.Info("Successfully initialized validators",
+			zap.Int("num_slots", len(validators.ValidatorsBySlotNumber)))
+	} else {
+		configs.Logger.Error("Failed to initialize validators - got empty data")
+	}
+
+	// Process genesis block
+	ZondNew := rpc.GetBlockByNumberMainnet(0)
+	if ZondNew == "" {
+		configs.Logger.Error("Failed to get genesis block")
 		return
 	}
 
-	var Zond models.Zond
-	err := json.Unmarshal([]byte(blockData), &Zond)
+	var ZondGenesis models.ZondDatabaseBlock
+	err := json.Unmarshal([]byte(ZondNew), &ZondGenesis)
 	if err != nil {
-		logger.Error("Failed to unmarshal genesis block", zap.Error(err))
+		configs.Logger.Error("Failed to unmarshal genesis block", zap.Error(err))
 		return
 	}
-	ZondNew := db.ConvertModelsUint64(Zond)
-	db.InsertBlockDocument(ZondNew)
-	db.ProcessTransactions(ZondNew)
-	logger.Info("Genesis block processed successfully")
+
+	db.InsertBlockDocument(ZondGenesis)
+	db.ProcessTransactions(ZondGenesis)
 }
 
 func processSubsequentBlocks(sum uint64, latestBlockNumber uint64) uint64 {
@@ -401,83 +413,78 @@ func runTaskWithRetry(task func(), taskName string) {
 	}
 }
 
-func singleBlockInsertion() {
-	const (
-		batchThreshold = 50 // Number of blocks behind before switching to batch mode
-		checkInterval  = 30 * time.Second
-	)
-
+func processBlockPeriodically() {
 	sum := db.GetLatestBlockNumberFromDB() + 1
-	logger.Info("Starting continuous block monitoring", zap.Uint64("from_block", sum))
 
+	// Get latest block number
 	latestBlockNumber, err := rpc.GetLatestBlock()
 	if err != nil {
 		logger.Error("Failed to get latest block", zap.Error(err))
 		return
 	}
-	logger.Info("Latest network block", zap.Uint64("block", latestBlockNumber))
 
-	isCollectionsExist := db.IsCollectionsExist()
+	// Check if we need to process new blocks
+	if latestBlockNumber > sum {
+		blocksBehind := latestBlockNumber - sum
+		if blocksBehind > 50 { // Use batch sync if more than 50 blocks behind
+			logger.Info("Switching to batch sync mode",
+				zap.Uint64("blocks_behind", blocksBehind))
+			sum = batchSync(sum, latestBlockNumber)
+		} else {
+			sum = processSubsequentBlocks(sum, latestBlockNumber)
+		}
+	}
+}
 
-	// Initialize data before starting periodic updates
-	if !isCollectionsExist {
+func updateDataPeriodically() {
+	// Update market data
+	logger.Info("Updating CoinGecko data...")
+	db.PeriodicallyUpdateCoinGeckoData()
+
+	// Update wallet count
+	logger.Info("Counting wallets...")
+	db.CountWallets()
+
+	// Update transaction volume
+	logger.Info("Calculating daily transaction volume...")
+	db.GetDailyTransactionVolume()
+}
+
+func singleBlockInsertion() {
+	configs.Logger.Info("Starting single block insertion process")
+
+	// Initialize collections if they don't exist
+	if !db.IsCollectionsExist() {
 		processInitialBlock()
-		isCollectionsExist = true
 	}
 
-	// Ensure initial data is present
-	logger.Info("Initializing market data...")
-	db.PeriodicallyUpdateCoinGeckoData()
-	logger.Info("Initializing wallet count...")
-	db.CountWallets()
-	logger.Info("Initializing transaction volume...")
-	db.GetDailyTransactionVolume()
+	// Start periodic tasks
+	go runPeriodicTask(func() {
+		processBlockPeriodically()
+	}, time.Second*30, "block_processing")
 
-	// Block processing goroutine
-	runPeriodicTask(func() {
-		// Get latest block number
-		newLatestBlock, err := rpc.GetLatestBlock()
-		if err != nil {
-			logger.Error("Failed to get latest block", zap.Error(err))
-			return
-		}
-		latestBlockNumber = newLatestBlock
+	go runPeriodicTask(func() {
+		updateDataPeriodically()
+	}, time.Second*30, "data_updates")
 
-		// Check how far behind we are
-		if latestBlockNumber > sum {
-			blocksBehind := latestBlockNumber - sum
-			if blocksBehind > batchThreshold {
-				// Use batch sync if we're significantly behind
-				logger.Info("Switching to batch sync mode",
-					zap.Uint64("blocks_behind", blocksBehind))
-				sum = batchSync(sum, latestBlockNumber)
-			} else {
-				// Use single block processing when close to caught up
-				sum = processSubsequentBlocks(sum, latestBlockNumber)
-			}
-		}
-	}, checkInterval, "block_processing")
+	// Add new periodic task for validator updates (every 6 hours)
+	go runPeriodicTask(func() {
+		updateValidatorsPeriodically()
+	}, time.Hour*6, "validator_updates")
 
-	// Data update goroutine with individual error handling
-	runPeriodicTask(func() {
-		// Update market data
-		func() {
-			logger.Info("Updating CoinGecko data...")
-			db.PeriodicallyUpdateCoinGeckoData()
-		}()
-
-		// Update wallet count
-		func() {
-			logger.Info("Counting wallets...")
-			db.CountWallets()
-		}()
-
-		// Update transaction volume
-		func() {
-			logger.Info("Calculating daily transaction volume...")
-			db.GetDailyTransactionVolume()
-		}()
-	}, 35*time.Minute, "data_updates")
-
+	// Keep the main goroutine alive
 	select {}
+}
+
+// New function to periodically update validators
+func updateValidatorsPeriodically() {
+	configs.Logger.Info("Updating validators")
+	validators := rpc.GetValidators()
+	if validators.ValidatorsBySlotNumber != nil && len(validators.ValidatorsBySlotNumber) > 0 {
+		db.InsertValidators(validators)
+		configs.Logger.Info("Successfully updated validators",
+			zap.Int("num_slots", len(validators.ValidatorsBySlotNumber)))
+	} else {
+		configs.Logger.Error("Failed to update validators - got empty data")
+	}
 }

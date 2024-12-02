@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { Metadata } from 'next';
 import BlocksClient from './blocks-client';
 import type { BlocksResponse } from './types';
 
@@ -31,6 +32,23 @@ async function getBlocks(page: string): Promise<BlocksResponse> {
 
 interface PageProps {
     params: Promise<{ query: string }>;
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ query: string }> }): Promise<Metadata> {
+  const resolvedParams = await params;
+  const pageNumber = resolvedParams.query || '1';
+  
+  return {
+    title: `Blocks - Page ${pageNumber} | ZondScan`,
+    description: `Explore Zond blockchain blocks. Page ${pageNumber} of the blocks list showing latest mined blocks, block rewards, transactions count, and more.`,
+    openGraph: {
+      title: `Blocks - Page ${pageNumber} | ZondScan`,
+      description: `Explore Zond blockchain blocks. Page ${pageNumber} of the blocks list showing latest mined blocks, block rewards, transactions count, and more.`,
+      url: `https://zondscan.com/blocks/${pageNumber}`,
+      siteName: 'ZondScan',
+      type: 'website',
+    },
+  };
 }
 
 export default async function BlocksPage({ params }: PageProps): Promise<JSX.Element> {

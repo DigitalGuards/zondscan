@@ -2,6 +2,7 @@ package routes
 
 import (
 	"backendAPI/db"
+	"backendAPI/models"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -280,11 +281,51 @@ func UserRoute(router *gin.Engine) {
 	})
 
 	router.GET("/validators", func(c *gin.Context) {
-		query, err := db.ReturnValidators()
+		rawValidators, err := db.ReturnValidators()
 		if err != nil {
-			fmt.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to fetch validators: %v", err),
+			})
+			return
 		}
-		c.JSON(http.StatusOK, gin.H{"response": query})
+
+		// Transform the raw validator data into the frontend-expected format
+		response := models.ValidatorResponse{
+			Validators:  make([]models.Validator, 0),
+			TotalStaked: "0", // We'll calculate this as we process validators
+		}
+
+		totalStaked := 0.0 // Assuming 1 validator = 1 stake for now
+		currentEpoch := rawValidators.Resultvalidator.Epoch
+
+		// Process validators by slot
+		for _, slotValidators := range rawValidators.Resultvalidator.Validatorsbyslotnumber {
+			// Add leader
+			response.Validators = append(response.Validators, models.Validator{
+				Address:      "0x" + slotValidators.Leader,
+				Uptime:      100.0, // Assuming 100% uptime for now
+				Age:         currentEpoch, // Using current epoch as age
+				StakedAmount: "32000000000", // Standard stake amount
+				IsActive:    true,
+			})
+			totalStaked += 32000000000
+
+			// Add attestors
+			for _, attestor := range slotValidators.Attestors {
+				response.Validators = append(response.Validators, models.Validator{
+					Address:      "0x" + attestor,
+					Uptime:      100.0,
+					Age:         currentEpoch,
+					StakedAmount: "32000000000",
+					IsActive:    true,
+				})
+				totalStaked += 32000000000
+			}
+		}
+
+		response.TotalStaked = fmt.Sprintf("%.0f", totalStaked)
+
+		c.JSON(http.StatusOK, response)
 	})
 
 	router.GET("/transactions", func(c *gin.Context) {

@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
+import { Metadata } from 'next';
 import TransactionsClient from './transactions-client';
 import type { TransactionsResponse } from './types';
 
@@ -41,6 +42,23 @@ function LoadingUI(): JSX.Element {
 
 interface PageProps {
     params: Promise<{ query: string }>;
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ query: string }> }): Promise<Metadata> {
+  const resolvedParams = await params;
+  const pageNumber = resolvedParams.query || '1';
+  
+  return {
+    title: `Transactions - Page ${pageNumber} | ZondScan`,
+    description: `View all transactions on the Zond blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
+    openGraph: {
+      title: `Transactions - Page ${pageNumber} | ZondScan`,
+      description: `View all transactions on the Zond blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
+      url: `https://zondscan.com/transactions/${pageNumber}`,
+      siteName: 'ZondScan',
+      type: 'website',
+    },
+  };
 }
 
 export default async function Page({ params }: PageProps): Promise<JSX.Element> {

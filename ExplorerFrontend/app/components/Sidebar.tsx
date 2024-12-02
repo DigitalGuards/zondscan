@@ -12,7 +12,7 @@ import PartnerHandshakeIcon from '../../public/partner-handshake-icon.svg'
 import BlockchainIcon from '../../public/blockchain-icon.svg'
 import ContractIcon from '../../public/contract.svg'
 import QRLFavicon from '../../public/favicon.ico'
-import UserCircleIcon from '../../public/send.svg'
+import SendIcon from '../../public/send.svg'
 import RichIcon from '../../public/favicon.svg'
 
 const blockchain = [
@@ -20,6 +20,7 @@ const blockchain = [
   { name: 'Pending Transactions', description: 'View pending transactions', href: '/pending/1', imgSrc: PartnerHandshakeIcon },
   { name: 'Latest Blocks', description: 'View all Blocks', href: '/blocks/1', imgSrc: BlockchainIcon },
   { name: 'Smart Contracts', description: 'Explore QRL contracts', href: '/contracts', imgSrc: ContractIcon },
+  { name: 'Validators', description: 'Network Validators', href: '/validators', imgSrc: ContractIcon },
 ]
 
 const tools = [
@@ -27,6 +28,12 @@ const tools = [
   { name: 'Unit Converter', description: 'Convert QRL currencies', href: '/converter', imgSrc: TokenIcon },
   { name: 'Richlist', description: 'Top QRL holders', href: '/richlist', imgSrc: RichIcon },
 ]
+
+const ValidatorIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+  </svg>
+);
 
 function classNames(...classes: string[]) {
   return classes.filter(Boolean).join(' ')
@@ -153,7 +160,7 @@ export default function Sidebar() {
                       className={classNames(open ? 'rotate-180' : '', 'h-5 w-5 text-[#ffa729] transition-transform duration-200')}
                     />
                   </Disclosure.Button>
-                  <Disclosure.Panel className="mt-3 space-y-2 pl-3">
+                  <Disclosure.Panel className="mt-3 space-y-2">
                     {blockchain.map((item) => (
                       <button
                         key={item.name}
@@ -234,7 +241,7 @@ export default function Sidebar() {
             >
               <div className="w-5 h-5 relative">
                 <Image
-                  src={UserCircleIcon}
+                  src={SendIcon}
                   alt="Wallet"
                   fill
                   sizes="20px"
