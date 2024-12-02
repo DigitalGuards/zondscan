@@ -124,23 +124,36 @@ func GetContractAddress(txHash string) (string, string, error) {
 	b, err := json.Marshal(group)
 	if err != nil {
 		logger.Info("Failed JSON marshal", zap.Error(err))
+		return "", "", err
 	}
 
 	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
+	if err != nil {
+		logger.Info("Failed to create request", zap.Error(err))
+		return "", "", err
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Printf("%v", err)
+		logger.Info("Failed to execute request", zap.Error(err))
+		return "", "", err
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Info("Failed to read response body", zap.Error(err))
+		return "", "", err
+	}
 
 	var ContractAddress models.Contract
-
-	json.Unmarshal([]byte(string(body)), &ContractAddress)
+	err = json.Unmarshal([]byte(string(body)), &ContractAddress)
+	if err != nil {
+		logger.Info("Failed to unmarshal response", zap.Error(err))
+		return "", "", err
+	}
 
 	return ContractAddress.Result.ContractAddress, ContractAddress.Result.Status, nil
 }
@@ -323,19 +336,29 @@ func GetBalance(address string) (string, error) {
 	b, err := json.Marshal(group)
 	if err != nil {
 		logger.Info("Failed JSON marshal", zap.Error(err))
+		return "", err
 	}
 
 	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
+	if err != nil {
+		logger.Info("Failed to create request", zap.Error(err))
+		return "", err
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		panic(err)
+		logger.Info("Failed to execute request", zap.Error(err))
+		return "", err
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Info("Failed to read response body", zap.Error(err))
+		return "", err
+	}
 
 	return string(body), nil
 }
@@ -475,23 +498,36 @@ func GetCode(address string, blockNrOrHash string) (string, error) {
 	b, err := json.Marshal(group)
 	if err != nil {
 		logger.Info("Failed JSON marshal", zap.Error(err))
+		return "", err
 	}
 
 	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
+	if err != nil {
+		logger.Info("Failed to create request", zap.Error(err))
+		return "", err
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		panic(err)
+		logger.Info("Failed to execute request", zap.Error(err))
+		return "", err
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Info("Failed to read response body", zap.Error(err))
+		return "", err
+	}
 
 	var GetCode models.GetCode
-
-	json.Unmarshal([]byte(string(body)), &GetCode)
+	err = json.Unmarshal([]byte(string(body)), &GetCode)
+	if err != nil {
+		logger.Info("Failed to unmarshal response", zap.Error(err))
+		return "", err
+	}
 
 	return GetCode.Result, nil
 }
@@ -518,7 +554,11 @@ func ZondCall(contractAddress string) *models.ZondResponse {
 		Params:  []interface{}{data, blockData},
 	}
 
-	jsonPayload, _ := json.Marshal(payload)
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		logger.Info("Failed JSON marshal", zap.Error(err))
+		return nil
+	}
 
 	resp, err := http.Post(os.Getenv("NODE_URL"), "application/json", bytes.NewBuffer(jsonPayload))
 	if err != nil {
@@ -527,7 +567,11 @@ func ZondCall(contractAddress string) *models.ZondResponse {
 	}
 	defer resp.Body.Close()
 
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		logger.Info("Failed to read response body", zap.Error(err))
+		return nil
+	}
 
 	var responseData models.ZondResponse
 	err = json.Unmarshal(body, &responseData)
@@ -547,7 +591,11 @@ func ZondGetLogs(contractAddress string) *models.ZondResponse {
 		"id":      1,
 	}
 
-	jsonPayload, _ := json.Marshal(payload)
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		logger.Info("Failed JSON marshal", zap.Error(err))
+		return nil
+	}
 
 	resp, err := http.Post(os.Getenv("NODE_URL"), "application/json", bytes.NewBuffer(jsonPayload))
 	if err != nil {
@@ -556,7 +604,11 @@ func ZondGetLogs(contractAddress string) *models.ZondResponse {
 	}
 	defer resp.Body.Close()
 
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		logger.Info("Failed to read response body", zap.Error(err))
+		return nil
+	}
 
 	var responseData models.ZondResponse
 	err = json.Unmarshal(body, &responseData)
