@@ -1,15 +1,5 @@
 #!/bin/bash
 
-# Print colored output
-print_status() {
-    echo -e "\e[1;34m>>> $1\e[0m"
-}
-
-print_error() {
-    echo -e "\e[1;31m>>> Error: $1\e[0m"
-    exit 1
-}
-
 # Clean PM2 logs and processes
 clean_pm2() {
     print_status "Cleaning PM2 logs and processes..."
@@ -152,6 +142,7 @@ setup_synchronizer() {
     cat > .env << EOL
 MONGOURI=mongodb://localhost:27017
 NODE_URL=http://REDACTED:8545
+BEACONCHAIN_API=http://REDACTED:3500/zond/v1alpha1/validators?page=1
 EOL
 
     # Build synchronizer

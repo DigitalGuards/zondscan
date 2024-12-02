@@ -344,7 +344,13 @@ func GetValidators() models.ResultValidator {
 	logger.Info("Starting GetValidators call to beacon chain API")
 	var beaconResponse models.BeaconValidatorResponse
 
-	req, err := http.NewRequest("GET", "http://REDACTED:3500/zond/v1alpha1/validators?page=1", nil)
+	beaconchainURL := os.Getenv("BEACONCHAIN_API")
+	if beaconchainURL == "" {
+		logger.Error("BEACONCHAIN_API environment variable not set")
+		return models.ResultValidator{}
+	}
+
+	req, err := http.NewRequest("GET", beaconchainURL, nil)
 	if err != nil {
 		logger.Error("Failed to create request", zap.Error(err))
 		return models.ResultValidator{}
@@ -363,12 +369,12 @@ func GetValidators() models.ResultValidator {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		logger.Error("Unexpected status code from beacon API", 
+		logger.Error("Unexpected status code from beacon API",
 			zap.Int("status_code", resp.StatusCode))
 		return models.ResultValidator{}
 	}
 
-	logger.Info("Got response from beacon chain API", 
+	logger.Info("Got response from beacon chain API",
 		zap.Int("status_code", resp.StatusCode),
 		zap.String("content_type", resp.Header.Get("Content-Type")))
 
@@ -388,7 +394,7 @@ func GetValidators() models.ResultValidator {
 
 	err = json.Unmarshal(body, &beaconResponse)
 	if err != nil {
-		logger.Error("Failed to unmarshal response", 
+		logger.Error("Failed to unmarshal response",
 			zap.Error(err),
 			zap.String("body_preview", string(body[:min(len(body), 200)]))) // Log first 200 chars only
 		return models.ResultValidator{}
@@ -399,21 +405,21 @@ func GetValidators() models.ResultValidator {
 		return models.ResultValidator{}
 	}
 
-	logger.Info("Successfully unmarshaled response", 
+	logger.Info("Successfully unmarshaled response",
 		zap.String("epoch", beaconResponse.Epoch),
 		zap.Int("validator_count", len(beaconResponse.ValidatorList)))
 
 	// Convert beacon response to ResultValidator format
 	epoch, err := strconv.Atoi(beaconResponse.Epoch)
 	if err != nil {
-		logger.Error("Failed to parse epoch", 
+		logger.Error("Failed to parse epoch",
 			zap.String("epoch", beaconResponse.Epoch),
 			zap.Error(err))
 		return models.ResultValidator{}
 	}
 
 	result := models.ResultValidator{
-		Epoch: epoch,
+		Epoch:                  epoch,
 		ValidatorsBySlotNumber: make([]models.ValidatorsBySlotNumber, 0),
 	}
 
@@ -422,7 +428,7 @@ func GetValidators() models.ResultValidator {
 	for _, validator := range beaconResponse.ValidatorList {
 		index, err := strconv.Atoi(validator.Index)
 		if err != nil {
-			logger.Warn("Failed to parse validator index", 
+			logger.Warn("Failed to parse validator index",
 				zap.String("index", validator.Index),
 				zap.Error(err))
 			continue

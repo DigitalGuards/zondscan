@@ -9,7 +9,7 @@ export const metadata = {
 export default async function ValidatorsPage() {
   return (
     <main>
-      <h1 className="sr-only">QRL Network Validators</h1>
+      <h1 className="sr-only">QRL Zond Network Validators</h1>
       <Suspense fallback={<div className="p-4 text-center">Loading validators...</div>}>
         <ValidatorsWrapper />
       </Suspense>
