@@ -41,6 +41,11 @@ export function toFixed(x) {
 }
 
 export function formatGas(amount) {
+  // Handle undefined or null
+  if (amount === undefined || amount === null) {
+    return ['0', ''];
+  }
+
   // Handle zero amount
   if (amount === 0 || amount === '0' || amount === '0x0') {
     return ['0', ''];
@@ -68,6 +73,11 @@ export function formatGas(amount) {
 }
 
 export function formatAmount(amount) {
+  // Handle undefined or null
+  if (amount === undefined || amount === null) {
+    return ['0.00', 'QRL'];
+  }
+
   // Handle zero amount
   if (amount === 0 || amount === '0' || amount === '0x0') {
     return ['0.00', 'QRL'];
@@ -138,6 +148,7 @@ export function formatAmount(amount) {
 }
 
 export function decodeBase64ToHexadecimal(rawData) {
+  if (!rawData) return '';
   const decoded = atob(rawData);
   let hex = '';
   for (let i = 0; i < decoded.length; i++) {
@@ -148,12 +159,14 @@ export function decodeBase64ToHexadecimal(rawData) {
 }
 
 export function epochToISO(timestamp) {
+  if (!timestamp) return '1970-01-01';
   const date = new Date(timestamp * 1000); 
   const datePart = date.toISOString().split('T')[0];
   return datePart;
 }
 
 export function formatTimestamp(timestamp) {
+  if (!timestamp) return '';
   const date = new Date(timestamp * 1000);
   return date.toLocaleString('en-US', {
     day: 'numeric',

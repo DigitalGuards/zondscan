@@ -1,11 +1,11 @@
 package synchroniser
 
 import (
-	"QRLtoMongoDB-PoS/configs"
-	"QRLtoMongoDB-PoS/db"
-	L "QRLtoMongoDB-PoS/logger"
-	"QRLtoMongoDB-PoS/models"
-	"QRLtoMongoDB-PoS/rpc"
+	"Zond2mongoDB/configs"
+	"Zond2mongoDB/db"
+	L "Zond2mongoDB/logger"
+	"Zond2mongoDB/models"
+	"Zond2mongoDB/rpc"
 	"encoding/json"
 	"io"
 	"os"

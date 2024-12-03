@@ -134,19 +134,13 @@ EOL
 # Setup blockchain synchronizer
 setup_synchronizer() {
     print_status "Setting up blockchain synchronizer..."
-    cd "$BASE_DIR/QRLtoMongoDB-PoS" || print_error "Synchronizer directory not found"
+    cd "$BASE_DIR/Zond2mongoDB" || print_error "Synchronizer directory not found"
 
     # Create .env file
     cat > .env << EOL
 MONGOURI=mongodb://localhost:27017
 NODE_URL=http://REDACTED:8545
-EOL
-
-    # Also create .env in the rpc directory to ensure it's available
-    mkdir -p rpc
-    cat > rpc/.env << EOL
-MONGOURI=mongodb://localhost:27017
-NODE_URL=http://REDACTED:8545
+BEACONCHAIN_API=http://REDACTED:3500
 EOL
 
     # Build synchronizer with explicit output name
@@ -155,12 +149,7 @@ EOL
 
     # Start synchronizer with PM2, explicitly setting environment variables
     print_status "Starting synchronizer with PM2..."
-    MONGOURI=mongodb://localhost:27017 NODE_URL=http://REDACTED:8545 pm2 start ./synchroniser.exe \
-        --name "synchroniser" \
-        --cwd "$BASE_DIR/QRLtoMongoDB-PoS" \
-        --env MONGOURI=mongodb://localhost:27017 \
-        --env NODE_URL=http://REDACTED:8545 \
-        || print_error "Failed to start synchronizer"
+    pm2 start ./syncer.exe --name "synchroniser" --cwd "$BASE_DIR/Zond2mongoDB" || print_error "Failed to start synchronizer"
 }
 
 # Save PM2 processes

@@ -1,9 +1,9 @@
 package db
 
 import (
-	"QRLtoMongoDB-PoS/bitfield"
-	"QRLtoMongoDB-PoS/configs"
-	"QRLtoMongoDB-PoS/models"
+	"Zond2mongoDB/bitfield"
+	"Zond2mongoDB/configs"
+	"Zond2mongoDB/models"
 	"context"
 	"math/big"
 	"strconv"

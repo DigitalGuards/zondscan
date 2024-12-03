@@ -1,4 +1,4 @@
-module QRLtoMongoDB-PoS
+module Zond2mongoDB
 
 go 1.20
 

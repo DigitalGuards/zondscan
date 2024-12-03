@@ -1,7 +1,7 @@
 package db
 
 import (
-	"QRLtoMongoDB-PoS/configs"
+	"Zond2mongoDB/configs"
 	"context"
 	"math/big"
 	"time"

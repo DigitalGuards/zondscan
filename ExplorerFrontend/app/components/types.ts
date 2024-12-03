@@ -12,6 +12,11 @@ interface BaseTransaction {
   TxHash: string;
   TimeStamp: number;
   Amount: number;
+  PaidFees?: number;  // Added to base fields since it's a core fee property
+  gasUsed?: string;
+  gasPrice?: string;
+  gasUsedStr?: string;
+  gasPriceStr?: string;
 }
 
 // Additional fields that might be present
@@ -20,7 +25,6 @@ interface OptionalTransactionFields {
   id?: string;
   Address?: string;
   TransactionAddress?: string;
-  Paidfees?: number;
   From?: string;
   To?: string;
   Type?: string;

@@ -16,10 +16,24 @@ const getData = async (url: string | URL): Promise<AddressData | null> => {
             console.error(`Invalid path: ${path}`);
             return null;
         }
+
+        console.log('Fetching address data:', path);
         const response = await axios.get(`${config.handlerUrl}/address/aggregate${path.replace('/address/', '/')}`);
+        console.log('Raw API response:', JSON.stringify(response.data, null, 2));
+
+        // Process transactions to ensure gas values are in hex format
+        if (response.data.transactions_by_address) {
+            response.data.transactions_by_address = response.data.transactions_by_address.map((tx: any) => ({
+                ...tx,
+                gasUsedStr: tx.gasUsedStr || (tx.gasUsed ? `0x${tx.gasUsed.toString(16)}` : '0x0'),
+                gasPriceStr: tx.gasPriceStr || (tx.gasPrice ? `0x${tx.gasPrice.toString(16)}` : '0x0')
+            }));
+        }
+
+        console.log('Processed transactions:', JSON.stringify(response.data.transactions_by_address, null, 2));
         return response.data;
     } catch (error) {
-        console.error(`Error fetching data`);
+        console.error(`Error fetching data:`, error);
         return null;
     }
 };

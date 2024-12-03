@@ -1,15 +1,12 @@
 package configs
 
 import (
-	L "QRLtoMongoDB-PoS/logger"
+	L "Zond2mongoDB/logger"
 
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
 )
 
-// http://209.250.255.226:8545
-
-// sudo mongod --dbpath /System/Volumes/Data/data/db
 const QUANTA float64 = 1000000000000000000
 
 var COINGECKO_URL string = "https://api.coingecko.com/api/v3/coins/quantum-resistant-ledger?tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false"

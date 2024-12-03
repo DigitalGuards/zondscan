@@ -1,8 +1,8 @@
 package fetch
 
 import (
-	"QRLtoMongoDB-PoS/configs"
-	"QRLtoMongoDB-PoS/models"
+	"Zond2mongoDB/configs"
+	"Zond2mongoDB/models"
 	"context"
 	"encoding/json"
 	"fmt"

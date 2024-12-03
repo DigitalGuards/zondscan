@@ -1,9 +1,9 @@
 package db
 
 import (
-	"QRLtoMongoDB-PoS/configs"
-	"QRLtoMongoDB-PoS/models"
-	"QRLtoMongoDB-PoS/rpc"
+	"Zond2mongoDB/configs"
+	"Zond2mongoDB/models"
+	"Zond2mongoDB/rpc"
 	"context"
 	"encoding/json"
 	"time"

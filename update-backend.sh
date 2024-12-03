@@ -38,15 +38,15 @@ if [ $? -ne 0 ]; then
 fi
 echo -e "${GREEN}Git pull completed successfully${NC}"
 
-# Deploy QRLtoMongoDB-PoS synchronizer
+# Deploy Zond2mongoDB synchronizer
 echo -e "${YELLOW}Building and deploying synchronizer...${NC}"
-cd QRLtoMongoDB-PoS
+cd Zond2mongoDB
 if [ $? -ne 0 ]; then
-    echo -e "${RED}Error: Could not find QRLtoMongoDB-PoS directory${NC}"
+    echo -e "${RED}Error: Could not find Zond2mongoDB directory${NC}"
     exit 1
 fi
 
-go build -o synchroniser
+go build -o syncer
 if [ $? -ne 0 ]; then
     echo -e "${RED}Error: Failed to build synchroniser${NC}"
     exit 1
@@ -57,18 +57,18 @@ pm2 stop synchroniser 2>/dev/null
 pm2 delete synchroniser 2>/dev/null
 
 # Start synchroniser with PM2
-pm2 start ./synchroniser --name synchroniser
+pm2 start ./syncer --name synchroniser
 if [ $? -ne 0 ]; then
     echo -e "${RED}Error: Failed to start synchroniser with PM2${NC}"
     exit 1
 fi
 echo -e "${GREEN}Synchroniser deployed successfully${NC}"
 
-# Deploy quanta-explorer-go server
+# Deploy BackendAPI server
 echo -e "${YELLOW}Building and deploying server...${NC}"
-cd ../quanta-explorer-go/server
+cd /BackendAPI
 if [ $? -ne 0 ]; then
-    echo -e "${RED}Error: Could not find quanta-explorer-go/server directory${NC}"
+    echo -e "${RED}Error: Could not find BackendAPI directory${NC}"
     exit 1
 fi
 
@@ -98,4 +98,4 @@ echo -e "${YELLOW}PM2 process status:${NC}"
 pm2 list
 
 # Return to original directory
-cd ../../
+cd ../

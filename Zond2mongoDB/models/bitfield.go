@@ -1,6 +1,6 @@
 package models
 
-import "QRLtoMongoDB-PoS/bitfield"
+import "Zond2mongoDB/bitfield"
 
 type Address struct {
 	ID       string       `json:"id"`

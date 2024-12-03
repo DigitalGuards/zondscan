@@ -1,9 +1,9 @@
 package main
 
 import (
-	"QRLtoMongoDB-PoS/configs"
-	L "QRLtoMongoDB-PoS/logger"
-	"QRLtoMongoDB-PoS/synchroniser"
+	"Zond2mongoDB/configs"
+	L "Zond2mongoDB/logger"
+	"Zond2mongoDB/synchroniser"
 	"os"
 	"os/signal"
 	"syscall"

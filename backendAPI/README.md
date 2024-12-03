@@ -97,16 +97,6 @@ The API uses two environment files:
 | HTTP_PORT | :8080 |
 | NODE_URL | http://localhost:8545 |
 
-### Production Environment Variables
-| VARIABLE | VALUE |
-| ------ | ------ |
-| GIN_MODE | release |
-| MONGOURI | mongodb://localhost:27017/qrldata?readPreference=primary |
-| CERT_PATH | PATH_TO_CERT |
-| KEY_PATH | PATH_TO_KEY |
-| HTTPS_PORT | :8443 |
-| NODE_URL | http://localhost:8545 |
-
 ## Getting Started
 
 1. Ensure Go is installed on your system

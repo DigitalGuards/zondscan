@@ -1,5 +1,16 @@
 #!/bin/bash
 
+print_status "Deploying frontend is currently commented out uncomment the function or deploy it manually or with update-frontend.sh"
+# Helper functions for status and error messages
+print_status() {
+    echo -e "\033[1;34m[*]\033[0m $1"
+}
+
+print_error() {
+    echo -e "\033[1;31m[!]\033[0m $1" >&2
+    exit 1
+}
+
 # Clean PM2 logs and processes
 clean_pm2() {
     print_status "Cleaning PM2 logs and processes..."
@@ -33,7 +44,7 @@ check_dependencies() {
 # Check if MongoDB is running
 check_mongodb() {
     if ! nc -z localhost 27017; then
-        print_error "MongoDB is not running on localhost:27017."
+        print_error "MongoDB is not running on localhost:27017. Or nc is not installed..."
     fi
 }
 
@@ -44,7 +55,7 @@ check_zond_node() {
         http://REDACTED:8545)
 
     if [[ $? -ne 0 || -z "$RESPONSE" ]]; then
-        print_error "Zond node is not accessible at http://127.0.0.1:8545."
+        print_error "Zond node is not accessible."
     fi
 }
 
@@ -136,13 +147,13 @@ EOL
 # Setup blockchain synchronizer
 setup_synchronizer() {
     print_status "Setting up blockchain synchronizer..."
-    cd "$BASE_DIR/QRLtoMongoDB-PoS" || print_error "Synchronizer directory not found"
+    cd "$BASE_DIR/Zond2mongoDB" || print_error "Synchronizer directory not found"
 
     # Create .env file
     cat > .env << EOL
 MONGOURI=mongodb://localhost:27017
 NODE_URL=http://REDACTED:8545
-BEACONCHAIN_API=http://REDACTED:3500/zond/v1alpha1/validators?page=1
+BEACONCHAIN_API=http://REDACTED:3500
 EOL
 
     # Build synchronizer
@@ -154,15 +165,13 @@ EOL
 
     # Start synchronizer with PM2, explicitly setting environment variables
     print_status "Starting synchronizer with PM2..."
-     pm2 start ./syncer --name "synchroniser" --cwd "$BASE_DIR/QRLtoMongoDB-PoS" || print_error "Failed to start synchronizer"
+     pm2 start ./syncer --name "synchroniser" --cwd "$BASE_DIR/Zond2mongoDB" || print_error "Failed to start synchronizer"
 }
 
 # Save PM2 processes
 save_pm2() {
     print_status "Saving PM2 processes..."
     pm2 save || print_error "Failed to save PM2 processes"
-    print_status "Generating PM2 startup script..."
-    pm2 startup systemd -u $USER --hp $HOME || print_error "Failed to generate PM2 startup script"
 }
 
 # Main deployment function

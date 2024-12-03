@@ -7,10 +7,10 @@ ExplorerFrontend/.pnp.js
 ExplorerFrontend/coverage
 ExplorerFrontend/build
 ExplorerFrontend/.env.local
-QRLtoMongoDB-PoS/.env
-QRLtoMongoDB-PoS/main.exe
-QRLtoMongoDB-PoS/logs.log
-QRLtoMongoDB-PoS/rpc/.env
+Zond2mongoDB/.env
+Zond2mongoDB/main.exe
+Zond2mongoDB/logs.log
+Zond2mongoDB/rpc/.env
 backendAPI/main.exe
 backendAPI/.env.production
 backendAPI/.env.development
@@ -21,9 +21,10 @@ yarn-debug.log*
 yarn-error.log*
 nginx.conf
 backendAPI/backendAPI
-QRLtoMongoDB-PoS/syncer
-QRLtoMongoDB-PoS/synchroniser/main
+Zond2mongoDB/syncer
+Zond2mongoDB/synchroniser/main
 check-tx.txt
 check-mongodb.txt
 notes.md
 ExplorerFrontend/app/todo.md
+QRLtoMongoDB-PoS/syncer

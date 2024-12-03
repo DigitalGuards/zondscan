@@ -1,7 +1,7 @@
 package models
 
 import (
-	"QRLtoMongoDB-PoS/bitfield"
+	"Zond2mongoDB/bitfield"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )

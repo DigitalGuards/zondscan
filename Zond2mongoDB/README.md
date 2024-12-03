@@ -1,4 +1,4 @@
-# QRLtoMongoDB-PoS
+# Zond2mongoDB
 
 Proof of stake blockchain synchronizer that efficiently transfers QRL blockchain data to MongoDB.
 
@@ -79,33 +79,34 @@ This is the Golang implementation of the QRL blockchain synchronizer to MongoDB.
 ```env
 MONGOURI=mongodb://localhost:27017
 NODE_URL=http://localhost:8545
+BEACONCHAIN_API=http://beaconnodehttpapi:3500 |
 ```
 
 2. Build the application:
 ```bash
 # On Unix-like systems
-go build -o synchroniser main.go
+go build -o syncer main.go
 
 # On Windows
-go build -o synchroniser.exe main.go
+go build -o syncer.exe main.go
 ```
 
 3. Run the synchronizer:
 ```bash
 # On Unix-like systems
-./synchroniser
+./syncer
 
 # On Windows
-./synchroniser.exe
+./syncer.exe
 ```
 
 For production deployment, it's recommended to use a process manager like PM2:
 ```bash
 # On Unix-like systems
-pm2 start ./synchroniser --name "synchroniser"
+pm2 start ./syncer --name "synchroniser"
 
 # On Windows
-pm2 start ./synchroniser.exe --name "synchroniser"
+pm2 start ./syncer.exe --name "synchroniser"
 ```
 
 ## Key Components

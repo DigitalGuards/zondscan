@@ -1,9 +1,9 @@
 package rpc
 
 import (
-	"QRLtoMongoDB-PoS/configs"
-	L "QRLtoMongoDB-PoS/logger"
-	"QRLtoMongoDB-PoS/models"
+	"Zond2mongoDB/configs"
+	L "Zond2mongoDB/logger"
+	"Zond2mongoDB/models"
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -372,6 +373,9 @@ func GetValidators() models.ResultValidator {
 		logger.Error("BEACONCHAIN_API environment variable not set")
 		return models.ResultValidator{}
 	}
+
+	// Append the validators endpoint path to the base URL
+	beaconchainURL = strings.TrimRight(beaconchainURL, "/") + "/zond/v1alpha1/validators"
 
 	req, err := http.NewRequest("GET", beaconchainURL, nil)
 	if err != nil {
