@@ -4,6 +4,12 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import config from '../../config';
 import { toFixed, formatAmount, epochsToDays } from '../lib/helpers';
+import { getDilithiumAddressFromPK } from '@theqrl/wallet.js';
+
+// Convert base64 to hex string
+function base64ToHex(base64: string): string {
+  return Buffer.from(base64, 'base64').toString('hex');
+}
 
 interface Validator {
   address: string;
@@ -23,7 +29,19 @@ export default function ValidatorsWrapper() {
     async function fetchValidators() {
       try {
         const response = await axios.get(`${config.handlerUrl}/validators`);
-        setValidators(response.data.validators || []);
+        const validatorsData = response.data.validators || [];
+        
+        // Process validators to decode addresses
+        const processedValidators = validatorsData.map((validator: any) => {
+          const publicKey = Buffer.from(validator.address, 'base64');
+          const dilithiumAddress = getDilithiumAddressFromPK(publicKey);
+          return {
+            ...validator,
+            address: '0x' + Buffer.from(dilithiumAddress).toString('hex')
+          };
+        });
+        
+        setValidators(processedValidators);
         setTotalStaked(response.data.totalStaked || '0');
       } catch (err) {
         console.error('Error fetching validators:', err);
@@ -105,7 +123,7 @@ export default function ValidatorsWrapper() {
                 </thead>
                 <tbody className="divide-y divide-[#3d3d3d] bg-transparent">
                   {validators.map((validator, index) => (
-                    <tr key={validator.address} className="hover:bg-[#2d2d2d]/30">
+                    <tr key={`table-${validator.address}-${index}`} className="hover:bg-[#2d2d2d]/30">
                       <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm sm:pl-6">
                         <a 
                           href={`/address/${validator.address}`}
@@ -143,8 +161,8 @@ export default function ValidatorsWrapper() {
         
         {/* Mobile-only expandable details */}
         <div className="sm:hidden mt-4 space-y-4">
-          {validators.map((validator) => (
-            <details key={validator.address} className="bg-[#2d2d2d]/30 rounded-lg">
+          {validators.map((validator, index) => (
+            <details key={`mobile-${validator.address}-${index}`} className="bg-[#2d2d2d]/30 rounded-lg">
               <summary className="px-4 py-3 cursor-pointer hover:bg-[#2d2d2d]/50 rounded-lg">
                 <div className="flex items-center justify-between">
                   <a 

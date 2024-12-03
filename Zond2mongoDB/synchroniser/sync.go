@@ -465,7 +465,7 @@ func singleBlockInsertion() {
 
 	go runPeriodicTask(func() {
 		updateDataPeriodically()
-	}, time.Second*30, "data_updates")
+	}, time.Minute*30, "data_updates")
 
 	// Add new periodic task for validator updates (every 6 hours)
 	go runPeriodicTask(func() {

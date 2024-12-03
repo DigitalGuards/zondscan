@@ -35,8 +35,8 @@ func InsertValidators(validators models.ResultValidator) {
 }
 
 func UpdateValidators(sum uint64, previousHash string) {
-	currentEpoch := int(sum) / 100
-	parentEpoch := int(GetBlockNumberFromHash(previousHash)) / 100
+	currentEpoch := int(sum) / 128
+	parentEpoch := int(GetBlockNumberFromHash(previousHash)) / 128
 
 	// Always update validators on first run or epoch change
 	if currentEpoch != parentEpoch {

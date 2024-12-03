@@ -295,7 +295,7 @@ func UserRoute(router *gin.Engine) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get latest block"})
 			return
 		}
-		currentEpoch := int(latestBlock[0].Result.Number / 30000) // Each epoch is 30000 blocks
+		currentEpoch := int(latestBlock[0].Result.Number / 128) // Each epoch is 128 blocks
 
 		// Initialize response
 		response := models.ValidatorResponse{
@@ -311,7 +311,7 @@ func UserRoute(router *gin.Engine) {
 		for _, slotValidators := range rawValidators.Resultvalidator.Validatorsbyslotnumber {
 			// Process leader
 			validatorEntry := models.Validator{
-				Address:      "0x" + slotValidators.Leader,
+				Address:      slotValidators.Leader,
 				Uptime:       100.0, // TODO: Calculate actual uptime from historical data
 				Age:          currentEpoch,
 				StakedAmount: "40000000000000000000000", // 40000 Quanta in Wei (18 decimal places)
@@ -328,7 +328,7 @@ func UserRoute(router *gin.Engine) {
 				processedValidators[attestor] = true
 
 				validatorEntry := models.Validator{
-					Address:      "0x" + attestor,
+					Address:      attestor,
 					Uptime:       100.0,
 					Age:          currentEpoch,
 					StakedAmount: "40000000000000000000000", // 40000 Quanta in Wei (18 decimal places)

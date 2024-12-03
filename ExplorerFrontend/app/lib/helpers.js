@@ -204,9 +204,9 @@ export function formatNumberWithCommas(x) {
 }
 
 export function epochsToDays(epochs) {
-  // Each epoch is 30000 blocks
-  // Each block takes ~12 seconds
-  // So each epoch is 360000 seconds (30000 * 12)
+  // Each epoch is 128 slots
+  // Each slot takes 60 seconds
+  // So each epoch is 128 * 60 seconds
   // Convert to days
-  return (epochs * 360000) / (24 * 60 * 60);
+  return (epochs * 128 * 60) / (24 * 60 * 60);
 }

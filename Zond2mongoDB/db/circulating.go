@@ -14,7 +14,7 @@ import (
 
 type Address struct {
 	Balance int64              `bson:"balance"`
-	_id     primitive.ObjectID `bson:"_id"`
+	ID      primitive.ObjectID `bson:"_id"`
 }
 
 func UpdateTotalBalance() {
