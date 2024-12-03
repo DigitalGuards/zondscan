@@ -1,6 +1,6 @@
 #!/bin/bash
 
-print_status "Deploying frontend is currently commented out uncomment the function or deploy it manually or with update-frontend.sh"
+
 # Helper functions for status and error messages
 print_status() {
     echo -e "\033[1;34m[*]\033[0m $1"
@@ -10,7 +10,7 @@ print_error() {
     echo -e "\033[1;31m[!]\033[0m $1" >&2
     exit 1
 }
-
+print_status "Deploying frontend is currently commented out uncomment the function or deploy it manually or with update-frontend.sh"
 # Clean PM2 logs and processes
 clean_pm2() {
     print_status "Cleaning PM2 logs and processes..."

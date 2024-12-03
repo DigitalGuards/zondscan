@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import config from '../../config';
-import { toFixed } from '../lib/helpers';
+import { toFixed, formatAmount, epochsToDays } from '../lib/helpers';
 
 interface Validator {
   address: string;
@@ -78,7 +78,7 @@ export default function ValidatorsWrapper() {
           />
           <StatCard
             title="Total Staked"
-            value={`${toFixed(parseFloat(totalStaked))} QRL`}
+            value={formatAmount(totalStaked)[0]}
             icon={
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -98,7 +98,7 @@ export default function ValidatorsWrapper() {
                   <tr className="bg-[#2d2d2d]/50">
                     <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-400 sm:pl-6">Validator</th>
                     <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-400">Status</th>
-                    <th scope="col" className="hidden sm:table-cell px-3 py-3.5 text-right text-sm font-semibold text-gray-400">Age (Days)</th>
+                    <th scope="col" className="hidden sm:table-cell px-3 py-3.5 text-right text-sm font-semibold text-gray-400">Age</th>
                     <th scope="col" className="hidden sm:table-cell px-3 py-3.5 text-right text-sm font-semibold text-gray-400">Uptime</th>
                     <th scope="col" className="px-3 py-3.5 text-right text-sm font-semibold text-gray-400 sm:pr-6">Staked</th>
                   </tr>
@@ -125,10 +125,13 @@ export default function ValidatorsWrapper() {
                           {validator.isActive ? 'Active' : 'Inactive'}
                         </span>
                       </td>
-                      <td className="hidden sm:table-cell whitespace-nowrap px-3 py-4 text-sm text-gray-300 text-right">{validator.age}</td>
+                      <td className="hidden sm:table-cell whitespace-nowrap px-3 py-4 text-sm text-gray-300 text-right">
+                        {epochsToDays(validator.age).toFixed(1)} days
+                        <span className="text-gray-500 text-xs ml-1">({validator.age} epochs)</span>
+                      </td>
                       <td className="hidden sm:table-cell whitespace-nowrap px-3 py-4 text-sm text-gray-300 text-right">{validator.uptime.toFixed(2)}%</td>
                       <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-300 text-right sm:pr-6 font-mono">
-                        {toFixed(parseFloat(validator.stakedAmount))}
+                        {formatAmount(validator.stakedAmount)[0]}
                       </td>
                     </tr>
                   ))}
@@ -162,7 +165,10 @@ export default function ValidatorsWrapper() {
               <div className="px-4 py-3 border-t border-[#3d3d3d] space-y-2">
                 <div className="flex justify-between">
                   <span className="text-gray-400">Age:</span>
-                  <span className="text-gray-300">{validator.age} days</span>
+                  <span className="text-gray-300">
+                    {epochsToDays(validator.age).toFixed(1)} days
+                    <span className="text-gray-500 text-xs ml-1">({validator.age} epochs)</span>
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400">Uptime:</span>
@@ -170,7 +176,7 @@ export default function ValidatorsWrapper() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400">Staked:</span>
-                  <span className="text-gray-300 font-mono">{toFixed(parseFloat(validator.stakedAmount))} QRL</span>
+                  <span className="text-gray-300 font-mono">{formatAmount(validator.stakedAmount)[0]} QRL</span>
                 </div>
               </div>
             </details>

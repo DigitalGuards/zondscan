@@ -289,37 +289,53 @@ func UserRoute(router *gin.Engine) {
 			return
 		}
 
-		// Transform the raw validator data into the frontend-expected format
+		// Get the current epoch from the latest block
+		latestBlock, err := db.ReturnLatestBlock()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get latest block"})
+			return
+		}
+		currentEpoch := int(latestBlock[0].Result.Number / 30000) // Each epoch is 30000 blocks
+
+		// Initialize response
 		response := models.ValidatorResponse{
 			Validators:  make([]models.Validator, 0),
-			TotalStaked: "0", // We'll calculate this as we process validators
+			TotalStaked: "0",
 		}
 
-		totalStaked := 0.0 // Assuming 1 validator = 1 stake for now
-		currentEpoch := rawValidators.Resultvalidator.Epoch
+		totalStaked := float64(0)
+
+		processedValidators := make(map[string]bool)
 
 		// Process validators by slot
 		for _, slotValidators := range rawValidators.Resultvalidator.Validatorsbyslotnumber {
-			// Add leader
-			response.Validators = append(response.Validators, models.Validator{
+			// Process leader
+			validatorEntry := models.Validator{
 				Address:      "0x" + slotValidators.Leader,
-				Uptime:      100.0, // Assuming 100% uptime for now
-				Age:         currentEpoch, // Using current epoch as age
-				StakedAmount: "32000000000", // Standard stake amount
-				IsActive:    true,
-			})
-			totalStaked += 32000000000
+				Uptime:       100.0, // TODO: Calculate actual uptime from historical data
+				Age:          currentEpoch,
+				StakedAmount: "40000000000000000000000", // 40000 Quanta in Wei (18 decimal places)
+				IsActive:     true,
+			}
+			response.Validators = append(response.Validators, validatorEntry)
+			totalStaked += 40000000000000000000000
 
-			// Add attestors
+			// Process attestors
 			for _, attestor := range slotValidators.Attestors {
-				response.Validators = append(response.Validators, models.Validator{
+				if _, exists := processedValidators[attestor]; exists {
+					continue
+				}
+				processedValidators[attestor] = true
+
+				validatorEntry := models.Validator{
 					Address:      "0x" + attestor,
-					Uptime:      100.0,
-					Age:         currentEpoch,
-					StakedAmount: "32000000000",
-					IsActive:    true,
-				})
-				totalStaked += 32000000000
+					Uptime:       100.0,
+					Age:          currentEpoch,
+					StakedAmount: "40000000000000000000000", // 40000 Quanta in Wei (18 decimal places)
+					IsActive:     true,
+				}
+				response.Validators = append(response.Validators, validatorEntry)
+				totalStaked += 40000000000000000000000
 			}
 		}
 

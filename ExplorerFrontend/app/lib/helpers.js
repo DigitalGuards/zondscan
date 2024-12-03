@@ -202,3 +202,11 @@ export function formatNumberWithCommas(x) {
   }
   return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
+
+export function epochsToDays(epochs) {
+  // Each epoch is 30000 blocks
+  // Each block takes ~12 seconds
+  // So each epoch is 360000 seconds (30000 * 12)
+  // Convert to days
+  return (epochs * 360000) / (24 * 60 * 60);
+}
