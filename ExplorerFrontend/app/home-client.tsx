@@ -168,6 +168,33 @@ export default function HomeClient() {
     }
   ];
 
+  const videoContainerStyle: React.CSSProperties = {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    zIndex: -1,
+    overflow: 'hidden',
+  };
+
+  const videoStyle: React.CSSProperties = {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    opacity: 0.5, // Adjust this value to make the video more or less visible
+  };
+
+  const overlayStyle: React.CSSProperties = {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Semi-transparent black overlay
+    zIndex: -1,
+  };
+
   const StatCard = ({ item }: { item: any }) => (
     <div className={`relative overflow-hidden rounded-2xl 
                    bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
@@ -204,42 +231,60 @@ export default function HomeClient() {
   );
 
   return (
-    <div className="min-h-screen">
-      <div className="max-w-[1200px] mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-8">
-        <div className="mb-4 sm:mb-10">
-          <SearchBar />
-        </div>
-        
-        {!data.dataInitialized && (
-          <div className="mb-4 sm:mb-8 p-2 sm:p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-500">
-            <div className="flex items-center">
-              <svg className="animate-spin -ml-1 mr-2 sm:mr-3 h-4 sm:h-5 w-4 sm:w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              <span className="text-xs sm:text-sm">Initializing explorer data... This may take a few minutes.</span>
-            </div>
+    <div className="relative">
+      {/* Video Background */}
+      <div style={videoContainerStyle}>
+        <video
+          autoPlay
+          loop
+          muted
+          playsInline
+          style={videoStyle}
+        >
+          <source src="/qrl-video-dark.mp4" type="video/mp4" />
+          Your browser does not support the video tag.
+        </video>
+        <div style={overlayStyle}></div>
+      </div>
+      
+      {/* Existing content */}
+      <div className="min-h-screen">
+        <div className="max-w-[1200px] mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-8">
+          <div className="mb-4 sm:mb-10">
+            <SearchBar />
           </div>
-        )}
-        
-        <div className="space-y-4 sm:space-y-8">
-          {/* Blockchain Stats */}
-          <div>
-            <h2 className="text-base sm:text-xl font-bold mb-2 sm:mb-4 text-[#ffa729]">Blockchain Statistics</h2>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
-              {blockchainStats.map((item, idx) => (
-                <StatCard key={idx} item={item} />
-              ))}
+          
+          {!data.dataInitialized && (
+            <div className="mb-4 sm:mb-8 p-2 sm:p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-500">
+              <div className="flex items-center">
+                <svg className="animate-spin -ml-1 mr-2 sm:mr-3 h-4 sm:h-5 w-4 sm:w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span className="text-xs sm:text-sm">Initializing explorer data... This may take a few minutes.</span>
+              </div>
             </div>
-          </div>
+          )}
+          
+          <div className="space-y-4 sm:space-y-8">
+            {/* Blockchain Stats */}
+            <div>
+              <h2 className="text-base sm:text-xl font-bold mb-2 sm:mb-4 text-[#ffa729]">Blockchain Statistics</h2>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
+                {blockchainStats.map((item, idx) => (
+                  <StatCard key={idx} item={item} />
+                ))}
+              </div>
+            </div>
 
-          {/* Financial Stats */}
-          <div>
-            <h2 className="text-base sm:text-xl font-bold mb-2 sm:mb-4 text-[#ffa729]">Financial Statistics</h2>
-            <div className="grid grid-cols-2 gap-2 sm:gap-4">
-              {financialStats.map((item, idx) => (
-                <StatCard key={idx} item={item} />
-              ))}
+            {/* Financial Stats */}
+            <div>
+              <h2 className="text-base sm:text-xl font-bold mb-2 sm:mb-4 text-[#ffa729]">Financial Statistics</h2>
+              <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                {financialStats.map((item, idx) => (
+                  <StatCard key={idx} item={item} />
+                ))}
+              </div>
             </div>
           </div>
         </div>
