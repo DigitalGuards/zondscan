@@ -11,7 +11,24 @@ export const metadata = {
   metadataBase: new URL('https://zondscan.com'),
   title: 'QRL Zond Explorer',
   description: 'QRL ZOND Web3/EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network',
-  keywords: 'QRL, ZOND, blockchain explorer, Web3, EVM, quantum resistant, cryptocurrency, blockchain, smart contracts, proof of stake, validators, transactions, blocks',
+  keywords: 'QRL, Proof of Stake, ZOND, blockchain explorer, Web3, EVM, quantum resistant, cryptocurrency, blockchain, smart contracts, validators, transactions, blocks',
+  icons: {
+    icon: [
+      { url: '/favis/favicon.ico' },
+      { url: '/favis/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/favis/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/favis/apple-touch-icon.png' },
+    ],
+    other: [
+      {
+        rel: 'mask-icon',
+        url: '/favis/safari-pinned-tab.svg',
+      },
+    ],
+  },
+  manifest: '/site.webmanifest',
   openGraph: {
     title: 'QRL Zond Explorer',
     description: 'QRL ZOND Web3/EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network',
@@ -43,10 +60,6 @@ export const metadata = {
       index: true,
       follow: true,
     },
-  },
-  icons: {
-    icon: '/favicon.ico',
-    apple: '/QRL.png',
   },
   alternates: {
     canonical: 'https://zondscan.com',

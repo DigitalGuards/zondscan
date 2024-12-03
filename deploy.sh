@@ -141,7 +141,7 @@ EOL
 
     # Start frontend in development mode with PM2
     print_status "Starting frontend in development mode..."
-    cd "$BASE_DIR/ExplorerFrontend" && pm2 start "npm run dev" --name "frontend" || print_error "Failed to start frontend"
+    cd "$BASE_DIR/ExplorerFrontend" && pm2 start "npm start" --name "frontend" || print_error "Failed to start frontend"
 }
 
 # Setup blockchain synchronizer
