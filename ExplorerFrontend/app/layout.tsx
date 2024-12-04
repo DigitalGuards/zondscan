@@ -10,13 +10,30 @@ export const viewport = {
 export const metadata = {
   metadataBase: new URL('https://zondscan.com'),
   title: 'QRL Zond Explorer',
-  description: 'QRL ZOND Web3/EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network',
+  description: 'QRL Zond Web3 EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network',
   keywords: 'QRL, Proof of Stake, ZOND, blockchain explorer, Web3, EVM, quantum resistant, cryptocurrency, blockchain, smart contracts, validators, transactions, blocks',
+  alternates: {
+    canonical: 'https://zondscan.com',
+    languages: {
+      'en-US': 'https://zondscan.com',
+    },
+    domains: [
+      {
+        domain: 'https://xmsscan.com',
+        defaultLocale: 'en-US'
+      },
+      {
+        domain: 'https://qrlvm.com',
+        defaultLocale: 'en-US'
+      }
+    ]
+  },
   icons: {
     icon: [
       { url: '/favis/favicon.ico' },
       { url: '/favis/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
       { url: '/favis/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/favis/favicon-48x48.png', sizes: '48x48', type: 'image/png' },
     ],
     apple: [
       { url: '/favis/apple-touch-icon.png' },
@@ -28,7 +45,7 @@ export const metadata = {
       },
     ],
   },
-  manifest: '/site.webmanifest',
+  
   openGraph: {
     title: 'QRL Zond Explorer',
     description: 'QRL ZOND Web3/EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network',
@@ -61,9 +78,6 @@ export const metadata = {
       follow: true,
     },
   },
-  alternates: {
-    canonical: 'https://zondscan.com',
-  },
 }
 
 interface RootLayoutProps {
@@ -79,8 +93,8 @@ export default function RootLayout({ children }: RootLayoutProps) {
             {
               "@context": "https://schema.org",
               "@type": "WebApplication",
-              "name": "QRL ZOND Explorer",
-              "description": "QRL ZOND Web3/EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network",
+              "name": "QRL Zond Explorer",
+              "description": "QRL Zond Web3 EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network",
               "url": "https://zondscan.com",
               "applicationCategory": "Blockchain Explorer",
               "operatingSystem": "All",
@@ -89,7 +103,57 @@ export default function RootLayout({ children }: RootLayoutProps) {
                 "@type": "Offer",
                 "price": "0",
                 "priceCurrency": "USD"
-              }
+              },
+              "hasPart": [
+                {
+                  "@type": "WebPage",
+                  "name": "Latest Transactions",
+                  "description": "View recent Transactions",
+                  "url": "https://zondscan.com/transactions/1"
+                },
+                {
+                  "@type": "WebPage",
+                  "name": "Pending Transactions",
+                  "description": "View pending transactions",
+                  "url": "https://zondscan.com/pending/1"
+                },
+                {
+                  "@type": "WebPage",
+                  "name": "Latest Blocks",
+                  "description": "View all Blocks",
+                  "url": "https://zondscan.com/blocks/1"
+                },
+                {
+                  "@type": "WebPage",
+                  "name": "Smart Contracts",
+                  "description": "Explore QRL contracts",
+                  "url": "https://zondscan.com/contracts"
+                },
+                {
+                  "@type": "WebPage",
+                  "name": "Validators",
+                  "description": "Network Validators",
+                  "url": "https://zondscan.com/validators"
+                },
+                {
+                  "@type": "WebPage",
+                  "name": "Balance Checker",
+                  "description": "Check Account balance",
+                  "url": "https://zondscan.com/checker"
+                },
+                {
+                  "@type": "WebPage",
+                  "name": "Unit Converter",
+                  "description": "Convert QRL currencies",
+                  "url": "https://zondscan.com/converter"
+                },
+                {
+                  "@type": "WebPage",
+                  "name": "Richlist",
+                  "description": "Top QRL holders",
+                  "url": "https://zondscan.com/richlist"
+                }
+              ]
             }
           `}
         </Script>
