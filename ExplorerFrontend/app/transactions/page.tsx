@@ -1,6 +1,7 @@
 import React from 'react';
 import TransactionsList from './[query]/TransactionsList';
 import { Transaction } from './[query]/types';
+import config from '../../config';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,8 +10,12 @@ interface TransactionsResponse {
   total: number;
 }
 
+interface PageProps {
+  searchParams: Promise<{ page?: string }>;
+}
+
 async function getTransactions(page: string): Promise<TransactionsResponse> {
-  const handlerUrl = process.env.NEXT_PUBLIC_HANDLER_URL || 'http://localhost:8080';
+  const handlerUrl = config.handlerUrl;
   const response = await fetch(`${handlerUrl}/txs?page=${page}`, {
     next: { revalidate: 10 }
   });
@@ -20,10 +25,6 @@ async function getTransactions(page: string): Promise<TransactionsResponse> {
   }
 
   return response.json();
-}
-
-interface PageProps {
-  searchParams: Promise<{ page?: string }>;
 }
 
 export default async function Page({ searchParams }: PageProps): Promise<JSX.Element> {

@@ -1,6 +1,46 @@
 import React from 'react';
 import { Metadata } from 'next';
 import PendingList from './PendingList';
+import axios from 'axios';
+import config from '../../../config';
+
+interface PendingTransaction {
+  hash: string;
+  from: string;
+  to: string;
+  value: string;
+  gasPrice: string;
+}
+
+interface PaginatedResponse {
+  transactions: PendingTransaction[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+async function fetchInitialData(page: number): Promise<PaginatedResponse> {
+  try {
+    const response = await axios.get<PaginatedResponse>(`${config.handlerUrl}/pending-transactions`, {
+      params: {
+        page,
+        limit: 10
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching initial pending transactions:', error);
+    // Return empty initial state that matches the PaginatedResponse interface
+    return {
+      transactions: [],
+      total: 0,
+      page: page,
+      limit: 10,
+      totalPages: 1
+    };
+  }
+}
 
 export async function generateMetadata({ params }: { params: Promise<{ query: string }> }): Promise<Metadata> {
   const resolvedParams = await params;
@@ -24,20 +64,16 @@ interface PageProps {
 }
 
 export default async function PendingPage({ params }: PageProps) {
-  // Initialize with empty data since we'll fetch it client-side
-  const initialData = {
-    txs: [],
-    total: 0
-  };
-
   const { query } = await params;
+  const currentPage = parseInt(query, 10) || 1;
+  const initialData = await fetchInitialData(currentPage);
 
   return (
     <main>
-      <h1 className="sr-only">Pending Transactions - Page {query}</h1>
+      <h1 className="sr-only">Pending Transactions - Page {currentPage}</h1>
       <PendingList 
         initialData={initialData}
-        currentPage={parseInt(query, 10)}
+        currentPage={currentPage}
       />
     </main>
   );

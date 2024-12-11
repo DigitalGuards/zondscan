@@ -29,7 +29,7 @@ export function getTransactionStatus(confirmations?: number | null): {
   }
 
   if (confirmations && confirmations > 0) {
-    if (confirmations >= 12) {
+    if (confirmations >= 1) {
       return { text: 'Confirmed', color: 'bg-green-500' };
     }
     return { text: 'Processing', color: 'bg-blue-500' };

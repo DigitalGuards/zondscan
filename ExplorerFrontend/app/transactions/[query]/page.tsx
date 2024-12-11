@@ -3,12 +3,11 @@ import { notFound } from 'next/navigation';
 import { Metadata } from 'next';
 import TransactionsClient from './transactions-client';
 import type { TransactionsResponse } from './types';
+import config from '../../../config';
 
 async function getTransactions(page: string): Promise<TransactionsResponse> {
-  const handlerUrl = process.env.NEXT_PUBLIC_HANDLER_URL || 'http://localhost:8080';
-  
   try {
-    const response = await fetch(`${handlerUrl}/txs?page=${page}`, {
+    const response = await fetch(`${config.handlerUrl}/txs?page=${page}`, {
       method: 'GET',
       headers: {
         'Accept': 'application/json'
@@ -41,7 +40,7 @@ function LoadingUI(): JSX.Element {
 }
 
 interface PageProps {
-    params: Promise<{ query: string }>;
+  params: Promise<{ query: string }>;
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ query: string }> }): Promise<Metadata> {

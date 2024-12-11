@@ -2,14 +2,13 @@ import { notFound } from 'next/navigation';
 import { Metadata } from 'next';
 import BlocksClient from './blocks-client';
 import type { BlocksResponse } from './types';
+import config from '../../../config';
 
 export const dynamic = 'force-dynamic';
 
 async function getBlocks(page: string): Promise<BlocksResponse> {
-  const handlerUrl = process.env.NEXT_PUBLIC_HANDLER_URL || 'http://localhost:8080';
-  
   try {
-    const response = await fetch(`${handlerUrl}/blocks?page=${page}`, {
+    const response = await fetch(`${config.handlerUrl}/blocks?page=${page}`, {
       method: 'GET',
       headers: {
         'Accept': 'application/json'

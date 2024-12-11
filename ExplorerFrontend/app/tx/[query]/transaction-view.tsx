@@ -50,9 +50,25 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
   // Format transaction value using the helper
   const [formattedValue, unit] = formatAmount(transaction.value);
 
-  // Format gas values with fallbacks for undefined values
-  const [formattedGasUsed] = transaction.gasUsed ? formatGas(transaction.gasUsed) : ['0'];
-  const [formattedGasPrice] = transaction.gasPrice ? formatGas(transaction.gasPrice) : ['0'];
+  // Calculate paid fees from gas values
+  const calculatePaidFees = () => {
+    if (!transaction.gasUsed || !transaction.gasPrice) return '0';
+    
+    try {
+      const gasUsed = BigInt(transaction.gasUsed);
+      const gasPrice = BigInt(transaction.gasPrice);
+      const paidFees = gasUsed * gasPrice;
+      
+      // Convert to QRL (divide by 10^18)
+      const paidFeesQRL = Number(paidFees) / 1e18;
+      return paidFeesQRL.toFixed(18); // Show full precision
+    } catch (error) {
+      console.error('Error calculating paid fees:', error);
+      return '0';
+    }
+  };
+
+  const paidFees = calculatePaidFees();
 
   return (
     <div className="py-8">
@@ -131,25 +147,13 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
 
               {(transaction.gasUsed || transaction.gasPrice) && (
                 <div className="space-y-4 pt-4 border-t border-gray-700">
-                  {transaction.gasUsed && (
-                    <div>
-                      <h2 className="text-sm font-semibold text-gray-400 mb-2">Gas Used</h2>
-                      <p className="text-gray-300">
-                        {formattedGasUsed}
-                        <span className="text-sm text-gray-400 ml-2">Shor</span>
-                      </p>
-                    </div>
-                  )}
-
-                  {transaction.gasPrice && (
-                    <div>
-                      <h2 className="text-sm font-semibold text-gray-400 mb-2">Gas Price</h2>
-                      <p className="text-gray-300">
-                        {formattedGasPrice}
-                        <span className="text-sm text-gray-400 ml-2">Shor</span>
-                      </p>
-                    </div>
-                  )}
+                  <div>
+                    <h2 className="text-sm font-semibold text-gray-400 mb-2">Transaction Fee</h2>
+                    <p className="text-2xl font-semibold text-[#ffa729]">
+                      {paidFees}
+                      <span className="text-sm text-gray-400 ml-2">QRL</span>
+                    </p>
+                  </div>
                 </div>
               )}
             </div>

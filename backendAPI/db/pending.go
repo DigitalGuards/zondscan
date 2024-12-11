@@ -10,7 +10,63 @@ import (
 	"os"
 )
 
-func GetPendingTransactions() (*models.PendingTransactionsResponse, error) {
+const DEFAULT_PAGE_SIZE = 10
+
+func GetPendingTransactions(page, limit int) (*models.PaginatedPendingTransactions, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = DEFAULT_PAGE_SIZE
+	}
+
+	transactions, err := fetchPendingTransactions()
+	if err != nil {
+		return nil, err
+	}
+
+	// Calculate pagination
+	total := len(transactions)
+	totalPages := (total + limit - 1) / limit
+	startIndex := (page - 1) * limit
+	endIndex := startIndex + limit
+	if endIndex > total {
+		endIndex = total
+	}
+
+	// Get paginated subset
+	var paginatedTxs []models.PendingTransaction
+	if startIndex < total {
+		paginatedTxs = transactions[startIndex:endIndex]
+	}
+
+	return &models.PaginatedPendingTransactions{
+		Transactions: paginatedTxs,
+		Total:        total,
+		Page:         page,
+		Limit:        limit,
+		TotalPages:   totalPages,
+	}, nil
+}
+
+func GetPendingTransactionByHash(hash string) (*models.PendingTransaction, error) {
+	transactions, err := fetchPendingTransactions()
+	if err != nil {
+		return nil, err
+	}
+
+	// Look for the transaction with matching hash
+	for _, tx := range transactions {
+		if tx.Hash == hash {
+			return &tx, nil
+		}
+	}
+
+	return nil, nil
+}
+
+// fetchPendingTransactions gets all pending transactions from the node
+func fetchPendingTransactions() ([]models.PendingTransaction, error) {
 	// Create JSON-RPC request
 	rpcReq := models.JsonRPC{
 		Jsonrpc: "2.0",
@@ -51,10 +107,22 @@ func GetPendingTransactions() (*models.PendingTransactionsResponse, error) {
 	}
 
 	// Parse response
-	var result models.PendingTransactionsResponse
-	if err := json.Unmarshal(body, &result); err != nil {
+	var rpcResp models.PendingTransactionsResponse
+	if err := json.Unmarshal(body, &rpcResp); err != nil {
 		return nil, fmt.Errorf("error parsing response: %v", err)
 	}
 
-	return &result, nil
+	// Convert response to slice of transactions
+	var allTransactions []models.PendingTransaction
+	if rpcResp.Result.Pending != nil {
+		for address, nonceTxs := range rpcResp.Result.Pending {
+			for nonce, tx := range nonceTxs {
+				tx.From = address  // Add the from address
+				tx.Nonce = nonce   // Add the nonce
+				allTransactions = append(allTransactions, tx)
+			}
+		}
+	}
+
+	return allTransactions, nil
 }

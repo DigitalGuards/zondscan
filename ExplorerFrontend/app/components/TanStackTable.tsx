@@ -84,17 +84,13 @@ const calculateFees = (tx: Transaction): number => {
     return tx.PaidFees;
   }
   
-  // If not, try to calculate from gas values (hex format)
-  if (!tx.gasUsedStr || !tx.gasPriceStr) return 0;
+  // Calculate from gas values (numeric format)
+  if (typeof tx.gasUsed !== 'number' || typeof tx.gasPrice !== 'number') return 0;
   
   try {
-    // Convert decimal numbers to hex if they're not already hex
-    const gasUsedHex = tx.gasUsedStr.startsWith('0x') ? tx.gasUsedStr : '0x' + Number(tx.gasUsedStr).toString(16);
-    const gasPriceHex = tx.gasPriceStr.startsWith('0x') ? tx.gasPriceStr : '0x' + Number(tx.gasPriceStr).toString(16);
-    
-    // Convert hex strings to BigInt and calculate
-    const gasUsed = BigInt(gasUsedHex);
-    const gasPrice = BigInt(gasPriceHex);
+    // Calculate fees using numeric values
+    const gasUsed = BigInt(tx.gasUsed);
+    const gasPrice = BigInt(tx.gasPrice);
     
     // Convert the result to a number for consistency with PaidFees format
     return Number(gasUsed * gasPrice) / 1e18; // Convert to QRL units

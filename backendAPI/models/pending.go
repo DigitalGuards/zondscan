@@ -30,3 +30,21 @@ type PendingTransactionsResponse struct {
 		Queued  map[string]map[string]PendingTransaction `json:"queued"`
 	} `json:"result"`
 }
+
+type PaginatedPendingTransactions struct {
+	Transactions []PendingTransaction `json:"transactions"`
+	Total       int                  `json:"total"`
+	Page        int                  `json:"page"`
+	Limit       int                  `json:"limit"`
+	TotalPages  int                  `json:"totalPages"`
+}
+
+type PaginatedPendingTransactionsResponse struct {
+	Jsonrpc string      `json:"jsonrpc"`
+	ID      int         `json:"id"`
+	Result  PaginatedPendingTransactions `json:"result"`
+}
+
+type PendingTransactionResponse struct {
+	Transaction *PendingTransaction `json:"transaction"`
+}

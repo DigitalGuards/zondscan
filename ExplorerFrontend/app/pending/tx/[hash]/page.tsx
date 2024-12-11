@@ -36,27 +36,26 @@ async function checkIfMined(hash: string): Promise<boolean> {
 async function findPendingTransaction(hash: string): Promise<PendingTransaction | null> {
   console.log(`Looking for transaction ${hash} in mempool...`);
   try {
-    const response = await axios.get(`${config.handlerUrl}/pending-transactions`);
-    console.log('Pending transactions response:', response.data);
-    const pendingData = response.data;
-
-    if (pendingData?.pending) {
-      for (const [address, nonceTxs] of Object.entries(pendingData.pending)) {
-        if (typeof nonceTxs === 'object') {
-          for (const [nonce, tx] of Object.entries(nonceTxs as any)) {
-            if (tx && typeof tx === 'object' && 'hash' in tx && tx.hash === hash) {
-              console.log('Found matching transaction in mempool');
-              return tx as PendingTransaction;
-            }
-          }
-        }
-      }
+    const response = await axios.get(`${config.handlerUrl}/pending-transaction/${hash}`);
+    console.log('Pending transaction response:', response.data);
+    
+    if (response.data?.transaction) {
+      console.log('Found transaction in mempool:', response.data.transaction);
+      return response.data.transaction;
     }
+    
     console.log('Transaction not found in mempool');
     return null;
-  } catch (error) {
-    console.error('Error fetching pending transactions:', error);
-    throw new Error('Failed to fetch pending transactions');
+  } catch (error: any) {
+    // If the transaction is not found, return null instead of throwing
+    if (error.response?.status === 404) {
+      console.log('Transaction not found in mempool (404)');
+      return null;
+    }
+    
+    // For other errors, throw
+    console.error('Error fetching pending transaction:', error);
+    throw new Error('Failed to fetch pending transaction');
   }
 }
 

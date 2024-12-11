@@ -43,32 +43,34 @@ export function toFixed(x) {
 export function formatGas(amount) {
   // Handle undefined or null
   if (amount === undefined || amount === null) {
-    return ['0', ''];
+    return ['0', 'Shor'];
   }
 
   // Handle zero amount
   if (amount === 0 || amount === '0' || amount === '0x0') {
-    return ['0', ''];
+    return ['0', 'Shor'];
   }
 
   try {
+    let value;
     // Handle hex strings (e.g., "0x123")
     if (typeof amount === 'string' && amount.startsWith('0x')) {
-      const value = parseInt(amount, 16);
-      return [value.toString(), ''];
+      value = parseInt(amount, 16);
     }
     // Handle number values
     else if (typeof amount === 'number') {
-      return [amount.toString(), ''];
+      value = amount;
     }
     // Handle other formats
     else {
-      const value = BigInt(amount);
-      return [value.toString(), ''];
+      value = BigInt(amount);
     }
+    
+    // Return the numeric value as a string with 'Shor' unit
+    return [value.toString(), 'Shor'];
   } catch (error) {
     console.error('Error converting gas amount:', error, amount);
-    return ['0', ''];
+    return ['0', 'Shor'];
   }
 }
 
@@ -209,4 +211,11 @@ export function epochsToDays(epochs) {
   // So each epoch is 128 * 60 seconds
   // Convert to days
   return (epochs * 128 * 60) / (24 * 60 * 60);
+}
+
+export function toHexString(num) {
+  if (num === undefined || num === null || num === 0) {
+    return '0x0';
+  }
+  return '0x' + num.toString(16);
 }

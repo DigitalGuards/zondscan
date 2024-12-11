@@ -11,6 +11,10 @@ const nextConfig = {
     return config;
   },
   transpilePackages: ['buffer'],
+  env: {
+    HANDLER_URL: process.env.HANDLER_URL,
+    DOMAIN_NAME: process.env.DOMAIN_NAME,
+  }
 }
 
 module.exports = nextConfig

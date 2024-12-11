@@ -12,9 +12,13 @@ import (
 )
 
 func UserRoute(router *gin.Engine) {
-	// Add pending transactions endpoint
+	// Add pending transactions endpoint with pagination
 	router.GET("/pending-transactions", func(c *gin.Context) {
-		result, err := db.GetPendingTransactions()
+		// Parse pagination parameters
+		page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+
+		result, err := db.GetPendingTransactions(page, limit)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": fmt.Sprintf("Failed to fetch pending transactions: %v", err),
@@ -22,7 +26,37 @@ func UserRoute(router *gin.Engine) {
 			return
 		}
 
-		c.JSON(http.StatusOK, result.Result)
+		c.JSON(http.StatusOK, result)
+	})
+
+	// Add endpoint for fetching a specific pending transaction
+	router.GET("/pending-transaction/:hash", func(c *gin.Context) {
+		hash := c.Param("hash")
+		if hash == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Transaction hash is required",
+			})
+			return
+		}
+
+		tx, err := db.GetPendingTransactionByHash(hash)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to fetch pending transaction: %v", err),
+			})
+			return
+		}
+
+		if tx == nil {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Pending transaction not found",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, models.PendingTransactionResponse{
+			Transaction: tx,
+		})
 	})
 
 	router.GET("/overview", func(c *gin.Context) {

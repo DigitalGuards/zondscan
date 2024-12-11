@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import TransactionView from './transaction-view';
 import type { TransactionDetails } from './types';
 import { decodeBase64ToHexadecimal } from '../../lib/server-helpers';
+import config from '../../../config';
 
 interface PageProps {
   params: Promise<{ query: string }>;
@@ -23,7 +24,7 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
   }
 
   console.log('Fetching transaction:', txHash);
-  const response = await fetch(`${process.env.NEXT_PUBLIC_HANDLER_URL}/tx/${txHash}`, {
+  const response = await fetch(`${config.handlerUrl}/tx/${txHash}`, {
     method: 'GET',
     headers: { Accept: 'application/json' },
     next: { revalidate: 60 }, // Cache for 60 seconds
@@ -68,56 +69,21 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
     }
   };
 
-  // Helper function to handle value conversion
-  const formatValue = (value: string | number | null | undefined, valueStr?: string): string => {
-    console.log('Formatting value:', value, 'valueStr:', valueStr);
-    
-    // If we have a hex string value from backend, use it directly
-    if (valueStr && valueStr.startsWith('0x')) {
-      console.log('Using valueStr:', valueStr);
-      return valueStr;
-    }
-    
+  // Helper function to convert number to hex string with proper scaling
+  const formatBigValue = (value: string | number | null | undefined): string => {
     if (value === null || value === undefined) return '0x0';
     
-    // If it's a number (uint64 from backend), convert to hex string
-    if (typeof value === 'number') {
-      // Convert to hex string with proper scaling (multiply by 10^18)
-      const valueStr = value.toString();
-      const scaledValue = BigInt(valueStr) * BigInt('1000000000000000000');
-      const hexValue = '0x' + scaledValue.toString(16);
-      console.log('Converted number to hex:', hexValue);
-      return hexValue;
+    try {
+      // Convert to string and then BigInt
+      const numStr = value.toString();
+      const num = BigInt(numStr);
+      
+      // Return hex string
+      return '0x' + num.toString(16);
+    } catch (error) {
+      console.error('Error converting value:', error);
+      return '0x0';
     }
-    
-    // If it's already a hex string, keep it as is
-    if (typeof value === 'string' && value.startsWith('0x')) {
-      console.log('Value is already hex:', value);
-      return value;
-    }
-    
-    // If it's a string containing a number
-    if (typeof value === 'string' && /^\d+$/.test(value)) {
-      // Convert to hex string with proper scaling (multiply by 10^18)
-      const scaledValue = BigInt(value) * BigInt('1000000000000000000');
-      const hexValue = '0x' + scaledValue.toString(16);
-      console.log('Converted string number to hex:', hexValue);
-      return hexValue;
-    }
-    
-    // If it's base64, decode it
-    if (typeof value === 'string') {
-      try {
-        const decoded = decodeBase64ToHexadecimal(value);
-        console.log('Decoded value:', decoded);
-        return decoded; // decodeBase64ToHexadecimal already adds '0x' prefix
-      } catch (error) {
-        console.error('Error decoding value:', error);
-        return value;
-      }
-    }
-    
-    return '0x0';
   };
 
   // Helper function to ensure integer values
@@ -136,10 +102,10 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
     blockNumber: ensureInteger(txData.blockNumber) || '',
     from: decodeAddress(txData.from),
     to: decodeAddress(txData.to),
-    value: formatValue(txData.value, txData.valueStr),
+    value: formatBigValue(txData.value),
     timestamp: ensureInteger(txData.blockTimestamp || txData.timestamp) || 0,
-    gasUsed: txData.gasUsedStr || '0x0',
-    gasPrice: txData.gasPriceStr || '0x0',
+    gasUsed: formatBigValue(txData.gasUsed),
+    gasPrice: formatBigValue(txData.gasPrice),
     nonce: ensureInteger(txData.nonce),
     latestBlock: ensureInteger(data.latestBlock)
   };
@@ -175,38 +141,31 @@ export default async function TransactionPage({ params }: PageProps): Promise<JS
     }
 
     // Check if transaction is in mempool
-    const pendingResponse = await fetch(`${process.env.NEXT_PUBLIC_HANDLER_URL}/pending-transactions`);
-    if (pendingResponse.ok) {
+    const pendingResponse = await fetch(`${config.handlerUrl}/pending-transaction/${txHash}`);
+    if (pendingResponse.ok && pendingResponse.status === 200) {
       const pendingData = await pendingResponse.json();
-      if (pendingData?.pending) {
-        for (const [address, nonceTxs] of Object.entries(pendingData.pending)) {
-          if (typeof nonceTxs === 'object') {
-            for (const [nonce, tx] of Object.entries(nonceTxs as any)) {
-              if (tx && typeof tx === 'object' && 'hash' in tx && tx.hash === txHash) {
-                // If found in mempool, show pending message with link
-                return (
-                  <div className="container mx-auto px-4">
-                    <div className="bg-yellow-900/20 border border-yellow-500/50 rounded-xl p-6 shadow-lg mt-6">
-                      <h2 className="text-yellow-500 font-semibold mb-2">Transaction Pending</h2>
-                      <p className="text-gray-300 mb-4">
-                        This transaction is still pending and has not been mined yet.
-                      </p>
-                      <a 
-                        href={`/pending/tx/${txHash}`}
-                        className="inline-block bg-yellow-500/20 text-yellow-500 px-4 py-2 rounded-lg hover:bg-yellow-500/30 transition-colors"
-                      >
-                        View Pending Transaction →
-                      </a>
-                    </div>
-                  </div>
-                );
-              }
-            }
-          }
-        }
+      if (pendingData?.transaction) {
+        // If found in mempool, show pending message with link
+        return (
+          <div className="container mx-auto px-4">
+            <div className="bg-yellow-900/20 border border-yellow-500/50 rounded-xl p-6 shadow-lg mt-6">
+              <h2 className="text-yellow-500 font-semibold mb-2">Transaction Pending</h2>
+              <p className="text-gray-300 mb-4">
+                This transaction is still pending and has not been mined yet.
+              </p>
+              <a 
+                href={`/pending/tx/${txHash}`}
+                className="inline-block bg-yellow-500/20 text-yellow-500 px-4 py-2 rounded-lg hover:bg-yellow-500/30 transition-colors"
+              >
+                View Pending Transaction →
+              </a>
+            </div>
+          </div>
+        );
       }
     }
 
+    // Not in mempool, try to get mined transaction
     const transaction = await getTransaction(txHash);
     return <TransactionView transaction={transaction} />;
   } catch (error) {
@@ -223,17 +182,6 @@ export default async function TransactionPage({ params }: PageProps): Promise<JS
             <li>The transaction has not been mined yet</li>
             <li>The transaction was dropped from the network</li>
           </ul>
-          {txHash && (
-            <p className="text-gray-300 mt-4">
-              If you believe this is a pending transaction, you can check the{' '}
-              <a 
-                href={`/pending/tx/${txHash}`}
-                className="text-yellow-500 hover:text-yellow-400 underline"
-              >
-                pending transactions page
-              </a>.
-            </p>
-          )}
         </div>
       </div>
     );

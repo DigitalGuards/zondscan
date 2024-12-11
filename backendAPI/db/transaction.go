@@ -135,7 +135,6 @@ func ReturnAllInternalTransactionsByAddress(address string) ([]models.TraceResul
 		}
 
 		from := hex.EncodeToString([]byte(singleTransaction.From))
-		fmt.Println(singleTransaction.Output)
 
 		if from == address[2:] {
 			singleTransaction.InOut = 0
@@ -526,11 +525,8 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 					To:             to,
 					TxHash:         txHash,
 					Value:          value,
-					ValueStr:       valueStr,
 					GasUsed:        gasUsed,
 					GasPrice:       gasPrice,
-					GasUsedStr:     gasUsedStr,
-					GasPriceStr:    gasPriceStr,
 					Nonce:          nonce,
 					Signature:      signature,
 					Pk:             pk,

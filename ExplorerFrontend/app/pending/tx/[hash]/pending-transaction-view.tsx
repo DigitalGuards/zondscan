@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { PendingTransaction } from '../types';
 import { formatAmount } from '../../../lib/helpers';
 
@@ -9,109 +10,92 @@ interface PendingTransactionViewProps {
 }
 
 export default function PendingTransactionView({ pendingTx }: PendingTransactionViewProps): JSX.Element {
-  // Format values using our helper function
-  const [value, valueUnit] = formatAmount(pendingTx.value);
-  const [gasPrice, gasPriceUnit] = formatAmount(pendingTx.gasPrice);
-  const [maxFeePerGas, maxFeeUnit] = pendingTx.maxFeePerGas ? formatAmount(pendingTx.maxFeePerGas) : ['0', 'QRL'];
-  const [maxPriorityFeePerGas, maxPriorityFeeUnit] = pendingTx.maxPriorityFeePerGas ? formatAmount(pendingTx.maxPriorityFeePerGas) : ['0', 'QRL'];
-
   return (
     <div className="container mx-auto px-4">
       <h1 className="text-2xl font-bold mb-6 text-[#ffa729]">Pending Transaction Details</h1>
       
-      <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] rounded-xl p-6 mb-8 shadow-xl">
-        <div className="space-y-4">
-          <div className="flex flex-col space-y-1">
-            <span className="text-gray-400">Transaction Hash</span>
-            <span className="text-gray-200 break-all font-mono">{pendingTx.hash}</span>
+      <div className="bg-gradient-to-r from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] rounded-xl p-6 mb-6">
+        <div className="grid grid-cols-1 gap-6">
+          <div>
+            <h2 className="text-lg font-semibold text-[#ffa729] mb-2">Transaction Hash</h2>
+            <p className="font-mono text-gray-300 break-all">{pendingTx.hash}</p>
           </div>
 
-          <div className="flex flex-col space-y-1">
-            <span className="text-gray-400">Status</span>
-            <div className="bg-yellow-500/20 text-yellow-500 px-3 py-1 rounded-lg text-sm inline-block">
-              Pending
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h2 className="text-lg font-semibold text-[#ffa729] mb-2">From</h2>
+              <Link href={`/address/${pendingTx.from}`} className="font-mono text-gray-300 hover:text-[#ffa729] break-all">
+                {pendingTx.from}
+              </Link>
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-[#ffa729] mb-2">To</h2>
+              {pendingTx.to ? (
+                <Link href={`/address/${pendingTx.to}`} className="font-mono text-gray-300 hover:text-[#ffa729] break-all">
+                  {pendingTx.to}
+                </Link>
+              ) : (
+                <span className="text-gray-500">Contract Creation</span>
+              )}
             </div>
           </div>
 
-          <div className="flex flex-col space-y-1">
-            <span className="text-gray-400">From</span>
-            <span className="text-gray-200 break-all font-mono">{pendingTx.from}</span>
-          </div>
-
-          {pendingTx.to && (
-            <div className="flex flex-col space-y-1">
-              <span className="text-gray-400">To</span>
-              <span className="text-gray-200 break-all font-mono">{pendingTx.to}</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h2 className="text-lg font-semibold text-[#ffa729] mb-2">Value</h2>
+              <p className="font-mono text-gray-300">{formatAmount(pendingTx.value)}</p>
             </div>
-          )}
-
-          <div className="flex flex-col space-y-1">
-            <span className="text-gray-400">Value</span>
-            <span className="text-gray-200">
-              {value} {valueUnit}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="flex flex-col space-y-1">
-              <span className="text-gray-400">Gas Limit</span>
-              <span className="text-gray-200">{parseInt(pendingTx.gas, 16).toLocaleString()}</span>
+            <div>
+              <h2 className="text-lg font-semibold text-[#ffa729] mb-2">Gas Price</h2>
+              <p className="font-mono text-gray-300">{formatAmount(pendingTx.gasPrice)}</p>
             </div>
+          </div>
 
-            <div className="flex flex-col space-y-1">
-              <span className="text-gray-400">Gas Price</span>
-              <span className="text-gray-200">
-                {gasPrice} {gasPriceUnit}
-              </span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h2 className="text-lg font-semibold text-[#ffa729] mb-2">Gas Limit</h2>
+              <p className="font-mono text-gray-300">{pendingTx.gas}</p>
             </div>
-
-            {pendingTx.maxFeePerGas && (
-              <div className="flex flex-col space-y-1">
-                <span className="text-gray-400">Max Fee Per Gas</span>
-                <span className="text-gray-200">
-                  {maxFeePerGas} {maxFeeUnit}
-                </span>
-              </div>
-            )}
-
-            {pendingTx.maxPriorityFeePerGas && (
-              <div className="flex flex-col space-y-1">
-                <span className="text-gray-400">Max Priority Fee Per Gas</span>
-                <span className="text-gray-200">
-                  {maxPriorityFeePerGas} {maxPriorityFeeUnit}
-                </span>
-              </div>
-            )}
+            <div>
+              <h2 className="text-lg font-semibold text-[#ffa729] mb-2">Nonce</h2>
+              <p className="font-mono text-gray-300">{pendingTx.nonce}</p>
+            </div>
           </div>
 
-          <div className="flex flex-col space-y-1">
-            <span className="text-gray-400">Nonce</span>
-            <span className="text-gray-200">{parseInt(pendingTx.nonce, 16)}</span>
-          </div>
-
-          {pendingTx.input && pendingTx.input !== '0x' && (
-            <div className="flex flex-col space-y-1">
-              <span className="text-gray-400">Input Data</span>
-              <span className="text-gray-200 break-all font-mono">{pendingTx.input}</span>
+          {(pendingTx.maxFeePerGas || pendingTx.maxPriorityFeePerGas) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {pendingTx.maxFeePerGas && (
+                <div>
+                  <h2 className="text-lg font-semibold text-[#ffa729] mb-2">Max Fee Per Gas</h2>
+                  <p className="font-mono text-gray-300">{formatAmount(pendingTx.maxFeePerGas)}</p>
+                </div>
+              )}
+              {pendingTx.maxPriorityFeePerGas && (
+                <div>
+                  <h2 className="text-lg font-semibold text-[#ffa729] mb-2">Max Priority Fee Per Gas</h2>
+                  <p className="font-mono text-gray-300">{formatAmount(pendingTx.maxPriorityFeePerGas)}</p>
+                </div>
+              )}
             </div>
           )}
+
+          <div>
+            <h2 className="text-lg font-semibold text-[#ffa729] mb-2">Input Data</h2>
+            <div className="bg-[#1a1a1a] rounded-lg p-4 overflow-x-auto">
+              <pre className="font-mono text-gray-300 whitespace-pre-wrap break-all">
+                {pendingTx.input === '0x' ? '(none)' : pendingTx.input}
+              </pre>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="bg-yellow-900/20 border border-yellow-500/50 rounded-xl p-6 shadow-lg">
-        <h2 className="text-yellow-500 font-semibold mb-2">About Pending Transactions</h2>
-        <p className="text-gray-300">
-          This transaction is currently in the mempool waiting to be included in a block. 
-          The details shown here may change when the transaction is mined, and there is no 
-          guarantee that this transaction will be included in a block.
-        </p>
-        <p className="text-gray-300 mt-2">
-          This page will automatically refresh every 10 seconds to check for updates.
+      <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-xl p-4 mb-6">
+        <p className="text-yellow-200">
+          <span className="font-semibold">Note:</span> This transaction is pending and waiting to be included in a block.
+          The status updates every few seconds.
         </p>
       </div>
-      
-      {/* Add auto-refresh meta tag */}
-      <meta httpEquiv="refresh" content="10" />
     </div>
   );
 }

@@ -1,160 +1,115 @@
 "use client";
 
-import React, { useEffect } from 'react';
 import axios from 'axios';
+import React, { useEffect } from 'react';
 import config from '../../../config';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { PendingTransaction, PendingTransactionsResponse } from '../tx/types';
 import { formatAmount } from '../../lib/helpers';
 
-interface PendingTransactionDisplay {
+interface PendingTransaction {
   hash: string;
   from: string;
-  to: string | null;
+  to: string;
   value: string;
   gasPrice: string;
-  timestamp: number;
+  timestamp?: number;
 }
 
-const transformPendingData = (data: PendingTransactionsResponse): PendingTransactionDisplay[] => {
-  const transformedTxs: PendingTransactionDisplay[] = [];
-  
-  try {
-    if (data?.pending) {
-      Object.entries(data.pending).forEach(([address, nonceTxs]) => {
-        if (typeof nonceTxs === 'object') {
-          Object.entries(nonceTxs).forEach(([nonce, tx]) => {
-            if (tx && typeof tx === 'object' && 'hash' in tx) {
-              try {
-                const transaction: PendingTransactionDisplay = {
-                  hash: tx.hash,
-                  from: tx.from,
-                  to: tx.to || null,
-                  value: tx.value,
-                  gasPrice: tx.gasPrice,
-                  timestamp: Math.floor(Date.now() / 1000)
-                };
-                transformedTxs.push(transaction);
-              } catch (error) {
-                console.error('Error transforming transaction:', error);
-              }
-            }
-          });
-        }
-      });
-    }
-  } catch (error) {
-    console.error('Error in transformPendingData:', error);
-  }
-  
-  return transformedTxs;
+interface PaginatedResponse {
+  transactions: PendingTransaction[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+interface TransactionCardProps {
+  transaction: PendingTransaction;
+}
+
+const TransactionCard: React.FC<TransactionCardProps> = ({ transaction }) => {
+  const date = transaction.timestamp 
+    ? new Date(transaction.timestamp * 1000).toLocaleString('en-GB', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      })
+    : 'Pending';
+
+  return (
+    <div className="bg-gradient-to-r from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] rounded-xl p-4 mb-4 hover:border-[#ffa729] transition-colors">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <Link href={`/pending/tx/${transaction.hash}`} className="text-[#ffa729] hover:text-[#ffb952] font-mono">
+            {transaction.hash}
+          </Link>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <p className="text-gray-400">From</p>
+            <Link href={`/address/${transaction.from}`} className="text-[#ffa729] hover:text-[#ffb952] font-mono break-all">
+              {transaction.from}
+            </Link>
+          </div>
+          <div>
+            <p className="text-gray-400">To</p>
+            <Link href={`/address/${transaction.to}`} className="text-[#ffa729] hover:text-[#ffb952] font-mono break-all">
+              {transaction.to}
+            </Link>
+          </div>
+        </div>
+        <div className="flex justify-between items-center mt-2">
+          <div>
+            <span className="text-gray-400">Value: </span>
+            <span className="text-white font-mono">{formatAmount(transaction.value)}</span>
+          </div>
+          <div>
+            <span className="text-gray-400">Gas Price: </span>
+            <span className="text-white font-mono">{formatAmount(transaction.gasPrice)}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
-const fetchPendingTransactions = async () => {
-  const response = await axios.get(`${config.handlerUrl}/pending-transactions`);
-  const transformedTxs = transformPendingData(response.data);
-  
-  return {
-    txs: transformedTxs,
-    total: transformedTxs.length
-  };
-};
+const ITEMS_PER_PAGE = 10;
 
 interface PendingListProps {
-  initialData: {
-    txs: PendingTransactionDisplay[];
-    total: number;
-  };
+  initialData: PaginatedResponse;
   currentPage: number;
 }
 
-function TransactionCard({ transaction }: { transaction: PendingTransactionDisplay }) {
-  const date = new Date(transaction.timestamp * 1000).toLocaleString('en-GB', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
+const fetchPendingTransactions = async (page: number): Promise<PaginatedResponse> => {
+  const response = await axios.get<PaginatedResponse>(`${config.handlerUrl}/pending-transactions`, {
+    params: {
+      page,
+      limit: ITEMS_PER_PAGE
+    }
   });
-
-  const [formattedValue, valueUnit] = formatAmount(transaction.value);
-  const [formattedGasPrice, gasPriceUnit] = formatAmount(transaction.gasPrice);
-
-  return (
-    <Link 
-      href={`/pending/tx/${transaction.hash}`}
-      className='relative overflow-hidden rounded-2xl 
-                bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
-                border border-[#3d3d3d] shadow-xl
-                hover:border-[#ffa729] transition-all duration-300
-                group mb-4 block'
-    >
-      <div className="flex items-center p-6">
-        <div className="flex flex-col items-center w-48">
-          <div className="mb-2">
-            <div className="bg-yellow-500/20 text-yellow-500 px-3 py-1 rounded-lg text-sm">
-              Pending
-            </div>
-          </div>
-          <div className="text-center">
-            <p className="text-lg font-semibold text-[#ffa729] mb-1">Transfer</p>
-            <p className="text-sm text-gray-400">{date}</p>
-          </div>
-        </div>
-
-        <div className="flex-1 px-8 border-l border-r border-[#3d3d3d]">
-          <div className="mb-2">
-            <p className="text-sm font-medium text-gray-400 mb-1">Transaction Hash</p>
-            <p className="text-gray-300 hover:text-[#ffa729] transition-colors break-all font-mono">
-              {transaction.hash}
-            </p>
-          </div>
-          <div className="mt-4">
-            <p className="text-sm font-medium text-gray-400 mb-1">From</p>
-            <p className="text-gray-300 font-mono truncate">
-              {transaction.from}
-            </p>
-            {transaction.to && (
-              <div className="mt-2">
-                <p className="text-sm font-medium text-gray-400 mb-1">To</p>
-                <p className="text-gray-300 font-mono truncate">
-                  {transaction.to}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="w-48 text-right">
-          <p className="text-sm font-medium text-gray-400 mb-2">Amount</p>
-          <p className="text-2xl font-semibold text-[#ffa729]">
-            {formattedValue}
-            <span className="text-sm text-gray-400 ml-2">{valueUnit}</span>
-          </p>
-          <p className="text-sm text-gray-400 mt-2">
-            Gas Price: {formattedGasPrice} {gasPriceUnit}
-          </p>
-        </div>
-      </div>
-    </Link>
-  );
-}
+  
+  return response.data;
+};
 
 export default function PendingList({ initialData, currentPage }: PendingListProps) {
   const { data, isError, error, refetch } = useQuery({
-    queryKey: ['pending-transactions'],
-    queryFn: fetchPendingTransactions,
+    queryKey: ['pending-transactions', currentPage],
+    queryFn: () => fetchPendingTransactions(currentPage),
     refetchInterval: 5000,
     retry: 2,
-    refetchOnMount: true,
+    refetchOnMount: false,
     initialData
   });
 
   useEffect(() => {
-    refetch();
-  }, [refetch]);
+    if (currentPage !== data?.page) {
+      refetch();
+    }
+  }, [refetch, currentPage, data?.page]);
 
   if (isError) {
     return (
@@ -168,10 +123,13 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
     );
   }
 
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE + 1;
+  const endIndex = Math.min(currentPage * ITEMS_PER_PAGE, data?.total || 0);
+
   return (
     <div className="px-4 lg:px-6">
       <h1 className="text-2xl font-bold mb-6 text-[#ffa729]">Mempool</h1>
-      {!data || data.txs.length === 0 ? (
+      {!data?.transactions?.length ? (
         <div className="bg-gradient-to-r from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] rounded-xl p-8 text-center">
           <div className="inline-block p-4 bg-yellow-500/20 rounded-full mb-4">
             <svg className="w-8 h-8 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -187,15 +145,41 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
         <div className="mb-8">
           <div className="bg-gradient-to-r from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] rounded-xl p-4 mb-6">
             <p className="text-gray-300">
-              <span className="text-[#ffa729] font-semibold">{data.txs.length}</span> unconfirmed {data.txs.length === 1 ? 'transaction' : 'transactions'} waiting to be included in a block. Updates every 5 seconds.
+              <span className="text-[#ffa729] font-semibold">{data?.total}</span> unconfirmed {data?.total === 1 ? 'transaction' : 'transactions'} waiting to be included in a block. Updates every 5 seconds.
+              {data?.totalPages > 1 && ` (Showing ${startIndex}-${endIndex} of ${data?.total})`}
             </p>
           </div>
-          {data.txs.map(transaction => (
+          {data?.transactions?.map(transaction => (
             <TransactionCard 
               key={transaction.hash} 
               transaction={transaction}
             />
           ))}
+          
+          {/* Pagination */}
+          {data?.totalPages > 1 && (
+            <div className="flex justify-center gap-2 mt-6">
+              {currentPage > 1 && (
+                <Link
+                  href={`/pending/${currentPage - 1}`}
+                  className="px-4 py-2 rounded-lg bg-[#2d2d2d] hover:bg-[#3d3d3d] text-gray-300 transition-colors"
+                >
+                  Previous
+                </Link>
+              )}
+              <span className="px-4 py-2 text-gray-400">
+                Page {currentPage} of {data?.totalPages}
+              </span>
+              {currentPage < data?.totalPages && (
+                <Link
+                  href={`/pending/${currentPage + 1}`}
+                  className="px-4 py-2 rounded-lg bg-[#2d2d2d] hover:bg-[#3d3d3d] text-gray-300 transition-colors"
+                >
+                  Next
+                </Link>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
