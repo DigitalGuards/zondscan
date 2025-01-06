@@ -315,7 +315,8 @@ func UserRoute(router *gin.Engine) {
 	})
 
 	router.GET("/validators", func(c *gin.Context) {
-		rawValidators, err := db.ReturnValidators()
+		pageToken := c.Query("page_token")
+		rawValidators, err := db.ReturnValidators(pageToken)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": fmt.Sprintf("Failed to fetch validators: %v", err),
@@ -335,6 +336,7 @@ func UserRoute(router *gin.Engine) {
 		response := models.ValidatorResponse{
 			Validators:  make([]models.Validator, 0),
 			TotalStaked: "0",
+			NextPageToken: pageToken, // Pass through the page token
 		}
 
 		totalStaked := float64(0)
@@ -387,11 +389,22 @@ func UserRoute(router *gin.Engine) {
 	})
 
 	router.GET("/contracts", func(c *gin.Context) {
-		query, err := db.ReturnContracts()
+		// Parse pagination parameters
+		page, _ := strconv.ParseInt(c.DefaultQuery("page", "0"), 10, 64)
+		limit, _ := strconv.ParseInt(c.DefaultQuery("limit", "10"), 10, 64)
+		search := c.Query("search")
+
+		query, total, err := db.ReturnContracts(page, limit, search)
 		if err != nil {
-			fmt.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to fetch contracts: %v", err),
+			})
+			return
 		}
-		c.JSON(http.StatusOK, gin.H{"response": query})
+		c.JSON(http.StatusOK, gin.H{
+			"response": query,
+			"total": total,
+		})
 	})
 
 	router.GET("/block/:query", func(c *gin.Context) {

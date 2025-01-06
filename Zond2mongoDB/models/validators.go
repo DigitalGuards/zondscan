@@ -24,8 +24,9 @@ type ResultValidator struct {
 
 // New beacon chain API validator models
 type BeaconValidatorResponse struct {
-	Epoch         string            `json:"epoch"`
 	ValidatorList []BeaconValidator `json:"validatorList"`
+	NextPageToken string           `json:"nextPageToken"`
+	TotalSize     int              `json:"totalSize"`
 }
 
 type BeaconValidator struct {
@@ -36,12 +37,12 @@ type BeaconValidator struct {
 type ValidatorDetails struct {
 	PublicKey                  string `json:"publicKey"`
 	WithdrawalCredentials      string `json:"withdrawalCredentials"`
-	EffectiveBalance           string `json:"effectiveBalance"`
-	Slashed                    bool   `json:"slashed"`
+	EffectiveBalance          string `json:"effectiveBalance"`
+	Slashed                   bool   `json:"slashed"`
 	ActivationEligibilityEpoch string `json:"activationEligibilityEpoch"`
-	ActivationEpoch            string `json:"activationEpoch"`
-	ExitEpoch                  string `json:"exitEpoch"`
-	WithdrawableEpoch          string `json:"withdrawableEpoch"`
+	ActivationEpoch           string `json:"activationEpoch"`
+	ExitEpoch                 string `json:"exitEpoch"`
+	WithdrawableEpoch         string `json:"withdrawableEpoch"`
 }
 
 // Frontend validator models

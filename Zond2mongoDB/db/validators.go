@@ -47,7 +47,7 @@ func UpdateValidators(sum uint64, previousHash string) {
 		validators := rpc.GetValidators()
 
 		// Only insert if we got valid data
-		if validators.ValidatorsBySlotNumber != nil && len(validators.ValidatorsBySlotNumber) > 0 {
+		if len(validators.ValidatorsBySlotNumber) > 0 {
 			InsertValidators(validators)
 			configs.Logger.Info("Successfully updated validators",
 				zap.Int("num_slots", len(validators.ValidatorsBySlotNumber)))

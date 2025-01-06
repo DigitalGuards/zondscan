@@ -366,7 +366,11 @@ func GetBalance(address string) (string, error) {
 
 func GetValidators() models.ResultValidator {
 	logger.Info("Starting GetValidators call to beacon chain API")
-	var beaconResponse models.BeaconValidatorResponse
+	var allValidators models.ResultValidator
+	pageToken := ""
+	maxPages := 3
+	currentPage := 0
+	totalValidators := 0
 
 	beaconchainURL := os.Getenv("BEACONCHAIN_API")
 	if beaconchainURL == "" {
@@ -374,97 +378,95 @@ func GetValidators() models.ResultValidator {
 		return models.ResultValidator{}
 	}
 
-	// Append the validators endpoint path to the base URL
-	beaconchainURL = strings.TrimRight(beaconchainURL, "/") + "/zond/v1alpha1/validators"
-
-	req, err := http.NewRequest("GET", beaconchainURL, nil)
-	if err != nil {
-		logger.Error("Failed to create request", zap.Error(err))
-		return models.ResultValidator{}
-	}
-	logger.Info("Created HTTP request for validators")
-
+	// Base URL for the validators endpoint
+	baseURL := strings.TrimRight(beaconchainURL, "/") + "/zond/v1alpha1/validators"
 	client := &http.Client{
-		Timeout: 30 * time.Second, // Increased timeout as the response is large
-	}
-	logger.Info("Sending request to beacon chain API")
-	resp, err := client.Do(req)
-	if err != nil {
-		logger.Error("Failed to get response from beacon API", zap.Error(err))
-		return models.ResultValidator{}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		logger.Error("Unexpected status code from beacon API",
-			zap.Int("status_code", resp.StatusCode))
-		return models.ResultValidator{}
+		Timeout: 30 * time.Second,
 	}
 
-	logger.Info("Got response from beacon chain API",
-		zap.Int("status_code", resp.StatusCode),
-		zap.String("content_type", resp.Header.Get("Content-Type")))
+	// Initialize the result
+	allValidators.ValidatorsBySlotNumber = make([]models.ValidatorsBySlotNumber, 0)
+	validatorMap := make(map[int][]string) // Map to accumulate validators across pages
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		logger.Error("Failed to read response body", zap.Error(err))
-		return models.ResultValidator{}
-	}
-
-	if len(body) == 0 {
-		logger.Error("Empty response body from beacon API")
-		return models.ResultValidator{}
-	}
-
-	logger.Info("Received response body",
-		zap.Int("body_length", len(body)))
-
-	err = json.Unmarshal(body, &beaconResponse)
-	if err != nil {
-		logger.Error("Failed to unmarshal response",
-			zap.Error(err),
-			zap.String("body_preview", string(body[:min(len(body), 200)]))) // Log first 200 chars only
-		return models.ResultValidator{}
-	}
-
-	if len(beaconResponse.ValidatorList) == 0 {
-		logger.Warn("No validators found in response")
-		return models.ResultValidator{}
-	}
-
-	logger.Info("Successfully unmarshaled response",
-		zap.String("epoch", beaconResponse.Epoch),
-		zap.Int("validator_count", len(beaconResponse.ValidatorList)))
-
-	// Convert beacon response to ResultValidator format
-	epoch, err := strconv.Atoi(beaconResponse.Epoch)
-	if err != nil {
-		logger.Error("Failed to parse epoch",
-			zap.String("epoch", beaconResponse.Epoch),
-			zap.Error(err))
-		return models.ResultValidator{}
-	}
-
-	result := models.ResultValidator{
-		Epoch:                  epoch,
-		ValidatorsBySlotNumber: make([]models.ValidatorsBySlotNumber, 0),
-	}
-
-	// Group validators by slot number
-	validatorMap := make(map[int][]string)
-	for _, validator := range beaconResponse.ValidatorList {
-		index, err := strconv.Atoi(validator.Index)
-		if err != nil {
-			logger.Warn("Failed to parse validator index",
-				zap.String("index", validator.Index),
-				zap.Error(err))
-			continue
+	for currentPage < maxPages {
+		requestURL := baseURL
+		if pageToken != "" {
+			requestURL += "?page_token=" + pageToken
 		}
-		slotNumber := index % 100 // Assuming 100 slots per epoch
-		validatorMap[slotNumber] = append(validatorMap[slotNumber], validator.Validator.PublicKey)
+
+		req, err := http.NewRequest("GET", requestURL, nil)
+		if err != nil {
+			logger.Error("Failed to create request", zap.Error(err))
+			break
+		}
+		logger.Info("Created HTTP request for validators", 
+			zap.String("url", requestURL),
+			zap.Int("page", currentPage+1),
+			zap.Int("maxPages", maxPages))
+
+		resp, err := client.Do(req)
+		if err != nil {
+			logger.Error("Failed to get response from beacon API", zap.Error(err))
+			break
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			logger.Error("Unexpected status code from beacon API",
+				zap.Int("status_code", resp.StatusCode))
+			resp.Body.Close()
+			break
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			logger.Error("Failed to read response body", zap.Error(err))
+			break
+		}
+
+		var beaconResponse models.BeaconValidatorResponse
+		err = json.Unmarshal(body, &beaconResponse)
+		if err != nil {
+			logger.Error("Failed to unmarshal response", zap.Error(err))
+			logger.Error("Response body:", zap.String("body", string(body)))
+			break
+		}
+
+		// Update total validators count
+		if currentPage == 0 {
+			totalValidators = beaconResponse.TotalSize
+			logger.Info("Total validators reported by API", zap.Int("total_validators", totalValidators))
+		}
+
+		// Process validators from this page
+		for _, validator := range beaconResponse.ValidatorList {
+			index, err := strconv.Atoi(validator.Index)
+			if err != nil {
+				logger.Warn("Failed to parse validator index",
+					zap.String("index", validator.Index),
+					zap.Error(err))
+				continue
+			}
+			slotNumber := index % 100 // Assuming 100 slots per epoch
+			validatorMap[slotNumber] = append(validatorMap[slotNumber], validator.Validator.PublicKey)
+		}
+
+		logger.Info("Processed validator page",
+			zap.Int("page", currentPage+1),
+			zap.Int("validators_on_page", len(beaconResponse.ValidatorList)),
+			zap.String("next_page_token", beaconResponse.NextPageToken))
+
+		currentPage++
+
+		// Check if there's a next page
+		if beaconResponse.NextPageToken == "" {
+			logger.Info("No more pages available", zap.Int("total_pages_fetched", currentPage))
+			break
+		}
+		pageToken = beaconResponse.NextPageToken
 	}
 
-	// Convert map to ValidatorsBySlotNumber slice
+	// Convert accumulated map to ValidatorsBySlotNumber slice
 	for slotNumber, validators := range validatorMap {
 		if len(validators) > 0 {
 			slotValidators := models.ValidatorsBySlotNumber{
@@ -472,16 +474,17 @@ func GetValidators() models.ResultValidator {
 				Leader:     validators[0],
 				Attestors:  validators[1:],
 			}
-			result.ValidatorsBySlotNumber = append(result.ValidatorsBySlotNumber, slotValidators)
+			allValidators.ValidatorsBySlotNumber = append(allValidators.ValidatorsBySlotNumber, slotValidators)
 		}
 	}
 
-	logger.Info("Finished processing validators",
-		zap.Int("epoch", result.Epoch),
-		zap.Int("slot_count", len(result.ValidatorsBySlotNumber)),
-		zap.Int("total_validators", len(beaconResponse.ValidatorList)))
+	logger.Info("Completed fetching all validators",
+		zap.Int("total_pages", currentPage),
+		zap.Int("total_validators_processed", len(validatorMap)),
+		zap.Int("total_slots", len(allValidators.ValidatorsBySlotNumber)),
+		zap.Int("expected_total", totalValidators))
 
-	return result
+	return allValidators
 }
 
 func min(a, b int) int {

@@ -19,8 +19,9 @@ type Resultvalidator struct {
 
 // ValidatorResponse represents the response format expected by the frontend
 type ValidatorResponse struct {
-	Validators  []Validator `json:"validators"`
-	TotalStaked string     `json:"totalStaked"`
+	Validators    []Validator `json:"validators"`
+	TotalStaked   string     `json:"totalStaked"`
+	NextPageToken string     `json:"next_page_token"`
 }
 
 // Validator represents a single validator's information

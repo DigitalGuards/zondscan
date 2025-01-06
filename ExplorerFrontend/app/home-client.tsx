@@ -5,6 +5,7 @@ import axios from "axios";
 import { formatNumber, formatNumberWithCommas, toFixed } from "./lib/helpers";
 import config from "../config.js"
 import SearchBar from "./components/SearchBar"
+import Charts from "./components/Charts"
 
 interface StatsData {
   value: string;
@@ -280,11 +281,12 @@ export default function HomeClient() {
             {/* Financial Stats */}
             <div>
               <h2 className="text-base sm:text-xl font-bold mb-2 sm:mb-4 text-[#ffa729]">Financial Statistics</h2>
-              <div className="grid grid-cols-2 gap-2 sm:gap-4">
+              <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-4">
                 {financialStats.map((item, idx) => (
                   <StatCard key={idx} item={item} />
                 ))}
               </div>
+              <Charts />
             </div>
           </div>
         </div>

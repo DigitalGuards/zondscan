@@ -77,25 +77,25 @@ func GetLatestBlockNumber() models.Result {
 }
 
 func GetLatestBlockNumberFromDB() uint64 {
-	if IsCollectionsExist() == false {
+	if !IsCollectionsExist() {
 		return 0
-	} else {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		filter := bson.D{}
-		options := options.FindOne().SetProjection(bson.M{"result.number": 1}).SetSort(bson.M{"result.number": -1})
-
-		var Zond models.ZondDatabaseBlock
-
-		err := configs.BlocksCollections.FindOne(ctx, filter, options).Decode(&Zond)
-
-		if err != nil {
-			configs.Logger.Info("Failed to do FindOne in the blocks collection", zap.Error(err))
-		}
-
-		return Zond.Result.Number
 	}
+	
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	filter := bson.D{}
+	options := options.FindOne().SetProjection(bson.M{"result.number": 1}).SetSort(bson.M{"result.number": -1})
+
+	var Zond models.ZondDatabaseBlock
+
+	err := configs.BlocksCollections.FindOne(ctx, filter, options).Decode(&Zond)
+
+	if err != nil {
+		configs.Logger.Info("Failed to do FindOne in the blocks collection", zap.Error(err))
+	}
+
+	return Zond.Result.Number
 }
 
 func IsCollectionsExist() bool {

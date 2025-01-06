@@ -24,6 +24,9 @@ export default function ValidatorsWrapper() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalStaked, setTotalStaked] = useState('0');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
+  const itemsPerPage = 10;
 
   useEffect(() => {
     async function fetchValidators() {
@@ -56,137 +59,128 @@ export default function ValidatorsWrapper() {
     return () => clearInterval(interval);
   }, []);
 
+  // Filter validators based on search query
+  const filteredValidators = validators.filter((validator: any) => {
+    const searchLower = searchQuery.toLowerCase();
+    return (
+      validator.address.toLowerCase().includes(searchLower) ||
+      validator.stakedAmount.toLowerCase().includes(searchLower)
+    );
+  });
+
+  const totalPages = Math.ceil(filteredValidators.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentValidators = filteredValidators.slice(startIndex, endIndex);
+
+  const goToPage = (page: number) => {
+    setCurrentPage(page);
+  };
+
   if (loading) {
-    return <ValidatorsLoadingSkeleton />;
+    return <div className="p-4 text-gray-300">Loading validators...</div>;
   }
 
   if (error) {
-    return (
-      <div className="p-4">
-        <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6">
-          <h2 className="text-red-500 font-semibold mb-2">Error</h2>
-          <p className="text-gray-300">{error}</p>
-        </div>
-      </div>
-    );
+    return <div className="p-4 text-red-500">Error: {error}</div>;
   }
 
   return (
-    <div className="p-4 lg:p-6">
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-[#ffa729] mb-4">Network Statistics</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <StatCard
-            title="Total Validators"
-            value={validators.length.toString()}
-            icon={
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            }
-          />
-          <StatCard
-            title="Active Validators"
-            value={validators.filter(v => v.isActive).length.toString()}
-            icon={
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            }
-          />
-          <StatCard
-            title="Total Staked"
-            value={`${formatAmount(totalStaked)[0]} ${formatAmount(totalStaked)[1]}`}
-            icon={
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            }
-          />
+    <div className="max-w-7xl mx-auto p-4 lg:p-6">
+      {/* Statistics Section */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+        <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4">
+          <h3 className="text-lg font-semibold text-gray-400">Total Validators</h3>
+          <p className="text-2xl text-[#ffa729]">{validators.length}</p>
+        </div>
+        <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4">
+          <h3 className="text-lg font-semibold text-gray-400">Active Validators</h3>
+          <p className="text-2xl text-[#ffa729]">{validators.filter(v => v.isActive).length}</p>
+        </div>
+        <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4 sm:col-span-2 lg:col-span-1">
+          <h3 className="text-lg font-semibold text-gray-400">Total Staked</h3>
+          <p className="text-2xl text-[#ffa729]">{formatAmount(totalStaked)[0]} {formatAmount(totalStaked)[1]}</p>
         </div>
       </div>
 
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-[#ffa729] mb-4">Validator List</h2>
-        <div className="overflow-x-auto -mx-4 sm:mx-0">
-          <div className="inline-block min-w-full align-middle">
-            <div className="overflow-hidden border border-[#3d3d3d] rounded-xl">
-              <table className="min-w-full divide-y divide-[#3d3d3d] bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]">
-                <thead>
-                  <tr className="bg-[#2d2d2d]/50">
-                    <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-400 sm:pl-6">Validator</th>
-                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-400">Status</th>
-                    <th scope="col" className="hidden sm:table-cell px-3 py-3.5 text-right text-sm font-semibold text-gray-400">Age</th>
-                    <th scope="col" className="hidden sm:table-cell px-3 py-3.5 text-right text-sm font-semibold text-gray-400">Uptime</th>
-                    <th scope="col" className="px-3 py-3.5 text-right text-sm font-semibold text-gray-400 sm:pr-6">Staked</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#3d3d3d] bg-transparent">
-                  {validators.map((validator, index) => (
-                    <tr key={`table-${validator.address}-${index}`} className="hover:bg-[#2d2d2d]/30">
-                      <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm sm:pl-6">
-                        <a 
-                          href={`/address/${validator.address}`}
-                          className="text-[#ffa729] hover:underline font-mono text-xs sm:text-sm"
-                        >
-                          {window.innerWidth < 640 
-                            ? `${validator.address.slice(0, 6)}...${validator.address.slice(-4)}`
-                            : `${validator.address.slice(0, 10)}...${validator.address.slice(-8)}`}
-                        </a>
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-4 text-sm">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          validator.isActive 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {validator.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td className="hidden sm:table-cell whitespace-nowrap px-3 py-4 text-sm text-gray-300 text-right">
-                        {epochsToDays(validator.age).toFixed(1)} days
-                        <span className="text-gray-500 text-xs ml-1">({validator.age} epochs)</span>
-                      </td>
-                      <td className="hidden sm:table-cell whitespace-nowrap px-3 py-4 text-sm text-gray-300 text-right">{validator.uptime.toFixed(2)}%</td>
-                      <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-300 text-right sm:pr-6 font-mono">
-                        {`${formatAmount(validator.stakedAmount)[0]} ${formatAmount(validator.stakedAmount)[1]}`}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+      {/* Search Bar */}
+      <div className="mb-6">
+        <input
+          type="text"
+          placeholder="Search validator by address or staked amount..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full p-2 bg-[#2d2d2d] border border-[#3d3d3d] rounded-lg text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#ffa729] focus:border-transparent"
+        />
+      </div>
+
+      {/* Validators List */}
+      <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-[#3d3d3d]">
+            <thead className="bg-[#2d2d2d]/50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Validator</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
+                <th className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Age</th>
+                <th className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Uptime</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Staked</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#3d3d3d]">
+              {currentValidators.map((validator, index) => (
+                <tr key={index} className="hover:bg-[#2d2d2d]/30">
+                  <td className="px-4 py-3 whitespace-nowrap text-sm">
+                    <a href={`/address/${validator.address}`} className="text-[#ffa729] hover:underline font-mono">
+                      {window.innerWidth < 640 
+                        ? `${validator.address.slice(0, 8)}...${validator.address.slice(-6)}`
+                        : validator.address}
+                    </a>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                      validator.isActive
+                        ? 'bg-green-900/20 text-green-400'
+                        : 'bg-red-900/20 text-red-400'
+                    }`}>
+                      {validator.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td className="hidden sm:table-cell px-4 py-3 whitespace-nowrap text-sm text-gray-300">
+                    {epochsToDays(validator.age).toFixed(1)} days
+                  </td>
+                  <td className="hidden sm:table-cell px-4 py-3 whitespace-nowrap text-sm text-gray-300">
+                    {validator.uptime.toFixed(2)}%
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-300 font-mono">
+                    {formatAmount(validator.stakedAmount)[0]} {formatAmount(validator.stakedAmount)[1]}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        
-        {/* Mobile-only expandable details */}
-        <div className="sm:hidden mt-4 space-y-4">
-          {validators.map((validator, index) => (
-            <details key={`mobile-${validator.address}-${index}`} className="bg-[#2d2d2d]/30 rounded-lg">
-              <summary className="px-4 py-3 cursor-pointer hover:bg-[#2d2d2d]/50 rounded-lg">
+
+        {/* Mobile Expandable Details */}
+        <div className="sm:hidden">
+          {currentValidators.map((validator, index) => (
+            <details key={`mobile-${index}`} className="border-t border-[#3d3d3d]">
+              <summary className="px-4 py-3 cursor-pointer hover:bg-[#2d2d2d]/30">
                 <div className="flex items-center justify-between">
-                  <a 
-                    href={`/address/${validator.address}`}
-                    className="text-[#ffa729] hover:underline font-mono text-sm"
-                  >
-                    {`${validator.address.slice(0, 6)}...${validator.address.slice(-4)}`}
+                  <a href={`/address/${validator.address}`} className="text-[#ffa729] hover:underline font-mono">
+                    {`${validator.address.slice(0, 8)}...${validator.address.slice(-6)}`}
                   </a>
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    validator.isActive 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-red-100 text-red-800'
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                    validator.isActive ? 'bg-green-900/20 text-green-400' : 'bg-red-900/20 text-red-400'
                   }`}>
                     {validator.isActive ? 'Active' : 'Inactive'}
                   </span>
                 </div>
               </summary>
-              <div className="px-4 py-3 border-t border-[#3d3d3d] space-y-2">
+              <div className="px-4 py-2 space-y-2 bg-[#2d2d2d]/30">
                 <div className="flex justify-between">
                   <span className="text-gray-400">Age:</span>
-                  <span className="text-gray-300">
-                    {epochsToDays(validator.age).toFixed(1)} days
-                    <span className="text-gray-500 text-xs ml-1">({validator.age} epochs)</span>
-                  </span>
+                  <span className="text-gray-300">{epochsToDays(validator.age).toFixed(1)} days</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400">Uptime:</span>
@@ -194,49 +188,68 @@ export default function ValidatorsWrapper() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400">Staked:</span>
-                  <span className="text-gray-300 font-mono">{`${formatAmount(validator.stakedAmount)[0]} ${formatAmount(validator.stakedAmount)[1]}`}</span>
+                  <span className="text-gray-300 font-mono">
+                    {formatAmount(validator.stakedAmount)[0]} {formatAmount(validator.stakedAmount)[1]}
+                  </span>
                 </div>
               </div>
             </details>
           ))}
         </div>
       </div>
-    </div>
-  );
-}
 
-function StatCard({ title, value, icon }: { title: string; value: string; icon: React.ReactNode }) {
-  return (
-    <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4 sm:p-6">
-      <div className="flex items-center space-x-4">
-        <div className="flex-shrink-0">
-          <div className="p-2 sm:p-3 bg-[#ffa729]/10 rounded-lg text-[#ffa729]">
-            {icon}
-          </div>
-        </div>
-        <div>
-          <p className="text-xs sm:text-sm text-gray-400">{title}</p>
-          <p className="text-lg sm:text-2xl font-bold text-[#ffa729]">{value}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ValidatorsLoadingSkeleton() {
-  return (
-    <div className="p-4 lg:p-6 animate-pulse">
-      <div className="mb-8">
-        <div className="h-8 w-48 bg-[#2d2d2d] rounded mb-4"></div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="bg-[#2d2d2d] rounded-xl h-24 sm:h-32"></div>
-          ))}
-        </div>
-      </div>
-      <div className="mb-8">
-        <div className="h-8 w-48 bg-[#2d2d2d] rounded mb-4"></div>
-        <div className="bg-[#2d2d2d] rounded-xl h-64 sm:h-96"></div>
+      {/* Pagination Controls */}
+      <div className="mt-4 flex flex-wrap justify-center items-center gap-2">
+        <button
+          onClick={() => goToPage(currentPage - 1)}
+          disabled={currentPage === 1}
+          className={`px-3 py-1 rounded-lg text-sm ${
+            currentPage === 1
+              ? 'bg-[#2d2d2d]/30 text-gray-500 cursor-not-allowed'
+              : 'bg-[#2d2d2d] text-gray-300 hover:bg-[#3d3d3d]'
+          }`}
+        >
+          Previous
+        </button>
+        
+        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+          let pageNum;
+          if (totalPages <= 5) {
+            pageNum = i + 1;
+          } else if (currentPage <= 3) {
+            pageNum = i + 1;
+          } else if (currentPage >= totalPages - 2) {
+            pageNum = totalPages - 4 + i;
+          } else {
+            pageNum = currentPage - 2 + i;
+          }
+          
+          return (
+            <button
+              key={i}
+              onClick={() => goToPage(pageNum)}
+              className={`w-8 h-8 rounded-lg text-sm ${
+                currentPage === pageNum
+                  ? 'bg-[#ffa729] text-black'
+                  : 'bg-[#2d2d2d] text-gray-300 hover:bg-[#3d3d3d]'
+              }`}
+            >
+              {pageNum}
+            </button>
+          );
+        })}
+        
+        <button
+          onClick={() => goToPage(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className={`px-3 py-1 rounded-lg text-sm ${
+            currentPage === totalPages
+              ? 'bg-[#2d2d2d]/30 text-gray-500 cursor-not-allowed'
+              : 'bg-[#2d2d2d] text-gray-300 hover:bg-[#3d3d3d]'
+          }`}
+        >
+          Next
+        </button>
       </div>
     </div>
   );
