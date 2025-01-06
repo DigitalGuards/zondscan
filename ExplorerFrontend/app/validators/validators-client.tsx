@@ -203,14 +203,14 @@ export default function ValidatorsWrapper() {
         <button
           onClick={() => goToPage(currentPage - 1)}
           disabled={currentPage === 1}
-          className={`px-3 py-1 rounded-lg text-sm ${
-            currentPage === 1
-              ? 'bg-[#2d2d2d]/30 text-gray-500 cursor-not-allowed'
-              : 'bg-[#2d2d2d] text-gray-300 hover:bg-[#3d3d3d]'
-          }`}
+          className="px-3 sm:px-4 py-2 rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d]
+                   hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d]
+                   transition-colors text-sm sm:text-base"
         >
           Previous
         </button>
+        
+        <span className="text-sm sm:text-base">Page {currentPage} of {totalPages}</span>
         
         {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
           let pageNum;
@@ -242,11 +242,9 @@ export default function ValidatorsWrapper() {
         <button
           onClick={() => goToPage(currentPage + 1)}
           disabled={currentPage === totalPages}
-          className={`px-3 py-1 rounded-lg text-sm ${
-            currentPage === totalPages
-              ? 'bg-[#2d2d2d]/30 text-gray-500 cursor-not-allowed'
-              : 'bg-[#2d2d2d] text-gray-300 hover:bg-[#3d3d3d]'
-          }`}
+          className="px-3 sm:px-4 py-2 rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d]
+                   hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d]
+                   transition-colors text-sm sm:text-base"
         >
           Next
         </button>

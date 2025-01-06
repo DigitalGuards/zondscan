@@ -96,3 +96,21 @@ func ReturnContractCode(query string) (models.ContractCode, error) {
 
 	return result, nil
 }
+
+// CountContracts returns the total number of smart contracts
+func CountContracts() (int64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Filter for contracts
+	filter := bson.D{
+		{Key: "contractAddress", Value: bson.D{{Key: "$exists", Value: true}}},
+	}
+
+	count, err := configs.TransferCollections.CountDocuments(ctx, filter)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}

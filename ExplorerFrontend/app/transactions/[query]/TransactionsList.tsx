@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import TransactionCard from './TransactionCard';
+import SearchBar from '../../components/SearchBar';
 import type { TransactionsListProps } from './types';
 
 export default function TransactionsList({ 
@@ -28,7 +29,11 @@ export default function TransactionsList({
   };
 
   return (
-    <div className="container mx-auto p-4">
+    <div className="space-y-4">
+      <div className="max-w-3xl mx-auto mb-8">
+        <SearchBar />
+      </div>
+
       {transactions.length === 0 ? (
         <div className="text-center py-8">
           <p className="text-gray-300">No transactions found</p>
@@ -47,30 +52,22 @@ export default function TransactionsList({
           <div className="flex justify-center items-center gap-4 text-gray-300">
             <button 
               onClick={goToPreviousPage} 
-              disabled={currentPage === 1} 
-              className={`px-6 py-3 rounded-xl
-                         ${currentPage === 1 
-                           ? 'bg-gray-700 text-gray-500 cursor-not-allowed' 
-                           : 'bg-[#2d2d2d] hover:bg-[#3d3d3d] text-[#ffa729] hover:text-[#ffb954]'} 
-                         transition-all duration-300`}
-              aria-label="Previous page"
+              disabled={currentPage === 1}
+              className="px-3 sm:px-4 py-2 rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d]
+                       hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d]
+                       transition-colors text-sm sm:text-base"
             >
               Previous
             </button>
             
-            <span className="px-4" aria-live="polite">
-              Page {currentPage} of {totalPages}
-            </span>
+            <span className="text-sm sm:text-base">Page {currentPage} of {totalPages}</span>
             
             <button 
               onClick={goToNextPage} 
-              disabled={currentPage === totalPages} 
-              className={`px-6 py-3 rounded-xl
-                         ${currentPage === totalPages 
-                           ? 'bg-gray-700 text-gray-500 cursor-not-allowed' 
-                           : 'bg-[#2d2d2d] hover:bg-[#3d3d3d] text-[#ffa729] hover:text-[#ffb954]'}
-                         transition-all duration-300`}
-              aria-label="Next page"
+              disabled={currentPage === totalPages}
+              className="px-3 sm:px-4 py-2 rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d]
+                       hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d]
+                       transition-colors text-sm sm:text-base"
             >
               Next
             </button>

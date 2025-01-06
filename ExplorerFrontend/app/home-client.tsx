@@ -20,6 +20,8 @@ interface DashboardData {
   totalTransactions: StatsData;
   marketCap: StatsData;
   currentPrice: StatsData;
+  validatorCount: StatsData;
+  contractCount: StatsData;
   syncing: boolean;
   dataInitialized: boolean;
 }
@@ -32,6 +34,8 @@ export default function HomeClient() {
     totalTransactions: { value: "0", isLoading: true, error: false },
     marketCap: { value: "0", isLoading: true, error: false },
     currentPrice: { value: "0", isLoading: true, error: false },
+    validatorCount: { value: "0", isLoading: true, error: false },
+    contractCount: { value: "0", isLoading: true, error: false },
     syncing: true,
     dataInitialized: false
   });
@@ -51,22 +55,28 @@ export default function HomeClient() {
 
             // Handle overview response
             if (overviewResponse.status === 'fulfilled') {
-              newData.walletCount.value = overviewResponse.value.data.countwallets?.toString() || "0";
-              newData.volume.value = overviewResponse.value.data.volume?.toString() || "0";
-              newData.marketCap.value = overviewResponse.value.data.marketcap?.toString() || "0";
-              newData.currentPrice.value = overviewResponse.value.data.currentPrice?.toString() || "0";
-              newData.syncing = overviewResponse.value.data.status?.syncing ?? true;
-              newData.dataInitialized = overviewResponse.value.data.status?.dataInitialized ?? false;
+              newData.walletCount = { value: overviewResponse.value.data.countwallets.toString(), isLoading: false, error: false };
+              newData.volume = { value: overviewResponse.value.data.volume.toString(), isLoading: false, error: false };
+              newData.marketCap = { value: overviewResponse.value.data.marketcap.toString(), isLoading: false, error: false };
+              newData.currentPrice = { value: overviewResponse.value.data.currentPrice.toString(), isLoading: false, error: false };
+              newData.validatorCount = { value: overviewResponse.value.data.validatorCount.toString(), isLoading: false, error: false };
+              newData.contractCount = { value: overviewResponse.value.data.contractCount.toString(), isLoading: false, error: false };
+              newData.syncing = overviewResponse.value.data.status.syncing;
+              newData.dataInitialized = overviewResponse.value.data.status.dataInitialized;
             } else {
-              newData.walletCount.error = true;
-              newData.volume.error = true;
-              newData.marketCap.error = true;
-              newData.currentPrice.error = true;
+              newData.walletCount = { value: "0", isLoading: false, error: true };
+              newData.volume = { value: "0", isLoading: false, error: true };
+              newData.marketCap = { value: "0", isLoading: false, error: true };
+              newData.currentPrice = { value: "0", isLoading: false, error: true };
+              newData.validatorCount = { value: "0", isLoading: false, error: true };
+              newData.contractCount = { value: "0", isLoading: false, error: true };
             }
 
             // Handle latest block response
             if (latestBlockResponse.status === 'fulfilled') {
               newData.blockHeight.value = latestBlockResponse.value.data.response?.[0]?.result?.number?.toString() || "0";
+              newData.blockHeight.isLoading = false;
+              newData.blockHeight.error = false;
             } else {
               newData.blockHeight.error = true;
             }
@@ -74,17 +84,11 @@ export default function HomeClient() {
             // Handle transactions response
             if (txsResponse.status === 'fulfilled') {
               newData.totalTransactions.value = txsResponse.value.data.total?.toString() || "0";
+              newData.totalTransactions.isLoading = false;
+              newData.totalTransactions.error = false;
             } else {
               newData.totalTransactions.error = true;
             }
-
-            // Update loading states
-            newData.walletCount.isLoading = false;
-            newData.volume.isLoading = false;
-            newData.blockHeight.isLoading = false;
-            newData.totalTransactions.isLoading = false;
-            newData.marketCap.isLoading = false;
-            newData.currentPrice.isLoading = false;
 
             return newData;
           });
@@ -139,6 +143,28 @@ export default function HomeClient() {
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mb-2 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+        </svg>
+      )
+    },
+    {
+      data: formatNumberWithCommas(data.validatorCount.value),
+      title: "Active Validators",
+      loading: data.validatorCount.isLoading,
+      error: data.validatorCount.error,
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mb-2 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      )
+    },
+    {
+      data: formatNumberWithCommas(data.contractCount.value),
+      title: "Smart Contracts",
+      loading: data.contractCount.isLoading,
+      error: data.contractCount.error,
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mb-2 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
         </svg>
       )
     }
@@ -271,7 +297,7 @@ export default function HomeClient() {
             {/* Blockchain Stats */}
             <div>
               <h2 className="text-base sm:text-xl font-bold mb-2 sm:mb-4 text-[#ffa729]">Blockchain Statistics</h2>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4">
                 {blockchainStats.map((item, idx) => (
                   <StatCard key={idx} item={item} />
                 ))}
@@ -281,7 +307,7 @@ export default function HomeClient() {
             {/* Financial Stats */}
             <div>
               <h2 className="text-base sm:text-xl font-bold mb-2 sm:mb-4 text-[#ffa729]">Financial Statistics</h2>
-              <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 mb-4">
                 {financialStats.map((item, idx) => (
                   <StatCard key={idx} item={item} />
                 ))}

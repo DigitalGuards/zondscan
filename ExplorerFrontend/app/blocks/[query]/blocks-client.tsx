@@ -6,6 +6,7 @@ import config from '../../../config';
 import { useQuery } from '@tanstack/react-query';
 import { Block, BlocksResponse } from './types';
 import { useRouter } from 'next/navigation';
+import SearchBar from '../../components/SearchBar';
 
 interface BlockCardProps {
   blockData: Block;
@@ -158,6 +159,11 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
   return (
     <div className="p-4 sm:p-8">
       <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-[#ffa729]">Blocks</h1>
+      
+      <div className="max-w-3xl mx-auto mb-8">
+        <SearchBar />
+      </div>
+
       <div className="mb-6 sm:mb-8">
         {data?.blocks.map((blockData) => (
           <BlockCard key={blockData.number} blockData={blockData} />

@@ -184,7 +184,9 @@ function SearchInput({ value, onChange }: { value: string; onChange: (value: str
         type="search"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="block w-full p-4 pl-10 text-sm text-gray-900 border border-[#3d3d3d] rounded-lg bg-[#1f1f1f] focus:ring-[#ffa729] focus:border-[#ffa729] placeholder-gray-400"
+        className="block w-full p-4 pl-10 text-sm text-white border border-[#3d3d3d] rounded-lg 
+                  bg-[#2d2d2d] hover:border-[#4d4d4d] focus:ring-1 focus:ring-[#ffa729] focus:border-[#ffa729] 
+                  placeholder-gray-400 outline-none transition-colors"
         placeholder="Search contracts..."
       />
     </div>

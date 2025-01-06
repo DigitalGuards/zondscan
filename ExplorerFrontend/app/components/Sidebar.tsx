@@ -136,18 +136,18 @@ export default function Sidebar() {
                       w-56 lg:top-0 top-[53px]`}>
         <div className="p-4">
           <Link href="/" className="flex items-center gap-1.5 mb-6 px-1 group" onClick={() => setIsOpen(false)}>
-            <div className="w-5 h-5 relative">
+            <div className="w-6 h-6 relative">
               <Image 
                 src={QRLFavicon} 
                 alt="QRL" 
                 fill
-                sizes="20px"
+                sizes="24px"
                 style={{ objectFit: 'contain' }}
                 loading="eager"
                 className="group-hover:scale-110 transition-transform duration-300"
               />
             </div>
-            <span className="text-sm font-medium text-gray-300 whitespace-nowrap group-hover:text-[#ffa729] transition-colors">
+            <span className="text-base font-medium text-gray-300 whitespace-nowrap group-hover:text-[#ffa729] transition-colors">
               ZondScan Explorer
             </span>
           </Link>
@@ -161,9 +161,9 @@ export default function Sidebar() {
                                            px-4 py-2.5 text-left text-sm font-medium 
                                            text-gray-300 hover:bg-[#3d3d3d] transition-colors
                                            shadow-md">
-                    <span className="text-sm">Blockchain</span>
+                    <span className="text-base">Blockchain</span>
                     <ChevronDownIcon
-                      className={classNames(open ? 'rotate-180' : '', 'h-4 w-4 text-[#ffa729] transition-transform duration-200')}
+                      className={classNames(open ? 'rotate-180' : '', 'h-5 w-5 text-[#ffa729] transition-transform duration-200')}
                     />
                   </Disclosure.Button>
                   <Disclosure.Panel className="mt-2 space-y-1">
@@ -171,16 +171,16 @@ export default function Sidebar() {
                       <button
                         key={item.name}
                         onClick={() => navigateTo(item.href)}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-300 
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-gray-300 
                                hover:bg-[#2d2d2d] rounded-md transition-all duration-200
                                hover:text-[#ffa729] group"
                       >
-                        <div className="w-4 h-4 relative">
+                        <div className="w-5 h-5 relative">
                           <Image
                             src={item.imgSrc}
                             alt={item.name}
                             fill
-                            sizes="16px"
+                            sizes="20px"
                             style={{ objectFit: 'contain' }}
                             className={item.name === 'Richlist' ? 'transition-[filter]' : `[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(105%)] 
                                    group-hover:[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(125%)] 
@@ -203,9 +203,9 @@ export default function Sidebar() {
                                            px-4 py-2.5 text-left text-sm font-medium 
                                            text-gray-300 hover:bg-[#3d3d3d] transition-colors
                                            shadow-md">
-                    <span className="text-sm">Smart Contracts</span>
+                    <span className="text-base">Smart Contracts</span>
                     <ChevronDownIcon
-                      className={classNames(open ? 'rotate-180' : '', 'h-4 w-4 text-[#ffa729] transition-transform duration-200')}
+                      className={classNames(open ? 'rotate-180' : '', 'h-5 w-5 text-[#ffa729] transition-transform duration-200')}
                     />
                   </Disclosure.Button>
                   <Disclosure.Panel className="mt-2 space-y-1">
@@ -213,16 +213,16 @@ export default function Sidebar() {
                       <button
                         key={item.name}
                         onClick={() => navigateTo(item.href)}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-300 
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-gray-300 
                                hover:bg-[#2d2d2d] rounded-md transition-all duration-200
                                hover:text-[#ffa729] group"
                       >
-                        <div className="w-4 h-4 relative">
+                        <div className="w-5 h-5 relative">
                           <Image
                             src={item.imgSrc}
                             alt={item.name}
                             fill
-                            sizes="16px"
+                            sizes="20px"
                             style={{ objectFit: 'contain' }}
                             className={item.name === 'Richlist' ? 'transition-[filter]' : `[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(105%)] 
                                    group-hover:[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(125%)] 
@@ -245,9 +245,9 @@ export default function Sidebar() {
                                            px-4 py-2.5 text-left text-sm font-medium 
                                            text-gray-300 hover:bg-[#3d3d3d] transition-colors
                                            shadow-md">
-                    <span className="text-sm">Tools</span>
+                    <span className="text-base">Tools</span>
                     <ChevronDownIcon
-                      className={classNames(open ? 'rotate-180' : '', 'h-4 w-4 text-[#ffa729] transition-transform duration-200')}
+                      className={classNames(open ? 'rotate-180' : '', 'h-5 w-5 text-[#ffa729] transition-transform duration-200')}
                     />
                   </Disclosure.Button>
                   <Disclosure.Panel className="mt-2 space-y-1">
@@ -255,16 +255,16 @@ export default function Sidebar() {
                       <button
                         key={item.name}
                         onClick={() => navigateTo(item.href)}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-300 
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-gray-300 
                                hover:bg-[#2d2d2d] rounded-md transition-all duration-200
                                hover:text-[#ffa729] group"
                       >
-                        <div className="w-4 h-4 relative">
+                        <div className="w-5 h-5 relative">
                           <Image
                             src={item.imgSrc}
                             alt={item.name}
                             fill
-                            sizes="16px"
+                            sizes="20px"
                             style={{ objectFit: 'contain' }}
                             className={item.name === 'Richlist' ? 'transition-[filter]' : `[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(105%)] 
                                    group-hover:[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(125%)] 
@@ -287,9 +287,9 @@ export default function Sidebar() {
                                            px-4 py-2.5 text-left text-sm font-medium 
                                            text-gray-300 hover:bg-[#3d3d3d] transition-colors
                                            shadow-md">
-                    <span className="text-sm">Wallet & FAQ</span>
+                    <span className="text-base">Wallet & FAQ</span>
                     <ChevronDownIcon
-                      className={classNames(open ? 'rotate-180' : '', 'h-4 w-4 text-[#ffa729] transition-transform duration-200')}
+                      className={classNames(open ? 'rotate-180' : '', 'h-5 w-5 text-[#ffa729] transition-transform duration-200')}
                     />
                   </Disclosure.Button>
                   <Disclosure.Panel className="mt-2 space-y-1">
@@ -297,16 +297,16 @@ export default function Sidebar() {
                       href="https://qrlwallet.com"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-300 
+                      className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-gray-300 
                              hover:bg-[#2d2d2d] rounded-md transition-all duration-200
                              hover:text-[#ffa729] group"
                     >
-                      <div className="w-4 h-4 relative">
+                      <div className="w-5 h-5 relative">
                         <Image
                           src={SendIcon}
                           alt="Wallet"
                           fill
-                          sizes="16px"
+                          sizes="20px"
                           style={{ objectFit: 'contain' }}
                           className="[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(105%)] 
                                  group-hover:[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(125%)] 
@@ -317,16 +317,16 @@ export default function Sidebar() {
                     </a>
                     <button
                       onClick={() => navigateTo('/faq')}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-300 
+                      className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-gray-300 
                              hover:bg-[#2d2d2d] rounded-md transition-all duration-200
                              hover:text-[#ffa729] group"
                     >
-                      <div className="w-4 h-4 relative">
+                      <div className="w-5 h-5 relative">
                         <Image
                           src={SendIcon}
                           alt="FAQ"
                           fill
-                          sizes="16px"
+                          sizes="20px"
                           style={{ objectFit: 'contain' }}
                           className="[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(105%)] 
                                  group-hover:[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(125%)] 
