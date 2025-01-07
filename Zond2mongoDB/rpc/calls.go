@@ -689,31 +689,32 @@ func CallContractMethod(contractAddress string, methodSig string) (string, error
 
 // GetTokenInfo attempts to get ERC20 token information for a contract
 func GetTokenInfo(contractAddress string) (name string, symbol string, decimals uint8, isToken bool) {
-	// Try to get token name
-	if result, err := CallContractMethod(contractAddress, SIG_NAME); err == nil && len(result) > 66 {
-		// Decode the string from the response
-		// Skip first 64 chars (32 bytes) as they represent the offset
-		nameHex := strings.TrimRight(result[66:], "0")
-		if decoded, err := hex.DecodeString(nameHex); err == nil {
-			name = string(decoded)
-			isToken = true
-		}
+	logger.Info("Attempting to get token info for contract: %s", contractAddress)
+
+	name, err := CallContractMethod(contractAddress, SIG_NAME)
+	if err != nil {
+		logger.Info("Error getting token name for %s: %v", contractAddress, err)
+		return "", "", 0, false
+	}
+	logger.Info("Got token name for %s: %s", contractAddress, name)
+
+	symbol, err = CallContractMethod(contractAddress, SIG_SYMBOL)
+	if err != nil {
+		logger.Info("Error getting token symbol for %s: %v", contractAddress, err)
+		return "", "", 0, false
+	}
+	logger.Info("Got token symbol for %s: %s", contractAddress, symbol)
+
+	decimals, err := CallContractMethod(contractAddress, SIG_DECIMALS)
+	if err != nil {
+		logger.Info("Error getting token decimals for %s: %v", contractAddress, err)
+		return "", "", 0, false
+	}
+	logger.Info("Got token decimals for %s: %s", contractAddress, decimals)
+
+	if val, err := strconv.ParseUint(decimals[2:], 16, 8); err == nil {
+		decimals = uint8(val)
 	}
 
-	// Try to get token symbol
-	if result, err := CallContractMethod(contractAddress, SIG_SYMBOL); err == nil && len(result) > 66 {
-		symbolHex := strings.TrimRight(result[66:], "0")
-		if decoded, err := hex.DecodeString(symbolHex); err == nil {
-			symbol = string(decoded)
-		}
-	}
-
-	// Try to get decimals
-	if result, err := CallContractMethod(contractAddress, SIG_DECIMALS); err == nil {
-		if val, err := strconv.ParseUint(result[2:], 16, 8); err == nil {
-			decimals = uint8(val)
-		}
-	}
-
-	return
+	return name, symbol, decimals, true
 }

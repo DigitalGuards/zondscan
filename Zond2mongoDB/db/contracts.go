@@ -72,14 +72,26 @@ func processContracts(tx *models.Transaction) ([]byte, []byte, uint8, bool) {
                         IsToken:               isToken,
                     }
 
+                    configs.Logger.Info("Processing contract: %s", contractAddress)
+
+                    // Try to get token info
+                    if !isToken {
+                        configs.Logger.Info("Not a token contract %s", contractAddress)
+                    } else {
+                        configs.Logger.Info("Found token contract %s: name=%s, symbol=%s, decimals=%d", 
+                            contractAddress, name, symbol, decimals)
+                    }
+
                     // Use upsert to update existing contract or insert new one
                     filter := bson.M{"contractAddress": contractAddressByte}
                     update := bson.M{"$set": contractInfo}
                     opts := options.Update().SetUpsert(true)
 
-                    _, err = configs.ContractCodeCollection.UpdateOne(context.Background(), filter, update, opts)
+                    result, err := configs.ContractCodeCollection.UpdateOne(context.Background(), filter, update, opts)
                     if err != nil {
                         configs.Logger.Warn("Failed to store contract info: ", zap.Error(err))
+                    } else {
+                        configs.Logger.Info("Upserted contract %s: modified=%d", contractAddress, result.ModifiedCount)
                     }
                 }
             }
