@@ -1,6 +1,6 @@
 package models
 
-type ContractCode struct {
+type ContractInfo struct {
 	ContractCreatorAddress []byte `json:"contractCreatorAddress" bson:"contractCreatorAddress"`
 	ContractAddress        []byte `json:"contractAddress" bson:"contractAddress"`
 	ContractCode           []byte `json:"contractCode" bson:"contractCode"`

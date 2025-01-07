@@ -22,13 +22,13 @@ func processContracts(tx *models.Transaction) ([]byte, []byte, uint8, bool) {
 
     from, err := hex.DecodeString(tx.From[2:])
     if err != nil {
-        configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
+        configs.Logger.Warn("Failed to hex decode string", zap.Error(err))
     }
 
     if tx.To != "" {
         to, err = hex.DecodeString(tx.To[2:])
         if err != nil {
-            configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
+            configs.Logger.Warn("Failed to hex decode string", zap.Error(err))
         }
         contractAddressByte = nil
     } else {
@@ -37,17 +37,17 @@ func processContracts(tx *models.Transaction) ([]byte, []byte, uint8, bool) {
 
             contractAddress, status, err := rpc.GetContractAddress(tx.Hash)
             if err != nil {
-                configs.Logger.Warn("Failed to do rpc request: ", zap.Error(err))
+                configs.Logger.Warn("Failed to do rpc request", zap.Error(err))
             }
 
             contractAddressByte, err = hex.DecodeString(contractAddress[2:])
             if err != nil {
-                configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
+                configs.Logger.Warn("Failed to hex decode string", zap.Error(err))
             }
 
             statusTx, err = strconv.ParseUint(status, 0, 8)
             if err != nil {
-                configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
+                configs.Logger.Warn("Failed to hex decode string", zap.Error(err))
             }
 
             if statusTx == 1 {
@@ -56,31 +56,30 @@ func processContracts(tx *models.Transaction) ([]byte, []byte, uint8, bool) {
                 // Get contract code
                 code, err := rpc.GetCode(contractAddress, "latest")
                 if err != nil {
-                    configs.Logger.Warn("Failed to get contract code: ", zap.Error(err))
+                    configs.Logger.Warn("Failed to get contract code", zap.Error(err))
                 } else {
-                    // Get token information
-                    name, symbol, decimals, isToken := rpc.GetTokenInfo(contractAddress)
-
-                    // Store contract information including token data
-                    contractInfo := models.ContractInfo{
-                        ContractCreatorAddress: from,
-                        ContractAddress:        contractAddressByte,
-                        ContractCode:           []byte(code),
-                        TokenName:              name,
-                        TokenSymbol:           symbol,
-                        TokenDecimals:         decimals,
-                        IsToken:               isToken,
+                    // Convert hex code to bytes
+                    codeByte, err := hex.DecodeString(code[2:]) // Remove "0x" prefix
+                    if err != nil {
+                        configs.Logger.Warn("Failed to decode contract code", zap.Error(err))
+                        return from, to, uint8(statusTx), isContract
                     }
-
-                    configs.Logger.Info("Processing contract: %s", contractAddress)
 
                     // Try to get token info
-                    if !isToken {
-                        configs.Logger.Info("Not a token contract %s", contractAddress)
-                    } else {
-                        configs.Logger.Info("Found token contract %s: name=%s, symbol=%s, decimals=%d", 
-                            contractAddress, name, symbol, decimals)
+                    name, symbol, decimals, isToken := rpc.GetTokenInfo(contractAddress)
+                    
+                    contractInfo := &models.ContractInfo{
+                        ContractCreatorAddress: from,
+                        ContractAddress:        contractAddressByte,
+                        ContractCode:           codeByte,
+                        TokenName:              name,    // Will be empty for non-tokens
+                        TokenSymbol:            symbol,  // Will be empty for non-tokens
+                        TokenDecimals:          decimals, // Will be 0 for non-tokens
+                        IsToken:                isToken,
                     }
+
+                    configs.Logger.Info("Processing contract",
+                        zap.String("address", contractAddress))
 
                     // Use upsert to update existing contract or insert new one
                     filter := bson.M{"contractAddress": contractAddressByte}
@@ -89,9 +88,11 @@ func processContracts(tx *models.Transaction) ([]byte, []byte, uint8, bool) {
 
                     result, err := configs.ContractCodeCollection.UpdateOne(context.Background(), filter, update, opts)
                     if err != nil {
-                        configs.Logger.Warn("Failed to store contract info: ", zap.Error(err))
+                        configs.Logger.Warn("Failed to store contract info", zap.Error(err))
                     } else {
-                        configs.Logger.Info("Upserted contract %s: modified=%d", contractAddress, result.ModifiedCount)
+                        configs.Logger.Info("Upserted contract",
+                            zap.String("address", contractAddress),
+                            zap.Int64("modified", result.ModifiedCount))
                     }
                 }
             }

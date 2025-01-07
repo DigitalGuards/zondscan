@@ -10,13 +10,13 @@ import config from '../../config.js';
 
 interface ContractData {
   _id: string;  // MongoDB ObjectId
-  blockNumber: number;
-  blockTimestamp: number;
-  from: string;
-  txHash: string;
-  pk: string;
-  signature: string;
+  contractCreatorAddress: string;
   contractAddress: string;
+  contractCode: string;
+  tokenName?: string;
+  tokenSymbol?: string;
+  tokenDecimals?: number;
+  isToken: boolean;
 }
 
 interface ContractsClientProps {
@@ -107,23 +107,29 @@ function CustomTable({ data }: { data: ContractData[] }) {
               </div>
               <div>
                 <span className="text-[#ffa729] text-sm">Creator:</span>
-                <Link href={`/address/${row.from}`} className="ml-2 text-white hover:text-[#ffa729] text-sm break-all">
-                  {truncateMiddle(row.from)}
+                <Link href={`/address/${row.contractCreatorAddress}`} className="ml-2 text-white hover:text-[#ffa729] text-sm break-all">
+                  {truncateMiddle(row.contractCreatorAddress)}
                 </Link>
               </div>
               <div>
-                <span className="text-[#ffa729] text-sm">Transaction Hash:</span>
-                <Link href={`/tx/${row.txHash}`} className="ml-2 text-white hover:text-[#ffa729] text-sm break-all">
-                  {truncateMiddle(row.txHash)}
-                </Link>
+                <span className="text-[#ffa729] text-sm">Contract Code:</span>
+                <span className="ml-2 text-white text-sm break-all">{truncateMiddle(row.contractCode)}</span>
               </div>
               <div>
-                <span className="text-[#ffa729] text-sm">Public Key:</span>
-                <span className="ml-2 text-white text-sm break-all">{truncateMiddle(row.pk)}</span>
+                <span className="text-[#ffa729] text-sm">Token Name:</span>
+                <span className="ml-2 text-white text-sm break-all">{row.tokenName}</span>
               </div>
               <div>
-                <span className="text-[#ffa729] text-sm">Signature:</span>
-                <span className="ml-2 text-white text-sm break-all">{truncateMiddle(row.signature)}</span>
+                <span className="text-[#ffa729] text-sm">Token Symbol:</span>
+                <span className="ml-2 text-white text-sm break-all">{row.tokenSymbol}</span>
+              </div>
+              <div>
+                <span className="text-[#ffa729] text-sm">Token Decimals:</span>
+                <span className="ml-2 text-white text-sm break-all">{row.tokenDecimals}</span>
+              </div>
+              <div>
+                <span className="text-[#ffa729] text-sm">Is Token:</span>
+                <span className="ml-2 text-white text-sm break-all">{row.isToken ? 'Yes' : 'No'}</span>
               </div>
             </div>
           </div>
@@ -139,9 +145,11 @@ function CustomTable({ data }: { data: ContractData[] }) {
           <tr className="border-b border-[#3d3d3d]">
             <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Contract Address</th>
             <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Creator</th>
-            <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Transaction Hash</th>
-            <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Public Key</th>
-            <th className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Signature</th>
+            <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Contract Code</th>
+            <th className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Token Name</th>
+            <th className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Token Symbol</th>
+            <th className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Token Decimals</th>
+            <th className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Is Token</th>
           </tr>
         </thead>
         <tbody>
@@ -153,17 +161,15 @@ function CustomTable({ data }: { data: ContractData[] }) {
                 </Link>
               </td>
               <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap">
-                <Link href={`/address/${row.from}`} className="text-[#ffa729] hover:text-[#ffb954] transition-colors">
-                  {truncateMiddle(row.from, 8, 8)}
+                <Link href={`/address/${row.contractCreatorAddress}`} className="text-[#ffa729] hover:text-[#ffb954] transition-colors">
+                  {truncateMiddle(row.contractCreatorAddress, 8, 8)}
                 </Link>
               </td>
-              <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap">
-                <Link href={`/tx/${row.txHash}`} className="text-[#ffa729] hover:text-[#ffb954] transition-colors">
-                  {truncateMiddle(row.txHash, 8, 8)}
-                </Link>
-              </td>
-              <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{truncateMiddle(row.pk, 8, 8)}</td>
-              <td className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{truncateMiddle(row.signature, 8, 8)}</td>
+              <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{truncateMiddle(row.contractCode, 8, 8)}</td>
+              <td className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{row.tokenName}</td>
+              <td className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{row.tokenSymbol}</td>
+              <td className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{row.tokenDecimals}</td>
+              <td className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{row.isToken ? 'Yes' : 'No'}</td>
             </tr>
           ))}
         </tbody>
@@ -245,13 +251,13 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
       console.log('Processing item:', item);
       const transformed = {
         _id: item._id || `contract-${index}`,
-        blockNumber: item.blockNumber,
-        blockTimestamp: item.blockTimestamp,
-        from: decodeField(item.from),
-        txHash: decodeField(item.txHash),
-        pk: decodeField(item.pk),
-        signature: decodeField(item.signature),
-        contractAddress: decodeField(item.contractAddress)
+        contractCreatorAddress: item.contractCreatorAddress,
+        contractAddress: item.contractAddress,
+        contractCode: item.contractCode,
+        tokenName: item.tokenName,
+        tokenSymbol: item.tokenSymbol,
+        tokenDecimals: item.tokenDecimals,
+        isToken: item.isToken
       };
       console.log('Transformed item:', transformed);
       return transformed;

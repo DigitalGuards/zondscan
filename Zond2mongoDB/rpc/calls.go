@@ -689,32 +689,88 @@ func CallContractMethod(contractAddress string, methodSig string) (string, error
 
 // GetTokenInfo attempts to get ERC20 token information for a contract
 func GetTokenInfo(contractAddress string) (name string, symbol string, decimals uint8, isToken bool) {
-	logger.Info("Attempting to get token info for contract: %s", contractAddress)
+	logger.Info("Getting token info", zap.String("contract_address", contractAddress))
 
-	name, err := CallContractMethod(contractAddress, SIG_NAME)
+	name, err := getTokenName(contractAddress)
 	if err != nil {
-		logger.Info("Error getting token name for %s: %v", contractAddress, err)
-		return "", "", 0, false
+		logger.Info("Failed to get token name",
+			zap.String("contract_address", contractAddress),
+			zap.Error(err))
+		name = ""
+	} else {
+		logger.Info("Got token name",
+			zap.String("contract_address", contractAddress),
+			zap.String("name", name))
 	}
-	logger.Info("Got token name for %s: %s", contractAddress, name)
 
-	symbol, err = CallContractMethod(contractAddress, SIG_SYMBOL)
+	symbol, err = getTokenSymbol(contractAddress)
 	if err != nil {
-		logger.Info("Error getting token symbol for %s: %v", contractAddress, err)
-		return "", "", 0, false
+		logger.Info("Failed to get token symbol",
+			zap.String("contract_address", contractAddress),
+			zap.Error(err))
+		symbol = ""
+	} else {
+		logger.Info("Got token symbol",
+			zap.String("contract_address", contractAddress),
+			zap.String("symbol", symbol))
 	}
-	logger.Info("Got token symbol for %s: %s", contractAddress, symbol)
 
-	decimals, err := CallContractMethod(contractAddress, SIG_DECIMALS)
+	decimals, err = getTokenDecimals(contractAddress)
 	if err != nil {
-		logger.Info("Error getting token decimals for %s: %v", contractAddress, err)
-		return "", "", 0, false
+		logger.Info("Failed to get token decimals",
+			zap.String("contract_address", contractAddress),
+			zap.Error(err))
+		decimals = 0
+	} else {
+		logger.Info("Got token decimals",
+			zap.String("contract_address", contractAddress),
+			zap.Uint8("decimals", decimals))
 	}
-	logger.Info("Got token decimals for %s: %s", contractAddress, decimals)
 
-	if val, err := strconv.ParseUint(decimals[2:], 16, 8); err == nil {
-		decimals = uint8(val)
-	}
-
+	// If we got here, all token checks passed
+	logger.Info("Successfully identified token",
+		zap.String("contract_address", contractAddress))
 	return name, symbol, decimals, true
+}
+
+func getTokenName(contractAddress string) (string, error) {
+	result, err := CallContractMethod(contractAddress, SIG_NAME)
+	if err != nil {
+		return "", err
+	}
+
+	nameHex := strings.TrimRight(result[66:], "0")
+	if decoded, err := hex.DecodeString(nameHex); err != nil {
+		return "", err
+	} else {
+		return string(decoded), nil
+	}
+}
+
+func getTokenSymbol(contractAddress string) (string, error) {
+	result, err := CallContractMethod(contractAddress, SIG_SYMBOL)
+	if err != nil {
+		return "", err
+	}
+
+	symbolHex := strings.TrimRight(result[66:], "0")
+	if decoded, err := hex.DecodeString(symbolHex); err != nil {
+		return "", err
+	} else {
+		return string(decoded), nil
+	}
+}
+
+func getTokenDecimals(contractAddress string) (uint8, error) {
+	result, err := CallContractMethod(contractAddress, SIG_DECIMALS)
+	if err != nil {
+		return 0, err
+	}
+
+	val, err := strconv.ParseUint(result[2:], 16, 8)
+	if err != nil {
+		return 0, err
+	}
+
+	return uint8(val), nil
 }
