@@ -142,19 +142,32 @@ func GetBalance(address string) (float64, string) {
 	}
 
 	req, err := http.NewRequest("POST", nodeURL, bytes.NewBuffer([]byte(b)))
+	if err != nil {
+		fmt.Println("Error creating request:", err)
+		return 0, "Error connecting to node"
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		panic(err)
+		fmt.Println("Error making request:", err)
+		return 0, "Error connecting to node"
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("Error reading response:", err)
+		return 0, "Error reading node response"
+	}
 	fmt.Println(string(body))
 
 	err = json.Unmarshal([]byte(string(body)), &result)
+	if err != nil {
+		fmt.Println("Error unmarshaling response:", err)
+		return 0, "Error parsing node response"
+	}
 
 	if result.Error.Message != "" {
 		return 0, result.Error.Message

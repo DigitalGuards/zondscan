@@ -225,29 +225,26 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
     }
   }, []);
 
-  // Debounced search effect
+  // Single effect to handle both search and pagination
   React.useEffect(() => {
-    const debounceTimer = setTimeout(() => {
-      setCurrentPage(0); // Reset to first page when searching
-      fetchContracts(0, searchQuery);
-    }, 300);
-
-    return () => clearTimeout(debounceTimer);
-  }, [searchQuery, fetchContracts]);
-
-  // Page change effect
-  React.useEffect(() => {
-    if (searchQuery === '') {
-      fetchContracts(currentPage, '');
+    // Skip initial fetch if we have initialData and no search
+    if (initialData.length > 0 && !searchQuery && currentPage === 0) {
+      return;
     }
-  }, [currentPage, fetchContracts]);
+
+    const timer = setTimeout(() => {
+      fetchContracts(currentPage, searchQuery);
+    }, searchQuery ? 300 : 0); // Only debounce when searching
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, currentPage, fetchContracts, initialData.length]);
 
   const transformedData = React.useMemo(() => {
     console.log('Raw contracts:', contracts);
     return contracts.map((item: any, index: number) => {
       console.log('Processing item:', item);
       const transformed = {
-        _id: item._id || `contract-${index}`, // Fallback to index if _id is missing
+        _id: item._id || `contract-${index}`,
         blockNumber: item.blockNumber,
         blockTimestamp: item.blockTimestamp,
         from: decodeField(item.from),
@@ -265,18 +262,21 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
 
   return (
     <Box className="p-4">
-      <Typography variant="h4" component="h1" className="text-center mb-8 text-[#ffa729]">
+      <Typography variant="h4" component="h1" gutterBottom>
         Smart Contracts
       </Typography>
 
       <SearchInput 
         value={searchQuery} 
-        onChange={setSearchQuery}
+        onChange={(value) => {
+          setSearchQuery(value);
+          setCurrentPage(0); // Reset page when searching
+        }}
       />
 
       {loading ? (
         <div className="flex justify-center items-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#ffa729]"></div>
+          Loading...
         </div>
       ) : transformedData.length > 0 ? (
         <CustomTable data={transformedData} />

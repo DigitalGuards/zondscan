@@ -1,94 +1,110 @@
 package db
 
 import (
-	"Zond2mongoDB/configs"
-	"Zond2mongoDB/models"
-	"Zond2mongoDB/rpc"
-	"context"
-	"encoding/hex"
-	"strconv"
+    "Zond2mongoDB/configs"
+    "Zond2mongoDB/models"
+    "Zond2mongoDB/rpc"
+    "context"
+    "encoding/hex"
+    "strconv"
 
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.uber.org/zap"
+    "go.mongodb.org/mongo-driver/bson"
+    "go.mongodb.org/mongo-driver/mongo"
+    "go.mongodb.org/mongo-driver/mongo/options"
+    "go.uber.org/zap"
 )
 
 func processContracts(tx *models.Transaction) ([]byte, []byte, uint8, bool) {
-	var to []byte
-	var contractAddressByte []byte
-	var statusTx uint64
-	isContract := false
+    var to []byte
+    var contractAddressByte []byte
+    var statusTx uint64
+    isContract := false
 
-	from, err := hex.DecodeString(tx.From[2:])
-	if err != nil {
-		configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
-	}
+    from, err := hex.DecodeString(tx.From[2:])
+    if err != nil {
+        configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
+    }
 
-	if tx.To != "" {
-		to, err = hex.DecodeString(tx.To[2:])
-		if err != nil {
-			configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
-		}
-		contractAddressByte = nil
-	} else {
-		if tx.Type != "0x3" {
-			to = nil
+    if tx.To != "" {
+        to, err = hex.DecodeString(tx.To[2:])
+        if err != nil {
+            configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
+        }
+        contractAddressByte = nil
+    } else {
+        if tx.Type != "0x3" {
+            to = nil
 
-			contractAddress, status, err := rpc.GetContractAddress(tx.Hash)
-			if err != nil {
-				configs.Logger.Warn("Failed to do rpc request: ", zap.Error(err))
-			}
+            contractAddress, status, err := rpc.GetContractAddress(tx.Hash)
+            if err != nil {
+                configs.Logger.Warn("Failed to do rpc request: ", zap.Error(err))
+            }
 
-			contractAddressByte, err = hex.DecodeString(contractAddress[2:])
-			if err != nil {
-				configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
-			}
+            contractAddressByte, err = hex.DecodeString(contractAddress[2:])
+            if err != nil {
+                configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
+            }
 
-			statusTx, err = strconv.ParseUint(status, 0, 8)
-			if err != nil {
-				configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
-			}
+            statusTx, err = strconv.ParseUint(status, 0, 8)
+            if err != nil {
+                configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
+            }
 
-			contractCode, err := rpc.GetCode(contractAddress, tx.BlockNumber)
-			if err != nil {
-				configs.Logger.Warn("Failed to do rpc request: ", zap.Error(err))
-			}
+            if statusTx == 1 {
+                isContract = true
 
-			contractCodeByte, err := hex.DecodeString(contractCode[2:])
-			if err != nil {
-				configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
-			}
+                // Get contract code
+                code, err := rpc.GetCode(contractAddress, "latest")
+                if err != nil {
+                    configs.Logger.Warn("Failed to get contract code: ", zap.Error(err))
+                } else {
+                    // Get token information
+                    name, symbol, decimals, isToken := rpc.GetTokenInfo(contractAddress)
 
-			contractCreatorAddress := from
+                    // Store contract information including token data
+                    contractInfo := models.ContractInfo{
+                        ContractCreatorAddress: from,
+                        ContractAddress:        contractAddressByte,
+                        ContractCode:           []byte(code),
+                        TokenName:              name,
+                        TokenSymbol:           symbol,
+                        TokenDecimals:         decimals,
+                        IsToken:               isToken,
+                    }
 
-			contractAddressByte, err = hex.DecodeString(contractAddress[2:])
-			if err != nil {
-				configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
-			}
+                    // Use upsert to update existing contract or insert new one
+                    filter := bson.M{"contractAddress": contractAddressByte}
+                    update := bson.M{"$set": contractInfo}
+                    opts := options.Update().SetUpsert(true)
 
-			if len(contractCodeByte) <= 24576 {
-				ContractCodeCollection(contractCreatorAddress, contractAddressByte, contractCodeByte)
-			}
+                    _, err = configs.ContractCodeCollection.UpdateOne(context.Background(), filter, update, opts)
+                    if err != nil {
+                        configs.Logger.Warn("Failed to store contract info: ", zap.Error(err))
+                    }
+                }
+            }
+        }
+    }
 
-			if contractCode != "" {
-				isContract = true
-			}
-		}
-	}
-
-	return to, contractAddressByte, uint8(statusTx), isContract
+    return from, to, uint8(statusTx), isContract
 }
 
+// ContractCodeCollection inserts a new contract into the database
 func ContractCodeCollection(contractCreatorAddress []byte, contractAddress []byte, code []byte) (*mongo.InsertOneResult, error) {
-	doc := primitive.D{
-		{Key: "contractCreatorAddress", Value: contractCreatorAddress},
-		{Key: "contractAddress", Value: contractAddress},
-		{Key: "contractCode", Value: code},
-	}
-	result, err := configs.ContractCodeCollections.InsertOne(context.TODO(), doc)
-	if err != nil {
-		configs.Logger.Warn("Failed to insert in the contractcode collection: ", zap.Error(err))
-	}
+    var contractInfo models.ContractInfo
+    contractInfo.ContractCreatorAddress = contractCreatorAddress
+    contractInfo.ContractAddress = contractAddress
+    contractInfo.ContractCode = code
 
-	return result, err
+    // Try to get token information if we have a valid contract address
+    if len(contractAddress) > 0 {
+        addrHex := "0x" + hex.EncodeToString(contractAddress)
+        name, symbol, decimals, isToken := rpc.GetTokenInfo(addrHex)
+        contractInfo.TokenName = name
+        contractInfo.TokenSymbol = symbol
+        contractInfo.TokenDecimals = decimals
+        contractInfo.IsToken = isToken
+    }
+
+    return configs.ContractCodeCollection.InsertOne(context.Background(), contractInfo)
 }

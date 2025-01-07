@@ -399,7 +399,7 @@ func GetValidators() models.ResultValidator {
 			logger.Error("Failed to create request", zap.Error(err))
 			break
 		}
-		logger.Info("Created HTTP request for validators", 
+		logger.Info("Created HTTP request for validators",
 			zap.String("url", requestURL),
 			zap.Int("page", currentPage+1),
 			zap.Int("maxPages", maxPages))
@@ -625,4 +625,95 @@ func ZondGetLogs(contractAddress string) *models.ZondResponse {
 	}
 
 	return &responseData
+}
+
+// Common ERC20 function signatures
+const (
+	SIG_NAME     = "0x06fdde03" // name()
+	SIG_SYMBOL   = "0x95d89b41" // symbol()
+	SIG_DECIMALS = "0x313ce567" // decimals()
+)
+
+// CallContractMethod makes a zond_call to a contract method and returns the result
+func CallContractMethod(contractAddress string, methodSig string) (string, error) {
+	group := models.JsonRPC{
+		Jsonrpc: "2.0",
+		Method:  "zond_call",
+		Params: []interface{}{
+			map[string]string{
+				"to":   contractAddress,
+				"data": methodSig,
+			},
+			"latest",
+		},
+		ID: 1,
+	}
+
+	b, err := json.Marshal(group)
+	if err != nil {
+		logger.Info("Failed JSON marshal", zap.Error(err))
+		return "", err
+	}
+
+	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
+	if err != nil {
+		logger.Info("Failed to create request", zap.Error(err))
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.Info("Failed to get response from RPC call", zap.Error(err))
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		logger.Info("Failed to read response body", zap.Error(err))
+		return "", err
+	}
+
+	var result struct {
+		Result string `json:"result"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		logger.Info("Failed to unmarshal response", zap.Error(err))
+		return "", err
+	}
+
+	return result.Result, nil
+}
+
+// GetTokenInfo attempts to get ERC20 token information for a contract
+func GetTokenInfo(contractAddress string) (name string, symbol string, decimals uint8, isToken bool) {
+	// Try to get token name
+	if result, err := CallContractMethod(contractAddress, SIG_NAME); err == nil && len(result) > 66 {
+		// Decode the string from the response
+		// Skip first 64 chars (32 bytes) as they represent the offset
+		nameHex := strings.TrimRight(result[66:], "0")
+		if decoded, err := hex.DecodeString(nameHex); err == nil {
+			name = string(decoded)
+			isToken = true
+		}
+	}
+
+	// Try to get token symbol
+	if result, err := CallContractMethod(contractAddress, SIG_SYMBOL); err == nil && len(result) > 66 {
+		symbolHex := strings.TrimRight(result[66:], "0")
+		if decoded, err := hex.DecodeString(symbolHex); err == nil {
+			symbol = string(decoded)
+		}
+	}
+
+	// Try to get decimals
+	if result, err := CallContractMethod(contractAddress, SIG_DECIMALS); err == nil {
+		if val, err := strconv.ParseUint(result[2:], 16, 8); err == nil {
+			decimals = uint8(val)
+		}
+	}
+
+	return
 }

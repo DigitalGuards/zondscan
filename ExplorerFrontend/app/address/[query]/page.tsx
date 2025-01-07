@@ -8,6 +8,11 @@ import BalanceDisplay from "./balance-display";
 import ActivityDisplay from "./activity-display";
 import type { AddressData } from "./types";
 
+const decodeToHex = (input: string): string => {
+    const decoded = Buffer.from(input, 'base64');
+    return decoded.toString('hex');
+};
+
 const getData = async (url: string | URL): Promise<AddressData | null> => {
     try {
         const path = new URL(url).pathname;
@@ -28,6 +33,16 @@ const getData = async (url: string | URL): Promise<AddressData | null> => {
                 gasUsedStr: tx.gasUsedStr || (tx.gasUsed ? `0x${tx.gasUsed.toString(16)}` : '0x0'),
                 gasPriceStr: tx.gasPriceStr || (tx.gasPrice ? `0x${tx.gasPrice.toString(16)}` : '0x0')
             }));
+        }
+
+        // Decode contract addresses if present
+        if (response.data.contract_code) {
+            response.data.contract_code = {
+                ...response.data.contract_code,
+                decodedCreatorAddress: `0x${decodeToHex(response.data.contract_code.contractCreatorAddress)}`,
+                decodedContractAddress: `0x${decodeToHex(response.data.contract_code.contractAddress)}`,
+                contractSize: Math.ceil(response.data.contract_code.contractCode.length * 3 / 4)
+            };
         }
 
         console.log('Processed transactions:', JSON.stringify(response.data.transactions_by_address, null, 2));
@@ -81,11 +96,18 @@ export default async function Address({ params }: PageProps): Promise<JSX.Elemen
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
             </svg>
         );
-    } else if (addressData.response !== null) {
+    } else if (addressData.contract_code && addressData.contract_code.contractCode) {
         addressType = "Contract";
         addressIcon = (
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+        );
+    } else {
+        addressType = "Address";
+        addressIcon = (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
         );
     }
@@ -109,9 +131,11 @@ export default async function Address({ params }: PageProps): Promise<JSX.Elemen
                                     <div className="text-sm md:text-base font-mono text-gray-300 break-all md:break-normal">
                                         {addressSegment}
                                     </div>
-                                    <div className="mt-2 md:mt-0 md:ml-2">
-                                        <CopyAddressButton address={addressSegment} />
-                                    </div>
+                                    {addressSegment && (
+                                        <div className="mt-2 md:mt-0 md:ml-2">
+                                            <CopyAddressButton address={addressSegment} />
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -125,6 +149,69 @@ export default async function Address({ params }: PageProps): Promise<JSX.Elemen
                         <BalanceDisplay balance={balance} />
                         <ActivityDisplay firstSeen={firstSeen} lastSeen={lastSeen} />
                     </div>
+
+                    {/* Contract Information */}
+                    {addressData.contract_code && addressData.contract_code.contractCode && (
+                        <div className="mt-6">
+                            <div className="rounded-xl bg-[#2d2d2d] border border-[#3d3d3d] p-4 md:p-6 space-y-4">
+                                <h3 className="text-lg font-semibold text-[#ffa729]">
+                                    {addressData.contract_code.isToken ? 'Token Contract' : 'Contract'} Information
+                                </h3>
+                                
+                                <div className="space-y-3">
+                                    {/* Creator Address */}
+                                    <div>
+                                        <div className="text-sm text-gray-400 mb-1">Creator Address</div>
+                                        <div className="flex items-center space-x-2">
+                                            <span className="text-sm font-mono text-gray-300 break-all">
+                                                {addressData.contract_code.decodedCreatorAddress || 'Unknown'}
+                                            </span>
+                                            {addressData.contract_code.decodedCreatorAddress && (
+                                                <CopyAddressButton address={addressData.contract_code.decodedCreatorAddress} />
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Token Information */}
+                                    {addressData.contract_code.isToken && (
+                                        <>
+                                            {/* Token Name */}
+                                            <div>
+                                                <div className="text-sm text-gray-400 mb-1">Token Name</div>
+                                                <div className="text-sm text-gray-300">
+                                                    {addressData.contract_code.tokenName || 'Unknown'}
+                                                </div>
+                                            </div>
+
+                                            {/* Token Symbol */}
+                                            <div>
+                                                <div className="text-sm text-gray-400 mb-1">Token Symbol</div>
+                                                <div className="text-sm text-gray-300">
+                                                    {addressData.contract_code.tokenSymbol || 'Unknown'}
+                                                </div>
+                                            </div>
+
+                                            {/* Token Decimals */}
+                                            <div>
+                                                <div className="text-sm text-gray-400 mb-1">Token Decimals</div>
+                                                <div className="text-sm text-gray-300">
+                                                    {addressData.contract_code.tokenDecimals || '0'}
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {/* Contract Size */}
+                                    <div>
+                                        <div className="text-sm text-gray-400 mb-1">Contract Size</div>
+                                        <div className="text-sm text-gray-300">
+                                            {addressData.contract_code.contractSize || 0} bytes
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
