@@ -12,7 +12,7 @@ interface ContractData {
   _id: string;  // MongoDB ObjectId
   contractCreatorAddress: string;
   contractAddress: string;
-  contractCode: string;
+  //contractCode: string;
   tokenName?: string;
   tokenSymbol?: string;
   tokenDecimals?: number;
@@ -112,10 +112,6 @@ function CustomTable({ data }: { data: ContractData[] }) {
                 </Link>
               </div>
               <div>
-                <span className="text-[#ffa729] text-sm">Contract Code:</span>
-                <span className="ml-2 text-white text-sm break-all">{truncateMiddle(row.contractCode)}</span>
-              </div>
-              <div>
                 <span className="text-[#ffa729] text-sm">Token Name:</span>
                 <span className="ml-2 text-white text-sm break-all">{row.tokenName}</span>
               </div>
@@ -145,8 +141,7 @@ function CustomTable({ data }: { data: ContractData[] }) {
           <tr className="border-b border-[#3d3d3d]">
             <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Contract Address</th>
             <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Creator</th>
-            <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Contract Code</th>
-            <th className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Token Name</th>
+            <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Token Name</th>
             <th className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Token Symbol</th>
             <th className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Token Decimals</th>
             <th className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Is Token</th>
@@ -165,8 +160,7 @@ function CustomTable({ data }: { data: ContractData[] }) {
                   {truncateMiddle(row.contractCreatorAddress, 8, 8)}
                 </Link>
               </td>
-              <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{truncateMiddle(row.contractCode, 8, 8)}</td>
-              <td className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{row.tokenName}</td>
+              <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{row.tokenName}</td>
               <td className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{row.tokenSymbol}</td>
               <td className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{row.tokenDecimals}</td>
               <td className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{row.isToken ? 'Yes' : 'No'}</td>
@@ -193,7 +187,7 @@ function SearchInput({ value, onChange }: { value: string; onChange: (value: str
         className="block w-full p-4 pl-10 text-sm text-white border border-[#3d3d3d] rounded-lg 
                   bg-[#2d2d2d] hover:border-[#4d4d4d] focus:ring-1 focus:ring-[#ffa729] focus:border-[#ffa729] 
                   placeholder-gray-400 outline-none transition-colors"
-        placeholder="Search contracts..."
+        placeholder="Search by contract address (with 0x) or token name"
       />
     </div>
   );
@@ -209,11 +203,14 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
   const fetchContracts = React.useCallback(async (page: number, search: string) => {
     try {
       setLoading(true);
+      // Remove '0x' prefix if present and convert to lowercase
+      const cleanSearch = search ? search.toLowerCase().replace(/^0x/, '') : undefined;
+      
       const response = await axios.get(`${config.handlerUrl}/contracts`, {
         params: {
           page,
           limit: ITEMS_PER_PAGE,
-          search: search ? search : undefined
+          search: cleanSearch
         }
       });
       
@@ -251,9 +248,8 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
       console.log('Processing item:', item);
       const transformed = {
         _id: item._id || `contract-${index}`,
-        contractCreatorAddress: item.contractCreatorAddress,
-        contractAddress: item.contractAddress,
-        contractCode: item.contractCode,
+        contractCreatorAddress: '0x' + decodeBase64ToHexadecimal(item.contractCreatorAddress),
+        contractAddress: '0x' + decodeBase64ToHexadecimal(item.contractAddress),
         tokenName: item.tokenName,
         tokenSymbol: item.tokenSymbol,
         tokenDecimals: item.tokenDecimals,
