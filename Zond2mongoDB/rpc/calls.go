@@ -691,6 +691,9 @@ func CallContractMethod(contractAddress string, methodSig string) (string, error
 func GetTokenInfo(contractAddress string) (name string, symbol string, decimals uint8, isToken bool) {
 	logger.Info("Getting token info", zap.String("contract_address", contractAddress))
 
+	// Track if we successfully got any token information
+	gotTokenInfo := false
+
 	name, err := getTokenName(contractAddress)
 	if err != nil {
 		logger.Info("Failed to get token name",
@@ -701,6 +704,7 @@ func GetTokenInfo(contractAddress string) (name string, symbol string, decimals 
 		logger.Info("Got token name",
 			zap.String("contract_address", contractAddress),
 			zap.String("name", name))
+		gotTokenInfo = true
 	}
 
 	symbol, err = getTokenSymbol(contractAddress)
@@ -713,6 +717,7 @@ func GetTokenInfo(contractAddress string) (name string, symbol string, decimals 
 		logger.Info("Got token symbol",
 			zap.String("contract_address", contractAddress),
 			zap.String("symbol", symbol))
+		gotTokenInfo = true
 	}
 
 	decimals, err = getTokenDecimals(contractAddress)
@@ -725,12 +730,19 @@ func GetTokenInfo(contractAddress string) (name string, symbol string, decimals 
 		logger.Info("Got token decimals",
 			zap.String("contract_address", contractAddress),
 			zap.Uint8("decimals", decimals))
+		gotTokenInfo = true
 	}
 
-	// If we got here, all token checks passed
-	logger.Info("Successfully identified token",
+	// Only mark as token if we got at least some token information
+	if gotTokenInfo {
+		logger.Info("Successfully identified token",
+			zap.String("contract_address", contractAddress))
+		return name, symbol, decimals, true
+	}
+
+	logger.Info("Contract is not a token",
 		zap.String("contract_address", contractAddress))
-	return name, symbol, decimals, true
+	return name, symbol, decimals, false
 }
 
 func getTokenName(contractAddress string) (string, error) {
