@@ -24,7 +24,7 @@ const blockchain = [
 
 const smartContracts = [
   { name: 'Smart Contracts', description: 'Explore QRL contracts', href: '/contracts', imgSrc: ContractIcon },
-  { name: 'Tokens', description: 'View QRL tokens', href: '/tokens', imgSrc: TokenIcon },
+  //{ name: 'Tokens', description: 'View QRL tokens', href: '/tokens', imgSrc: TokenIcon },
   // NFTs section commented out until implementation
   // { name: 'NFTs', description: 'View QRL NFTs', href: '/nfts', imgSrc: TokenIcon },
 ]
