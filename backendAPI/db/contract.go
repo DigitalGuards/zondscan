@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -65,10 +66,15 @@ func ReturnContractCode(query string) (models.ContractInfo, error) {
 
 	var result models.ContractInfo
 
+	// Remove "0x" prefix if present
+	if strings.HasPrefix(query, "0x") {
+		query = query[2:]
+	}
+
 	// Try to decode the query as a hex address
 	address, err := hex.DecodeString(query)
 	if err != nil {
-		return result, err
+		return result, fmt.Errorf("failed to decode hex address: %v", err)
 	}
 
 	filter := bson.M{"contractAddress": address}
