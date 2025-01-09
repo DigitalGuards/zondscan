@@ -9,6 +9,7 @@ import ActivityDisplay from "./activity-display";
 import type { AddressData } from "./types";
 
 const decodeToHex = (input: string): string => {
+    if (!input) return '0x0';
     const decoded = Buffer.from(input, 'base64');
     return decoded.toString('hex');
 };
@@ -36,12 +37,15 @@ const getData = async (url: string | URL): Promise<AddressData | null> => {
         }
 
         // Decode contract addresses if present
-        if (response.data.contract_code) {
+        if (response.data.contract_code && response.data.contract_code.contractCode) {
             response.data.contract_code = {
                 ...response.data.contract_code,
-                decodedCreatorAddress: `0x${decodeToHex(response.data.contract_code.contractCreatorAddress)}`,
-                decodedContractAddress: `0x${decodeToHex(response.data.contract_code.contractAddress)}`,
-                contractSize: Math.ceil(response.data.contract_code.contractCode.length * 3 / 4)
+                decodedCreatorAddress: response.data.contract_code.contractCreatorAddress ? 
+                    `0x${decodeToHex(response.data.contract_code.contractCreatorAddress)}` : '0x0',
+                decodedContractAddress: response.data.contract_code.contractAddress ? 
+                    `0x${decodeToHex(response.data.contract_code.contractAddress)}` : '0x0',
+                contractSize: response.data.contract_code.contractCode ? 
+                    Math.ceil(response.data.contract_code.contractCode.length * 3 / 4) : 0
             };
         }
 

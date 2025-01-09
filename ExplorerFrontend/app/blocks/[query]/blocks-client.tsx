@@ -160,7 +160,7 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
     <div className="p-4 sm:p-8">
       <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-[#ffa729]">Blocks</h1>
       
-      <div className="max-w-3xl mx-auto mb-8">
+      <div className="max-w-[1200px] mx-auto mb-8">
         <SearchBar />
       </div>
 

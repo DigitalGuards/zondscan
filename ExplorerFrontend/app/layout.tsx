@@ -104,6 +104,13 @@ export default function RootLayout({ children }: RootLayoutProps) {
                 "price": "0",
                 "priceCurrency": "USD"
               },
+              "relatedApplication": {
+                "@type": "SoftwareApplication",
+                "name": "QRL Zond Web Wallet",
+                "url": "https://qrlwallet.com",
+                "applicationCategory": "Blockchain Wallet",
+                "operatingSystem": "All"
+              },
               "hasPart": [
                 {
                   "@type": "WebPage",

@@ -313,7 +313,7 @@ export default function Sidebar() {
                                  transition-[filter]"
                         />
                       </div>
-                      <span className="truncate">QRL Web Wallet</span>
+                      <span className="truncate">QRL Zond Wallet</span>
                     </a>
                     <button
                       onClick={() => navigateTo('/faq')}
