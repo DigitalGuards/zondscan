@@ -281,7 +281,7 @@ export default function HomeClient() {
       {/* Main Content */}
       <div className="relative z-10 px-4 lg:px-8 pt-6.81 lg:pt-8">
         {/* Search Bar */}
-        <div className="max-w-3xl mx-auto mt-4">
+        <div className="max-w-4xl mx-auto mt-4">
           <div className="mb-4 sm:mb-10">
             <SearchBar />
           </div>
@@ -289,9 +289,8 @@ export default function HomeClient() {
           {!data.dataInitialized && (
             <div className="mb-4 sm:mb-8 p-2 sm:p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-500">
               <div className="flex items-center">
-                <svg className="animate-spin -ml-1 mr-2 sm:mr-3 h-4 sm:h-5 w-4 sm:w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 sm:h-5 w-4 sm:w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <span className="text-xs sm:text-sm">Initializing explorer data... This may take a few minutes.</span>
               </div>
@@ -317,7 +316,9 @@ export default function HomeClient() {
                   <StatCard key={idx} item={item} />
                 ))}
               </div>
-              <Charts />
+              <div className="max-w-6xl mx-auto">
+                <Charts />
+              </div>
             </div>
           </div>
         </div>
