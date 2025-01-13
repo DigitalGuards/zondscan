@@ -29,7 +29,7 @@ export default function TransactionsList({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 px-4 sm:px-6 lg:px-8">
       <div className="max-w-[1200px] mx-auto mb-8">
         <SearchBar />
       </div>
@@ -40,7 +40,7 @@ export default function TransactionsList({
         </div>
       ) : (
         <>
-          <div className="mb-8">
+          <div className="max-w-[1200px] mx-auto mb-8">
             {transactions.map(transaction => (
               <TransactionCard 
                 key={transaction.TxHash} 
