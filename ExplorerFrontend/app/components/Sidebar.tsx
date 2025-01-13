@@ -133,7 +133,7 @@ export default function Sidebar() {
                       border-r border-[#2d2d2d] shadow-[4px_0_24px_rgba(0,0,0,0.2)]
                       transition-all duration-300 ease-in-out
                       ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-                      w-56 lg:top-0 top-[53px]`}>
+                      w-64 lg:top-0 top-[53px]`}>
         <div className="p-4">
           <Link href="/" className="flex items-center gap-1.5 mb-6 px-1 group" onClick={() => setIsOpen(false)}>
             <div className="w-6 h-6 relative">
@@ -173,7 +173,7 @@ export default function Sidebar() {
                         onClick={() => navigateTo(item.href)}
                         className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-gray-300 
                                hover:bg-[#2d2d2d] rounded-md transition-all duration-200
-                               hover:text-[#ffa729] group"
+                               hover:text-[#ffa729] group whitespace-nowrap"
                       >
                         <div className="w-5 h-5 relative">
                           <Image
@@ -215,7 +215,7 @@ export default function Sidebar() {
                         onClick={() => navigateTo(item.href)}
                         className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-gray-300 
                                hover:bg-[#2d2d2d] rounded-md transition-all duration-200
-                               hover:text-[#ffa729] group"
+                               hover:text-[#ffa729] group whitespace-nowrap"
                       >
                         <div className="w-5 h-5 relative">
                           <Image
@@ -257,7 +257,7 @@ export default function Sidebar() {
                         onClick={() => navigateTo(item.href)}
                         className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-gray-300 
                                hover:bg-[#2d2d2d] rounded-md transition-all duration-200
-                               hover:text-[#ffa729] group"
+                               hover:text-[#ffa729] group whitespace-nowrap"
                       >
                         <div className="w-5 h-5 relative">
                           <Image
@@ -299,7 +299,7 @@ export default function Sidebar() {
                       rel="noopener noreferrer"
                       className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-gray-300 
                              hover:bg-[#2d2d2d] rounded-md transition-all duration-200
-                             hover:text-[#ffa729] group"
+                             hover:text-[#ffa729] group whitespace-nowrap"
                     >
                       <div className="w-5 h-5 relative">
                         <Image
@@ -319,7 +319,7 @@ export default function Sidebar() {
                       onClick={() => navigateTo('/faq')}
                       className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-gray-300 
                              hover:bg-[#2d2d2d] rounded-md transition-all duration-200
-                             hover:text-[#ffa729] group"
+                             hover:text-[#ffa729] group whitespace-nowrap"
                     >
                       <div className="w-5 h-5 relative">
                         <Image
