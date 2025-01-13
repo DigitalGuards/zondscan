@@ -1,7 +1,7 @@
 "use client";
 
 import axios from 'axios';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import config from '../../../config';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -45,7 +45,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({ transaction }) => {
     : 'Pending';
 
   return (
-    <div className="bg-gradient-to-r from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] rounded-xl p-4 mb-4 hover:border-[#ffa729] transition-colors">
+    <div className="bg-gradient-to-r from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] rounded-xl p-6 shadow-lg hover:border-[#ffa729] transition-colors">
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <Link href={`/pending/tx/${transaction.hash}`} className="text-[#ffa729] hover:text-[#ffb952] font-mono">
@@ -107,19 +107,32 @@ const fetchPendingTransactions = async (page: number): Promise<PaginatedResponse
 };
 
 export default function PendingList({ initialData, currentPage }: PendingListProps) {
-  const { data, isError, error, refetch } = useQuery({
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastChecked, setLastChecked] = useState<Date | null>(null);
+  const { data, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['pending-transactions', currentPage],
     queryFn: () => fetchPendingTransactions(currentPage),
     initialData,
     refetchInterval: 5000,
   });
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await refetch();
+    setLastChecked(new Date());
+    setTimeout(() => setIsRefreshing(false), 500);
+  };
+
   if (isError) {
     console.error('Error fetching pending transactions:', error);
     return (
-      <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg mt-6">
-        <h2 className="text-red-500 font-semibold mb-2">Error Loading Transactions</h2>
-        <p className="text-gray-300">Failed to load pending transactions. Please try again later.</p>
+      <div className="px-4 sm:px-6 lg:px-8">
+        <div className="max-w-[1200px] mx-auto">
+          <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg">
+            <h2 className="text-red-500 font-semibold mb-2">Error Loading Transactions</h2>
+            <p className="text-gray-300">Failed to load pending transactions. Please try again later.</p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -144,9 +157,13 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
   } catch (err) {
     console.error('Error processing transactions:', err);
     return (
-      <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg mt-6">
-        <h2 className="text-red-500 font-semibold mb-2">Error Processing Transactions</h2>
-        <p className="text-gray-300">Failed to process transaction data. Please try again later.</p>
+      <div className="px-4 sm:px-6 lg:px-8">
+        <div className="max-w-[1200px] mx-auto">
+          <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg">
+            <h2 className="text-red-500 font-semibold mb-2">Error Processing Transactions</h2>
+            <p className="text-gray-300">Failed to process transaction data. Please try again later.</p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -156,31 +173,78 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
 
   if (transactions.length === 0) {
     return (
-      <div className="bg-[#1f1f1f] border border-[#3d3d3d] rounded-xl p-6 shadow-lg mt-6">
-        <h2 className="text-gray-300 font-semibold mb-2">No Pending Transactions</h2>
-        <p className="text-gray-400">There are currently no pending transactions in the mempool.</p>
-        <button 
-          onClick={() => refetch()} 
-          className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-        >
-          Refresh Transactions
-        </button>
+      <div className="px-4 sm:px-6 lg:px-8">
+        <div className="max-w-[1200px] mx-auto">
+          <div className="bg-gradient-to-r from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] rounded-xl p-6 shadow-lg">
+            <h2 className="text-[#ffa729] font-semibold text-lg mb-2">No Pending Transactions</h2>
+            <p className="text-gray-300 mb-4">There are currently no pending transactions in the mempool.</p>
+            {lastChecked && !isRefreshing && !isFetching && (
+              <div className="mb-4 text-sm">
+                <span className="text-green-400">✓ Confirmed empty at {lastChecked.toLocaleTimeString()}</span>
+              </div>
+            )}
+            <button 
+              onClick={handleRefresh}
+              disabled={isRefreshing || isFetching}
+              className={`px-6 py-2 bg-[#ffa729] hover:bg-[#ffb952] text-black font-medium rounded-lg transition-all
+                         flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed
+                         ${isRefreshing || isFetching ? 'animate-pulse' : ''}`}
+            >
+              {isRefreshing || isFetching ? (
+                <>
+                  <svg className="animate-spin h-4 w-4 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Checking Mempool...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Check Again
+                </>
+              )}
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      {transactions.map((transaction) => (
-        <TransactionCard key={transaction.hash} transaction={transaction} />
-      ))}
-      <div className="mt-4 text-center">
-        <button 
-          onClick={() => refetch()} 
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-        >
-          Refresh Transactions
-        </button>
+    <div className="px-4 sm:px-6 lg:px-8">
+      <div className="max-w-[1200px] mx-auto space-y-4">
+        {transactions.map((transaction) => (
+          <TransactionCard key={transaction.hash} transaction={transaction} />
+        ))}
+        <div className="mt-4 text-center">
+          <button 
+            onClick={handleRefresh}
+            disabled={isRefreshing || isFetching}
+            className={`px-6 py-2 bg-[#ffa729] hover:bg-[#ffb952] text-black font-medium rounded-lg transition-all
+                       flex items-center gap-2 mx-auto disabled:opacity-50 disabled:cursor-not-allowed
+                       ${isRefreshing || isFetching ? 'animate-pulse' : ''}`}
+          >
+            {isRefreshing || isFetching ? (
+              <>
+                <svg className="animate-spin h-4 w-4 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Checking Mempool...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Check Again
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );
