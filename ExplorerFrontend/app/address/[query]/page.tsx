@@ -118,26 +118,26 @@ export default async function Address({ params }: PageProps): Promise<JSX.Elemen
     }
 
     return (
-        <div className="py-4 md:py-8 px-4 md:px-8">
+        <div className="py-4 lg:py-8 px-4 lg:px-8 max-w-7xl mx-auto">
             <div className="relative overflow-hidden rounded-2xl 
                         bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
-                        border border-[#3d3d3d] shadow-xl mb-6 md:mb-8">
-                <div className="p-4 md:p-8">
+                        border border-[#3d3d3d] shadow-xl mb-6 lg:mb-8">
+                <div className="p-4 lg:p-8">
                     {/* Header */}
-                    <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 md:mb-8 pb-4 md:pb-6 border-b border-gray-700">
-                        <div className="flex items-start md:items-center mb-4 md:mb-0">
-                            <div className="hidden md:block">{addressIcon}</div>
-                            <div className="flex-1 md:ml-4">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6 lg:mb-8 pb-4 lg:pb-6 border-b border-gray-700">
+                        <div className="flex items-start lg:items-center mb-4 lg:mb-0">
+                            <div className="hidden lg:block">{addressIcon}</div>
+                            <div className="flex-1 lg:ml-4">
                                 <div className="flex items-center">
-                                    <div className="block md:hidden mr-2">{addressIcon}</div>
+                                    <div className="block lg:hidden mr-2">{addressIcon}</div>
                                     <div className="text-sm font-medium text-gray-400">{addressType}</div>
                                 </div>
-                                <div className="flex flex-col md:flex-row md:items-center mt-1">
-                                    <div className="text-sm md:text-base font-mono text-gray-300 break-all md:break-normal">
+                                <div className="flex flex-col sm:flex-row sm:items-center mt-1 gap-2">
+                                    <div className="text-sm lg:text-base font-mono text-gray-300 break-all sm:break-normal">
                                         {addressSegment}
                                     </div>
                                     {addressSegment && (
-                                        <div className="flex items-center gap-2 mb-2 md:ml-6">
+                                        <div className="flex items-center gap-2 mb-2 sm:mb-0 sm:ml-4">
                                             <CopyAddressButton address={addressSegment} />
                                             <QRCodeButton address={addressSegment} />
                                         </div>
@@ -145,13 +145,13 @@ export default async function Address({ params }: PageProps): Promise<JSX.Elemen
                                 </div>
                             </div>
                         </div>
-                        <div className="px-3 py-1 md:px-4 md:py-2 rounded-xl bg-[#3d3d3d] bg-opacity-20 self-start md:self-center">
+                        <div className="px-3 py-1 lg:px-4 lg:py-2 rounded-xl bg-[#3d3d3d] bg-opacity-20 self-start lg:self-center">
                             <span className="text-sm font-medium text-[#ffa729]">Rank #{rank}</span>
                         </div>
                     </div>
 
                     {/* Stats Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6">
                         <BalanceDisplay balance={balance} />
                         <ActivityDisplay firstSeen={firstSeen} lastSeen={lastSeen} />
                     </div>
@@ -159,7 +159,7 @@ export default async function Address({ params }: PageProps): Promise<JSX.Elemen
                     {/* Contract Information */}
                     {addressData.contract_code && addressData.contract_code.contractCode && (
                         <div className="mt-6">
-                            <div className="rounded-xl bg-[#2d2d2d] border border-[#3d3d3d] p-4 md:p-6 space-y-4">
+                            <div className="rounded-xl bg-[#2d2d2d] border border-[#3d3d3d] p-4 lg:p-6 space-y-4">
                                 <h3 className="text-lg font-semibold text-[#ffa729]">
                                     {addressData.contract_code.isToken ? 'Token Contract' : 'Contract'} Information
                                 </h3>
@@ -223,7 +223,7 @@ export default async function Address({ params }: PageProps): Promise<JSX.Elemen
 
             {/* Transactions Section */}
             <div className="space-y-4">
-                <h2 className="text-lg md:text-xl font-semibold text-[#ffa729]">Transactions</h2>
+                <h2 className="text-lg lg:text-xl font-semibold text-[#ffa729]">Transactions</h2>
                 <div className="overflow-hidden rounded-xl border border-[#3d3d3d]">
                     {addressData.transactions_by_address && addressData.transactions_by_address.length > 0 ? (
                         <TanStackTable 
