@@ -264,10 +264,6 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
 
   return (
     <Box className="p-4">
-      <Typography variant="h4" component="h1" gutterBottom>
-        Smart Contracts
-      </Typography>
-
       <SearchInput 
         value={searchQuery} 
         onChange={(value) => {
