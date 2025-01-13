@@ -1,7 +1,6 @@
 import React from 'react';
 import axios from 'axios';
 import config from '../../../../config';
-import { redirect } from 'next/navigation';
 import { PendingTransaction } from '../types';
 import PendingTransactionView from './pending-transaction-view';
 
@@ -14,105 +13,69 @@ function validateTransactionHash(hash: string): boolean {
   return hashRegex.test(hash);
 }
 
-async function checkIfMined(hash: string): Promise<boolean> {
-  console.log(`Checking if transaction ${hash} is mined...`);
-  try {
-    const txResponse = await axios.get(`${config.handlerUrl}/tx/${hash}`);
-    console.log('Mined check response:', txResponse.data);
-    
-    if (txResponse.data?.response && 
-        txResponse.data.response.blockNumber) {
-      console.log('Transaction found in blockchain');
-      return true;
-    }
-    
-    return false;
-  } catch (error) {
-    console.log('Transaction not found in blockchain:', error);
-    return false;
-  }
-}
-
-async function findPendingTransaction(hash: string): Promise<PendingTransaction | null> {
-  console.log(`Looking for transaction ${hash} in mempool...`);
-  try {
-    const response = await axios.get(`${config.handlerUrl}/pending-transaction/${hash}`);
-    console.log('Pending transaction response:', response.data);
-    
-    if (response.data?.transaction) {
-      console.log('Found transaction in mempool:', response.data.transaction);
-      return response.data.transaction;
-    }
-    
-    console.log('Transaction not found in mempool');
-    return null;
-  } catch (error: any) {
-    // If the transaction is not found, return null instead of throwing
-    if (error.response?.status === 404) {
-      console.log('Transaction not found in mempool (404)');
-      return null;
-    }
-    
-    // For other errors, throw
-    console.error('Error fetching pending transaction:', error);
-    throw new Error('Failed to fetch pending transaction');
-  }
-}
-
 async function getTransactionStatus(hash: string): Promise<{ 
-  isPending: boolean; 
-  pendingTx: PendingTransaction | null; 
-  isMined: boolean;
-  leftMempool: boolean;
+  status: 'pending' | 'mined' | 'dropped';
+  transaction: PendingTransaction | null;
+  blockNumber?: string;
 }> {
-  console.log(`Getting status for transaction ${hash}...`);
-  
-  if (!validateTransactionHash(hash)) {
-    console.error('Invalid transaction hash format');
-    throw new Error('Invalid transaction hash format');
-  }
-
   try {
-    const [isMined, pendingTx] = await Promise.all([
-      checkIfMined(hash),
-      findPendingTransaction(hash)
-    ]);
-
-    if (isMined) {
-      return { 
-        isPending: false, 
-        pendingTx: null,
-        isMined: true,
-        leftMempool: false
-      };
+    // First try pending transactions endpoint
+    const response = await axios.get(`${config.handlerUrl}/pending-transaction/${hash}`);
+    console.log('Transaction status response:', response.data);
+    
+    if (!response.data?.transaction) {
+      return { status: 'dropped', transaction: null };
     }
 
-    // If not mined and not in mempool, it has likely left mempool and is being processed
-    if (!pendingTx) {
-      return {
-        isPending: true,
-        pendingTx: null,
-        isMined: false,
-        leftMempool: true
-      };
-    }
-
-    return { 
-      isPending: true, 
-      pendingTx,
-      isMined: false,
-      leftMempool: false
+    const tx = response.data.transaction;
+    return {
+      status: tx.status,
+      transaction: tx,
+      blockNumber: tx.blockNumber
     };
-
-  } catch (error) {
-    console.error('Error in getTransactionStatus:', error);
-    throw error;
+  } catch (error: any) {
+    console.error('Error fetching transaction status:', error);
+    
+    // If we got a 404, check if it exists in regular transactions
+    if (error.response?.status === 404) {
+      try {
+        const txResponse = await axios.get(`${config.handlerUrl}/tx/${hash}`);
+        if (txResponse.data?.response) {
+          const tx = txResponse.data.response;
+          return {
+            status: 'mined',
+            transaction: {
+              hash: hash,
+              status: 'mined',
+              blockNumber: tx.blockNumber?.toString(),
+              accessList: [],
+              blockHash: null,
+              chainId: '0x7e7e', // Zond chainId
+              from: tx.from || '',
+              gas: tx.gas || '0x0',
+              gasPrice: tx.gasPrice || '0x0',
+              input: tx.input || '0x',
+              nonce: tx.nonce?.toString() || '0',
+              publicKey: tx.publicKey || '',
+              to: tx.to,
+              transactionIndex: null,
+              type: tx.type || '0x0',
+              value: tx.value || '0x0',
+              lastSeen: Math.floor(Date.now() / 1000),
+              createdAt: Math.floor(Date.now() / 1000)
+            }
+          };
+        }
+      } catch (txError) {
+        console.error('Error checking regular transaction:', txError);
+      }
+    }
+    
+    return { status: 'dropped', transaction: null };
   }
 }
 
 export default async function PendingTransactionPage({ params }: PageProps) {
-  console.log('Rendering PendingTransactionPage');
-  
   try {
     const resolvedParams = await params;
     const hash = resolvedParams.hash;
@@ -132,70 +95,51 @@ export default async function PendingTransactionPage({ params }: PageProps) {
       );
     }
 
-    const { isPending, pendingTx, isMined, leftMempool } = await getTransactionStatus(hash);
+    const { status, transaction, blockNumber } = await getTransactionStatus(hash);
 
-    if (isMined) {
-      console.log('Transaction is mined');
+    // If transaction is mined, use window.location for client-side redirect
+    if (status === 'mined' && transaction) {
       return (
-        <div className="container mx-auto px-4">
-          <div className="bg-green-900/20 border border-green-500/50 rounded-xl p-6 shadow-lg mt-6">
-            <h2 className="text-green-500 font-semibold mb-2">Transaction Confirmed</h2>
-            <p className="text-gray-300 mb-4">
-              This transaction has been mined and is now part of the blockchain.
-            </p>
-            <a 
-              href={`/tx/${hash}`}
-              className="inline-block bg-green-500/20 text-green-500 px-4 py-2 rounded-lg hover:bg-green-500/30 transition-colors"
-            >
-              View Transaction Details →
-            </a>
-          </div>
-        </div>
+        <>
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `window.location.href = '/tx/${hash}';`,
+            }}
+          />
+          <div>Redirecting to transaction page...</div>
+        </>
       );
     }
 
-    if (leftMempool) {
+    // If transaction is dropped
+    if (status === 'dropped' || !transaction) {
       return (
         <div className="container mx-auto px-4">
-          <div className="bg-yellow-900/20 border border-yellow-500/50 rounded-xl p-6 shadow-lg mt-6">
-            <h2 className="text-yellow-500 font-semibold mb-2">Transaction Processing</h2>
-            <p className="text-gray-300 mb-2">
-              This transaction has left the mempool and is likely being processed into a block.
-              Please wait while the explorer fetches the block data.
-            </p>
+          <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg mt-6">
+            <h2 className="text-red-500 font-semibold mb-2">Transaction Not Found</h2>
             <p className="text-gray-300">
-              Transaction Hash: <span className="font-mono">{hash}</span>
-            </p>
-            <p className="text-gray-300 mt-4 text-sm">
-              This page will automatically refresh every 10 seconds to check for updates.
+              This transaction is no longer in the mempool. It may have been dropped 
+              or replaced. Please check if a transaction with a higher gas price was 
+              submitted with the same nonce.
             </p>
           </div>
-          <meta httpEquiv="refresh" content="10" />
         </div>
       );
     }
 
-    return (
-      <>
-        <PendingTransactionView pendingTx={pendingTx!} />
-        <meta httpEquiv="refresh" content="10" />
-      </>
-    );
-
+    // Transaction is pending
+    return <PendingTransactionView pendingTx={transaction} />;
+    
   } catch (error) {
-    console.error('Error in page component:', error);
+    console.error('Error in PendingTransactionPage:', error);
     return (
       <div className="container mx-auto px-4">
         <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg mt-6">
-          <h2 className="text-red-500 font-semibold mb-2">Error Loading Transaction</h2>
+          <h2 className="text-red-500 font-semibold mb-2">Error</h2>
           <p className="text-gray-300">
-            There was an error loading the transaction details: {error instanceof Error ? error.message : 'Unknown error'}
-          </p>
-          <p className="text-gray-300 mt-2">
-            This page will automatically refresh every 10 seconds to check for updates.
+            An error occurred while fetching the transaction. Please try again later.
           </p>
         </div>
-        <meta httpEquiv="refresh" content="10" />
       </div>
     );
   }

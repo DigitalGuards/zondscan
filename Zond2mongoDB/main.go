@@ -36,6 +36,10 @@ func main() {
 	logger.Info("Starting wallet count sync service...")
 	db.StartWalletCountSync()
 	
+	// Start pending transaction sync
+	logger.Info("Starting pending transaction sync service...")
+	synchroniser.StartPendingTransactionSync()
+	
 	// Start blockchain sync
 	synchroniser.Sync()
 }

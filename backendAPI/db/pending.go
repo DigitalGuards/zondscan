@@ -1,16 +1,20 @@
 package db
 
 import (
+	"backendAPI/configs"
 	"backendAPI/models"
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"os"
+	"context"
+	"time"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-const DEFAULT_PAGE_SIZE = 10
+const (
+	DEFAULT_PAGE_SIZE  = 10
+	PENDING_COLLECTION = "pending_transactions"
+)
 
 func GetPendingTransactions(page, limit int) (*models.PaginatedPendingTransactions, error) {
 	if page < 1 {
@@ -20,29 +24,46 @@ func GetPendingTransactions(page, limit int) (*models.PaginatedPendingTransactio
 		limit = DEFAULT_PAGE_SIZE
 	}
 
-	transactions, err := fetchPendingTransactions()
+	collection := configs.GetCollection(configs.DB, PENDING_COLLECTION)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Get total count for all non-mined transactions
+	filter := bson.M{"status": bson.M{"$ne": "mined"}}
+	total, err := collection.CountDocuments(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
 
-	// Calculate pagination
-	total := len(transactions)
-	totalPages := (total + limit - 1) / limit
-	startIndex := (page - 1) * limit
-	endIndex := startIndex + limit
-	if endIndex > total {
-		endIndex = total
+	totalPages := (int(total) + limit - 1) / limit
+	skip := (page - 1) * limit
+
+	// Get paginated transactions
+	opts := options.Find().
+		SetSort(bson.M{"createdAt": -1}).
+		SetSkip(int64(skip)).
+		SetLimit(int64(limit))
+
+	cursor, err := collection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var transactions []models.PendingTransaction
+	if err = cursor.All(ctx, &transactions); err != nil {
+		return nil, err
 	}
 
-	// Get paginated subset
-	var paginatedTxs []models.PendingTransaction
-	if startIndex < total {
-		paginatedTxs = transactions[startIndex:endIndex]
+	// Ensure timestamps are in UTC
+	for i := range transactions {
+		transactions[i].LastSeen = transactions[i].LastSeen.UTC()
+		transactions[i].CreatedAt = transactions[i].CreatedAt.UTC()
 	}
 
 	return &models.PaginatedPendingTransactions{
-		Transactions: paginatedTxs,
-		Total:        total,
+		Transactions: transactions,
+		Total:        int(total),
 		Page:         page,
 		Limit:        limit,
 		TotalPages:   totalPages,
@@ -50,79 +71,32 @@ func GetPendingTransactions(page, limit int) (*models.PaginatedPendingTransactio
 }
 
 func GetPendingTransactionByHash(hash string) (*models.PendingTransaction, error) {
-	transactions, err := fetchPendingTransactions()
+	collection := configs.GetCollection(configs.DB, PENDING_COLLECTION)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var transaction models.PendingTransaction
+	err := collection.FindOne(ctx, bson.M{"_id": hash}).Decode(&transaction)
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil
+		}
 		return nil, err
 	}
 
-	// Look for the transaction with matching hash
-	for _, tx := range transactions {
-		if tx.Hash == hash {
-			return &tx, nil
-		}
-	}
+	// Ensure timestamps are in UTC
+	transaction.LastSeen = transaction.LastSeen.UTC()
+	transaction.CreatedAt = transaction.CreatedAt.UTC()
 
-	return nil, nil
+	return &transaction, nil
 }
 
-// fetchPendingTransactions gets all pending transactions from the node
-func fetchPendingTransactions() ([]models.PendingTransaction, error) {
-	// Create JSON-RPC request
-	rpcReq := models.JsonRPC{
-		Jsonrpc: "2.0",
-		Method:  "txpool_content",
-		Params:  []interface{}{},
-		ID:      1,
-	}
+// DeleteMinedTransaction removes a transaction from the pending_transactions collection once it's mined
+func DeleteMinedTransaction(hash string) error {
+    collection := configs.GetCollection(configs.DB, PENDING_COLLECTION)
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
 
-	reqBody, err := json.Marshal(rpcReq)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling request: %v", err)
-	}
-
-	// Get node URL from environment variable or use default
-	nodeURL := os.Getenv("NODE_URL")
-	if nodeURL == "" {
-		nodeURL = "http://REDACTED:8545" // fallback to default if not set
-	}
-
-	// Create and send HTTP request
-	req, err := http.NewRequest("POST", nodeURL, bytes.NewBuffer(reqBody))
-	if err != nil {
-		return nil, fmt.Errorf("error creating request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("error sending request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("error reading response: %v", err)
-	}
-
-	// Parse response
-	var rpcResp models.PendingTransactionsResponse
-	if err := json.Unmarshal(body, &rpcResp); err != nil {
-		return nil, fmt.Errorf("error parsing response: %v", err)
-	}
-
-	// Convert response to slice of transactions
-	var allTransactions []models.PendingTransaction
-	if rpcResp.Result.Pending != nil {
-		for address, nonceTxs := range rpcResp.Result.Pending {
-			for nonce, tx := range nonceTxs {
-				tx.From = address  // Add the from address
-				tx.Nonce = nonce   // Add the nonce
-				allTransactions = append(allTransactions, tx)
-			}
-		}
-	}
-
-	return allTransactions, nil
+    _, err := collection.DeleteOne(ctx, bson.M{"_id": hash})
+    return err
 }

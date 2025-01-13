@@ -3,7 +3,6 @@ package synchroniser
 import (
 	"Zond2mongoDB/configs"
 	"Zond2mongoDB/db"
-	L "Zond2mongoDB/logger"
 	"Zond2mongoDB/models"
 	"Zond2mongoDB/rpc"
 	"encoding/json"
@@ -15,7 +14,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var logger *zap.Logger = L.FileLogger(configs.Filename)
+var logger *zap.Logger = configs.Logger
 
 type Data struct {
 	blockData    []interface{}
@@ -342,6 +341,11 @@ func processBlockAndUpdateValidators(sum uint64, ZondNew models.ZondDatabaseBloc
 	db.InsertBlockDocument(ZondNew)
 	db.ProcessTransactions(ZondNew)
 	db.UpdateValidators(sum, previousHash)
+	if err := processBlock(&ZondNew); err != nil {
+		configs.Logger.Error("Failed to process block",
+			zap.Uint64("block", ZondNew.Result.Number),
+			zap.Error(err))
+	}
 }
 
 func runPeriodicTask(task func(), interval time.Duration, taskName string) {
@@ -487,4 +491,16 @@ func updateValidatorsPeriodically() {
 	} else {
 		configs.Logger.Error("Failed to update validators - got empty data")
 	}
+}
+
+func processBlock(block *models.ZondDatabaseBlock) error {
+	// Update pending transactions that are now mined
+	if err := UpdatePendingTransactionsInBlock(block); err != nil {
+		configs.Logger.Error("Failed to update pending transactions in block",
+			zap.Uint64("block", block.Result.Number),
+			zap.Error(err))
+	}
+
+	// Continue with existing block processing...
+	return nil
 }

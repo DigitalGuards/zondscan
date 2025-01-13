@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
 import { PendingTransaction } from '../types';
 import { formatAmount } from '../../../lib/helpers';
 
@@ -10,91 +9,76 @@ interface PendingTransactionViewProps {
 }
 
 export default function PendingTransactionView({ pendingTx }: PendingTransactionViewProps): JSX.Element {
+  const [formattedValue, unit] = formatAmount(pendingTx.value);
+  const [formattedGasPrice] = formatAmount(pendingTx.gasPrice);
+
   return (
     <div className="container mx-auto px-4">
-      <h1 className="text-2xl font-bold mb-6 text-[#ffa729]">Pending Transaction Details</h1>
-      
-      <div className="bg-gradient-to-r from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] rounded-xl p-6 mb-6">
-        <div className="grid grid-cols-1 gap-6">
+      <div className="bg-[#1f1f1f] rounded-xl p-6 shadow-lg mt-6 border border-[#3d3d3d]">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold text-white">Pending Transaction</h2>
+          <span className="px-3 py-1 rounded-lg bg-yellow-500/20 text-yellow-500">
+            Pending
+          </span>
+        </div>
+
+        <div className="space-y-4">
           <div>
-            <h2 className="text-lg font-semibold text-[#ffa729] mb-2">Transaction Hash</h2>
-            <p className="font-mono text-gray-300 break-all">{pendingTx.hash}</p>
+            <h3 className="text-gray-400 mb-1">Transaction Hash</h3>
+            <p className="font-mono text-white break-all">{pendingTx.hash}</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-[#ffa729] mb-2">From</h2>
-              <Link href={`/address/${pendingTx.from}`} className="font-mono text-gray-300 hover:text-[#ffa729] break-all">
-                {pendingTx.from}
-              </Link>
+              <h3 className="text-gray-400 mb-1">From</h3>
+              <p className="font-mono text-white break-all">{pendingTx.from}</p>
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-[#ffa729] mb-2">To</h2>
-              {pendingTx.to ? (
-                <Link href={`/address/${pendingTx.to}`} className="font-mono text-gray-300 hover:text-[#ffa729] break-all">
-                  {pendingTx.to}
-                </Link>
-              ) : (
-                <span className="text-gray-500">Contract Creation</span>
-              )}
+              <h3 className="text-gray-400 mb-1">To</h3>
+              <p className="font-mono text-white break-all">{pendingTx.to || 'Contract Creation'}</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-[#ffa729] mb-2">Value</h2>
-              <p className="font-mono text-gray-300">{formatAmount(pendingTx.value)}</p>
+              <h3 className="text-gray-400 mb-1">Value</h3>
+              <p className="text-white">
+                {formattedValue} {unit}
+              </p>
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-[#ffa729] mb-2">Gas Price</h2>
-              <p className="font-mono text-gray-300">{formatAmount(pendingTx.gasPrice)}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <h2 className="text-lg font-semibold text-[#ffa729] mb-2">Gas Limit</h2>
-              <p className="font-mono text-gray-300">{pendingTx.gas}</p>
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-[#ffa729] mb-2">Nonce</h2>
-              <p className="font-mono text-gray-300">{pendingTx.nonce}</p>
+              <h3 className="text-gray-400 mb-1">Gas Price</h3>
+              <p className="text-white">{formattedGasPrice} Gwei</p>
             </div>
           </div>
 
-          {(pendingTx.maxFeePerGas || pendingTx.maxPriorityFeePerGas) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {pendingTx.maxFeePerGas && (
-                <div>
-                  <h2 className="text-lg font-semibold text-[#ffa729] mb-2">Max Fee Per Gas</h2>
-                  <p className="font-mono text-gray-300">{formatAmount(pendingTx.maxFeePerGas)}</p>
-                </div>
-              )}
-              {pendingTx.maxPriorityFeePerGas && (
-                <div>
-                  <h2 className="text-lg font-semibold text-[#ffa729] mb-2">Max Priority Fee Per Gas</h2>
-                  <p className="font-mono text-gray-300">{formatAmount(pendingTx.maxPriorityFeePerGas)}</p>
-                </div>
-              )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <h3 className="text-gray-400 mb-1">Gas Limit</h3>
+              <p className="text-white">{pendingTx.gas}</p>
+            </div>
+            <div>
+              <h3 className="text-gray-400 mb-1">Nonce</h3>
+              <p className="text-white">{pendingTx.nonce}</p>
+            </div>
+          </div>
+
+          {pendingTx.input && pendingTx.input !== '0x' && (
+            <div>
+              <h3 className="text-gray-400 mb-1">Input Data</h3>
+              <div className="bg-[#2d2d2d] p-4 rounded-lg">
+                <p className="font-mono text-white break-all">{pendingTx.input}</p>
+              </div>
             </div>
           )}
-
-          <div>
-            <h2 className="text-lg font-semibold text-[#ffa729] mb-2">Input Data</h2>
-            <div className="bg-[#1a1a1a] rounded-lg p-4 overflow-x-auto">
-              <pre className="font-mono text-gray-300 whitespace-pre-wrap break-all">
-                {pendingTx.input === '0x' ? '(none)' : pendingTx.input}
-              </pre>
-            </div>
-          </div>
         </div>
-      </div>
 
-      <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-xl p-4 mb-6">
-        <p className="text-yellow-200">
-          <span className="font-semibold">Note:</span> This transaction is pending and waiting to be included in a block.
-          The status updates every few seconds.
-        </p>
+        <div className="mt-6 pt-6 border-t border-[#3d3d3d]">
+          <p className="text-gray-400 text-sm">
+            This transaction is currently pending in the mempool. The page will automatically 
+            refresh when the transaction is mined or if its status changes.
+          </p>
+        </div>
       </div>
     </div>
   );

@@ -6,22 +6,26 @@ import config from '../../../config';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { formatAmount } from '../../lib/helpers';
-
-interface PendingTransaction {
-  hash: string;
-  from: string;
-  to: string;
-  value: string;
-  gasPrice: string;
-  timestamp?: number;
-}
+import { PendingTransaction } from '../tx/types';
 
 interface PaginatedResponse {
-  transactions: PendingTransaction[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
+  // New format fields
+  jsonrpc?: string;
+  id?: number;
+  result?: {
+    pending: {
+      [address: string]: {
+        [nonce: string]: PendingTransaction;
+      };
+    };
+    queued: Record<string, unknown>;
+  };
+  // Old format fields
+  transactions?: PendingTransaction[];
+  total?: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
 }
 
 interface TransactionCardProps {
@@ -29,8 +33,8 @@ interface TransactionCardProps {
 }
 
 const TransactionCard: React.FC<TransactionCardProps> = ({ transaction }) => {
-  const date = transaction.timestamp 
-    ? new Date(transaction.timestamp * 1000).toLocaleString('en-GB', {
+  const date = transaction.createdAt 
+    ? new Date(transaction.createdAt * 1000).toLocaleString('en-GB', {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
@@ -47,29 +51,34 @@ const TransactionCard: React.FC<TransactionCardProps> = ({ transaction }) => {
           <Link href={`/pending/tx/${transaction.hash}`} className="text-[#ffa729] hover:text-[#ffb952] font-mono">
             {transaction.hash}
           </Link>
+          <span className={`px-2 py-1 rounded text-sm ${
+            transaction.status === 'pending' ? 'bg-yellow-500/20 text-yellow-500' :
+            transaction.status === 'dropped' ? 'bg-red-500/20 text-red-500' :
+            'bg-green-500/20 text-green-500'
+          }`}>
+            {transaction.status}
+          </span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <p className="text-gray-400">From</p>
-            <Link href={`/address/${transaction.from}`} className="text-[#ffa729] hover:text-[#ffb952] font-mono break-all">
-              {transaction.from}
-            </Link>
+            <p className="text-gray-400 text-sm">From</p>
+            <p className="text-white font-mono truncate">{transaction.from}</p>
           </div>
           <div>
-            <p className="text-gray-400">To</p>
-            <Link href={`/address/${transaction.to}`} className="text-[#ffa729] hover:text-[#ffb952] font-mono break-all">
-              {transaction.to}
-            </Link>
-          </div>
-        </div>
-        <div className="flex justify-between items-center mt-2">
-          <div>
-            <span className="text-gray-400">Value: </span>
-            <span className="text-white font-mono">{formatAmount(transaction.value)}</span>
+            <p className="text-gray-400 text-sm">To</p>
+            <p className="text-white font-mono truncate">{transaction.to}</p>
           </div>
           <div>
-            <span className="text-gray-400">Gas Price: </span>
-            <span className="text-white font-mono">{formatAmount(transaction.gasPrice)}</span>
+            <p className="text-gray-400 text-sm">Value</p>
+            <p className="text-white">{formatAmount(transaction.value)[0]} QRL</p>
+          </div>
+          <div>
+            <p className="text-gray-400 text-sm">Gas Price</p>
+            <p className="text-white">{formatAmount(transaction.gasPrice)[0]} Shor</p>
+          </div>
+          <div>
+            <p className="text-gray-400 text-sm">Time</p>
+            <p className="text-white">{date}</p>
           </div>
         </div>
       </div>
@@ -85,6 +94,7 @@ interface PendingListProps {
 }
 
 const fetchPendingTransactions = async (page: number): Promise<PaginatedResponse> => {
+  console.log('Fetching pending transactions for page:', page);
   const response = await axios.get<PaginatedResponse>(`${config.handlerUrl}/pending-transactions`, {
     params: {
       page,
@@ -92,6 +102,7 @@ const fetchPendingTransactions = async (page: number): Promise<PaginatedResponse
     }
   });
   
+  console.log('Received response:', response.data);
   return response.data;
 };
 
@@ -99,89 +110,78 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
   const { data, isError, error, refetch } = useQuery({
     queryKey: ['pending-transactions', currentPage],
     queryFn: () => fetchPendingTransactions(currentPage),
+    initialData,
     refetchInterval: 5000,
-    retry: 2,
-    refetchOnMount: false,
-    initialData
   });
 
-  useEffect(() => {
-    if (currentPage !== data?.page) {
-      refetch();
-    }
-  }, [refetch, currentPage, data?.page]);
-
   if (isError) {
+    console.error('Error fetching pending transactions:', error);
     return (
-      <div className="px-4 lg:px-6">
-        <h1 className="text-2xl font-bold mb-6 text-[#ffa729]">Mempool</h1>
-        <div className="bg-red-900/50 border border-red-500 text-red-200 px-6 py-4 rounded-xl">
-          <p className="font-bold">Error:</p>
-          <p>{error instanceof Error ? error.message : 'Failed to load pending transactions'}</p>
-        </div>
+      <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg mt-6">
+        <h2 className="text-red-500 font-semibold mb-2">Error Loading Transactions</h2>
+        <p className="text-gray-300">Failed to load pending transactions. Please try again later.</p>
       </div>
     );
   }
 
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE + 1;
-  const endIndex = Math.min(currentPage * ITEMS_PER_PAGE, data?.total || 0);
+  // Convert the nested structure to a flat array
+  const transactions: PendingTransaction[] = [];
+  try {
+    // Handle both old and new response formats
+    if (data?.result?.pending) {
+      // New format
+      Object.entries(data.result.pending).forEach(([address, nonceMap]) => {
+        Object.entries(nonceMap).forEach(([nonce, tx]) => {
+          transactions.push(tx as PendingTransaction);
+        });
+      });
+    } else if (Array.isArray(data?.transactions)) {
+      // Old format
+      transactions.push(...data.transactions);
+    } else {
+      console.warn('Unexpected response format:', data);
+    }
+  } catch (err) {
+    console.error('Error processing transactions:', err);
+    return (
+      <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg mt-6">
+        <h2 className="text-red-500 font-semibold mb-2">Error Processing Transactions</h2>
+        <p className="text-gray-300">Failed to process transaction data. Please try again later.</p>
+      </div>
+    );
+  }
+
+  // Sort by createdAt descending
+  transactions.sort((a, b) => (b.createdAt - a.createdAt));
+
+  if (transactions.length === 0) {
+    return (
+      <div className="bg-[#1f1f1f] border border-[#3d3d3d] rounded-xl p-6 shadow-lg mt-6">
+        <h2 className="text-gray-300 font-semibold mb-2">No Pending Transactions</h2>
+        <p className="text-gray-400">There are currently no pending transactions in the mempool.</p>
+        <button 
+          onClick={() => refetch()} 
+          className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+        >
+          Refresh Transactions
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="px-4 lg:px-6">
-      <h1 className="text-2xl font-bold mb-6 text-[#ffa729]">Mempool</h1>
-      {!data?.transactions?.length ? (
-        <div className="bg-gradient-to-r from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] rounded-xl p-8 text-center">
-          <div className="inline-block p-4 bg-yellow-500/20 rounded-full mb-4">
-            <svg className="w-8 h-8 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-          </div>
-          <h2 className="text-xl font-semibold text-[#ffa729] mb-2">No Pending Transactions</h2>
-          <p className="text-gray-400 max-w-lg mx-auto">
-            Showing unconfirmed transactions waiting to be included in a block. Updates every 5 seconds.
-          </p>
-        </div>
-      ) : (
-        <div className="mb-8">
-          <div className="bg-gradient-to-r from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] rounded-xl p-4 mb-6">
-            <p className="text-gray-300">
-              <span className="text-[#ffa729] font-semibold">{data?.total}</span> unconfirmed {data?.total === 1 ? 'transaction' : 'transactions'} waiting to be included in a block. Updates every 5 seconds.
-              {data?.totalPages > 1 && ` (Showing ${startIndex}-${endIndex} of ${data?.total})`}
-            </p>
-          </div>
-          {data?.transactions?.map(transaction => (
-            <TransactionCard 
-              key={transaction.hash} 
-              transaction={transaction}
-            />
-          ))}
-          
-          {/* Pagination */}
-          {data?.totalPages > 1 && (
-            <div className="flex justify-center gap-2 mt-6">
-              {currentPage > 1 && (
-                <Link
-                  href={`/pending/${currentPage - 1}`}
-                  className="px-4 py-2 rounded-lg bg-[#2d2d2d] hover:bg-[#3d3d3d] text-gray-300 transition-colors"
-                >
-                  Previous
-                </Link>
-              )}
-              <span className="px-4 py-2 text-gray-400">
-                Page {currentPage} of {data?.totalPages}
-              </span>
-              {currentPage < data?.totalPages && (
-                <Link
-                  href={`/pending/${currentPage + 1}`}
-                  className="px-4 py-2 rounded-lg bg-[#2d2d2d] hover:bg-[#3d3d3d] text-gray-300 transition-colors"
-                >
-                  Next
-                </Link>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+    <div className="space-y-4">
+      {transactions.map((transaction) => (
+        <TransactionCard key={transaction.hash} transaction={transaction} />
+      ))}
+      <div className="mt-4 text-center">
+        <button 
+          onClick={() => refetch()} 
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+        >
+          Refresh Transactions
+        </button>
+      </div>
     </div>
   );
 }

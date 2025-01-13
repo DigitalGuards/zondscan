@@ -1,8 +1,6 @@
 package rpc
 
 import (
-	"Zond2mongoDB/configs"
-	L "Zond2mongoDB/logger"
 	"Zond2mongoDB/models"
 	"bytes"
 	"encoding/hex"
@@ -20,8 +18,6 @@ import (
 	"go.uber.org/zap"
 )
 
-var logger *zap.Logger = L.FileLogger(configs.Filename)
-
 func GetLatestBlock() (uint64, error) {
 	var Zond models.RPC
 
@@ -33,13 +29,13 @@ func GetLatestBlock() (uint64, error) {
 	}
 	b, err := json.Marshal(group)
 	if err != nil {
-		logger.Info("Failed JSON marshal", zap.Error(err))
+		zap.L().Info("Failed JSON marshal", zap.Error(err))
 		return 0, err
 	}
 
 	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
 	if err != nil {
-		logger.Info("Failed to create request", zap.Error(err))
+		zap.L().Info("Failed to create request", zap.Error(err))
 		return 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -47,7 +43,7 @@ func GetLatestBlock() (uint64, error) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		logger.Info("Failed to get response from RPC call", zap.Error(err))
+		zap.L().Info("Failed to get response from RPC call", zap.Error(err))
 		return 0, err
 	}
 	if resp == nil {
@@ -57,13 +53,13 @@ func GetLatestBlock() (uint64, error) {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		logger.Info("Failed to read response body", zap.Error(err))
+		zap.L().Info("Failed to read response body", zap.Error(err))
 		return 0, err
 	}
 
 	err = json.Unmarshal([]byte(string(body)), &Zond)
 	if err != nil {
-		logger.Info("Failed to unmarshal response", zap.Error(err))
+		zap.L().Info("Failed to unmarshal response", zap.Error(err))
 		return 0, err
 	}
 
@@ -83,13 +79,13 @@ func GetBlockByNumberMainnet(blocknumber uint64) string {
 	}
 	b, err := json.Marshal(group)
 	if err != nil {
-		logger.Info("Failed JSON marshal", zap.Error(err))
+		zap.L().Info("Failed JSON marshal", zap.Error(err))
 		return ""
 	}
 
 	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
 	if err != nil {
-		logger.Info("Failed to create request", zap.Error(err))
+		zap.L().Info("Failed to create request", zap.Error(err))
 		return ""
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -97,18 +93,18 @@ func GetBlockByNumberMainnet(blocknumber uint64) string {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		logger.Info("Failed to get response from RPC call", zap.Error(err))
+		zap.L().Info("Failed to get response from RPC call", zap.Error(err))
 		return ""
 	}
 	if resp == nil {
-		logger.Info("Received nil response")
+		zap.L().Info("Received nil response")
 		return ""
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		logger.Info("Failed to read response body", zap.Error(err))
+		zap.L().Info("Failed to read response body", zap.Error(err))
 		return ""
 	}
 
@@ -124,13 +120,13 @@ func GetContractAddress(txHash string) (string, string, error) {
 	}
 	b, err := json.Marshal(group)
 	if err != nil {
-		logger.Info("Failed JSON marshal", zap.Error(err))
+		zap.L().Info("Failed JSON marshal", zap.Error(err))
 		return "", "", err
 	}
 
 	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
 	if err != nil {
-		logger.Info("Failed to create request", zap.Error(err))
+		zap.L().Info("Failed to create request", zap.Error(err))
 		return "", "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -138,21 +134,21 @@ func GetContractAddress(txHash string) (string, string, error) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		logger.Info("Failed to execute request", zap.Error(err))
+		zap.L().Info("Failed to execute request", zap.Error(err))
 		return "", "", err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		logger.Info("Failed to read response body", zap.Error(err))
+		zap.L().Info("Failed to read response body", zap.Error(err))
 		return "", "", err
 	}
 
 	var ContractAddress models.Contract
 	err = json.Unmarshal([]byte(string(body)), &ContractAddress)
 	if err != nil {
-		logger.Info("Failed to unmarshal response", zap.Error(err))
+		zap.L().Info("Failed to unmarshal response", zap.Error(err))
 		return "", "", err
 	}
 
@@ -176,13 +172,13 @@ func CallDebugTraceTransaction(hash string) (transactionType []byte, callType []
 
 	b, err := json.Marshal(group)
 	if err != nil {
-		logger.Error("Failed JSON marshal", zap.Error(err))
+		zap.L().Error("Failed JSON marshal", zap.Error(err))
 		return nil, nil, nil, nil, 0, 0, nil, 0, 0, 0, nil, 0
 	}
 
 	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
 	if err != nil {
-		logger.Error("Failed to create request", zap.Error(err))
+		zap.L().Error("Failed to create request", zap.Error(err))
 		return nil, nil, nil, nil, 0, 0, nil, 0, 0, 0, nil, 0
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -190,20 +186,20 @@ func CallDebugTraceTransaction(hash string) (transactionType []byte, callType []
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		logger.Error("Failed to execute request", zap.Error(err))
+		zap.L().Error("Failed to execute request", zap.Error(err))
 		return nil, nil, nil, nil, 0, 0, nil, 0, 0, 0, nil, 0
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		logger.Error("Failed to read response body", zap.Error(err))
+		zap.L().Error("Failed to read response body", zap.Error(err))
 		return nil, nil, nil, nil, 0, 0, nil, 0, 0, 0, nil, 0
 	}
 
 	err = json.Unmarshal([]byte(string(body)), &tracerResponse)
 	if err != nil {
-		logger.Error("Failed to unmarshal response", zap.Error(err))
+		zap.L().Error("Failed to unmarshal response", zap.Error(err))
 		return nil, nil, nil, nil, 0, 0, nil, 0, 0, 0, nil, 0
 	}
 
@@ -215,14 +211,14 @@ func CallDebugTraceTransaction(hash string) (transactionType []byte, callType []
 	if tracerResponse.Result.Gas != "" {
 		gas, err = strconv.ParseUint(tracerResponse.Result.Gas[2:], 16, 64)
 		if err != nil {
-			logger.Warn("Failed to parse gas value", zap.Error(err))
+			zap.L().Warn("Failed to parse gas value", zap.Error(err))
 		}
 	}
 
 	if tracerResponse.Result.GasUsed != "" {
 		gasUsed, err = strconv.ParseUint(tracerResponse.Result.GasUsed[2:], 16, 64)
 		if err != nil {
-			logger.Warn("Failed to parse gasUsed value", zap.Error(err))
+			zap.L().Warn("Failed to parse gasUsed value", zap.Error(err))
 		}
 	}
 
@@ -241,13 +237,13 @@ func CallDebugTraceTransaction(hash string) (transactionType []byte, callType []
 	// Process From and To addresses
 	from, err = hex.DecodeString(tracerResponse.Result.From[2:])
 	if err != nil {
-		logger.Warn("Failed to decode From address", zap.Error(err))
+		zap.L().Warn("Failed to decode From address", zap.Error(err))
 		from = []byte{}
 	}
 
 	to, err = hex.DecodeString(tracerResponse.Result.To[2:])
 	if err != nil {
-		logger.Warn("Failed to decode To address", zap.Error(err))
+		zap.L().Warn("Failed to decode To address", zap.Error(err))
 		to = []byte{}
 	}
 
@@ -256,7 +252,7 @@ func CallDebugTraceTransaction(hash string) (transactionType []byte, callType []
 	if tracerResponse.Result.Output != "0x" && len(tracerResponse.Result.Output) > 2 {
 		output, err = strconv.ParseUint(tracerResponse.Result.Output[2:], 16, 64)
 		if err != nil {
-			logger.Warn("Failed to parse output value", zap.Error(err))
+			zap.L().Warn("Failed to parse output value", zap.Error(err))
 			output = 0
 		}
 	}
@@ -266,7 +262,7 @@ func CallDebugTraceTransaction(hash string) (transactionType []byte, callType []
 	if tracerResponse.Result.Value != "" {
 		_, ok := bigInt.SetString(tracerResponse.Result.Value[2:], 16)
 		if !ok {
-			logger.Warn("Failed to parse value")
+			zap.L().Warn("Failed to parse value")
 		}
 	}
 
@@ -295,7 +291,7 @@ func CallDebugTraceTransaction(hash string) (transactionType []byte, callType []
 			addressHex := data[24:64]
 			addressFunctionidentifier, err = hex.DecodeString(addressHex)
 			if err != nil {
-				logger.Warn("Failed to decode address from input", zap.Error(err))
+				zap.L().Warn("Failed to decode address from input", zap.Error(err))
 			}
 
 			// Extract amount if there's enough data
@@ -303,7 +299,7 @@ func CallDebugTraceTransaction(hash string) (transactionType []byte, callType []
 				amountHex := data[64:128]
 				amountBytes, err := hex.DecodeString(amountHex)
 				if err != nil {
-					logger.Warn("Failed to decode amount from input", zap.Error(err))
+					zap.L().Warn("Failed to decode amount from input", zap.Error(err))
 				} else {
 					amountBigInt := new(big.Int).SetBytes(amountBytes)
 					amountFunctionIdentifier = amountBigInt.Uint64()
@@ -336,13 +332,13 @@ func GetBalance(address string) (string, error) {
 
 	b, err := json.Marshal(group)
 	if err != nil {
-		logger.Info("Failed JSON marshal", zap.Error(err))
+		zap.L().Info("Failed JSON marshal", zap.Error(err))
 		return "", err
 	}
 
 	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
 	if err != nil {
-		logger.Info("Failed to create request", zap.Error(err))
+		zap.L().Info("Failed to create request", zap.Error(err))
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -350,14 +346,14 @@ func GetBalance(address string) (string, error) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		logger.Info("Failed to execute request", zap.Error(err))
+		zap.L().Info("Failed to execute request", zap.Error(err))
 		return "", err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		logger.Info("Failed to read response body", zap.Error(err))
+		zap.L().Info("Failed to read response body", zap.Error(err))
 		return "", err
 	}
 
@@ -365,7 +361,7 @@ func GetBalance(address string) (string, error) {
 }
 
 func GetValidators() models.ResultValidator {
-	logger.Info("Starting GetValidators call to beacon chain API")
+	zap.L().Info("Starting GetValidators call to beacon chain API")
 	var allValidators models.ResultValidator
 	pageToken := ""
 	maxPages := 3
@@ -374,7 +370,7 @@ func GetValidators() models.ResultValidator {
 
 	beaconchainURL := os.Getenv("BEACONCHAIN_API")
 	if beaconchainURL == "" {
-		logger.Error("BEACONCHAIN_API environment variable not set")
+		zap.L().Error("BEACONCHAIN_API environment variable not set")
 		return models.ResultValidator{}
 	}
 
@@ -396,22 +392,22 @@ func GetValidators() models.ResultValidator {
 
 		req, err := http.NewRequest("GET", requestURL, nil)
 		if err != nil {
-			logger.Error("Failed to create request", zap.Error(err))
+			zap.L().Error("Failed to create request", zap.Error(err))
 			break
 		}
-		logger.Info("Created HTTP request for validators",
+		zap.L().Info("Created HTTP request for validators",
 			zap.String("url", requestURL),
 			zap.Int("page", currentPage+1),
 			zap.Int("maxPages", maxPages))
 
 		resp, err := client.Do(req)
 		if err != nil {
-			logger.Error("Failed to get response from beacon API", zap.Error(err))
+			zap.L().Error("Failed to get response from beacon API", zap.Error(err))
 			break
 		}
 
 		if resp.StatusCode != http.StatusOK {
-			logger.Error("Unexpected status code from beacon API",
+			zap.L().Error("Unexpected status code from beacon API",
 				zap.Int("status_code", resp.StatusCode))
 			resp.Body.Close()
 			break
@@ -420,29 +416,29 @@ func GetValidators() models.ResultValidator {
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			logger.Error("Failed to read response body", zap.Error(err))
+			zap.L().Error("Failed to read response body", zap.Error(err))
 			break
 		}
 
 		var beaconResponse models.BeaconValidatorResponse
 		err = json.Unmarshal(body, &beaconResponse)
 		if err != nil {
-			logger.Error("Failed to unmarshal response", zap.Error(err))
-			logger.Error("Response body:", zap.String("body", string(body)))
+			zap.L().Error("Failed to unmarshal response", zap.Error(err))
+			zap.L().Error("Response body:", zap.String("body", string(body)))
 			break
 		}
 
 		// Update total validators count
 		if currentPage == 0 {
 			totalValidators = beaconResponse.TotalSize
-			logger.Info("Total validators reported by API", zap.Int("total_validators", totalValidators))
+			zap.L().Info("Total validators reported by API", zap.Int("total_validators", totalValidators))
 		}
 
 		// Process validators from this page
 		for _, validator := range beaconResponse.ValidatorList {
 			index, err := strconv.Atoi(validator.Index)
 			if err != nil {
-				logger.Warn("Failed to parse validator index",
+				zap.L().Warn("Failed to parse validator index",
 					zap.String("index", validator.Index),
 					zap.Error(err))
 				continue
@@ -451,7 +447,7 @@ func GetValidators() models.ResultValidator {
 			validatorMap[slotNumber] = append(validatorMap[slotNumber], validator.Validator.PublicKey)
 		}
 
-		logger.Info("Processed validator page",
+		zap.L().Info("Processed validator page",
 			zap.Int("page", currentPage+1),
 			zap.Int("validators_on_page", len(beaconResponse.ValidatorList)),
 			zap.String("next_page_token", beaconResponse.NextPageToken))
@@ -460,7 +456,7 @@ func GetValidators() models.ResultValidator {
 
 		// Check if there's a next page
 		if beaconResponse.NextPageToken == "" {
-			logger.Info("No more pages available", zap.Int("total_pages_fetched", currentPage))
+			zap.L().Info("No more pages available", zap.Int("total_pages_fetched", currentPage))
 			break
 		}
 		pageToken = beaconResponse.NextPageToken
@@ -478,7 +474,7 @@ func GetValidators() models.ResultValidator {
 		}
 	}
 
-	logger.Info("Completed fetching all validators",
+	zap.L().Info("Completed fetching all validators",
 		zap.Int("total_pages", currentPage),
 		zap.Int("total_validators_processed", len(validatorMap)),
 		zap.Int("total_slots", len(allValidators.ValidatorsBySlotNumber)),
@@ -504,13 +500,13 @@ func GetCode(address string, blockNrOrHash string) (string, error) {
 
 	b, err := json.Marshal(group)
 	if err != nil {
-		logger.Info("Failed JSON marshal", zap.Error(err))
+		zap.L().Info("Failed JSON marshal", zap.Error(err))
 		return "", err
 	}
 
 	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
 	if err != nil {
-		logger.Info("Failed to create request", zap.Error(err))
+		zap.L().Info("Failed to create request", zap.Error(err))
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -518,21 +514,21 @@ func GetCode(address string, blockNrOrHash string) (string, error) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		logger.Info("Failed to execute request", zap.Error(err))
+		zap.L().Info("Failed to execute request", zap.Error(err))
 		return "", err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		logger.Info("Failed to read response body", zap.Error(err))
+		zap.L().Info("Failed to read response body", zap.Error(err))
 		return "", err
 	}
 
 	var GetCode models.GetCode
 	err = json.Unmarshal([]byte(string(body)), &GetCode)
 	if err != nil {
-		logger.Info("Failed to unmarshal response", zap.Error(err))
+		zap.L().Info("Failed to unmarshal response", zap.Error(err))
 		return "", err
 	}
 
@@ -563,27 +559,27 @@ func ZondCall(contractAddress string) *models.ZondResponse {
 
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
-		logger.Info("Failed JSON marshal", zap.Error(err))
+		zap.L().Info("Failed JSON marshal", zap.Error(err))
 		return nil
 	}
 
 	resp, err := http.Post(os.Getenv("NODE_URL"), "application/json", bytes.NewBuffer(jsonPayload))
 	if err != nil {
-		logger.Info("Failed to get a response from HTTP POST request", zap.Error(err))
+		zap.L().Info("Failed to get a response from HTTP POST request", zap.Error(err))
 		return nil
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		logger.Info("Failed to read response body", zap.Error(err))
+		zap.L().Info("Failed to read response body", zap.Error(err))
 		return nil
 	}
 
 	var responseData models.ZondResponse
 	err = json.Unmarshal(body, &responseData)
 	if err != nil {
-		logger.Info("Failed JSON unmarshal", zap.Error(err))
+		zap.L().Info("Failed JSON unmarshal", zap.Error(err))
 		return nil
 	}
 
@@ -600,27 +596,27 @@ func ZondGetLogs(contractAddress string) *models.ZondResponse {
 
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
-		logger.Info("Failed JSON marshal", zap.Error(err))
+		zap.L().Info("Failed JSON marshal", zap.Error(err))
 		return nil
 	}
 
 	resp, err := http.Post(os.Getenv("NODE_URL"), "application/json", bytes.NewBuffer(jsonPayload))
 	if err != nil {
-		logger.Info("Failed to get a response from HTTP POST request", zap.Error(err))
+		zap.L().Info("Failed to get a response from HTTP POST request", zap.Error(err))
 		return nil
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		logger.Info("Failed to read response body", zap.Error(err))
+		zap.L().Info("Failed to read response body", zap.Error(err))
 		return nil
 	}
 
 	var responseData models.ZondResponse
 	err = json.Unmarshal(body, &responseData)
 	if err != nil {
-		logger.Info("Failed JSON unmarshal", zap.Error(err))
+		zap.L().Info("Failed JSON unmarshal", zap.Error(err))
 		return nil
 	}
 
@@ -651,13 +647,13 @@ func CallContractMethod(contractAddress string, methodSig string) (string, error
 
 	b, err := json.Marshal(group)
 	if err != nil {
-		logger.Info("Failed JSON marshal", zap.Error(err))
+		zap.L().Info("Failed JSON marshal", zap.Error(err))
 		return "", err
 	}
 
 	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
 	if err != nil {
-		logger.Info("Failed to create request", zap.Error(err))
+		zap.L().Info("Failed to create request", zap.Error(err))
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -665,14 +661,14 @@ func CallContractMethod(contractAddress string, methodSig string) (string, error
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		logger.Info("Failed to get response from RPC call", zap.Error(err))
+		zap.L().Info("Failed to get response from RPC call", zap.Error(err))
 		return "", err
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		logger.Info("Failed to read response body", zap.Error(err))
+		zap.L().Info("Failed to read response body", zap.Error(err))
 		return "", err
 	}
 
@@ -680,7 +676,7 @@ func CallContractMethod(contractAddress string, methodSig string) (string, error
 		Result string `json:"result"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
-		logger.Info("Failed to unmarshal response", zap.Error(err))
+		zap.L().Info("Failed to unmarshal response", zap.Error(err))
 		return "", err
 	}
 
@@ -689,19 +685,19 @@ func CallContractMethod(contractAddress string, methodSig string) (string, error
 
 // GetTokenInfo attempts to get ERC20 token information for a contract
 func GetTokenInfo(contractAddress string) (name string, symbol string, decimals uint8, isToken bool) {
-	logger.Info("Getting token info", zap.String("contract_address", contractAddress))
+	zap.L().Info("Getting token info", zap.String("contract_address", contractAddress))
 
 	// Track if we successfully got any token information
 	gotTokenInfo := false
 
 	name, err := getTokenName(contractAddress)
 	if err != nil {
-		logger.Info("Failed to get token name",
+		zap.L().Info("Failed to get token name",
 			zap.String("contract_address", contractAddress),
 			zap.Error(err))
 		name = ""
 	} else {
-		logger.Info("Got token name",
+		zap.L().Info("Got token name",
 			zap.String("contract_address", contractAddress),
 			zap.String("name", name))
 		gotTokenInfo = true
@@ -709,12 +705,12 @@ func GetTokenInfo(contractAddress string) (name string, symbol string, decimals 
 
 	symbol, err = getTokenSymbol(contractAddress)
 	if err != nil {
-		logger.Info("Failed to get token symbol",
+		zap.L().Info("Failed to get token symbol",
 			zap.String("contract_address", contractAddress),
 			zap.Error(err))
 		symbol = ""
 	} else {
-		logger.Info("Got token symbol",
+		zap.L().Info("Got token symbol",
 			zap.String("contract_address", contractAddress),
 			zap.String("symbol", symbol))
 		gotTokenInfo = true
@@ -722,12 +718,12 @@ func GetTokenInfo(contractAddress string) (name string, symbol string, decimals 
 
 	decimals, err = getTokenDecimals(contractAddress)
 	if err != nil {
-		logger.Info("Failed to get token decimals",
+		zap.L().Info("Failed to get token decimals",
 			zap.String("contract_address", contractAddress),
 			zap.Error(err))
 		decimals = 0
 	} else {
-		logger.Info("Got token decimals",
+		zap.L().Info("Got token decimals",
 			zap.String("contract_address", contractAddress),
 			zap.Uint8("decimals", decimals))
 		gotTokenInfo = true
@@ -735,12 +731,12 @@ func GetTokenInfo(contractAddress string) (name string, symbol string, decimals 
 
 	// Only mark as token if we got at least some token information
 	if gotTokenInfo {
-		logger.Info("Successfully identified token",
+		zap.L().Info("Successfully identified token",
 			zap.String("contract_address", contractAddress))
 		return name, symbol, decimals, true
 	}
 
-	logger.Info("Contract is not a token",
+	zap.L().Info("Contract is not a token",
 		zap.String("contract_address", contractAddress))
 	return name, symbol, decimals, false
 }

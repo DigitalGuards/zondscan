@@ -3,14 +3,7 @@ import { Metadata } from 'next';
 import PendingList from './PendingList';
 import axios from 'axios';
 import config from '../../../config';
-
-interface PendingTransaction {
-  hash: string;
-  from: string;
-  to: string;
-  value: string;
-  gasPrice: string;
-}
+import { PendingTransaction } from '../tx/types';
 
 interface PaginatedResponse {
   transactions: PendingTransaction[];

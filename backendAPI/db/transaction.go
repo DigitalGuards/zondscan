@@ -7,10 +7,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -595,4 +597,38 @@ func ReturnDailyTransactionsVolume() int64 {
 	}
 
 	return result.Volume
+}
+
+func GetTransactionByHash(hash string) (*models.Transaction, error) {
+    collection := configs.GetCollection(configs.DB, "transfer")
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+
+    // Remove "0x" prefix if present and decode hex to bytes
+    if strings.HasPrefix(hash, "0x") {
+        hash = hash[2:]
+    }
+    hashBytes, err := hex.DecodeString(hash)
+    if err != nil {
+        return nil, fmt.Errorf("invalid hash format: %v", err)
+    }
+
+    var transfer models.Transfer
+    err = collection.FindOne(ctx, bson.M{"txhash": hashBytes}).Decode(&transfer)
+    if err != nil {
+        if err == mongo.ErrNoDocuments {
+            return nil, nil // Return nil if not found
+        }
+        return nil, err
+    }
+
+    // Convert back to hex string with "0x" prefix
+    txHashHex := "0x" + hex.EncodeToString(transfer.TxHash)
+    blockNumberStr := strconv.FormatUint(transfer.BlockNumber, 10)
+
+    // Convert Transfer to Transaction
+    return &models.Transaction{
+        Hash:        txHashHex,
+        BlockNumber: blockNumberStr,
+    }, nil
 }

@@ -1,7 +1,7 @@
 export interface PendingTransaction {
   accessList: any[];
   blockHash: null;
-  blockNumber: null;
+  blockNumber?: string;
   chainId: string;
   from: string;
   gas: string;
@@ -16,6 +16,13 @@ export interface PendingTransaction {
   transactionIndex: null;
   type: string;
   value: string;
+  status: 'pending' | 'mined' | 'dropped';
+  lastSeen: number;
+  createdAt: number;
+}
+
+export interface PendingTransactionResponse {
+  transaction: PendingTransaction;
 }
 
 export interface PendingTransactionsByNonce {

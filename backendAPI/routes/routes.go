@@ -4,8 +4,10 @@ import (
 	"backendAPI/db"
 	"backendAPI/models"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -20,10 +22,19 @@ func UserRoute(router *gin.Engine) {
 
 		result, err := db.GetPendingTransactions(page, limit)
 		if err != nil {
+			log.Printf("Error fetching pending transactions: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": fmt.Sprintf("Failed to fetch pending transactions: %v", err),
 			})
 			return
+		}
+
+		// Log the result for debugging
+		log.Printf("Found %d pending transactions", len(result.Transactions))
+
+		// Return empty array instead of null for transactions
+		if result.Transactions == nil {
+			result.Transactions = make([]models.PendingTransaction, 0)
 		}
 
 		c.JSON(http.StatusOK, result)
@@ -32,31 +43,51 @@ func UserRoute(router *gin.Engine) {
 	// Add endpoint for fetching a specific pending transaction
 	router.GET("/pending-transaction/:hash", func(c *gin.Context) {
 		hash := c.Param("hash")
-		if hash == "" {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "Transaction hash is required",
-			})
-			return
-		}
-
-		tx, err := db.GetPendingTransactionByHash(hash)
+		transaction, err := db.GetPendingTransactionByHash(hash)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to fetch pending transaction: %v", err),
-			})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
-		if tx == nil {
+		// If not found in pending, check if it's in the transactions collection
+		if transaction == nil {
+			// Check if transaction exists in the transactions collection
+			tx, err := db.GetTransactionByHash(hash)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			
+			if tx != nil {
+				// Transaction is mined - return formatted response
+				c.JSON(http.StatusOK, gin.H{
+					"transaction": gin.H{
+						"hash":        tx.Hash,        // Already has 0x prefix
+						"status":      "mined",
+						"blockNumber": tx.BlockNumber,
+						"timestamp":   time.Now().Unix(),
+					},
+				})
+				return
+			}
+
+			// Transaction not found in either collection
 			c.JSON(http.StatusNotFound, gin.H{
-				"error": "Pending transaction not found",
+				"error":   "Transaction not found",
+				"details": "This transaction is no longer in the mempool. It may have been dropped or replaced.",
 			})
 			return
 		}
 
-		c.JSON(http.StatusOK, models.PendingTransactionResponse{
-			Transaction: tx,
-		})
+		// If transaction is mined, delete it from pending collection
+		if transaction.Status == "mined" {
+			if err := db.DeleteMinedTransaction(hash); err != nil {
+				// Log error but don't fail the request
+				log.Printf("Error deleting mined transaction %s: %v\n", hash, err)
+			}
+		}
+
+		c.JSON(http.StatusOK, gin.H{"transaction": transaction})
 	})
 
 	router.GET("/overview", func(c *gin.Context) {
@@ -92,13 +123,13 @@ func UserRoute(router *gin.Engine) {
 
 		// Return response with default values if data isn't available
 		c.JSON(http.StatusOK, gin.H{
-			"marketcap":       marketCap,       // Returns 0 if not available
-			"currentPrice":    currentPrice,    // Returns 0 if not available
-			"countwallets":    walletCount,     // Returns 0 if not available
-			"circulating":     circulating,     // Returns "0" if not available
-			"volume":          volume,          // Returns 0 if not available
-			"validatorCount":  validatorCount,  // Returns 0 if not available
-			"contractCount":   contractCount,   // Returns 0 if not available
+			"marketcap":      marketCap,      // Returns 0 if not available
+			"currentPrice":   currentPrice,   // Returns 0 if not available
+			"countwallets":   walletCount,    // Returns 0 if not available
+			"circulating":    circulating,    // Returns "0" if not available
+			"volume":         volume,         // Returns 0 if not available
+			"validatorCount": validatorCount, // Returns 0 if not available
+			"contractCount":  contractCount,  // Returns 0 if not available
 			"status": gin.H{
 				"syncing":         true, // Indicate that data is still being synced
 				"dataInitialized": marketCap > 0 || currentPrice > 0 || walletCount > 0 || circulating != "0" || volume > 0,
@@ -348,8 +379,8 @@ func UserRoute(router *gin.Engine) {
 
 		// Initialize response
 		response := models.ValidatorResponse{
-			Validators:  make([]models.Validator, 0),
-			TotalStaked: "0",
+			Validators:    make([]models.Validator, 0),
+			TotalStaked:   "0",
 			NextPageToken: pageToken, // Pass through the page token
 		}
 
@@ -417,7 +448,7 @@ func UserRoute(router *gin.Engine) {
 		}
 		c.JSON(http.StatusOK, gin.H{
 			"response": query,
-			"total": total,
+			"total":    total,
 		})
 	})
 
