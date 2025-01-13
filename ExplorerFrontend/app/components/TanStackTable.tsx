@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   createColumnHelper,
   flexRender,
@@ -8,11 +8,15 @@ import {
   getFilteredRowModel,
   getCoreRowModel,
   getPaginationRowModel,
-  ColumnDef
+  ColumnDef,
+  Row,
+  Table,
+  HeaderGroup,
+  Header,
+  Cell
 } from "@tanstack/react-table";
-import { decodeBase64ToHexadecimal, epochToISO, toFixed } from "../lib/helpers";
+import { decodeBase64ToHexadecimal, epochToISO, formatAmount } from "../lib/helpers";
 import DebouncedInput from "./DebouncedInput";
-import { DownloadIcon } from "./Icons";
 import { DownloadBtn, DownloadBtnInternal } from "./DownloadBtn";
 import Link from "next/link";
 import { Transaction, InternalTransaction } from "./types";
@@ -27,18 +31,116 @@ interface TableProps {
   internalt: InternalTransaction[];
 }
 
-type TableData = {
-  transactions: Transaction[];
-  internalTransactions: InternalTransaction[];
+type TableInstance<T> = Table<T>;
+
+const renderTableHeader = <T extends Transaction | InternalTransaction>(
+  table: TableInstance<T>
+) => {
+  return table.getHeaderGroups().map((headerGroup: HeaderGroup<T>) => (
+    <tr key={headerGroup.id} className="border-b border-[#3d3d3d]">
+      {headerGroup.headers.map((header: Header<T, unknown>) => (
+        <th
+          key={header.id}
+          className="px-4 py-3 text-left text-sm font-medium text-[#ffa729]"
+        >
+          {header.isPlaceholder
+            ? null
+            : flexRender(
+                header.column.columnDef.header,
+                header.getContext()
+              )}
+        </th>
+      ))}
+    </tr>
+  ));
+};
+
+const renderTableBody = <T extends Transaction | InternalTransaction>(
+  table: TableInstance<T>
+) => {
+  return table.getRowModel().rows.map((row: Row<T>) => (
+    <tr
+      key={row.id}
+      className="border-b border-[#3d3d3d] hover:bg-[rgba(255,167,41,0.05)]"
+    >
+      {row.getVisibleCells().map((cell: Cell<T, unknown>) => (
+        <td
+          key={cell.id}
+          className="px-4 py-3 text-sm text-gray-300"
+        >
+          {flexRender(
+            cell.column.columnDef.cell,
+            cell.getContext()
+          )}
+        </td>
+      ))}
+    </tr>
+  ));
+};
+
+const calculateFees = (tx: Transaction): number => {
+  // First check if PaidFees is available (decimal format)
+  if (typeof tx.PaidFees === 'number') {
+    return tx.PaidFees;
+  }
+  
+  // Calculate from gas values (numeric format)
+  if (typeof tx.gasUsed !== 'number' || typeof tx.gasPrice !== 'number') return 0;
+  
+  try {
+    // Calculate fees using numeric values
+    const gasUsed = BigInt(tx.gasUsed);
+    const gasPrice = BigInt(tx.gasPrice);
+    
+    // Convert the result to a number for consistency with PaidFees format
+    return Number(gasUsed * gasPrice) / 1e18; // Convert to QRL units
+  } catch (error) {
+    console.error('Error calculating fees:', error);
+    return 0;
+  }
 };
 
 export default function TanStackTable({ transactions, internalt }: TableProps) {
-  const columnHelper = createColumnHelper<Transaction>();
-  const internalColumnHelper = createColumnHelper<InternalTransaction>();
+  const [mounted, setMounted] = useState(false);
+  const [windowWidth, setWindowWidth] = useState(0);
+  const [globalFilter, setGlobalFilter] = useState("");
+  const [showInternal, setShowInternal] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    setWindowWidth(window.innerWidth);
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Pre-format the transaction data
+  const formattedTransactions = useMemo(() => transactions.map(tx => {
+    const [amount, amountUnit] = formatAmount(tx.Amount);
+    const fees = calculateFees(tx);
+    const [feesFormatted, feesUnit] = formatAmount(fees);
+    return {
+      ...tx,
+      formattedAmount: `${amount} ${amountUnit}`,
+      formattedFees: `${feesFormatted} ${feesUnit}`
+    };
+  }), [transactions]);
+
+  // Pre-format the internal transaction data
+  const formattedInternalTransactions = useMemo(() => internalt.map(tx => {
+    const [value, valueUnit] = formatAmount(tx.Value);
+    return {
+      ...tx,
+      formattedValue: `${value} ${valueUnit}`
+    };
+  }), [internalt]);
+
+  const columnHelper = createColumnHelper<any>();
+  const internalColumnHelper = createColumnHelper<any>();
   const inOutMap = ["Out", "In"];
   const txTypeMap = ["Coinbase", "Attest", "Transfer", "Stake"];
 
-  const columns: ColumnDef<Transaction, any>[] = [
+  const transactionColumns = useMemo(() => [
     columnHelper.accessor(() => "", {
       id: "Number",
       cell: (info) => <span>{transactions.length - info.row.index}</span>,
@@ -52,15 +154,31 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
       cell: (info) => <span>{txTypeMap[info.getValue()]}</span>,
       header: "Transaction Type",
     }),
-    columnHelper.accessor("Address", {
+    columnHelper.accessor((row) => ({ from: row.From, to: row.To }), {
+      id: "Addresses",
       cell: (info) => {
-        const fullAddress = "0x" + decodeBase64ToHexadecimal(info.getValue());
+        const { from, to } = info.getValue();
+        const fromAddress = from ? "0x" + decodeBase64ToHexadecimal(from) : "";
+        const toAddress = to ? "0x" + decodeBase64ToHexadecimal(to) : "";
         return (
-          <span>
-            <Link href={"/address/" + fullAddress} title={fullAddress}>
-              {truncateMiddle(fullAddress)}
-            </Link>
-          </span>
+          <div className="flex flex-col gap-1">
+            {fromAddress && (
+              <div className="flex items-center gap-1">
+                <span className="text-gray-400 text-sm">From:</span>
+                <Link href={"/address/" + fromAddress} title={fromAddress}>
+                  {truncateMiddle(fromAddress)}
+                </Link>
+              </div>
+            )}
+            {toAddress && (
+              <div className="flex items-center gap-1">
+                <span className="text-gray-400 text-sm">To:</span>
+                <Link href={"/address/" + toAddress} title={toAddress}>
+                  {truncateMiddle(toAddress)}
+                </Link>
+              </div>
+            )}
+          </div>
         );
       },
       header: "From/To",
@@ -82,17 +200,17 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
       cell: (info) => <span>{epochToISO(info.getValue())}</span>,
       header: "Timestamp",
     }),
-    columnHelper.accessor((row) => toFixed(row.Amount), {
-      id: "Amount",
-      header: "Amount (QRL)",
+    columnHelper.accessor("formattedAmount", {
+      cell: (info) => <span>{info.getValue()}</span>,
+      header: "Amount",
     }),
-    columnHelper.accessor((row) => toFixed(row.Paidfees), {
-      id: "PaidFees",
-      header: "Paid Fees (QRL)",
+    columnHelper.accessor("formattedFees", {
+      cell: (info) => <span>{info.getValue()}</span>,
+      header: "Paid Fees",
     }),
-  ];
+  ], [transactions.length]);
 
-  const internalColumns: ColumnDef<InternalTransaction, any>[] = [
+  const internalTransactionColumns = useMemo(() => [
     internalColumnHelper.accessor(() => "", {
       id: "Number",
       cell: (info) => <span>{internalt.length - info.row.index}</span>,
@@ -141,16 +259,16 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
       },
       header: "Transaction Hash",
     }),
-    internalColumnHelper.accessor((row) => toFixed(row.Value), {
-      id: "Value",
-      header: "Value (QRL)",
+    internalColumnHelper.accessor("formattedValue", {
+      cell: (info) => <span>{info.getValue()}</span>,
+      header: "Value",
     }),
-    internalColumnHelper.accessor((row) => toFixed(row.GasUsed), {
-      id: "GasUsed",
+    internalColumnHelper.accessor("GasUsed", {
+      cell: (info) => <span>{info.getValue()} Units</span>,
       header: "Gas Used (in Units)",
     }),
-    internalColumnHelper.accessor((row) => toFixed(row.AmountFunctionIdentifier), {
-      id: "AmountFunctionIdentifier",
+    internalColumnHelper.accessor("AmountFunctionIdentifier", {
+      cell: (info) => <span>{info.getValue()}</span>,
       header: "Token Units",
     }),
     internalColumnHelper.accessor("BlockTimestamp", {
@@ -161,291 +279,319 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
       cell: (info) => <span>{info.getValue() === 1 ? "Success" : "Failure"}</span>,
       header: "Status",
     }),
-  ];
+  ], [internalt.length]);
 
-  const [selectedItem, setSelectedItem] = useState(0);
-  const [tableData, setTableData] = useState<TableData>({
-    transactions: transactions || [],
-    internalTransactions: internalt || []
-  });
-  const [globalFilter, setGlobalFilter] = useState("");
-
-  const table = useReactTable({
-    data: tableData.transactions,
-    columns,
+  const transactionTable = useReactTable({
+    data: formattedTransactions,
+    columns: transactionColumns,
     state: {
       globalFilter,
     },
-    getFilteredRowModel: getFilteredRowModel(),
+    onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
   });
 
-  const tableInternalTransactions = useReactTable({
-    data: tableData.internalTransactions,
-    columns: internalColumns,
+  const internalTransactionTable = useReactTable({
+    data: formattedInternalTransactions,
+    columns: internalTransactionColumns,
     state: {
       globalFilter,
     },
-    getFilteredRowModel: getFilteredRowModel(),
+    onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
   });
 
-  const handleTabChange = (idx: number) => {
-    setSelectedItem(idx);
-  }
+  const renderTransactionCard = (row: Row<any>) => {
+    const data = row.original;
 
-  if (!transactions || transactions.length === 0) {
-    return <div>No transactions yet.</div>;
+    return (
+      <div key={row.id} className="p-4 border-b border-[#3d3d3d] last:border-b-0">
+        <div className="space-y-3">
+          <div className="flex justify-between items-start">
+            <div className="space-y-1">
+              <div className="text-xs text-gray-400">Transaction Type</div>
+              <div className="text-sm text-white">{txTypeMap[data.TxType]}</div>
+            </div>
+            <div className="px-2 py-1 rounded bg-[#3d3d3d] bg-opacity-40">
+              <span className="text-xs text-[#ffa729]">{inOutMap[data.InOut]}</span>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-xs text-gray-400">Transaction Hash</div>
+            <Link 
+              href={"/tx/0x" + decodeBase64ToHexadecimal(data.TxHash)}
+              className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
+            >
+              {"0x" + decodeBase64ToHexadecimal(data.TxHash)}
+            </Link>
+          </div>
+
+          <div>
+            <div className="text-xs text-gray-400">From</div>
+            {data.From && (
+              <Link 
+                href={"/address/0x" + decodeBase64ToHexadecimal(data.From)}
+                className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
+              >
+                {"0x" + decodeBase64ToHexadecimal(data.From)}
+              </Link>
+            )}
+          </div>
+
+          <div>
+            <div className="text-xs text-gray-400">To</div>
+            {data.To && (
+              <Link 
+                href={"/address/0x" + decodeBase64ToHexadecimal(data.To)}
+                className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
+              >
+                {"0x" + decodeBase64ToHexadecimal(data.To)}
+              </Link>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-xs text-gray-400">Amount</div>
+              <div className="text-sm text-white">{data.formattedAmount}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-400">Fees</div>
+              <div className="text-sm text-white">{data.formattedFees}</div>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-xs text-gray-400">Time</div>
+            <div className="text-sm text-white">{epochToISO(data.TimeStamp)}</div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderInternalTransactionCard = (row: Row<any>) => {
+    const data = row.original;
+
+    return (
+      <div key={row.id} className="p-4 border-b border-[#3d3d3d] last:border-b-0">
+        <div className="space-y-3">
+          <div className="flex justify-between items-start">
+            <div className="space-y-1">
+              <div className="text-xs text-gray-400">Type</div>
+              <div className="text-sm text-white">{atob(String(data.Type))}</div>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-xs text-gray-400">Transaction Hash</div>
+            <Link 
+              href={"/tx/0x" + decodeBase64ToHexadecimal(data.Hash)}
+              className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
+            >
+              {"0x" + decodeBase64ToHexadecimal(data.Hash)}
+            </Link>
+          </div>
+
+          <div>
+            <div className="text-xs text-gray-400">From</div>
+            <Link 
+              href={"/address/0x" + decodeBase64ToHexadecimal(data.From)}
+              className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
+            >
+              {"0x" + decodeBase64ToHexadecimal(data.From)}
+            </Link>
+          </div>
+
+          <div>
+            <div className="text-xs text-gray-400">To</div>
+            <Link 
+              href={"/address/0x" + decodeBase64ToHexadecimal(data.To)}
+              className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
+            >
+              {"0x" + decodeBase64ToHexadecimal(data.To)}
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-xs text-gray-400">Value</div>
+              <div className="text-sm text-white">{data.formattedValue}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-400">Gas Used</div>
+              <div className="text-sm text-white">{data.GasUsed} Units</div>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-xs text-gray-400">Time</div>
+            <div className="text-sm text-white">{epochToISO(data.BlockTimestamp)}</div>
+          </div>
+
+          <div>
+            <div className="text-xs text-gray-400">Status</div>
+            <div className="text-sm text-white">{data.Output === 1 ? "Success" : "Failure"}</div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  if (!mounted) {
+    return null;
   }
 
   return (
-     <>
-      <div className="text-sm mt-5 overflow-x-auto">
-        <ul role="tablist" className="w-full border-b flex items-center gap-x-3 overflow-x-auto mb-4">
-          <li className={`py-2 border-b-2 ${selectedItem === 0 ? "border-indigo-600 text-indigo-600" : "border-white text-gray-500"}`}>
+    <div className="w-full">
+      <div className="p-4 border-b border-[#3d3d3d] space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center space-x-4">
             <button
-              role="tab"
-              aria-selected={selectedItem === 0}
-              onClick={() => handleTabChange(0)}
-              className="py-2.5 px-4 rounded-lg duration-150 hover:text-indigo-600 hover:bg-gray-50 active:bg-gray-100 font-medium"
+              onClick={() => setShowInternal(false)}
+              className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                !showInternal
+                  ? "bg-[#ffa729] text-black"
+                  : "text-gray-400 hover:text-white"
+              }`}
             >
               Transactions
             </button>
-          </li>
-          <li className={`py-2 border-b-2 ${selectedItem === 1 ? "border-indigo-600 text-indigo-600" : "border-white text-gray-500"}`}>
             <button
-              role="tab"
-              aria-selected={selectedItem === 1}
-              onClick={() => handleTabChange(1)}
-              className="py-2.5 px-4 rounded-lg duration-150 hover:text-indigo-600 hover:bg-gray-50 active:bg-gray-100 font-medium"
+              onClick={() => setShowInternal(true)}
+              className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                showInternal
+                  ? "bg-[#ffa729] text-black"
+                  : "text-gray-400 hover:text-white"
+              }`}
             >
-              Internal Transactions
+              Internal Txns
             </button>
-          </li>
-        </ul>
-  
-        {/* Conditional rendering for Transactions tab */}
-        {selectedItem === 0 && (
-          tableData.transactions.length > 0 ? (
-              <div className="p-2 max-w-full mx-auto overflow-x-auto bg-white rounded-lg shadow-md">
-           <div className="flex justify-between mb-4">
-             <div className="w-full flex items-center gap-1">
-           <DebouncedInput
-             value={globalFilter ?? ""}
-             onChange={(value: any) => setGlobalFilter(String(value))}
-             className="p-2 bg-transparent outline-none border-b-2 w-1/5 focus:w-1/3 duration-300 border-ffa729 hover:border-ffa940 w-full"
-             placeholder="Search all columns..."
-           />
-             </div>
-             <div className="flex inline">
-             <p>Download all your transactions - </p> 
-             <DownloadIcon />
-               {/* @ts-ignore */}
-               <DownloadBtn data={tableData.transactions} fileName="data" />
-             </div>
-           </div>
-           <table className="w-full table-auto text-left divide-y divide-gray-200">
-             <thead className="bg-indigo-100">
-               {table.getHeaderGroups().map((headerGroup) => (
-                 <tr key={headerGroup.id}>
-                   {headerGroup.headers.map((header) => (
-                     <th key={header.id} className="capitalize px-3.5 py-2 text-indigo-600">
-                       {flexRender(header.column.columnDef.header, header.getContext())}
-                     </th>
-                   ))}
-                 </tr>
-               ))}
-             </thead>
-             <tbody className="text-gray-600">
-               {table.getRowModel().rows.length ? (
-                 table.getRowModel().rows.map((row, i) => (
-                   <tr key={row.id} className={`${i % 2 === 0 ? "bg-gray-100" : "bg-white"}`}>
-                     {row.getVisibleCells().map((cell) => (
-                       <td key={cell.id} className="px-3.5 py-2 text-gray-900">
-                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                       </td>
-                     ))}
-                   </tr>
-                 ))
-               ) : (
-                 <tr className="text-center h-32">
-                   <td colSpan={12}>No Record Found!</td>
-                 </tr>
-               )}
-             </tbody>
-           </table>
-       <div className="flex items-center justify-end mt-2 gap-2">
-         <button
-           onClick={() => {
-             table.previousPage();
-           }}
-           disabled={!table.getCanPreviousPage()}
-           className="p-1 border border-gray-300 px-2 disabled:opacity-30"
-         >
-           {"<"}
-         </button>
-         <button
-           onClick={() => {
-             table.nextPage();
-           }}
-           disabled={!table.getCanNextPage()}
-           className="p-1 border border-gray-300 px-2 disabled:opacity-30"
-         >
-           {">"}
-         </button>
-  
-         <span className="flex items-center gap-1">
-           <div>Page</div>
-           <strong>
-             {table.getState().pagination.pageIndex + 1} of{" "}
-             {table.getPageCount()}
-           </strong>
-         </span>
-         <span className="flex items-center gap-1">
-           | Go to page:
-           <input
-             type="number"
-             defaultValue={table.getState().pagination.pageIndex + 1}
-             onChange={(e) => {
-               const page = e.target.value ? Number(e.target.value) - 1 : 0;
-               table.setPageIndex(page); 
-             }}
-             className="border p-1 rounded w-16 bg-transparent"
-           />
-         </span>
-         <select
-           value={table.getState().pagination.pageSize}
-           onChange={(e) => {
-             table.setPageSize(Number(e.target.value));
-           }}
-           className="p-2 bg-transparent"
-         >
-           {[10, 20, 30, 50].map((pageSize) => (
-             <option key={pageSize} value={pageSize}>
-               Show {pageSize}
-             </option>
-           ))}
-         </select>
-  
-           </div>
-         </div>
-          ) : (
-            <div>No transactions yet.</div>
-          )
-        )}
-  
-        {/* Conditional rendering for Internal Transactions tab */}
-        {selectedItem === 1 && (
-          tableData.internalTransactions.length > 0 ? (
-            <div className="p-2 max-w-full mx-auto overflow-x-auto bg-white rounded-lg shadow-md">
-            <div className="flex justify-between mb-4">
-              <div className="w-full flex items-center gap-1">
+          </div>
+          <div className="flex items-center space-x-4">
             <DebouncedInput
               value={globalFilter ?? ""}
-              onChange={(value: any) => setGlobalFilter(String(value))}
-              className="p-2 bg-transparent outline-none border-b-2 w-1/5 focus:w-1/3 duration-300 border-ffa729 hover:border-ffa940 w-full"
-              placeholder="Search all columns..."
+              onChange={(value) => setGlobalFilter(String(value))}
+              className="px-4 py-2 text-sm bg-[#1a1a1a] border border-[#3d3d3d] rounded-lg focus:outline-none focus:border-[#ffa729] text-white w-full md:w-auto"
+              placeholder="Search transactions..."
             />
-              </div>
-              <div className="flex inline">
-              <p>Download all your transactions - </p> 
-              <DownloadIcon />
-                {/* @ts-ignore */}
-                <DownloadBtnInternal data={tableData.internalTransactions} fileName="internalTransactions" />
-              </div>
-            </div>
-            <table className="w-full table-auto text-left divide-y divide-gray-200">
-              <thead className="bg-indigo-100">
-                {tableInternalTransactions.getHeaderGroups().map((headerGroup) => (
-                  <tr key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => (
-                      <th key={header.id} className="capitalize px-3.5 py-2 text-indigo-600">
-                        {flexRender(header.column.columnDef.header, header.getContext())}
-                      </th>
-                    ))}
-                  </tr>
-                ))}
-              </thead>
-              <tbody className="text-gray-600">
-                {tableInternalTransactions.getRowModel().rows.length ? (
-                  tableInternalTransactions.getRowModel().rows.map((row, i) => (
-                    <tr key={row.id} className={`${i % 2 === 0 ? "bg-gray-100" : "bg-white"}`}>
-                      {row.getVisibleCells().map((cell) => (
-                        <td key={cell.id} className="px-3.5 py-2 text-gray-900">
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </td>
-                      ))}
-                    </tr>
-                  ))
-                ) : (
-                  <tr className="text-center h-32">
-                    <td colSpan={12}>No Record Found!</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-        <div className="flex items-center justify-end mt-2 gap-2">
-          <button
-            onClick={() => {
-              tableInternalTransactions.previousPage();
-            }}
-            disabled={!tableInternalTransactions.getCanPreviousPage()}
-            className="p-1 border border-gray-300 px-2 disabled:opacity-30"
-          >
-            {"<"}
-          </button>
-          <button
-            onClick={() => {
-              tableInternalTransactions.nextPage();
-            }}
-            disabled={!tableInternalTransactions.getCanNextPage()}
-            className="p-1 border border-gray-300 px-2 disabled:opacity-30"
-          >
-            {">"}
-          </button>
-  
-          <span className="flex items-center gap-1">
-            <div>Page</div>
-            <strong>
-              {tableInternalTransactions.getState().pagination.pageIndex + 1} of{" "}
-              {tableInternalTransactions.getPageCount()}
-            </strong>
-          </span>
-          <span className="flex items-center gap-1">
-            | Go to page:
-            <input
-              type="number"
-              defaultValue={tableInternalTransactions.getState().pagination.pageIndex + 1}
-              onChange={(e) => {
-                const page = e.target.value ? Number(e.target.value) - 1 : 0;
-                tableInternalTransactions.setPageIndex(page); 
-              }}
-              className="border p-1 rounded w-16 bg-transparent"
-            />
-          </span>
-          <select
-            value={tableInternalTransactions.getState().pagination.pageSize}
-            onChange={(e) => {
-              tableInternalTransactions.setPageSize(Number(e.target.value));
-            }}
-            className="p-2 bg-transparent"
-          >
-            {[10, 20, 30, 50].map((pageSize) => (
-              <option key={pageSize} value={pageSize}>
-                Show {pageSize}
-              </option>
-            ))}
-          </select>
-  
-            </div>
+            {showInternal ? (
+              <DownloadBtnInternal data={internalt} />
+            ) : (
+              <DownloadBtn data={transactions} />
+            )}
           </div>
-          ) : (
-            <div>No Internal transactions yet.</div>
-          )
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        {windowWidth < 768 ? (
+          <div className="overflow-hidden">
+            {showInternal
+              ? internalTransactionTable.getRowModel().rows.map((row) => renderInternalTransactionCard(row))
+              : transactionTable.getRowModel().rows.map((row) => renderTransactionCard(row))
+            }
+          </div>
+        ) : (
+          <table className="w-full">
+            <thead>
+              {showInternal
+                ? renderTableHeader(internalTransactionTable)
+                : renderTableHeader(transactionTable)
+              }
+            </thead>
+            <tbody>
+              {showInternal
+                ? renderTableBody(internalTransactionTable)
+                : renderTableBody(transactionTable)
+              }
+            </tbody>
+          </table>
         )}
       </div>
-    </>
+
+      <div className="p-4 border-t border-[#3d3d3d]">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            {showInternal ? (
+              <>
+                <button
+                  className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
+                  onClick={() => internalTransactionTable.setPageIndex(0)}
+                  disabled={!internalTransactionTable.getCanPreviousPage()}
+                >
+                  {"<<"}
+                </button>
+                <button
+                  className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
+                  onClick={() => internalTransactionTable.previousPage()}
+                  disabled={!internalTransactionTable.getCanPreviousPage()}
+                >
+                  Previous
+                </button>
+                <button
+                  className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
+                  onClick={() => internalTransactionTable.nextPage()}
+                  disabled={!internalTransactionTable.getCanNextPage()}
+                >
+                  Next
+                </button>
+                <button
+                  className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
+                  onClick={() => internalTransactionTable.setPageIndex(internalTransactionTable.getPageCount() - 1)}
+                  disabled={!internalTransactionTable.getCanNextPage()}
+                >
+                  {">>"}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
+                  onClick={() => transactionTable.setPageIndex(0)}
+                  disabled={!transactionTable.getCanPreviousPage()}
+                >
+                  {"<<"}
+                </button>
+                <button
+                  className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
+                  onClick={() => transactionTable.previousPage()}
+                  disabled={!transactionTable.getCanPreviousPage()}
+                >
+                  Previous
+                </button>
+                <button
+                  className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
+                  onClick={() => transactionTable.nextPage()}
+                  disabled={!transactionTable.getCanNextPage()}
+                >
+                  Next
+                </button>
+                <button
+                  className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
+                  onClick={() => transactionTable.setPageIndex(transactionTable.getPageCount() - 1)}
+                  disabled={!transactionTable.getCanNextPage()}
+                >
+                  {">>"}
+                </button>
+              </>
+            )}
+          </div>
+          <div className="text-sm text-gray-400">
+            Page {showInternal
+              ? internalTransactionTable.getState().pagination.pageIndex + 1
+              : transactionTable.getState().pagination.pageIndex + 1} of{" "}
+            {showInternal
+              ? internalTransactionTable.getPageCount()
+              : transactionTable.getPageCount()}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

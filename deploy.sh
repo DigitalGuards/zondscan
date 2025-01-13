@@ -1,15 +1,16 @@
 #!/bin/bash
 
-# Print colored output
+
+# Helper functions for status and error messages
 print_status() {
-    echo -e "\e[1;34m>>> $1\e[0m"
+    echo -e "\033[1;34m[*]\033[0m $1"
 }
 
 print_error() {
-    echo -e "\e[1;31m>>> Error: $1\e[0m"
+    echo -e "\033[1;31m[!]\033[0m $1" >&2
     exit 1
 }
-
+print_status "Deploying frontend is currently commented out uncomment the function or deploy it manually or with update-frontend.sh"
 # Clean PM2 logs and processes
 clean_pm2() {
     print_status "Cleaning PM2 logs and processes..."
@@ -43,7 +44,7 @@ check_dependencies() {
 # Check if MongoDB is running
 check_mongodb() {
     if ! nc -z localhost 27017; then
-        print_error "MongoDB is not running on localhost:27017."
+        print_error "MongoDB is not running on localhost:27017. Or nc is not installed..."
     fi
 }
 
@@ -54,7 +55,7 @@ check_zond_node() {
         http://REDACTED:8545)
 
     if [[ $? -ne 0 || -z "$RESPONSE" ]]; then
-        print_error "Zond node is not accessible at http://127.0.0.1:8545."
+        print_error "Zond node is not accessible."
     fi
 }
 
@@ -69,8 +70,16 @@ check_port() {
 # Clone the repository
 clone_repo() {
     if [ -d ".git" ]; then
-        print_status "Repository already exists. Pulling latest changes..."
-        git pull || print_error "Failed to pull latest changes"
+        print_status "Repository already exists. Checking git status..."
+        git status
+        
+        read -p "Would you like to pull the latest changes? (y/n): " PULL_CHANGES
+        if [[ $PULL_CHANGES =~ ^[Yy]$ ]]; then
+            print_status "Pulling latest changes..."
+            git pull || print_error "Failed to pull latest changes"
+        else
+            print_status "Skipping pull, continuing with existing code..."
+        fi
     else
         print_status "Cloning QRL Explorer repository..."
         git clone https://github.com/DigitalGuards/zondexplorer.git || print_error "Failed to clone repository"
@@ -132,45 +141,37 @@ EOL
 
     # Start frontend in development mode with PM2
     print_status "Starting frontend in development mode..."
-    cd "$BASE_DIR/ExplorerFrontend" && pm2 start "npm run dev" --name "frontend" || print_error "Failed to start frontend"
+    cd "$BASE_DIR/ExplorerFrontend" && pm2 start "npm start" --name "frontend" || print_error "Failed to start frontend"
 }
 
 # Setup blockchain synchronizer
 setup_synchronizer() {
     print_status "Setting up blockchain synchronizer..."
-    cd "$BASE_DIR/QRLtoMongoDB-PoS" || print_error "Synchronizer directory not found"
+    cd "$BASE_DIR/Zond2mongoDB" || print_error "Synchronizer directory not found"
 
     # Create .env file
     cat > .env << EOL
 MONGOURI=mongodb://localhost:27017
 NODE_URL=http://REDACTED:8545
-EOL
-
-    # Also create .env in the rpc directory to ensure it's available
-    mkdir -p rpc
-    cat > rpc/.env << EOL
-MONGOURI=mongodb://localhost:27017
-NODE_URL=http://REDACTED:8545
+BEACONCHAIN_API=http://REDACTED:3500
 EOL
 
     # Build synchronizer
     print_status "Building synchronizer..."
-    go build -o synchroniser main.go || print_error "Failed to build synchronizer"
+    go build -o syncer main.go || print_error "Failed to build synchronizer"
 
     # Make the binary executable
-    chmod +x ./synchroniser
+    chmod +x ./syncer
 
     # Start synchronizer with PM2, explicitly setting environment variables
     print_status "Starting synchronizer with PM2..."
-     pm2 start ./synchroniser --name "synchroniser" --cwd "$BASE_DIR/QRLtoMongoDB-PoS" || print_error "Failed to start synchronizer"
+     pm2 start ./syncer --name "synchroniser" --cwd "$BASE_DIR/Zond2mongoDB" || print_error "Failed to start synchronizer"
 }
 
 # Save PM2 processes
 save_pm2() {
     print_status "Saving PM2 processes..."
     pm2 save || print_error "Failed to save PM2 processes"
-    print_status "Generating PM2 startup script..."
-    pm2 startup systemd -u $USER --hp $HOME || print_error "Failed to generate PM2 startup script"
 }
 
 # Main deployment function
@@ -188,7 +189,7 @@ main() {
     check_zond_node
 
     # Check if required ports are available
-    check_port 3000
+    #check_port 3000
     check_port 8080
 
     # Clone and setup

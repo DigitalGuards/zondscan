@@ -27,6 +27,18 @@ ExplorerFrontend/
 │   │       ├── blocks-client.tsx # Client-side block component
 │   │       └── types.ts  # Block-related types
 │   │
+│   ├── pending/          # Pending transactions feature
+│   │   ├── layout.tsx    # Layout wrapper for pending transactions
+│   │   ├── loading.tsx   # Loading state with skeleton UI
+│   │   ├── [query]/      # Dynamic pending transaction routes
+│   │   │   ├── page.tsx  # Pending transactions list page
+│   │   │   └── PendingList.tsx # Client-side pending transactions component
+│   │   └── tx/          # Pending transaction details
+│   │       ├── types.ts  # Pending transaction type definitions
+│   │       └── [hash]/   # Dynamic transaction hash routes
+│   │           ├── page.tsx # Transaction detail page
+│   │           └── pending-transaction-view.tsx # Transaction detail view
+│   │
 │   ├── transactions/     # Transactions feature
 │   │   ├── layout.tsx    # Layout for transactions
 │   │   ├── loading.tsx   # Loading state
@@ -134,6 +146,21 @@ The frontend uses two environment files:
 - Pagination support
 - Search by block number
 - Client-side state management with blocks-client.tsx
+
+### Mempool (Pending Transactions)
+- Real-time view of unconfirmed transactions
+- Auto-updates every 5 seconds
+- Transaction details including:
+  - Transaction hash
+  - From/To addresses
+  - Value amount
+  - Gas price
+  - Timestamp
+- Responsive card-based UI with loading states
+- Error handling and empty state messaging
+- Client-side state management with React Query
+- Pagination support
+- Individual transaction view support
 
 ### Transaction Explorer
 - View latest transactions

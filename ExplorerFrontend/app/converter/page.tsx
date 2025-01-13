@@ -8,7 +8,7 @@ function Converter() {
     const [shor, setShor] = useState("");
     const [error, setError] = useState("");
 
-    const DECIMALS = 1e12; // QRL has 12 decimal places
+    const DECIMALS = 1e18; // QRL has 18 decimal places like ethereum
 
     const handleChangeShors = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
@@ -94,7 +94,7 @@ function Converter() {
                         {/* Info Box */}
                         <div className="mt-6 p-4 bg-[#1a1b1e] rounded-lg border border-[#3d3d3d]">
                             <p className="text-sm text-gray-400">
-                                1 QRL = 1,000,000,000,000 Shor (10^12)
+                                1 QRL = 1,000,000,000,000,000,000 Shor (10^18)
                             </p>
                         </div>
                     </div>

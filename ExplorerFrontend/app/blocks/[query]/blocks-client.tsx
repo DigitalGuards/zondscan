@@ -6,6 +6,7 @@ import config from '../../../config';
 import { useQuery } from '@tanstack/react-query';
 import { Block, BlocksResponse } from './types';
 import { useRouter } from 'next/navigation';
+import SearchBar from '../../components/SearchBar';
 
 interface BlockCardProps {
   blockData: Block;
@@ -26,6 +27,12 @@ const BlockCard: React.FC<BlockCardProps> = ({ blockData }) => {
     }).format(date);
   };
 
+  // Truncate hash to show first 6 and last 4 characters
+  const truncateHash = (hash: string) => {
+    if (!hash) return '';
+    return `${hash.substring(0, 6)}...${hash.substring(hash.length - 4)}`;
+  };
+
   return (
     <a 
       href={`/block/${blockData.number}`}
@@ -33,29 +40,37 @@ const BlockCard: React.FC<BlockCardProps> = ({ blockData }) => {
                 bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
                 border border-[#3d3d3d] shadow-xl
                 hover:border-[#ffa729] transition-all duration-300
-                group mb-4 block'
+                group mb-3 sm:mb-4 block'
     >
-      <div className="p-6 flex flex-col md:flex-row items-center">
-        {/* Left Section - Icon and Status */}
-        <div className="flex items-center flex-col md:ml-4 mb-4 md:mb-0 md:w-48">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 text-[#ffa729] group-hover:scale-110 transition-transform duration-300">
-            <path strokeLinecap="round" strokeLinejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
-          </svg>
-          <p className="text-gray-300 mt-2">Confirmed</p>
-          <p className="text-gray-400 text-sm">{formatDate(blockData.timestamp)}</p>
-        </div>
+      <div className="p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center">
+          {/* Left Section - Icon and Status */}
+          <div className="flex flex-row sm:flex-col items-center mb-3 sm:mb-0 sm:w-48 w-full justify-between">
+            <div className="flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 sm:w-8 sm:h-8 text-[#ffa729] group-hover:scale-110 transition-transform duration-300">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+              </svg>
+              <span className="text-gray-300 ml-2 sm:hidden">Block #{blockData.number}</span>
+            </div>
+            <div className="flex flex-col items-end sm:items-center">
+              <p className="text-gray-300 mt-0 sm:mt-2 text-sm sm:text-base">Confirmed</p>
+              <p className="text-gray-400 text-xs sm:text-sm">{formatDate(blockData.timestamp)}</p>
+            </div>
+          </div>
 
-        {/* Right Section - Block Info */}
-        <div className="flex-1 md:ml-8">
-          <div className="space-y-2">
-            <h2 className="text-lg font-semibold text-[#ffa729] group-hover:scale-105 transition-transform duration-300">
+          {/* Right Section - Block Info */}
+          <div className="flex-1 sm:ml-8 space-y-2 w-full">
+            <h2 className="text-lg font-semibold text-[#ffa729] group-hover:scale-105 transition-transform duration-300 hidden sm:block">
               Block #{blockData.number}
             </h2>
-            <p className="text-gray-400">
-              Hash: <span className="text-gray-300 font-mono">{blockData.hash}</span>
-            </p>
+            <div className="flex items-center text-gray-400">
+              <span className="sm:inline hidden">Hash: </span>
+              <span className="text-gray-300 font-mono text-sm sm:text-base" title={blockData.hash}>
+                {truncateHash(blockData.hash)}
+              </span>
+            </div>
             {blockData.transactions && (
-              <p className="text-gray-400">
+              <p className="text-gray-400 text-sm sm:text-base">
                 Transactions: <span className="text-gray-300">{blockData.transactions.length}</span>
               </p>
             )}
@@ -104,22 +119,22 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
 
   if (isLoading) {
     return (
-      <div className="p-8">
-        <h1 className="text-2xl font-bold mb-6 text-[#ffa729]">Blocks</h1>
-        <div className="space-y-4">
+      <div className="p-4 sm:p-8">
+        <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-[#ffa729]">Latest Synced Blocks</h1>
+        <div className="space-y-3 sm:space-y-4">
           {[...Array(5)].map((_, i) => (
             <div 
               key={i}
-              className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] p-6 animate-pulse"
+              className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] p-4 sm:p-6 animate-pulse"
             >
-              <div className="flex flex-col md:flex-row items-center">
-                <div className="w-48 flex flex-col items-center">
-                  <div className="w-8 h-8 bg-gray-700 rounded-lg mb-2"></div>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center">
+                <div className="w-full sm:w-48 flex flex-row sm:flex-col items-center justify-between sm:justify-center">
+                  <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gray-700 rounded-lg mb-0 sm:mb-2"></div>
                   <div className="h-4 w-20 bg-gray-700 rounded"></div>
                 </div>
-                <div className="flex-1 md:ml-8 space-y-2">
-                  <div className="h-6 w-32 bg-gray-700 rounded"></div>
-                  <div className="h-4 w-full bg-gray-700 rounded"></div>
+                <div className="flex-1 sm:ml-8 space-y-2 mt-3 sm:mt-0">
+                  <div className="h-5 sm:h-6 w-32 bg-gray-700 rounded"></div>
+                  <div className="h-4 w-32 bg-gray-700 rounded"></div>
                 </div>
               </div>
             </div>
@@ -131,41 +146,46 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
 
   if (isError) {
     return (
-      <div className="p-8">
-        <h1 className="text-2xl font-bold mb-6 text-[#ffa729]">Blocks</h1>
-        <div className="bg-red-900/50 border border-red-500 text-red-200 px-6 py-4 rounded-xl">
+      <div className="p-4 sm:p-8">
+        <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-[#ffa729]">Latest Synced Blocks</h1>
+        <div className="bg-red-900/50 border border-red-500 text-red-200 px-4 sm:px-6 py-3 sm:py-4 rounded-xl">
           <p className="font-bold">Error:</p>
-          <p>{error instanceof Error ? error.message : 'Failed to load blocks'}</p>
+          <p className="text-sm sm:text-base">{error instanceof Error ? error.message : 'Failed to load blocks'}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6 text-[#ffa729]">Blocks</h1>
-      <div className="mb-8">
+    <div className="p-4 sm:p-8">
+      <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-[#ffa729]">Latest Synced Blocks</h1>
+      
+      <div className="max-w-[1200px] mx-auto mb-8">
+        <SearchBar />
+      </div>
+
+      <div className="mb-6 sm:mb-8">
         {data?.blocks.map((blockData) => (
           <BlockCard key={blockData.number} blockData={blockData} />
         ))}
       </div>
-      <div className="flex justify-center items-center gap-4 text-gray-300">
+      <div className="flex justify-center items-center gap-2 sm:gap-4 text-sm sm:text-base text-gray-300">
         <button 
           onClick={goToPreviousPage} 
           disabled={currentPage === 1} 
-          className="px-4 py-2 rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d]
+          className="px-3 sm:px-4 py-2 rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d]
                    hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d]
-                   transition-colors"
+                   transition-colors text-sm sm:text-base"
         >
           Previous
         </button>
-        <span>Page {currentPage} of {totalPages}</span>
+        <span className="text-sm sm:text-base">Page {currentPage} of {totalPages}</span>
         <button 
           onClick={goToNextPage} 
           disabled={currentPage === totalPages} 
-          className="px-4 py-2 rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d]
+          className="px-3 sm:px-4 py-2 rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d]
                    hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d]
-                   transition-colors"
+                   transition-colors text-sm sm:text-base"
         >
           Next
         </button>

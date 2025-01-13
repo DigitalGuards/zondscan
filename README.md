@@ -16,7 +16,7 @@ The project consists of three main components:
    - MongoDB data aggregation
    - Real-time blockchain data serving
 
-3. **QRLtoMongoDB-PoS**: Blockchain synchronizer
+3. **Zond2mongoDB**: Blockchain synchronizer
    - Syncs blockchain data to MongoDB
    - Handles chain reorganization
    - Maintains data consistency
@@ -84,17 +84,6 @@ touch .env.development && touch .env.production
 | HTTP_PORT | :8080 |
 | NODE_URL | http://localhost:8545 |
 
-#### .env.production fields
-
-| VARIABLE | VALUE |
-| ------ | ------ |
-| GIN_MODE | release |
-| MONGOURI | mongodb://localhost:27017/qrldata?readPreference=primary |
-| CERT_PATH | PATH_TO_CERT |
-| KEY_PATH | PATH_TO_KEY |
-| HTTPS_PORT | :8443 |
-| NODE_URL | http://localhost:8545 |
-
 Build and start the backendAPI:
 ```bash
 # On Unix-like systems
@@ -106,11 +95,11 @@ go build -o backendAPI.exe main.go
 pm2 start ./backendAPI.exe --name "handler"
 ```
 
-### QRLtoMongoDB-PoS Setup
+### Zond2mongoDB Setup
 
 Navigate to the synchronizer directory:
 ```
-cd ../QRLtoMongoDB-PoS
+cd ../Zond2mongoDB
 touch .env
 ```
 
@@ -118,7 +107,9 @@ touch .env
 | VARIABLE | VALUE |
 | ------ | ------ |
 | MONGOURI | mongodb://localhost:27017 |
-| NODE_URL | http://localhost:8545 |
+| NODE_URL | http://yourzondnode:8545 |
+| BEACONCHAIN_API | http://beaconnodehttpapi:3500 |
+
 
 Build and start the synchronizer:
 ```bash
@@ -150,7 +141,7 @@ The backend consists of three main components that work together to provide bloc
    - Exposes RPC endpoints for data access
    - Handles consensus and network communication
 
-2. **QRLtoMongoDB-PoS (Synchronizer)**
+2. **Zond2mongoDB (Synchronizer)**
    - Connects to Zond node via RPC
    - Continuously syncs blockchain data to MongoDB
    - Components:

@@ -2,6 +2,8 @@
 
 import React from 'react';
 import type { TransactionDetails } from './types';
+import { getConfirmations, getTransactionStatus } from './types';
+import { formatAmount, formatGas, formatNumberWithCommas } from '../../lib/helpers';
 
 const formatTimestamp = (timestamp: number): string => {
   if (!timestamp) return 'Unknown';
@@ -17,26 +19,6 @@ const formatTimestamp = (timestamp: number): string => {
     second: '2-digit',
     timeZoneName: 'short'
   }).format(date);
-};
-
-const getStatusColor = (status: string | undefined): string => {
-  if (!status) return 'bg-blue-500';
-  
-  try {
-    const statusLower = status.toLowerCase();
-    switch (statusLower) {
-      case 'success':
-        return 'bg-green-500';
-      case 'failed':
-        return 'bg-red-500';
-      case 'pending':
-        return 'bg-yellow-500';
-      default:
-        return 'bg-blue-500';
-    }
-  } catch (error) {
-    return 'bg-blue-500';
-  }
 };
 
 const AddressLink = ({ address }: { address: string }) => (
@@ -56,7 +38,37 @@ interface TransactionViewProps {
 }
 
 export default function TransactionView({ transaction }: TransactionViewProps): JSX.Element {
-  const statusColor = getStatusColor(transaction.status);
+  // Calculate confirmations and get status
+  const confirmations = getConfirmations(transaction.blockNumber, transaction.latestBlock);
+  const status = getTransactionStatus(confirmations);
+
+  // Format confirmation text
+  const confirmationText = confirmations === null 
+    ? 'Pending' 
+    : `${confirmations} Confirmation${confirmations === 1 ? '' : 's'}`;
+
+  // Format transaction value using the helper
+  const [formattedValue, unit] = formatAmount(transaction.value);
+
+  // Calculate paid fees from gas values
+  const calculatePaidFees = () => {
+    if (!transaction.gasUsed || !transaction.gasPrice) return '0';
+    
+    try {
+      const gasUsed = BigInt(transaction.gasUsed);
+      const gasPrice = BigInt(transaction.gasPrice);
+      const paidFees = gasUsed * gasPrice;
+      
+      // Convert to QRL (divide by 10^18)
+      const paidFeesQRL = Number(paidFees) / 1e18;
+      return paidFeesQRL.toFixed(18); // Show full precision
+    } catch (error) {
+      console.error('Error calculating paid fees:', error);
+      return '0';
+    }
+  };
+
+  const paidFees = calculatePaidFees();
 
   return (
     <div className="py-8">
@@ -72,10 +84,10 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               </svg>
               <h1 className="text-2xl font-bold text-[#ffa729]">Transaction Details</h1>
             </div>
-            <div className={`px-4 py-2 rounded-xl ${statusColor} bg-opacity-20 border border-opacity-20 
-                           flex items-center ${statusColor.replace('bg-', 'border-')}`}>
-              <div className={`w-2 h-2 rounded-full ${statusColor} mr-2`}></div>
-              <span className="text-sm font-medium">{transaction.status || 'Unknown'}</span>
+            <div className={`px-4 py-2 rounded-xl ${status.color} bg-opacity-20 border border-opacity-20 
+                           flex items-center ${status.color.replace('bg-', 'border-')}`}>
+              <div className={`w-2 h-2 rounded-full ${status.color} mr-2`}></div>
+              <span className="text-sm font-medium">{status.text}</span>
             </div>
           </div>
           
@@ -90,12 +102,19 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
 
               <div>
                 <h2 className="text-sm font-semibold text-gray-400 mb-2">Block</h2>
-                <a 
-                  href={`/block/${transaction.blockNumber}`}
-                  className="text-gray-300 hover:text-[#ffa729] transition-colors duration-300"
-                >
-                  {transaction.blockNumber || 'Pending'}
-                </a>
+                {transaction.blockNumber ? (
+                  <div>
+                    <a 
+                      href={`/block/${transaction.blockNumber}`}
+                      className="text-gray-300 hover:text-[#ffa729] transition-colors duration-300"
+                    >
+                      #{transaction.blockNumber}
+                    </a>
+                    <p className="text-sm text-gray-400 mt-1">{confirmationText}</p>
+                  </div>
+                ) : (
+                  <p className="text-gray-300">Pending</p>
+                )}
               </div>
 
               <div>
@@ -121,26 +140,20 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               <div>
                 <h2 className="text-sm font-semibold text-gray-400 mb-2">Value</h2>
                 <p className="text-2xl font-semibold text-[#ffa729]">
-                  {transaction.value}
-                  <span className="text-sm text-gray-400 ml-2">QUANTA</span>
+                  {formattedValue}
+                  <span className="text-sm text-gray-400 ml-2">{unit}</span>
                 </p>
               </div>
 
               {(transaction.gasUsed || transaction.gasPrice) && (
                 <div className="space-y-4 pt-4 border-t border-gray-700">
-                  {transaction.gasUsed && (
-                    <div>
-                      <h2 className="text-sm font-semibold text-gray-400 mb-2">Gas Used</h2>
-                      <p className="text-gray-300">{transaction.gasUsed}</p>
-                    </div>
-                  )}
-
-                  {transaction.gasPrice && (
-                    <div>
-                      <h2 className="text-sm font-semibold text-gray-400 mb-2">Gas Price</h2>
-                      <p className="text-gray-300">{transaction.gasPrice}</p>
-                    </div>
-                  )}
+                  <div>
+                    <h2 className="text-sm font-semibold text-gray-400 mb-2">Transaction Fee</h2>
+                    <p className="text-2xl font-semibold text-[#ffa729]">
+                      {paidFees}
+                      <span className="text-sm text-gray-400 ml-2">QRL</span>
+                    </p>
+                  </div>
                 </div>
               )}
             </div>

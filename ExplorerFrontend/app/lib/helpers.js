@@ -1,7 +1,6 @@
 'use client';
 
 export function decodeToHex(input, format) {
-  // Using browser's built-in atob for base64 decoding
   const decoded = atob(input);
   let hex = '';
   for (let i = 0; i < decoded.length; i++) {
@@ -41,39 +40,117 @@ export function toFixed(x) {
   return num.toString();
 }
 
-export function formatAmount(amount) {
+export function formatGas(amount) {
+  // Handle undefined or null
+  if (amount === undefined || amount === null) {
+    return ['0', 'Shor'];
+  }
+
   // Handle zero amount
-  if (amount === 0 || amount === '0') {
-    return ['0', 'QRL'];
+  if (amount === 0 || amount === '0' || amount === '0x0') {
+    return ['0', 'Shor'];
   }
 
-  // Convert string to number if needed
-  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  try {
+    let value;
+    // Handle hex strings (e.g., "0x123")
+    if (typeof amount === 'string' && amount.startsWith('0x')) {
+      value = parseInt(amount, 16);
+    }
+    // Handle number values
+    else if (typeof amount === 'number') {
+      value = amount;
+    }
+    // Handle other formats
+    else {
+      value = BigInt(amount);
+    }
+    
+    // Return the numeric value as a string with 'Shor' unit
+    return [value.toString(), 'Shor'];
+  } catch (error) {
+    console.error('Error converting gas amount:', error, amount);
+    return ['0', 'Shor'];
+  }
+}
 
-  // Handle NaN
-  if (isNaN(num)) {
-    return ['0', 'QRL'];
+export function formatAmount(amount) {
+  // Handle undefined or null
+  if (amount === undefined || amount === null) {
+    return ['0.00', 'QRL'];
   }
 
-  // Convert to shor (1 QRL = 1e9 shor)
-  const shorValue = num * 1e9;
-
-  // If it's >= 1 QRL, show in QRL
-  if (num >= 1) {
-    return [num.toString(), 'QRL'];
+  // Handle zero amount
+  if (amount === 0 || amount === '0' || amount === '0x0') {
+    return ['0.00', 'QRL'];
   }
 
-  // If it's less than 1 shor or 0, show "0 shor"
-  if (shorValue < 1) {
-    return ['0', 'shor'];
+  let totalNum;
+  try {
+    // Handle hex strings (e.g., "0x123") from node
+    if (typeof amount === 'string' && amount.startsWith('0x')) {
+      const value = BigInt(amount);
+      const divisor = BigInt('1000000000000000000'); // 10^18
+      const wholePart = value / divisor;
+      const fractionalPart = value % divisor;
+      totalNum = Number(wholePart) + Number(fractionalPart) / Number(divisor);
+    }
+    // Handle float values (already scaled) from database
+    else if (typeof amount === 'number' && amount < 1000000000000000000) {
+      totalNum = amount;
+    }
+    // Handle raw number values (need scaling) from database
+    else if (typeof amount === 'number') {
+      const value = BigInt(Math.floor(amount));
+      const divisor = BigInt('1000000000000000000'); // 10^18
+      const wholePart = value / divisor;
+      const fractionalPart = value % divisor;
+      totalNum = Number(wholePart) + Number(fractionalPart) / Number(divisor);
+    }
+    // Handle other formats
+    else {
+      const value = BigInt(amount);
+      const divisor = BigInt('1000000000000000000'); // 10^18
+      const wholePart = value / divisor;
+      const fractionalPart = value % divisor;
+      totalNum = Number(wholePart) + Number(fractionalPart) / Number(divisor);
+    }
+  } catch (error) {
+    console.error('Error converting amount:', error, amount);
+    return ['0.00', 'QRL'];
   }
 
-  // Otherwise show the exact number of shor
-  return [Math.floor(shorValue).toString(), 'shor'];
+  // Format with appropriate decimal places, avoiding scientific notation
+  if (totalNum === 0) {
+    return ['0.00', 'QRL'];
+  } else if (totalNum < 0.000001) {
+    // For very small numbers, show all significant digits without trailing zeros
+    const str = totalNum.toFixed(21).replace(/\.?0+$/, '');
+    // Remove any scientific notation
+    const parts = str.split('e');
+    if (parts.length === 2) {
+      const mantissa = parts[0];
+      const exponent = parseInt(parts[1]);
+      if (exponent < 0) {
+        const abs = Math.abs(exponent);
+        return ['0.' + '0'.repeat(abs-1) + mantissa.replace('.', ''), 'QRL'];
+      }
+    }
+    return [str, 'QRL'];
+  } else if (totalNum < 1) {
+    // For numbers less than 1, show up to 6 decimal places
+    return [totalNum.toFixed(6).replace(/\.?0+$/, ''), 'QRL'];
+  } else if (totalNum < 1000) {
+    // For numbers between 1 and 999, show up to 4 decimal places
+    return [totalNum.toFixed(4).replace(/\.?0+$/, ''), 'QRL'];
+  } else {
+    // For large numbers, show 2 decimal places
+    return [totalNum.toFixed(2).replace(/\.?0+$/, ''), 'QRL'];
+  }
 }
 
 export function decodeBase64ToHexadecimal(rawData) {
-  // Using browser's built-in atob for base64 decoding
+  if (!rawData) return '';
   const decoded = atob(rawData);
   let hex = '';
   for (let i = 0; i < decoded.length; i++) {
@@ -84,12 +161,14 @@ export function decodeBase64ToHexadecimal(rawData) {
 }
 
 export function epochToISO(timestamp) {
+  if (!timestamp) return '1970-01-01';
   const date = new Date(timestamp * 1000); 
   const datePart = date.toISOString().split('T')[0];
   return datePart;
 }
 
 export function formatTimestamp(timestamp) {
+  if (!timestamp) return '';
   const date = new Date(timestamp * 1000);
   return date.toLocaleString('en-US', {
     day: 'numeric',
@@ -103,8 +182,7 @@ export function formatTimestamp(timestamp) {
 
 export function formatNumber(value) {
   if (typeof value !== "number" || isNaN(value)) {
-    console.error("Invalid value passed to formatNumber:", value);
-    return "Error";  // Default value
+    return "Error";
   }
   if (value >= 1e12) {
       value = (value / 1e12).toFixed(2) + 'T';
@@ -125,4 +203,19 @@ export function formatNumberWithCommas(x) {
     return "0";
   }
   return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+export function epochsToDays(epochs) {
+  // Each epoch is 128 slots
+  // Each slot takes 60 seconds
+  // So each epoch is 128 * 60 seconds
+  // Convert to days
+  return (epochs * 128 * 60) / (24 * 60 * 60);
+}
+
+export function toHexString(num) {
+  if (num === undefined || num === null || num === 0) {
+    return '0x0';
+  }
+  return '0x' + num.toString(16);
 }

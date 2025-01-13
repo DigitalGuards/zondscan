@@ -2,15 +2,94 @@ package routes
 
 import (
 	"backendAPI/db"
+	"backendAPI/models"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
 func UserRoute(router *gin.Engine) {
+	// Add pending transactions endpoint with pagination
+	router.GET("/pending-transactions", func(c *gin.Context) {
+		// Parse pagination parameters
+		page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+
+		result, err := db.GetPendingTransactions(page, limit)
+		if err != nil {
+			log.Printf("Error fetching pending transactions: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to fetch pending transactions: %v", err),
+			})
+			return
+		}
+
+		// Log the result for debugging
+		log.Printf("Found %d pending transactions", len(result.Transactions))
+
+		// Return empty array instead of null for transactions
+		if result.Transactions == nil {
+			result.Transactions = make([]models.PendingTransaction, 0)
+		}
+
+		c.JSON(http.StatusOK, result)
+	})
+
+	// Add endpoint for fetching a specific pending transaction
+	router.GET("/pending-transaction/:hash", func(c *gin.Context) {
+		hash := c.Param("hash")
+		transaction, err := db.GetPendingTransactionByHash(hash)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		// If not found in pending, check if it's in the transactions collection
+		if transaction == nil {
+			// Check if transaction exists in the transactions collection
+			tx, err := db.GetTransactionByHash(hash)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			
+			if tx != nil {
+				// Transaction is mined - return formatted response
+				c.JSON(http.StatusOK, gin.H{
+					"transaction": gin.H{
+						"hash":        tx.Hash,        // Already has 0x prefix
+						"status":      "mined",
+						"blockNumber": tx.BlockNumber,
+						"timestamp":   time.Now().Unix(),
+					},
+				})
+				return
+			}
+
+			// Transaction not found in either collection
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "Transaction not found",
+				"details": "This transaction is no longer in the mempool. It may have been dropped or replaced.",
+			})
+			return
+		}
+
+		// If transaction is mined, delete it from pending collection
+		if transaction.Status == "mined" {
+			if err := db.DeleteMinedTransaction(hash); err != nil {
+				// Log error but don't fail the request
+				log.Printf("Error deleting mined transaction %s: %v\n", hash, err)
+			}
+		}
+
+		c.JSON(http.StatusOK, gin.H{"transaction": transaction})
+	})
+
 	router.GET("/overview", func(c *gin.Context) {
 		// Get market cap with default value
 		marketCap := db.GetMarketCap()
@@ -30,13 +109,27 @@ func UserRoute(router *gin.Engine) {
 		// Get daily transaction volume with default value
 		volume := db.ReturnDailyTransactionsVolume()
 
+		// Get validator count
+		validatorCount, err := db.CountValidators()
+		if err != nil {
+			validatorCount = 0
+		}
+
+		// Get contract count
+		contractCount, err := db.CountContracts()
+		if err != nil {
+			contractCount = 0
+		}
+
 		// Return response with default values if data isn't available
 		c.JSON(http.StatusOK, gin.H{
-			"marketcap":    marketCap,    // Returns 0 if not available
-			"currentPrice": currentPrice, // Returns 0 if not available
-			"countwallets": walletCount,  // Returns 0 if not available
-			"circulating":  circulating,  // Returns "0" if not available
-			"volume":       volume,       // Returns 0 if not available
+			"marketcap":      marketCap,      // Returns 0 if not available
+			"currentPrice":   currentPrice,   // Returns 0 if not available
+			"countwallets":   walletCount,    // Returns 0 if not available
+			"circulating":    circulating,    // Returns "0" if not available
+			"volume":         volume,         // Returns 0 if not available
+			"validatorCount": validatorCount, // Returns 0 if not available
+			"contractCount":  contractCount,  // Returns 0 if not available
 			"status": gin.H{
 				"syncing":         true, // Indicate that data is still being synced
 				"dataInitialized": marketCap > 0 || currentPrice > 0 || walletCount > 0 || circulating != "0" || volume > 0,
@@ -78,9 +171,21 @@ func UserRoute(router *gin.Engine) {
 			fmt.Println(err)
 		}
 
+		// Get latest block for confirmation count
+		latestBlock, err := db.ReturnLatestBlock()
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		var latestBlockNumber uint64
+		if len(latestBlock) > 0 {
+			latestBlockNumber = latestBlock[0].Result.Number
+		}
+
 		c.JSON(http.StatusOK, gin.H{
-			"txs":   txs,
-			"total": countTransactions,
+			"txs":         txs,
+			"total":       countTransactions,
+			"latestBlock": latestBlockNumber,
 		})
 	})
 
@@ -138,6 +243,17 @@ func UserRoute(router *gin.Engine) {
 			fmt.Printf("Error getting contract code: %v\n", err)
 		}
 
+		// Get latest block for confirmation count
+		latestBlock, err := db.ReturnLatestBlock()
+		if err != nil {
+			fmt.Printf("Error getting latest block: %v\n", err)
+		}
+
+		var latestBlockNumber uint64
+		if len(latestBlock) > 0 {
+			latestBlockNumber = latestBlock[0].Result.Number
+		}
+
 		// Response aggregation
 		c.JSON(http.StatusOK, gin.H{
 			"address":                          addressData,
@@ -146,6 +262,7 @@ func UserRoute(router *gin.Engine) {
 			"transactions_by_address":          TransactionsByAddress,
 			"internal_transactions_by_address": InternalTransactionsByAddress,
 			"contract_code":                    contractCodeData,
+			"latestBlock":                      latestBlockNumber,
 		})
 	})
 
@@ -160,9 +277,15 @@ func UserRoute(router *gin.Engine) {
 		if err != nil {
 			fmt.Println(err)
 		}
+
+		var latestBlockNumber uint64
+		if len(latestBlock) > 0 {
+			latestBlockNumber = latestBlock[0].Result.Number
+		}
+
 		c.JSON(http.StatusOK, gin.H{
 			"response":    query,
-			"latestBlock": latestBlock,
+			"latestBlock": latestBlockNumber,
 		})
 	})
 
@@ -237,11 +360,69 @@ func UserRoute(router *gin.Engine) {
 	})
 
 	router.GET("/validators", func(c *gin.Context) {
-		query, err := db.ReturnValidators()
+		pageToken := c.Query("page_token")
+		rawValidators, err := db.ReturnValidators(pageToken)
 		if err != nil {
-			fmt.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to fetch validators: %v", err),
+			})
+			return
 		}
-		c.JSON(http.StatusOK, gin.H{"response": query})
+
+		// Get the current epoch from the latest block
+		latestBlock, err := db.ReturnLatestBlock()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get latest block"})
+			return
+		}
+		currentEpoch := int(latestBlock[0].Result.Number / 128) // Each epoch is 128 blocks
+
+		// Initialize response
+		response := models.ValidatorResponse{
+			Validators:    make([]models.Validator, 0),
+			TotalStaked:   "0",
+			NextPageToken: pageToken, // Pass through the page token
+		}
+
+		totalStaked := float64(0)
+
+		processedValidators := make(map[string]bool)
+
+		// Process validators by slot
+		for _, slotValidators := range rawValidators.Resultvalidator.Validatorsbyslotnumber {
+			// Process leader
+			validatorEntry := models.Validator{
+				Address:      slotValidators.Leader,
+				Uptime:       100.0, // TODO: Calculate actual uptime from historical data
+				Age:          currentEpoch,
+				StakedAmount: "40000000000000000000000", // 40000 Quanta in Wei (18 decimal places)
+				IsActive:     true,
+			}
+			response.Validators = append(response.Validators, validatorEntry)
+			totalStaked += 40000000000000000000000
+
+			// Process attestors
+			for _, attestor := range slotValidators.Attestors {
+				if _, exists := processedValidators[attestor]; exists {
+					continue
+				}
+				processedValidators[attestor] = true
+
+				validatorEntry := models.Validator{
+					Address:      attestor,
+					Uptime:       100.0,
+					Age:          currentEpoch,
+					StakedAmount: "40000000000000000000000", // 40000 Quanta in Wei (18 decimal places)
+					IsActive:     true,
+				}
+				response.Validators = append(response.Validators, validatorEntry)
+				totalStaked += 40000000000000000000000
+			}
+		}
+
+		response.TotalStaked = fmt.Sprintf("%.0f", totalStaked)
+
+		c.JSON(http.StatusOK, response)
 	})
 
 	router.GET("/transactions", func(c *gin.Context) {
@@ -253,11 +434,22 @@ func UserRoute(router *gin.Engine) {
 	})
 
 	router.GET("/contracts", func(c *gin.Context) {
-		query, err := db.ReturnContracts()
+		// Parse pagination parameters
+		page, _ := strconv.ParseInt(c.DefaultQuery("page", "0"), 10, 64)
+		limit, _ := strconv.ParseInt(c.DefaultQuery("limit", "10"), 10, 64)
+		search := c.Query("search")
+
+		query, total, err := db.ReturnContracts(page, limit, search)
 		if err != nil {
-			fmt.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to fetch contracts: %v", err),
+			})
+			return
 		}
-		c.JSON(http.StatusOK, gin.H{"response": query})
+		c.JSON(http.StatusOK, gin.H{
+			"response": query,
+			"total":    total,
+		})
 	})
 
 	router.GET("/block/:query", func(c *gin.Context) {

@@ -31,7 +31,7 @@ check_dependencies() {
     command -v node >/dev/null 2>&1 || { print_error "Node.js is required but not installed."; }
     command -v npm >/dev/null 2>&1 || { print_error "npm is required but not installed."; }
     command -v go >/dev/null 2>&1 || { print_error "Go is required but not installed."; }
-    command -v mongod >/dev/null 2>&1 || { print_error "MongoDB is required but not installed."; }
+    #command -v mongod >/dev/null 2>&1 || { print_error "MongoDB is required but not installed."; }
 
     # Install PM2 if not present
     if ! command -v pm2 >/dev/null 2>&1; then
@@ -41,11 +41,11 @@ check_dependencies() {
 }
 
 # Check if MongoDB is running
-check_mongodb() {
-    if ! nc -z localhost 27017; then
-        print_error "MongoDB is not running on localhost:27017."
-    fi
-}
+#check_mongodb() {
+#    if ! nc -z localhost 27017; then
+#        print_error "MongoDB is not running on localhost:27017."
+#    fi
+#}
 
 # Check if Zond node is accessible
 check_zond_node() {
@@ -134,19 +134,13 @@ EOL
 # Setup blockchain synchronizer
 setup_synchronizer() {
     print_status "Setting up blockchain synchronizer..."
-    cd "$BASE_DIR/QRLtoMongoDB-PoS" || print_error "Synchronizer directory not found"
+    cd "$BASE_DIR/Zond2mongoDB" || print_error "Synchronizer directory not found"
 
     # Create .env file
     cat > .env << EOL
 MONGOURI=mongodb://localhost:27017
 NODE_URL=http://REDACTED:8545
-EOL
-
-    # Also create .env in the rpc directory to ensure it's available
-    mkdir -p rpc
-    cat > rpc/.env << EOL
-MONGOURI=mongodb://localhost:27017
-NODE_URL=http://REDACTED:8545
+BEACONCHAIN_API=http://REDACTED:3500
 EOL
 
     # Build synchronizer with explicit output name
@@ -155,12 +149,7 @@ EOL
 
     # Start synchronizer with PM2, explicitly setting environment variables
     print_status "Starting synchronizer with PM2..."
-    MONGOURI=mongodb://localhost:27017 NODE_URL=http://REDACTED:8545 pm2 start ./synchroniser.exe \
-        --name "synchroniser" \
-        --cwd "$BASE_DIR/QRLtoMongoDB-PoS" \
-        --env MONGOURI=mongodb://localhost:27017 \
-        --env NODE_URL=http://REDACTED:8545 \
-        || print_error "Failed to start synchronizer"
+    pm2 start ./syncer.exe --name "synchroniser" --cwd "$BASE_DIR/Zond2mongoDB" || print_error "Failed to start synchronizer"
 }
 
 # Save PM2 processes
@@ -180,7 +169,7 @@ main() {
     check_dependencies
 
     # Check if MongoDB and Zond node are running
-    check_mongodb
+    #check_mongodb
     check_zond_node
 
     # Clone and setup

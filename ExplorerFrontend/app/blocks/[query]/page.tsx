@@ -1,14 +1,14 @@
 import { notFound } from 'next/navigation';
+import { Metadata } from 'next';
 import BlocksClient from './blocks-client';
 import type { BlocksResponse } from './types';
+import config from '../../../config';
 
 export const dynamic = 'force-dynamic';
 
 async function getBlocks(page: string): Promise<BlocksResponse> {
-  const handlerUrl = process.env.NEXT_PUBLIC_HANDLER_URL || 'http://localhost:8080';
-  
   try {
-    const response = await fetch(`${handlerUrl}/blocks?page=${page}`, {
+    const response = await fetch(`${config.handlerUrl}/blocks?page=${page}`, {
       method: 'GET',
       headers: {
         'Accept': 'application/json'
@@ -31,6 +31,23 @@ async function getBlocks(page: string): Promise<BlocksResponse> {
 
 interface PageProps {
     params: Promise<{ query: string }>;
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ query: string }> }): Promise<Metadata> {
+  const resolvedParams = await params;
+  const pageNumber = resolvedParams.query || '1';
+  
+  return {
+    title: `Latest Synced Blocks - Page ${pageNumber} | ZondScan`,
+    description: `View the most recently synced blocks on the Zond blockchain network. Page ${pageNumber} of the blocks list.`,
+    openGraph: {
+      title: `Latest Synced Blocks - Page ${pageNumber} | ZondScan`,
+      description: `View the most recently synced blocks on the Zond blockchain network. Page ${pageNumber} of the blocks list.`,
+      url: `https://zondscan.com/blocks/${pageNumber}`,
+      siteName: 'ZondScan',
+      type: 'website',
+    },
+  };
 }
 
 export default async function BlocksPage({ params }: PageProps): Promise<JSX.Element> {
