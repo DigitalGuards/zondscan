@@ -228,27 +228,31 @@ export default function HomeClient() {
                    border border-[#3d3d3d] shadow-xl
                    hover:border-[#ffa729] transition-all duration-300
                    group ${!data.dataInitialized ? 'opacity-50' : ''}`}>
-      <div className="relative p-3 sm:p-6 text-center min-h-[120px] sm:min-h-[160px] flex flex-col justify-center">
+      <div className="relative p-2 sm:p-6 text-center min-h-[90px] sm:min-h-[160px] flex flex-col justify-center">
         {item.loading ? (
           <div className="flex flex-col items-center justify-center space-y-2">
-            <div className="w-20 sm:w-32 h-5 sm:h-8 bg-gray-700/50 rounded animate-pulse"></div>
-            <div className="w-16 sm:w-24 h-3 sm:h-4 bg-gray-700/50 rounded animate-pulse"></div>
+            <div className="w-16 sm:w-32 h-4 sm:h-8 bg-gray-700/50 rounded animate-pulse"></div>
+            <div className="w-12 sm:w-24 h-2 sm:h-4 bg-gray-700/50 rounded animate-pulse"></div>
           </div>
         ) : item.error ? (
           <div className="flex flex-col items-center justify-center text-red-400">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 sm:h-8 w-5 sm:w-8 mb-1 sm:mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 sm:h-8 w-4 sm:w-8 mb-1 sm:mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <span className="text-xs">Failed to load data</span>
           </div>
         ) : (
           <>
-            <div className="flex justify-center">{item.icon}</div>
-            <h4 className="text-lg sm:text-3xl font-bold mb-1 sm:mb-3 text-[#ffa729] 
+            <div className="flex justify-center">
+              <div className="h-4 w-4 sm:h-6 sm:w-6 mb-1 sm:mb-2 text-[#ffa729]">
+                {item.icon}
+              </div>
+            </div>
+            <h4 className="text-base sm:text-3xl font-bold mb-1 sm:mb-3 text-[#ffa729] 
                         group-hover:scale-110 transition-transform duration-300 break-words">
               {item.data}
             </h4>
-            <p className="text-[11px] sm:text-sm text-gray-300 font-medium">
+            <p className="text-[10px] sm:text-sm text-gray-300 font-medium">
               {item.title}
             </p>
           </>
@@ -273,14 +277,15 @@ export default function HomeClient() {
         </video>
         <div style={overlayStyle}></div>
       </div>
-      
-      {/* Existing content */}
-      <div className="min-h-screen">
-        <div className="max-w-[1200px] mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-8">
+
+      {/* Main Content */}
+      <div className="relative z-10 px-4 lg:px-8 pt-6.81 lg:pt-8">
+        {/* Search Bar */}
+        <div className="max-w-3xl mx-auto mt-4">
           <div className="mb-4 sm:mb-10">
             <SearchBar />
           </div>
-          
+
           {!data.dataInitialized && (
             <div className="mb-4 sm:mb-8 p-2 sm:p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-500">
               <div className="flex items-center">
@@ -292,12 +297,12 @@ export default function HomeClient() {
               </div>
             </div>
           )}
-          
+
           <div className="space-y-4 sm:space-y-8">
             {/* Blockchain Stats */}
             <div>
               <h2 className="text-base sm:text-xl font-bold mb-2 sm:mb-4 text-[#ffa729]">Blockchain Statistics</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4">
                 {blockchainStats.map((item, idx) => (
                   <StatCard key={idx} item={item} />
                 ))}
@@ -307,7 +312,7 @@ export default function HomeClient() {
             {/* Financial Stats */}
             <div>
               <h2 className="text-base sm:text-xl font-bold mb-2 sm:mb-4 text-[#ffa729]">Financial Statistics</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 mb-4">
+              <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-4">
                 {financialStats.map((item, idx) => (
                   <StatCard key={idx} item={item} />
                 ))}

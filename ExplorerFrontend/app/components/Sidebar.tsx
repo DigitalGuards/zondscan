@@ -92,7 +92,7 @@ export default function Sidebar() {
       <div className={`lg:hidden fixed top-0 left-0 right-0 z-50 bg-[#1a1a1a] transition-transform duration-300 ${
         isVisible ? 'translate-y-0' : '-translate-y-full'
       }`}>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#2d2d2d]">
+        <div className="flex items-center justify-between px-4 py-2 border-b border-[#2d2d2d]">
           <button
             onClick={() => setIsOpen(!isOpen)}
             className="p-2 rounded-lg bg-[#2d2d2d] text-gray-300 hover:bg-[#3d3d3d] transition-colors"
@@ -104,17 +104,21 @@ export default function Sidebar() {
               <Bars3Icon className="h-6 w-6" />
             )}
           </button>
-          <span className="text-lg font-semibold text-gray-300">ZondScan Explorer</span>
-          <div className="relative w-8 h-8">
-            <Image 
-              src={QRLFavicon} 
-              alt="QRL"
-              fill
-              sizes="32px"
-              style={{ objectFit: 'contain' }}
-              loading="eager"
-              className="hover:scale-110 transition-transform duration-300"
-            />
+          <div className="flex flex-col items-center">
+            <div className="relative w-12 h-10">
+              <Image 
+                src="/Zond_logo_XMSS_600x400.gif" 
+                alt="Zond Logo"
+                fill
+                sizes="48px"
+                style={{ objectFit: 'contain' }}
+                loading="eager"
+                className="hover:scale-110 transition-transform duration-300"
+              />
+            </div>
+            <div className="flex flex-col items-center">
+              <span className="text-sm font-semibold text-gray-300">ZondScan</span>
+            </div>
           </div>
         </div>
       </div>
@@ -135,21 +139,23 @@ export default function Sidebar() {
                       ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
                       w-64 lg:top-0 top-[53px]`}>
         <div className="p-4">
-          <Link href="/" className="flex items-center gap-1.5 mb-6 px-1 group" onClick={() => setIsOpen(false)}>
-            <div className="w-6 h-6 relative">
+          <Link href="/" className="flex flex-col items-center mb-6 px-1 group" onClick={() => setIsOpen(false)}>
+            <div className="w-32 h-24 relative">
               <Image 
-                src={QRLFavicon} 
-                alt="QRL" 
+                src="/Zond_logo_XMSS_600x400.gif" 
+                alt="Zond Logo" 
                 fill
-                sizes="24px"
+                sizes="128px"
                 style={{ objectFit: 'contain' }}
                 loading="eager"
                 className="group-hover:scale-110 transition-transform duration-300"
               />
             </div>
-            <span className="text-base font-medium text-gray-300 whitespace-nowrap group-hover:text-[#ffa729] transition-colors">
-              ZondScan Explorer
-            </span>
+            <div className="flex flex-col items-center mt-2">
+              <span className="text-lg font-semibold text-gray-300 whitespace-nowrap group-hover:text-[#ffa729] transition-colors">
+                ZondScan
+              </span>
+            </div>
           </Link>
 
           <nav className="space-y-3">
