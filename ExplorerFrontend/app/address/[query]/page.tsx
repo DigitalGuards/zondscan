@@ -3,6 +3,7 @@ import axios from "axios";
 import config from '../../../config';
 import { headers } from "next/headers";
 import CopyAddressButton from "../../components/CopyAddressButton";
+import QRCodeButton from "../../components/QRCodeButton";
 import TanStackTable from "../../components/TanStackTable";
 import BalanceDisplay from "./balance-display";
 import ActivityDisplay from "./activity-display";
@@ -136,8 +137,9 @@ export default async function Address({ params }: PageProps): Promise<JSX.Elemen
                                         {addressSegment}
                                     </div>
                                     {addressSegment && (
-                                        <div className="mt-2 md:mt-0 md:ml-2">
+                                        <div className="flex items-center gap-2 mb-2 md:ml-6">
                                             <CopyAddressButton address={addressSegment} />
+                                            <QRCodeButton address={addressSegment} />
                                         </div>
                                     )}
                                 </div>

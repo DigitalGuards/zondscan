@@ -38,11 +38,11 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
   const pageNumber = resolvedParams.query || '1';
   
   return {
-    title: `Blocks - Page ${pageNumber} | ZondScan`,
-    description: `Explore Zond blockchain blocks. Page ${pageNumber} of the blocks list showing latest mined blocks, block rewards, transactions count, and more.`,
+    title: `Latest Synced Blocks - Page ${pageNumber} | ZondScan`,
+    description: `View the most recently synced blocks on the Zond blockchain network. Page ${pageNumber} of the blocks list.`,
     openGraph: {
-      title: `Blocks - Page ${pageNumber} | ZondScan`,
-      description: `Explore Zond blockchain blocks. Page ${pageNumber} of the blocks list showing latest mined blocks, block rewards, transactions count, and more.`,
+      title: `Latest Synced Blocks - Page ${pageNumber} | ZondScan`,
+      description: `View the most recently synced blocks on the Zond blockchain network. Page ${pageNumber} of the blocks list.`,
       url: `https://zondscan.com/blocks/${pageNumber}`,
       siteName: 'ZondScan',
       type: 'website',

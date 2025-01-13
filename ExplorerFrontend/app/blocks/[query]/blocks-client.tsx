@@ -120,7 +120,7 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
   if (isLoading) {
     return (
       <div className="p-4 sm:p-8">
-        <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-[#ffa729]">Blocks</h1>
+        <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-[#ffa729]">Latest Synced Blocks</h1>
         <div className="space-y-3 sm:space-y-4">
           {[...Array(5)].map((_, i) => (
             <div 
@@ -147,7 +147,7 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
   if (isError) {
     return (
       <div className="p-4 sm:p-8">
-        <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-[#ffa729]">Blocks</h1>
+        <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-[#ffa729]">Latest Synced Blocks</h1>
         <div className="bg-red-900/50 border border-red-500 text-red-200 px-4 sm:px-6 py-3 sm:py-4 rounded-xl">
           <p className="font-bold">Error:</p>
           <p className="text-sm sm:text-base">{error instanceof Error ? error.message : 'Failed to load blocks'}</p>
@@ -158,7 +158,7 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
 
   return (
     <div className="p-4 sm:p-8">
-      <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-[#ffa729]">Blocks</h1>
+      <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-[#ffa729]">Latest Synced Blocks</h1>
       
       <div className="max-w-[1200px] mx-auto mb-8">
         <SearchBar />
