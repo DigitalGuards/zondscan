@@ -219,3 +219,8 @@ export function toHexString(num) {
   }
   return '0x' + num.toString(16);
 }
+
+export function truncateHash(hash, startLength = 6, endLength = 4) {
+  if (!hash || hash.length < startLength + endLength) return hash;
+  return `${hash.slice(0, startLength)}...${hash.slice(-endLength)}`;
+}

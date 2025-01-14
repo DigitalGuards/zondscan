@@ -107,7 +107,7 @@ export default function Sidebar() {
           <div className="flex flex-col items-center">
             <div className="relative w-12 h-10">
               <Image 
-                src="/Zond_logo_XMSS_600x400.gif" 
+                src="/ZondScan_Logo.gif" 
                 alt="Zond Logo"
                 fill
                 sizes="48px"
@@ -142,7 +142,7 @@ export default function Sidebar() {
           <Link href="/" className="flex flex-col items-center mb-6 px-1 group" onClick={() => setIsOpen(false)}>
             <div className="w-32 h-24 relative">
               <Image 
-                src="/Zond_logo_XMSS_600x400.gif" 
+                src="/ZondScan_Logo.gif" 
                 alt="Zond Logo" 
                 fill
                 sizes="128px"

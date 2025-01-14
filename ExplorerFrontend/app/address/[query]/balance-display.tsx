@@ -8,16 +8,16 @@ export default function BalanceDisplay({ balance }: BalanceDisplayProps): JSX.El
   const [formattedBalance, unit] = formatAmount(balance);
 
   return (
-    <div className="relative overflow-hidden rounded-xl 
+    <div className="relative overflow-hidden rounded-lg md:rounded-xl 
                   bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
-                  border border-[#3d3d3d] p-4 lg:p-6">
-      <h2 className="text-sm font-semibold text-gray-400 mb-3 lg:mb-4">Balance</h2>
-      <div className="flex items-baseline flex-wrap gap-2">
-        <span className="text-xl sm:text-2xl lg:text-3xl font-bold text-[#ffa729] break-all">{formattedBalance}</span>
-        <span className="text-xs sm:text-sm text-gray-400">{unit}</span>
+                  border border-[#3d3d3d] p-3 md:p-4 lg:p-6">
+      <h2 className="text-xs md:text-sm font-semibold text-gray-400 mb-2 md:mb-3 lg:mb-4">Balance</h2>
+      <div className="flex items-baseline flex-wrap gap-1.5 md:gap-2">
+        <span className="text-lg md:text-xl lg:text-2xl font-bold text-[#ffa729] break-all">{formattedBalance}</span>
+        <span className="text-[10px] md:text-xs lg:text-sm text-gray-400">{unit}</span>
       </div>
       {balance > STAKING_QUANTA && (
-        <div className="mt-3 lg:mt-4 px-2 lg:px-3 py-1 bg-green-500/10 text-green-400 text-xs sm:text-sm rounded-lg inline-block">
+        <div className="mt-2 md:mt-3 lg:mt-4 px-2 md:px-2.5 lg:px-3 py-0.5 md:py-1 bg-green-500/10 text-green-400 text-[10px] md:text-xs lg:text-sm rounded-md md:rounded-lg inline-block">
           Qualified for Staking
         </div>
       )}
