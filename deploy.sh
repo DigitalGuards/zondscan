@@ -185,8 +185,8 @@ main() {
     check_dependencies
 
     # Check if MongoDB and Zond node are running
-    check_mongodb
-    check_zond_node
+    #check_mongodb
+    #check_zond_node
 
     # Check if required ports are available
     #check_port 3000
