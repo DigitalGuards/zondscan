@@ -51,18 +51,42 @@ func batchSync(fromBlock string, toBlock string) string {
 		batchSize = 64
 	}
 
-	// Start producers in batches
+	// Start producers in batches with retry logic
 	currentBlock := fromBlock
 	for utils.CompareHexNumbers(currentBlock, toBlock) < 0 {
 		endBlock := utils.AddHexNumbers(currentBlock, utils.IntToHex(batchSize))
 		if utils.CompareHexNumbers(endBlock, toBlock) > 0 {
 			endBlock = toBlock
 		}
-		producers <- producer(currentBlock, endBlock)
-		logger.Info("Processing block range",
-			zap.String("from", currentBlock),
-			zap.String("to", endBlock))
-		currentBlock = endBlock
+
+		// Retry logic for producer
+		var producerChan <-chan Data
+		for retries := 0; retries < 3; retries++ {
+			producerChan = producer(currentBlock, endBlock)
+			if producerChan != nil {
+				break
+			}
+			logger.Warn("Failed to create producer, retrying...",
+				zap.String("from", currentBlock),
+				zap.String("to", endBlock),
+				zap.Int("retry", retries+1))
+			time.Sleep(time.Duration(1<<uint(retries)) * time.Second)
+		}
+
+		if producerChan != nil {
+			producers <- producerChan
+			logger.Info("Processing block range",
+				zap.String("from", currentBlock),
+				zap.String("to", endBlock))
+			currentBlock = endBlock
+		} else {
+			logger.Error("Failed to process block range after retries",
+				zap.String("from", currentBlock),
+				zap.String("to", endBlock))
+			// Store the last successful block
+			db.StoreLastKnownBlockNumber(currentBlock)
+			return currentBlock
+		}
 	}
 
 	close(producers)
@@ -72,23 +96,36 @@ func batchSync(fromBlock string, toBlock string) string {
 }
 
 func Sync() {
-	// Try to get the last synced block, fallback to latest from DB if not found
-	nextBlock := db.GetLastKnownBlockNumber()
-	if nextBlock == "0x0" {
-		nextBlock = db.GetLatestBlockNumberFromDB()
+	var nextBlock string
+	var maxHex string
+	var err error
+
+	// Retry getting initial sync points with exponential backoff
+	for retries := 0; retries < 5; retries++ {
+		// Try to get the last synced block, fallback to latest from DB if not found
+		nextBlock = db.GetLastKnownBlockNumber()
+		if nextBlock == "0x0" {
+			nextBlock = db.GetLatestBlockNumberFromDB()
+		}
+		nextBlock = utils.AddHexNumbers(nextBlock, "0x1")
+
+		maxHex, err = rpc.GetLatestBlock()
+		if err == nil {
+			break
+		}
+		logger.Warn("Failed to get latest block, retrying...",
+			zap.Error(err),
+			zap.Int("retry", retries+1))
+		time.Sleep(time.Duration(1<<uint(retries)) * time.Second)
 	}
-	nextBlock = utils.AddHexNumbers(nextBlock, "0x1")
-	logger.Info("Starting sync from block number", zap.String("block", nextBlock))
 
-	wg := sync.WaitGroup{}
-
-	maxHex, err := rpc.GetLatestBlock()
 	if err != nil {
-		logger.Error("Failed to get latest block", zap.Error(err))
-		// Don't exit on RPC error, retry after delay
-		time.Sleep(10 * time.Second)
+		logger.Error("Failed to get latest block after retries", zap.Error(err))
 		return
 	}
+
+	logger.Info("Starting sync from block number", zap.String("block", nextBlock))
+	wg := sync.WaitGroup{}
 	logger.Info("Latest block from network", zap.String("block", maxHex))
 
 	// Create a buffered channel of read only channels, with length 32.
@@ -272,51 +309,50 @@ func processSubsequentBlocks(currentBlock string) string {
 				zap.String("expected_parent", currentDBHash),
 				zap.String("actual_parent", previousHash))
 
-			// Walk back through the chain until we find a matching block
-			var lastValidBlock string
-			var foundFork bool
+			// Handle chain reorganization
 			startRollback := utils.SubtractHexNumbers(currentBlock, "0x1")
+			lastKnownGoodBlock := db.GetLastKnownBlockNumber()
 
-			for blockNum := startRollback; utils.CompareHexNumbers(blockNum, "0x0") > 0 &&
-				utils.CompareHexNumbers(utils.SubtractHexNumbers(startRollback, blockNum), maxRollback) < 0; blockNum = utils.SubtractHexNumbers(blockNum, "0x1") {
+			// If we can't determine the last known good block, roll back a fixed amount
+			if lastKnownGoodBlock == "0x0" {
+				rollbackPoint := utils.SubtractHexNumbers(startRollback, "0x32") // Roll back 50 blocks
+				logger.Warn("No last known good block found, rolling back fixed amount",
+					zap.String("rollback_to", rollbackPoint))
+				return rollbackPoint
+			}
 
-				prevBlockData, err := rpc.GetBlockByNumberMainnet(blockNum)
-				if err != nil {
-					logger.Warn("Failed to get previous block data",
-						zap.String("block", blockNum),
-						zap.Error(err))
-					continue
-				}
+			// Verify the last known good block is still valid
+			lastGoodBlockData, err := rpc.GetBlockByNumberMainnet(lastKnownGoodBlock)
+			if err != nil {
+				logger.Error("Failed to get last known good block",
+					zap.String("block", lastKnownGoodBlock),
+					zap.Error(err))
+				return utils.SubtractHexNumbers(lastKnownGoodBlock, "0x32") // Roll back 50 blocks from last known
+			}
 
-				dbHash := db.GetLatestBlockHashHeaderFromDB(blockNum)
-				if dbHash == prevBlockData.Result.Hash {
-					lastValidBlock = blockNum
-					foundFork = true
-					break
-				}
+			dbHash := db.GetLatestBlockHashHeaderFromDB(lastKnownGoodBlock)
+			if dbHash != lastGoodBlockData.Result.Hash {
+				logger.Warn("Last known good block no longer matches chain",
+					zap.String("block", lastKnownGoodBlock),
+					zap.String("db_hash", dbHash),
+					zap.String("chain_hash", lastGoodBlockData.Result.Hash))
+				return utils.SubtractHexNumbers(lastKnownGoodBlock, "0x32") // Roll back 50 blocks from last known
+			}
 
+			// Roll back all blocks after the last known good block
+			for blockNum := startRollback; utils.CompareHexNumbers(blockNum, lastKnownGoodBlock) > 0; blockNum = utils.SubtractHexNumbers(blockNum, "0x1") {
 				logger.Info("Rolling back block",
-					zap.String("block", blockNum),
-					zap.String("hash", dbHash))
+					zap.String("block", blockNum))
 				db.Rollback(blockNum)
 			}
 
-			if !foundFork {
-				logger.Error("Failed to find fork point within reasonable range",
-					zap.String("start_block", startRollback),
-					zap.String("end_block", utils.SubtractHexNumbers(startRollback, maxRollback)))
-				// Back off to allow network to stabilize
-				time.Sleep(10 * time.Second)
-				return utils.SubtractHexNumbers(startRollback, maxRollback)
-			}
-
-			logger.Info("Found fork point, resuming sync",
-				zap.String("last_valid_block", lastValidBlock),
-				zap.String("blocks_rolled_back", utils.SubtractHexNumbers(currentBlock, lastValidBlock)))
+			logger.Info("Chain reorganization complete",
+				zap.String("last_valid_block", lastKnownGoodBlock),
+				zap.String("blocks_rolled_back", utils.SubtractHexNumbers(currentBlock, lastKnownGoodBlock)))
 
 			// Add a delay to allow network to stabilize
 			time.Sleep(5 * time.Second)
-			return utils.AddHexNumbers(lastValidBlock, "0x1")
+			return utils.AddHexNumbers(lastKnownGoodBlock, "0x1")
 		}
 
 		// If we get here, we'll retry with the same block
@@ -412,12 +448,29 @@ func runTaskWithRetry(task func(), taskName string) {
 }
 
 func processBlockPeriodically() {
-	nextBlock := utils.AddHexNumbers(db.GetLatestBlockNumberFromDB(), "0x1")
+	// Get last known block from sync state
+	nextBlock := db.GetLastKnownBlockNumber()
+	if nextBlock == "0x0" {
+		nextBlock = db.GetLatestBlockNumberFromDB()
+	}
+	nextBlock = utils.AddHexNumbers(nextBlock, "0x1")
 
-	// Get latest block number
-	latestBlockHex, err := rpc.GetLatestBlock()
+	// Get latest block number with retries
+	var latestBlockHex string
+	var err error
+	for retries := 0; retries < 3; retries++ {
+		latestBlockHex, err = rpc.GetLatestBlock()
+		if err == nil {
+			break
+		}
+		logger.Warn("Failed to get latest block, retrying...",
+			zap.Error(err),
+			zap.Int("retry", retries+1))
+		time.Sleep(time.Duration(1<<uint(retries)) * time.Second)
+	}
+
 	if err != nil {
-		logger.Error("Failed to get latest block", zap.Error(err))
+		logger.Error("Failed to get latest block after retries", zap.Error(err))
 		return
 	}
 
@@ -426,11 +479,32 @@ func processBlockPeriodically() {
 		blocksBehind := utils.SubtractHexNumbers(latestBlockHex, nextBlock)
 		if utils.CompareHexNumbers(blocksBehind, "0x32") > 0 { // Use batch sync if more than 50 blocks behind
 			logger.Info("Switching to batch sync mode",
-				zap.String("blocks_behind", blocksBehind))
-			nextBlock = batchSync(nextBlock, latestBlockHex)
+				zap.String("blocks_behind", blocksBehind),
+				zap.String("from_block", nextBlock),
+				zap.String("to_block", latestBlockHex))
+
+			// Store current sync state before batch sync
+			db.StoreLastKnownBlockNumber(nextBlock)
+
+			// Perform batch sync
+			syncedBlock := batchSync(nextBlock, latestBlockHex)
+
+			// Verify sync progress
+			if utils.CompareHexNumbers(syncedBlock, nextBlock) > 0 {
+				logger.Info("Batch sync completed successfully",
+					zap.String("synced_to", syncedBlock))
+				nextBlock = syncedBlock
+			} else {
+				logger.Warn("Batch sync made no progress",
+					zap.String("last_block", nextBlock))
+			}
 		} else {
+			// Process blocks one by one for small ranges
 			nextBlock = processSubsequentBlocks(nextBlock)
 		}
+
+		// Update sync state after processing
+		db.StoreLastKnownBlockNumber(nextBlock)
 	}
 }
 

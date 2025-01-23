@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
 )
@@ -156,40 +157,62 @@ func Rollback(blockNumber string) {
 	var block models.ZondDatabaseBlock
 	err := configs.BlocksCollections.FindOne(ctx, bson.M{"result.number": blockNumber}).Decode(&block)
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			// Block doesn't exist, just log and return
+			configs.Logger.Info("Block not found for rollback, skipping",
+				zap.String("block", blockNumber))
+			return
+		}
 		configs.Logger.Warn("Failed to find block for rollback: ", zap.Error(err))
 		return
 	}
 	timestamp := block.Result.Timestamp
 
 	// Delete the block
-	_, err = configs.BlocksCollections.DeleteOne(ctx, bson.M{"result.number": blockNumber})
+	result, err := configs.BlocksCollections.DeleteOne(ctx, bson.M{"result.number": blockNumber})
 	if err != nil {
 		configs.Logger.Warn("Failed to delete in the blocks collection: ", zap.Error(err))
 		return
 	}
+	if result.DeletedCount == 0 {
+		configs.Logger.Info("No block found to delete",
+			zap.String("block", blockNumber))
+		return
+	}
 
 	// Clean up transactions for this block
-	_, err = configs.TransactionByAddressCollections.DeleteMany(ctx, bson.M{"blockTimestamp": timestamp})
+	txResult, err := configs.TransactionByAddressCollections.DeleteMany(ctx, bson.M{"blockTimestamp": timestamp})
 	if err != nil {
 		configs.Logger.Warn("Failed to clean up transactions: ", zap.Error(err))
+	} else {
+		configs.Logger.Debug("Cleaned up transactions",
+			zap.Int64("count", txResult.DeletedCount))
 	}
 
 	// Clean up transfers for this block
-	_, err = configs.TransferCollections.DeleteMany(ctx, bson.M{"blockTimestamp": timestamp})
+	transferResult, err := configs.TransferCollections.DeleteMany(ctx, bson.M{"blockTimestamp": timestamp})
 	if err != nil {
 		configs.Logger.Warn("Failed to clean up transfers: ", zap.Error(err))
+	} else {
+		configs.Logger.Debug("Cleaned up transfers",
+			zap.Int64("count", transferResult.DeletedCount))
 	}
 
 	// Clean up internal transactions for this block
-	_, err = configs.InternalTransactionByAddressCollections.DeleteMany(ctx, bson.M{"blockTimestamp": timestamp})
+	internalResult, err := configs.InternalTransactionByAddressCollections.DeleteMany(ctx, bson.M{"blockTimestamp": timestamp})
 	if err != nil {
 		configs.Logger.Warn("Failed to clean up internal transactions: ", zap.Error(err))
+	} else {
+		configs.Logger.Debug("Cleaned up internal transactions",
+			zap.Int64("count", internalResult.DeletedCount))
 	}
 
-	// Update addresses collection
+	// Get all transfers that were in this block to update address balances
 	var transfers []models.Transfer
 	cursor, err := configs.TransferCollections.Find(ctx, bson.M{"blockTimestamp": timestamp})
-	if err == nil {
+	if err != nil {
+		configs.Logger.Warn("Failed to find transfers for balance updates: ", zap.Error(err))
+	} else {
 		defer cursor.Close(ctx)
 		for cursor.Next(ctx) {
 			var transfer models.Transfer
@@ -211,7 +234,8 @@ func Rollback(blockNumber string) {
 
 	configs.Logger.Info("Successfully rolled back block and cleaned up related collections",
 		zap.String("block", blockNumber),
-		zap.String("timestamp", timestamp))
+		zap.String("timestamp", timestamp),
+		zap.Int("transfers_processed", len(transfers)))
 }
 
 func updateAddressBalance(address string) {
