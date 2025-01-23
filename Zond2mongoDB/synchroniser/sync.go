@@ -6,8 +6,6 @@ import (
 	"Zond2mongoDB/models"
 	"Zond2mongoDB/rpc"
 	"Zond2mongoDB/utils"
-	"io"
-	"os"
 	"sync"
 	"time"
 
@@ -44,7 +42,7 @@ func batchSync(fromBlock string, toBlock string) string {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		consumer(os.Stdout, producers)
+		consumer(producers)
 	}()
 
 	// Use larger batch size when far behind
@@ -94,7 +92,7 @@ func Sync() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		consumer(os.Stdout, producers)
+		consumer(producers)
 	}()
 	logger.Info("Started consumer process")
 
@@ -129,7 +127,7 @@ func Sync() {
 	singleBlockInsertion()
 }
 
-func consumer(w io.Writer, ch <-chan (<-chan Data)) {
+func consumer(ch <-chan (<-chan Data)) {
 	// Consume the producer channels.
 	for Datas := range ch {
 		// Consume the Datas.
@@ -214,7 +212,7 @@ func processInitialBlock() {
 	db.ProcessTransactions(*block)
 }
 
-func processSubsequentBlocks(currentBlock string, latestBlockNumber string) string {
+func processSubsequentBlocks(currentBlock string) string {
 	const (
 		maxRetries  = 3
 		retryDelay  = 2 * time.Second
@@ -416,7 +414,7 @@ func processBlockPeriodically() {
 				zap.String("blocks_behind", blocksBehind))
 			nextBlock = batchSync(nextBlock, latestBlockHex)
 		} else {
-			nextBlock = processSubsequentBlocks(nextBlock, latestBlockHex)
+			nextBlock = processSubsequentBlocks(nextBlock)
 		}
 	}
 }
