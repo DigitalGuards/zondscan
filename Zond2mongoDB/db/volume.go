@@ -49,19 +49,48 @@ func GetDailyTransactionVolume() {
 		}
 	}
 
+	// Convert hex volume to int64
+	volumeInt := utils.HexToInt(totalVolume)
+	var volume int64
+	if !volumeInt.IsInt64() {
+		configs.Logger.Warn("Volume exceeds int64 range, capping at max int64",
+			zap.String("volume_hex", totalVolume))
+		volume = 9223372036854775807 // max int64
+	} else {
+		volume = volumeInt.Int64()
+	}
+
+	// Convert timestamp to int64
+	timestampInt := utils.HexToInt(currentBlockTimestamp)
+	var timestamp int64
+	if !timestampInt.IsInt64() {
+		configs.Logger.Warn("Timestamp exceeds int64 range, using current time",
+			zap.String("timestamp_hex", currentBlockTimestamp))
+		timestamp = time.Now().Unix()
+	} else {
+		timestamp = timestampInt.Int64()
+	}
+
 	// Update volume in database
 	filter := bson.M{"type": "daily_volume"}
 	update := bson.M{
 		"$set": bson.M{
-			"volume":    totalVolume,
-			"timestamp": currentBlockTimestamp,
+			"volume":    volume,
+			"timestamp": timestamp,
 		},
 	}
 	opts := options.Update().SetUpsert(true)
 
 	_, err = configs.DailyTransactionsVolumeCollections.UpdateOne(ctx, filter, update, opts)
 	if err != nil {
-		configs.Logger.Info("Failed to update volume", zap.Error(err))
+		configs.Logger.Error("Failed to update volume",
+			zap.Error(err),
+			zap.Int64("volume", volume),
+			zap.Int64("timestamp", timestamp))
+	} else {
+		configs.Logger.Info("Successfully updated volume",
+			zap.Int64("volume", volume),
+			zap.Int64("timestamp", timestamp))
 	}
 }
 

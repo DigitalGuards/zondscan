@@ -324,48 +324,67 @@ func processSubsequentBlocks(currentBlock string) string {
 
 			// Handle chain reorganization
 			startRollback := utils.SubtractHexNumbers(currentBlock, "0x1")
-			lastKnownGoodBlock := db.GetLastKnownBlockNumber()
 
-			// If we can't determine the last known good block, roll back a fixed amount
-			if lastKnownGoodBlock == "0x0" {
-				rollbackPoint := utils.SubtractHexNumbers(startRollback, "0x32") // Roll back 50 blocks
-				logger.Warn("No last known good block found, rolling back fixed amount",
-					zap.String("rollback_to", rollbackPoint))
-				return rollbackPoint
-			}
+			// Start from current block and walk back until we find a matching block
+			var validBlock string
+			maxRollback := utils.SubtractHexNumbers(startRollback, "0x64") // Max 100 blocks back
 
-			// Verify the last known good block is still valid
-			lastGoodBlockData, err := rpc.GetBlockByNumberMainnet(lastKnownGoodBlock)
-			if err != nil {
-				logger.Error("Failed to get last known good block",
-					zap.String("block", lastKnownGoodBlock),
-					zap.Error(err))
-				return utils.SubtractHexNumbers(lastKnownGoodBlock, "0x32") // Roll back 50 blocks from last known
-			}
+			for blockNum := startRollback; utils.CompareHexNumbers(blockNum, maxRollback) >= 0; blockNum = utils.SubtractHexNumbers(blockNum, "0x1") {
+				// Get block from chain
+				blockData, err := rpc.GetBlockByNumberMainnet(blockNum)
+				if err != nil {
+					logger.Warn("Failed to get block during rollback search",
+						zap.String("block", blockNum),
+						zap.Error(err))
+					continue
+				}
 
-			dbHash := db.GetLatestBlockHashHeaderFromDB(lastKnownGoodBlock)
-			if dbHash != lastGoodBlockData.Result.Hash {
-				logger.Warn("Last known good block no longer matches chain",
-					zap.String("block", lastKnownGoodBlock),
+				// Get block hash from DB
+				dbHash := db.GetLatestBlockHashHeaderFromDB(blockNum)
+				if dbHash == "" {
+					logger.Debug("Block not found in DB during rollback search",
+						zap.String("block", blockNum))
+					continue
+				}
+
+				// Compare hashes
+				if dbHash == blockData.Result.Hash {
+					validBlock = blockNum
+					logger.Info("Found valid block during rollback search",
+						zap.String("block", blockNum),
+						zap.String("hash", dbHash))
+					break
+				}
+
+				logger.Debug("Hash mismatch during rollback search",
+					zap.String("block", blockNum),
 					zap.String("db_hash", dbHash),
-					zap.String("chain_hash", lastGoodBlockData.Result.Hash))
-				return utils.SubtractHexNumbers(lastKnownGoodBlock, "0x32") // Roll back 50 blocks from last known
+					zap.String("chain_hash", blockData.Result.Hash))
 			}
 
-			// Roll back all blocks after the last known good block
-			for blockNum := startRollback; utils.CompareHexNumbers(blockNum, lastKnownGoodBlock) > 0; blockNum = utils.SubtractHexNumbers(blockNum, "0x1") {
+			if validBlock == "" {
+				logger.Error("Failed to find valid block within rollback range",
+					zap.String("start", startRollback),
+					zap.String("end", maxRollback))
+				return maxRollback
+			}
+
+			// Roll back all blocks after the valid block
+			rollbackCount := 0
+			for blockNum := startRollback; utils.CompareHexNumbers(blockNum, validBlock) > 0; blockNum = utils.SubtractHexNumbers(blockNum, "0x1") {
 				logger.Info("Rolling back block",
 					zap.String("block", blockNum))
 				db.Rollback(blockNum)
+				rollbackCount++
 			}
 
 			logger.Info("Chain reorganization complete",
-				zap.String("last_valid_block", lastKnownGoodBlock),
-				zap.String("blocks_rolled_back", utils.SubtractHexNumbers(currentBlock, lastKnownGoodBlock)))
+				zap.String("last_valid_block", validBlock),
+				zap.Int("blocks_rolled_back", rollbackCount))
 
 			// Add a delay to allow network to stabilize
 			time.Sleep(5 * time.Second)
-			return utils.AddHexNumbers(lastKnownGoodBlock, "0x1")
+			return utils.AddHexNumbers(validBlock, "0x1")
 		}
 
 		// If we get here, we'll retry with the same block
