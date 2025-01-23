@@ -3,56 +3,57 @@ package db
 import (
 	"Zond2mongoDB/configs"
 	"Zond2mongoDB/models"
-	"Zond2mongoDB/rpc"
 	"context"
+	"time"
 
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
 )
 
-func InsertValidators(validators models.ResultValidator) {
-	// Use a more appropriate filter - just use a constant ID for the validator document
-	filter := primitive.D{{Key: "_id", Value: "validators"}}
-	update := primitive.D{
-		{Key: "$set", Value: primitive.D{
-			{Key: "jsonrpc", Value: 2},
-			{Key: "resultvalidator", Value: validators},
-		}},
-	}
-	opts := options.Update().SetUpsert(true)
-	result, err := configs.ValidatorsCollections.UpdateOne(context.TODO(), filter, update, opts)
-	if err != nil {
-		configs.Logger.Error("Failed to insert in the validators collection", zap.Error(err))
-		return
-	}
+func UpdateValidators(blockNumber string, previousHash string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	if result.UpsertedCount > 0 {
-		configs.Logger.Info("Inserted new validator document")
-	} else if result.ModifiedCount > 0 {
-		configs.Logger.Info("Updated existing validator document")
+	filter := bson.M{"result.number": blockNumber}
+	update := bson.M{"$set": bson.M{"previousHash": previousHash}}
+
+	_, err := configs.BlocksCollections.UpdateOne(ctx, filter, update)
+	if err != nil {
+		configs.Logger.Info("Failed to update validator document", zap.Error(err))
 	}
 }
 
-func UpdateValidators(sum uint64, previousHash string) {
-	currentEpoch := int(sum) / 128
-	parentEpoch := int(GetBlockNumberFromHash(previousHash)) / 128
+func InsertValidators(validators models.ResultValidator) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	// Always update validators on first run or epoch change
-	if currentEpoch != parentEpoch {
-		configs.Logger.Info("Fetching validators from beacon chain",
-			zap.Int("current_epoch", currentEpoch),
-			zap.Int("parent_epoch", parentEpoch))
-
-		validators := rpc.GetValidators()
-
-		// Only insert if we got valid data
-		if len(validators.ValidatorsBySlotNumber) > 0 {
-			InsertValidators(validators)
-			configs.Logger.Info("Successfully updated validators",
-				zap.Int("num_slots", len(validators.ValidatorsBySlotNumber)))
-		} else {
-			configs.Logger.Error("Got empty validator data from beacon chain")
-		}
+	// Clear existing validators
+	_, err := configs.ValidatorsCollections.DeleteMany(ctx, bson.M{})
+	if err != nil {
+		configs.Logger.Info("Failed to delete validator documents", zap.Error(err))
 	}
+
+	// Insert new validators
+	_, err = configs.ValidatorsCollections.InsertOne(ctx, validators)
+	if err != nil {
+		configs.Logger.Info("Failed to insert validator document", zap.Error(err))
+	}
+}
+
+func GetBlockNumberFromHash(hash string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	filter := bson.M{"result.hash": hash}
+	options := options.FindOne().SetProjection(bson.M{"result.number": 1})
+
+	var block models.ZondDatabaseBlock
+	err := configs.BlocksCollections.FindOne(ctx, filter, options).Decode(&block)
+	if err != nil {
+		configs.Logger.Info("Failed to get block number from hash", zap.Error(err))
+		return "0x0"
+	}
+
+	return block.Result.Number
 }

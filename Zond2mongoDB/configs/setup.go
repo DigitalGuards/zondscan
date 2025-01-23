@@ -34,17 +34,21 @@ func ConnectDB() *mongo.Client {
 	fmt.Println("Connected to MongoDB")
 
 	// Initialize collections with validators
-	db := client.Database("qrldata")
+	db := client.Database("qrldata-b2h")
 
 	// Daily Transactions Volume
 	volumeValidator := bson.M{
 		"$jsonSchema": bson.M{
 			"bsonType": "object",
-			"required": []string{"volume"},
+			"required": []string{"volume", "timestamp"},
 			"properties": bson.M{
 				"volume": bson.M{
-					"bsonType":    "long",
-					"description": "must be a long/int64 and is required",
+					"bsonType":    "string",
+					"description": "must be a hex string and is required",
+				},
+				"timestamp": bson.M{
+					"bsonType":    "string",
+					"description": "must be a hex string and is required",
 				},
 			},
 		},
@@ -175,7 +179,10 @@ func initializeCollections(db *mongo.Database) {
 	_, err = db.Collection("dailyTransactionsVolume").UpdateOne(
 		ctx,
 		bson.M{},
-		bson.M{"$setOnInsert": bson.M{"volume": int64(0)}},
+		bson.M{"$setOnInsert": bson.M{
+			"volume":    "0x0",
+			"timestamp": "0x0",
+		}},
 		options.Update().SetUpsert(true),
 	)
 	if err != nil {
@@ -199,12 +206,12 @@ var DB *mongo.Client = ConnectDB()
 
 // Getting database collections
 func GetCollection(client *mongo.Client, collectionName string) *mongo.Collection {
-	collection := client.Database("qrldata").Collection(collectionName)
+	collection := client.Database("qrldata-b2h").Collection(collectionName)
 	return collection
 }
 
 func GetListCollectionNames(client *mongo.Client) []string {
-	result, err := client.Database("qrldata").ListCollectionNames(
+	result, err := client.Database("qrldata-b2h").ListCollectionNames(
 		context.TODO(),
 		bson.D{})
 

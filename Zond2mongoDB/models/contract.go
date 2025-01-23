@@ -37,9 +37,9 @@ type ResultContract struct {
 
 // ContractInfo stores contract metadata including token information
 type ContractInfo struct {
-	ContractCreatorAddress []byte `json:"contractCreatorAddress" bson:"contractCreatorAddress"`
-	ContractAddress        []byte `json:"contractAddress" bson:"contractAddress"`
-	ContractCode           []byte `json:"contractCode" bson:"contractCode"`
+	ContractCreatorAddress string `json:"contractCreatorAddress" bson:"contractCreatorAddress"`
+	ContractAddress        string `json:"contractAddress" bson:"contractAddress"`
+	ContractCode           string `json:"contractCode" bson:"contractCode"`
 	// Token information
 	TokenName     string `json:"tokenName,omitempty" bson:"tokenName,omitempty"`
 	TokenSymbol   string `json:"tokenSymbol,omitempty" bson:"tokenSymbol,omitempty"`

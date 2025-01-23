@@ -195,13 +195,15 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 			continue
 		}
 
-		from := hex.EncodeToString(singleTransaction.From)
+		// Compare addresses without 0x prefix
+		from := strings.TrimPrefix(singleTransaction.From, "0x")
+		addr := strings.TrimPrefix(address, "0x")
 
-		if from == address[2:] && singleTransaction.To != nil {
+		if from == addr && singleTransaction.To != "" {
 			singleTransaction.InOut = 0
 			singleTransaction.Address = singleTransaction.To
 		} else {
-			if singleTransaction.To == nil {
+			if singleTransaction.To == "" {
 				singleTransaction.InOut = 0
 				singleTransaction.Address = singleTransaction.From
 			} else {
@@ -415,26 +417,10 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 		// Found in blocks collection, convert to Transfer model
 		for _, tx := range block.Result.Transactions {
 			if tx.Hash == query {
-				// Convert from address
-				from, err := hex.DecodeString(tx.From[2:])
-				if err != nil {
-					fmt.Println("Error decoding from address:", err)
-				}
-
-				// Convert to address if it exists
-				var to []byte
-				if tx.To != "" {
-					to, err = hex.DecodeString(tx.To[2:])
-					if err != nil {
-						fmt.Println("Error decoding to address:", err)
-					}
-				}
-
-				// Convert transaction hash
-				txHash, err := hex.DecodeString(tx.Hash[2:])
-				if err != nil {
-					fmt.Println("Error decoding transaction hash:", err)
-				}
+				// Use hex strings directly
+				from := tx.From
+				to := tx.To
+				txHash := tx.Hash
 
 				// Store original hex value
 				valueStr := tx.Value
@@ -504,21 +490,6 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 					}
 				}
 
-				// Convert signature and public key if available
-				var signature, pk []byte
-				if tx.Signature != "" {
-					signature, err = hex.DecodeString(tx.Signature[2:])
-					if err != nil {
-						fmt.Println("Error decoding signature:", err)
-					}
-				}
-				if tx.PublicKey != "" {
-					pk, err = hex.DecodeString(tx.PublicKey[2:])
-					if err != nil {
-						fmt.Println("Error decoding public key:", err)
-					}
-				}
-
 				result = models.Transfer{
 					ID:             primitive.NewObjectID(),
 					BlockNumber:    block.Result.Number,
@@ -530,11 +501,9 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 					GasUsed:        gasUsed,
 					GasPrice:       gasPrice,
 					Nonce:          nonce,
-					Signature:      signature,
-					Pk:             pk,
+					Signature:      tx.Signature,
+					Pk:             tx.PublicKey,
 					Size:           block.Result.Size,
-					FromStr:        tx.From,
-					ToStr:          tx.To,
 				}
 				return result, nil
 			}
@@ -551,14 +520,6 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 	err = configs.TransferCollections.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
 		fmt.Println(err)
-	}
-
-	// Add hex string representations for the fallback case too
-	if result.From != nil {
-		result.FromStr = "0x" + hex.EncodeToString(result.From)
-	}
-	if result.To != nil {
-		result.ToStr = "0x" + hex.EncodeToString(result.To)
 	}
 
 	return result, err
@@ -600,35 +561,32 @@ func ReturnDailyTransactionsVolume() int64 {
 }
 
 func GetTransactionByHash(hash string) (*models.Transaction, error) {
-    collection := configs.GetCollection(configs.DB, "transfer")
-    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
+	collection := configs.GetCollection(configs.DB, "transfer")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-    // Remove "0x" prefix if present and decode hex to bytes
-    if strings.HasPrefix(hash, "0x") {
-        hash = hash[2:]
-    }
-    hashBytes, err := hex.DecodeString(hash)
-    if err != nil {
-        return nil, fmt.Errorf("invalid hash format: %v", err)
-    }
+	// Remove "0x" prefix if present and decode hex to bytes
+	if strings.HasPrefix(hash, "0x") {
+		hash = hash[2:]
+	}
+	hashBytes, err := hex.DecodeString(hash)
+	if err != nil {
+		return nil, fmt.Errorf("invalid hash format: %v", err)
+	}
 
-    var transfer models.Transfer
-    err = collection.FindOne(ctx, bson.M{"txhash": hashBytes}).Decode(&transfer)
-    if err != nil {
-        if err == mongo.ErrNoDocuments {
-            return nil, nil // Return nil if not found
-        }
-        return nil, err
-    }
+	var transfer models.Transfer
+	err = collection.FindOne(ctx, bson.M{"txhash": hashBytes}).Decode(&transfer)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil // Return nil if not found
+		}
+		return nil, err
+	}
+	blockNumberStr := strconv.FormatUint(transfer.BlockNumber, 10)
 
-    // Convert back to hex string with "0x" prefix
-    txHashHex := "0x" + hex.EncodeToString(transfer.TxHash)
-    blockNumberStr := strconv.FormatUint(transfer.BlockNumber, 10)
-
-    // Convert Transfer to Transaction
-    return &models.Transaction{
-        Hash:        txHashHex,
-        BlockNumber: blockNumberStr,
-    }, nil
+	// Transfer.TxHash is already in hex string format
+	return &models.Transaction{
+		Hash:        transfer.TxHash,
+		BlockNumber: blockNumberStr,
+	}, nil
 }

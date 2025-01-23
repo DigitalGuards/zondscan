@@ -77,26 +77,26 @@ type PreResult struct {
 }
 
 type Result struct {
-	BaseFeePerGas    uint64        `json:"baseFeePerGas"`
-	GasLimit         uint64        `json:"gasLimit"`
-	GasUsed          uint64        `json:"gasUsed"`
+	BaseFeePerGas    string        `json:"baseFeePerGas"`
+	GasLimit         string        `json:"gasLimit"`
+	GasUsed          string        `json:"gasUsed"`
 	Hash             string        `json:"hash"`
-	Number           uint64        `json:"number"`
+	Number           string        `json:"number"`
 	ParentHash       string        `json:"parentHash"`
 	ReceiptsRoot     string        `json:"receiptsRoot"`
 	StateRoot        string        `json:"stateRoot"`
-	Timestamp        uint64        `json:"timestamp"`
+	Timestamp        string        `json:"timestamp"`
 	Transactions     []Transaction `json:"transactions"`
 	TransactionsRoot string        `json:"transactionsRoot"`
-	Difficulty       uint64        `json:"difficulty"`
+	Difficulty       string        `json:"difficulty"`
 	ExtraData        string        `json:"extraData"`
 	LogsBloom        string        `json:"logsBloom"`
 	Miner            string        `json:"miner"`
 	MixHash          string        `json:"mixHash"`
 	Nonce            string        `json:"nonce"`
 	Sha3Uncles       string        `json:"sha3Uncles"`
-	Size             uint64        `json:"size"`
-	TotalDifficulty  uint64        `json:"totalDifficulty"`
+	Size             string        `json:"size"`
+	TotalDifficulty  string        `json:"totalDifficulty"`
 	Uncles           []interface{} `json:"uncles"`
 	Withdrawals      []Withdrawal  `json:"withdrawals"`
 	WithdrawalsRoot  string        `json:"withdrawalsRoot"`
@@ -129,12 +129,9 @@ type ZondCallPayload struct {
 }
 
 type ZondResponse struct {
-	Id      int        `json:"id"`
-	Jsonrpc string     `json:"jsonrpc"`
-	Result  ZondResult `json:"result"`
-}
-
-type ZondResult struct {
+	Id      int    `json:"id"`
+	Jsonrpc string `json:"jsonrpc"`
+	Result  string `json:"result"`
 }
 
 type Vote struct {

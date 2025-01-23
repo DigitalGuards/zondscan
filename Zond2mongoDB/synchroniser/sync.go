@@ -5,7 +5,7 @@ import (
 	"Zond2mongoDB/db"
 	"Zond2mongoDB/models"
 	"Zond2mongoDB/rpc"
-	"encoding/json"
+	"Zond2mongoDB/utils"
 	"io"
 	"os"
 	"sync"
@@ -22,18 +22,18 @@ type Data struct {
 }
 
 // batchSync handles syncing multiple blocks in parallel
-func batchSync(fromBlock uint64, toBlock uint64) uint64 {
+func batchSync(fromBlock string, toBlock string) string {
 	// Sanity check to prevent backwards sync
-	if fromBlock >= toBlock {
+	if utils.CompareHexNumbers(fromBlock, toBlock) >= 0 {
 		logger.Error("Invalid block range for batch sync",
-			zap.Uint64("from_block", fromBlock),
-			zap.Uint64("to_block", toBlock))
+			zap.String("from_block", fromBlock),
+			zap.String("to_block", toBlock))
 		return fromBlock
 	}
 
 	logger.Info("Starting batch sync",
-		zap.Uint64("from_block", fromBlock),
-		zap.Uint64("to_block", toBlock))
+		zap.String("from_block", fromBlock),
+		zap.String("to_block", toBlock))
 
 	wg := sync.WaitGroup{}
 
@@ -49,20 +49,22 @@ func batchSync(fromBlock uint64, toBlock uint64) uint64 {
 
 	// Use larger batch size when far behind
 	batchSize := 32
-	if toBlock-fromBlock > 1000 {
+	if utils.CompareHexNumbers(utils.SubtractHexNumbers(toBlock, fromBlock), "0x3e8") > 0 { // 0x3e8 = 1000
 		batchSize = 64
 	}
 
 	// Start producers in batches
-	for i, size := int(fromBlock), batchSize; i < int(toBlock); i += size {
-		end := i + size
-		if end > int(toBlock) {
-			end = int(toBlock)
+	currentBlock := fromBlock
+	for utils.CompareHexNumbers(currentBlock, toBlock) < 0 {
+		endBlock := utils.AddHexNumbers(currentBlock, utils.IntToHex(batchSize))
+		if utils.CompareHexNumbers(endBlock, toBlock) > 0 {
+			endBlock = toBlock
 		}
-		producers <- producer(i, end)
+		producers <- producer(currentBlock, endBlock)
 		logger.Info("Processing block range",
-			zap.Int("from", i),
-			zap.Int("to", end))
+			zap.String("from", currentBlock),
+			zap.String("to", endBlock))
+		currentBlock = endBlock
 	}
 
 	close(producers)
@@ -72,17 +74,17 @@ func batchSync(fromBlock uint64, toBlock uint64) uint64 {
 }
 
 func Sync() {
-	var bNum uint64 = db.GetLatestBlockNumberFromDB() + 1
-	logger.Info("Starting sync from block number", zap.Uint64("block", bNum))
+	nextBlock := utils.AddHexNumbers(db.GetLatestBlockNumberFromDB(), "0x1")
+	logger.Info("Starting sync from block number", zap.String("block", nextBlock))
 
 	wg := sync.WaitGroup{}
 
-	max, err := rpc.GetLatestBlock()
+	maxHex, err := rpc.GetLatestBlock()
 	if err != nil {
 		logger.Error("Failed to get latest block", zap.Error(err))
 		return
 	}
-	logger.Info("Latest block from network", zap.Uint64("block", max))
+	logger.Info("Latest block from network", zap.String("block", maxHex))
 
 	// Create a buffered channel of read only channels, with length 32.
 	producers := make(chan (<-chan Data), 32)
@@ -98,20 +100,22 @@ func Sync() {
 
 	// Increased batch size for faster initial sync
 	batchSize := 32
-	if max-bNum > 1000 {
+	if utils.CompareHexNumbers(utils.SubtractHexNumbers(maxHex, nextBlock), "0x3e8") > 0 { // 0x3e8 = 1000
 		batchSize = 64
 	}
 
 	// Start producers in correct order with larger batch size
-	for i, size := int(bNum), batchSize; i < int(max); i += size {
-		end := i + size
-		if end > int(max) {
-			end = int(max)
+	currentBlock := nextBlock
+	for utils.CompareHexNumbers(currentBlock, maxHex) < 0 {
+		endBlock := utils.AddHexNumbers(currentBlock, utils.IntToHex(batchSize))
+		if utils.CompareHexNumbers(endBlock, maxHex) > 0 {
+			endBlock = maxHex
 		}
-		producers <- producer(i, end)
+		producers <- producer(currentBlock, endBlock)
 		logger.Info("Processing block range",
-			zap.Int("from", i),
-			zap.Int("to", end))
+			zap.String("from", currentBlock),
+			zap.String("to", endBlock))
+		currentBlock = endBlock
 	}
 
 	close(producers)
@@ -147,7 +151,7 @@ func consumer(w io.Writer, ch <-chan (<-chan Data)) {
 	}
 }
 
-func producer(start int, end int) <-chan Data {
+func producer(start string, end string) <-chan Data {
 	// Create a channel which we will send our data.
 	Datas := make(chan Data, 32)
 
@@ -159,27 +163,22 @@ func producer(start int, end int) <-chan Data {
 		defer close(ch)
 
 		// Produce data.
-		for i := start; i < end; i++ {
-			data := rpc.GetBlockByNumberMainnet(uint64(i))
-			if data == "" {
-				logger.Warn("Empty block data received", zap.Int("block", i))
-				continue
-			}
-
-			var Zond models.Zond
-			err := json.Unmarshal([]byte(data), &Zond)
+		currentBlock := start
+		for utils.CompareHexNumbers(currentBlock, end) < 0 {
+			data, err := rpc.GetBlockByNumberMainnet(currentBlock)
 			if err != nil {
-				logger.Error("Failed to unmarshal block data",
-					zap.Int("block", i),
+				logger.Error("Failed to get block data",
+					zap.String("block", currentBlock),
 					zap.Error(err))
 				continue
 			}
 
-			if Zond.PreResult.ParentHash != "" {
-				ZondNew := db.ConvertModelsUint64(Zond)
-				blockData = append(blockData, ZondNew)
-				blockNumbers = append(blockNumbers, i)
+			if data != nil && data.Result.ParentHash != "" {
+				db.UpdateTransactionStatuses(data)
+				blockData = append(blockData, *data)
+				blockNumbers = append(blockNumbers, int(utils.HexToInt(currentBlock).Int64()))
 			}
+			currentBlock = utils.AddHexNumbers(currentBlock, "0x1")
 		}
 		if len(blockData) > 0 {
 			ch <- Data{blockData: blockData, blockNumbers: blockNumbers}
@@ -204,146 +203,128 @@ func processInitialBlock() {
 	}
 
 	// Process genesis block
-	ZondNew := rpc.GetBlockByNumberMainnet(0)
-	if ZondNew == "" {
-		configs.Logger.Error("Failed to get genesis block")
-		return
-	}
-
-	var ZondGenesis models.ZondDatabaseBlock
-	err := json.Unmarshal([]byte(ZondNew), &ZondGenesis)
+	block, err := rpc.GetBlockByNumberMainnet("0x0")
 	if err != nil {
-		configs.Logger.Error("Failed to unmarshal genesis block", zap.Error(err))
+		configs.Logger.Error("Failed to get genesis block", zap.Error(err))
 		return
 	}
 
-	db.InsertBlockDocument(ZondGenesis)
-	db.ProcessTransactions(ZondGenesis)
+	db.UpdateTransactionStatuses(block)
+	db.InsertBlockDocument(*block)
+	db.ProcessTransactions(*block)
 }
 
-func processSubsequentBlocks(sum uint64, latestBlockNumber uint64) uint64 {
+func processSubsequentBlocks(currentBlock string, latestBlockNumber string) string {
 	const (
 		maxRetries  = 3
 		retryDelay  = 2 * time.Second
-		maxRollback = uint64(50)
+		maxRollback = "0x32" // 0x32 = 50
 	)
 
 	for retry := 0; retry < maxRetries; retry++ {
-		blockData := rpc.GetBlockByNumberMainnet(sum)
-		if blockData == "" {
-			logger.Warn("Empty block data received",
-				zap.Uint64("block", sum),
-				zap.Int("retry", retry+1))
-			time.Sleep(retryDelay)
-			continue
-		}
-
-		var Zond models.Zond
-		err := json.Unmarshal([]byte(blockData), &Zond)
+		blockData, err := rpc.GetBlockByNumberMainnet(currentBlock)
 		if err != nil {
-			logger.Error("Failed to unmarshal block",
-				zap.Uint64("block", sum),
-				zap.Error(err),
-				zap.Int("retry", retry+1))
+			logger.Warn("Failed to get block data",
+				zap.String("block", currentBlock),
+				zap.Int("retry", retry+1),
+				zap.Error(err))
 			time.Sleep(retryDelay)
 			continue
 		}
 
-		if Zond.PreResult.ParentHash == "" {
+		if blockData == nil || blockData.Result.ParentHash == "" {
 			logger.Warn("Block has no parent hash",
-				zap.Uint64("block", sum),
+				zap.String("block", currentBlock),
 				zap.Int("retry", retry+1))
 			time.Sleep(retryDelay)
 			continue
 		}
 
-		ZondNew := db.ConvertModelsUint64(Zond)
-		previousHash := ZondNew.Result.ParentHash
+		db.UpdateTransactionStatuses(blockData)
+		previousHash := blockData.Result.ParentHash
 		currentDBHash := db.GetLatestBlockHashHeaderFromDB(db.GetLatestBlockNumberFromDB())
 
 		if previousHash == currentDBHash {
-			processBlockAndUpdateValidators(sum, ZondNew, previousHash)
+			processBlockAndUpdateValidators(currentBlock, blockData, previousHash)
 			logger.Info("Block processed successfully",
-				zap.Uint64("block", sum),
-				zap.String("hash", ZondNew.Result.Hash))
-			return sum + 1
+				zap.String("block", currentBlock),
+				zap.String("hash", blockData.Result.Hash))
+			return utils.AddHexNumbers(currentBlock, "0x1")
 		}
 
 		// If we've tried multiple times and still have hash mismatch
 		if retry == maxRetries-1 {
 			logger.Warn("Potential chain reorganization after retries",
-				zap.Uint64("block", sum),
+				zap.String("block", currentBlock),
 				zap.String("expected_parent", currentDBHash),
 				zap.String("actual_parent", previousHash))
 
 			// Walk back through the chain until we find a matching block
-			var lastValidBlock uint64
+			var lastValidBlock string
 			var foundFork bool
-			startRollback := sum - 1
+			startRollback := utils.SubtractHexNumbers(currentBlock, "0x1")
 
-			for blockNum := startRollback; blockNum > 0 && blockNum > (startRollback-maxRollback); blockNum-- {
-				prevBlockData := rpc.GetBlockByNumberMainnet(blockNum)
-				if prevBlockData == "" {
+			for blockNum := startRollback; utils.CompareHexNumbers(blockNum, "0x0") > 0 &&
+				utils.CompareHexNumbers(utils.SubtractHexNumbers(startRollback, blockNum), maxRollback) < 0; blockNum = utils.SubtractHexNumbers(blockNum, "0x1") {
+
+				prevBlockData, err := rpc.GetBlockByNumberMainnet(blockNum)
+				if err != nil {
+					logger.Warn("Failed to get previous block data",
+						zap.String("block", blockNum),
+						zap.Error(err))
 					continue
 				}
 
-				var prevZond models.Zond
-				if err := json.Unmarshal([]byte(prevBlockData), &prevZond); err != nil {
-					continue
-				}
-
-				prevZondNew := db.ConvertModelsUint64(prevZond)
 				dbHash := db.GetLatestBlockHashHeaderFromDB(blockNum)
-
-				if dbHash == prevZondNew.Result.Hash {
+				if dbHash == prevBlockData.Result.Hash {
 					lastValidBlock = blockNum
 					foundFork = true
 					break
 				}
 
 				logger.Info("Rolling back block",
-					zap.Uint64("block", blockNum),
+					zap.String("block", blockNum),
 					zap.String("hash", dbHash))
 				db.Rollback(blockNum)
 			}
 
 			if !foundFork {
 				logger.Error("Failed to find fork point within reasonable range",
-					zap.Uint64("start_block", startRollback),
-					zap.Uint64("end_block", startRollback-maxRollback))
+					zap.String("start_block", startRollback),
+					zap.String("end_block", utils.SubtractHexNumbers(startRollback, maxRollback)))
 				// Back off to allow network to stabilize
 				time.Sleep(10 * time.Second)
-				return startRollback - maxRollback
+				return utils.SubtractHexNumbers(startRollback, maxRollback)
 			}
 
 			logger.Info("Found fork point, resuming sync",
-				zap.Uint64("last_valid_block", lastValidBlock),
-				zap.Uint64("blocks_rolled_back", sum-lastValidBlock))
+				zap.String("last_valid_block", lastValidBlock),
+				zap.String("blocks_rolled_back", utils.SubtractHexNumbers(currentBlock, lastValidBlock)))
 
 			// Add a delay to allow network to stabilize
 			time.Sleep(5 * time.Second)
-			return lastValidBlock + 1
+			return utils.AddHexNumbers(lastValidBlock, "0x1")
 		}
 
 		// If we get here, we'll retry with the same block
 		logger.Info("Retrying block due to hash mismatch",
-			zap.Uint64("block", sum),
+			zap.String("block", currentBlock),
 			zap.Int("retry", retry+1),
 			zap.String("expected_parent", currentDBHash),
 			zap.String("actual_parent", previousHash))
 		time.Sleep(retryDelay)
 	}
 
-	return sum
+	return currentBlock
 }
 
-func processBlockAndUpdateValidators(sum uint64, ZondNew models.ZondDatabaseBlock, previousHash string) {
-	db.InsertBlockDocument(ZondNew)
-	db.ProcessTransactions(ZondNew)
-	db.UpdateValidators(sum, previousHash)
-	if err := processBlock(&ZondNew); err != nil {
+func processBlockAndUpdateValidators(blockNumber string, block *models.ZondDatabaseBlock, previousHash string) {
+	db.InsertBlockDocument(*block)
+	db.ProcessTransactions(*block)
+	db.UpdateValidators(blockNumber, previousHash)
+	if err := processBlock(block); err != nil {
 		configs.Logger.Error("Failed to process block",
-			zap.Uint64("block", ZondNew.Result.Number),
+			zap.String("block", blockNumber),
 			zap.Error(err))
 	}
 }
@@ -418,24 +399,24 @@ func runTaskWithRetry(task func(), taskName string) {
 }
 
 func processBlockPeriodically() {
-	sum := db.GetLatestBlockNumberFromDB() + 1
+	nextBlock := utils.AddHexNumbers(db.GetLatestBlockNumberFromDB(), "0x1")
 
 	// Get latest block number
-	latestBlockNumber, err := rpc.GetLatestBlock()
+	latestBlockHex, err := rpc.GetLatestBlock()
 	if err != nil {
 		logger.Error("Failed to get latest block", zap.Error(err))
 		return
 	}
 
 	// Check if we need to process new blocks
-	if latestBlockNumber > sum {
-		blocksBehind := latestBlockNumber - sum
-		if blocksBehind > 50 { // Use batch sync if more than 50 blocks behind
+	if utils.CompareHexNumbers(latestBlockHex, nextBlock) > 0 {
+		blocksBehind := utils.SubtractHexNumbers(latestBlockHex, nextBlock)
+		if utils.CompareHexNumbers(blocksBehind, "0x32") > 0 { // Use batch sync if more than 50 blocks behind
 			logger.Info("Switching to batch sync mode",
-				zap.Uint64("blocks_behind", blocksBehind))
-			sum = batchSync(sum, latestBlockNumber)
+				zap.String("blocks_behind", blocksBehind))
+			nextBlock = batchSync(nextBlock, latestBlockHex)
 		} else {
-			sum = processSubsequentBlocks(sum, latestBlockNumber)
+			nextBlock = processSubsequentBlocks(nextBlock, latestBlockHex)
 		}
 	}
 }
@@ -497,7 +478,7 @@ func processBlock(block *models.ZondDatabaseBlock) error {
 	// Update pending transactions that are now mined
 	if err := UpdatePendingTransactionsInBlock(block); err != nil {
 		configs.Logger.Error("Failed to update pending transactions in block",
-			zap.Uint64("block", block.Result.Number),
+			zap.String("block", block.Result.Number),
 			zap.Error(err))
 	}
 

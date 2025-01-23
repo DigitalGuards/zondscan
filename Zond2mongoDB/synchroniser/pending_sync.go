@@ -88,7 +88,7 @@ func UpdatePendingTransactionsInBlock(block *models.ZondDatabaseBlock) error {
 			}
 			configs.Logger.Info("Transaction mined",
 				zap.String("hash", tx.Hash),
-				zap.Uint64("block", block.Result.Number))
+				zap.String("block", block.Result.Number))
 		}
 	}
 

@@ -33,7 +33,7 @@ func ConnectDB() *mongo.Client {
 	fmt.Println("Connected to MongoDB")
 
 	// Initialize collections with validators and indexes
-	db := client.Database("qrldata")
+	db := client.Database("qrldata-b2h")
 
 	// Create indexes
 	createIndexes(db)
@@ -247,6 +247,6 @@ var DB *mongo.Client = ConnectDB()
 
 // Getting database collections
 func GetCollection(client *mongo.Client, collectionName string) *mongo.Collection {
-	collection := client.Database("qrldata").Collection(collectionName)
+	collection := client.Database("qrldata-b2h").Collection(collectionName)
 	return collection
 }

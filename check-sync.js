@@ -1,6 +1,6 @@
 try {
     // Connect to MongoDB
-    const db = connect('mongodb://localhost:27017/qrldata');
+    const db = connect('mongodb://localhost:27017/qrldata-b2h');
     
     // Get collection stats
     const blockCount = db.blocks.countDocuments();

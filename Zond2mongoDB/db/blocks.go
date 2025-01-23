@@ -3,14 +3,79 @@ package db
 import (
 	"Zond2mongoDB/configs"
 	"Zond2mongoDB/models"
+	"Zond2mongoDB/utils"
 	"context"
-	"strconv"
+	"math/big"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
 )
+
+func GetLatestBlockFromDB() *models.ZondDatabaseBlock {
+	if !IsCollectionsExist() {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	filter := bson.D{}
+	options := options.FindOne().SetProjection(bson.M{"result.number": 1, "result.timestamp": 1}).SetSort(bson.M{"result.number": -1})
+
+	var Zond models.ZondDatabaseBlock
+
+	err := configs.BlocksCollections.FindOne(ctx, filter, options).Decode(&Zond)
+
+	if err != nil {
+		configs.Logger.Info("Failed to do FindOne in the blocks collection", zap.Error(err))
+	}
+
+	return &Zond
+}
+
+func GetLatestBlockNumberFromDB() string {
+	if !IsCollectionsExist() {
+		return "0x0"
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	filter := bson.D{}
+	options := options.FindOne().SetProjection(bson.M{"result.number": 1}).SetSort(bson.M{"result.number": -1})
+
+	var Zond models.ZondDatabaseBlock
+
+	err := configs.BlocksCollections.FindOne(ctx, filter, options).Decode(&Zond)
+
+	if err != nil {
+		configs.Logger.Info("Failed to do FindOne in the blocks collection", zap.Error(err))
+		return "0x0"
+	}
+
+	return Zond.Result.Number
+}
+
+func GetLatestBlockHashHeaderFromDB(blockNumber string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	filter := bson.M{"result.number": blockNumber}
+	options := options.FindOne().SetProjection(bson.M{"result.hash": 1})
+
+	var Zond models.ZondDatabaseBlock
+
+	err := configs.BlocksCollections.FindOne(ctx, filter, options).Decode(&Zond)
+
+	if err != nil {
+		configs.Logger.Info("Failed to do FindOne in the blocks collection", zap.Error(err))
+		return ""
+	}
+
+	return Zond.Result.Hash
+}
 
 func InsertBlockDocument(obj models.ZondDatabaseBlock) {
 	hashField := obj.Result.Hash
@@ -27,17 +92,17 @@ func InsertBlockDocument(obj models.ZondDatabaseBlock) {
 func InsertManyBlockDocuments(blocks []interface{}) {
 	_, err := configs.BlocksCollections.InsertMany(context.TODO(), blocks)
 	if err != nil {
-		panic(err)
+		configs.Logger.Warn("Failed to insert many block documents", zap.Error(err))
 	}
 }
 
-func Rollback(number uint64) {
+func Rollback(blockNumber string) {
 	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 	defer cancel()
 
 	// Get the block's timestamp before deleting it
 	var block models.ZondDatabaseBlock
-	err := configs.BlocksCollections.FindOne(ctx, bson.M{"result.number": number}).Decode(&block)
+	err := configs.BlocksCollections.FindOne(ctx, bson.M{"result.number": blockNumber}).Decode(&block)
 	if err != nil {
 		configs.Logger.Warn("Failed to find block for rollback: ", zap.Error(err))
 		return
@@ -45,7 +110,7 @@ func Rollback(number uint64) {
 	timestamp := block.Result.Timestamp
 
 	// Delete the block
-	_, err = configs.BlocksCollections.DeleteOne(ctx, bson.M{"result.number": number})
+	_, err = configs.BlocksCollections.DeleteOne(ctx, bson.M{"result.number": blockNumber})
 	if err != nil {
 		configs.Logger.Warn("Failed to delete in the blocks collection: ", zap.Error(err))
 		return
@@ -70,8 +135,6 @@ func Rollback(number uint64) {
 	}
 
 	// Update addresses collection
-	// This is more complex as we need to recalculate balances
-	// We'll trigger a balance recalculation for affected addresses
 	var transfers []models.Transfer
 	cursor, err := configs.TransferCollections.Find(ctx, bson.M{"blockTimestamp": timestamp})
 	if err == nil {
@@ -85,21 +148,21 @@ func Rollback(number uint64) {
 
 		// Update balances for affected addresses
 		for _, transfer := range transfers {
-			if transfer.From != nil {
+			if transfer.From != "" {
 				updateAddressBalance(transfer.From)
 			}
-			if transfer.To != nil {
+			if transfer.To != "" {
 				updateAddressBalance(transfer.To)
 			}
 		}
 	}
 
-	configs.Logger.Info("Successfully rolled back block and cleaned up related collections: ",
-		zap.String("Block number:", strconv.Itoa(int(number))),
-		zap.Uint64("timestamp", timestamp))
+	configs.Logger.Info("Successfully rolled back block and cleaned up related collections",
+		zap.String("block", blockNumber),
+		zap.String("timestamp", timestamp))
 }
 
-func updateAddressBalance(address []byte) {
+func updateAddressBalance(address string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -116,20 +179,27 @@ func updateAddressBalance(address []byte) {
 	}
 	defer cursor.Close(ctx)
 
-	// Calculate new balance
-	var balance uint64
+	// Calculate new balance using big.Int for hex values
+	balance := new(big.Int)
 	for cursor.Next(ctx) {
 		var transfer models.Transfer
 		if err = cursor.Decode(&transfer); err != nil {
 			continue
 		}
 
-		if transfer.From != nil && string(transfer.From) == string(address) {
-			balance -= transfer.Value
+		value := utils.HexToInt(transfer.Value)
+		if transfer.From == address {
+			balance.Sub(balance, value)
 		}
-		if transfer.To != nil && string(transfer.To) == string(address) {
-			balance += transfer.Value
+		if transfer.To == address {
+			balance.Add(balance, value)
 		}
+	}
+
+	// Convert balance to hex string
+	balanceHex := "0x" + balance.Text(16)
+	if balance.Sign() == 0 {
+		balanceHex = "0x0"
 	}
 
 	// Update address balance
@@ -137,7 +207,7 @@ func updateAddressBalance(address []byte) {
 	_, err = configs.AddressesCollections.UpdateOne(
 		ctx,
 		bson.M{"id": address},
-		bson.M{"$set": bson.M{"balance": balance}},
+		bson.M{"$set": bson.M{"balance": balanceHex}},
 		opts,
 	)
 	if err != nil {
