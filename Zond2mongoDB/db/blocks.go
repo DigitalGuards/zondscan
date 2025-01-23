@@ -4,7 +4,6 @@ import (
 	"Zond2mongoDB/configs"
 	"Zond2mongoDB/models"
 	"Zond2mongoDB/utils"
-	"Zond2mongoDB/validation"
 	"context"
 	"math/big"
 	"time"
@@ -148,7 +147,7 @@ func GetLastKnownBlockNumber() string {
 	return result.BlockNumber
 }
 
-func StoreLastKnownBlockNumber(blockNumber string) {
+func StoreLastKnownBlockNumber(blockNumber string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -164,204 +163,79 @@ func StoreLastKnownBlockNumber(blockNumber string) {
 		configs.Logger.Warn("Failed to store last known block number",
 			zap.String("block", blockNumber),
 			zap.Error(err))
+		return err
 	}
+	return nil
 }
 
-func Rollback(blockNumber string) {
-	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
-	defer cancel()
+func Rollback(blockNumber string) error {
+    ctx := context.Background()
 
-	// Validate block number format
-	if !validation.IsValidHexString(blockNumber) {
-		configs.Logger.Error("Invalid block number format for rollback",
-			zap.String("block", blockNumber))
-		return
-	}
+    // Find all blocks after the given block number
+    filter := bson.M{
+        "result.number": bson.M{
+            "$gt": blockNumber,
+        },
+    }
 
-	// Get the block's data before deleting it
-	var block models.ZondDatabaseBlock
-	err := configs.BlocksCollections.FindOne(ctx, bson.M{"result.number": blockNumber}).Decode(&block)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			configs.Logger.Info("Block not found for rollback, skipping",
-				zap.String("block", blockNumber))
-			return
-		}
-		configs.Logger.Warn("Failed to find block for rollback: ", zap.Error(err))
-		return
-	}
+    // Get blocks to be removed for logging
+    cursor, err := configs.BlocksCollections.Find(ctx, filter)
+    if err != nil {
+        configs.Logger.Error("Failed to find blocks for rollback",
+            zap.String("from_block", blockNumber),
+            zap.Error(err))
+        return err
+    }
+    defer cursor.Close(ctx)
 
-	blockHash := block.Result.Hash
-	if blockHash == "" || !validation.IsValidHexString(blockHash) {
-		configs.Logger.Error("Invalid block hash for rollback",
-			zap.String("block", blockNumber),
-			zap.String("hash", blockHash))
-		return
-	}
+    var blocks []models.ZondDatabaseBlock
+    if err = cursor.All(ctx, &blocks); err != nil {
+        configs.Logger.Error("Failed to decode blocks for rollback",
+            zap.Error(err))
+        return err
+    }
 
-	// Start a session for atomic operations
-	session, err := configs.DB.StartSession()
-	if err != nil {
-		configs.Logger.Error("Failed to start session for rollback", zap.Error(err))
-		return
-	}
-	defer session.EndSession(ctx)
+    // Log blocks being removed
+    for _, block := range blocks {
+        configs.Logger.Info("Rolling back block",
+            zap.String("number", block.Result.Number),
+            zap.String("hash", block.Result.Hash))
+    }
 
-	// Track affected addresses for balance recalculation
-	affectedAddresses := make(map[string]bool)
+    // Delete blocks in a transaction
+    session, err := configs.DB.StartSession()
+    if err != nil {
+        configs.Logger.Error("Failed to start session for rollback",
+            zap.Error(err))
+        return err
+    }
+    defer session.EndSession(ctx)
 
-	_, err = session.WithTransaction(ctx, func(sessCtx mongo.SessionContext) (interface{}, error) {
-		// Delete the block
-		result, err := configs.BlocksCollections.DeleteOne(sessCtx, bson.M{
-			"result.number": blockNumber,
-			"result.hash":   blockHash,
-		})
-		if err != nil {
-			return nil, err
-		}
-		if result.DeletedCount == 0 {
-			configs.Logger.Info("No block found to delete",
-				zap.String("block", blockNumber))
-			return nil, nil
-		}
+    _, err = session.WithTransaction(ctx, func(sessCtx mongo.SessionContext) (interface{}, error) {
+        // Delete blocks
+        _, err := configs.BlocksCollections.DeleteMany(sessCtx, filter)
+        if err != nil {
+            return nil, err
+        }
 
-		// Clean up and track addresses from transactions
-		txCursor, err := configs.TransactionByAddressCollections.Find(sessCtx, bson.M{
-			"BlockNumber": blockNumber,
-			"blockHash":   blockHash,
-		})
-		if err == nil {
-			defer txCursor.Close(sessCtx)
-			for txCursor.Next(sessCtx) {
-				var tx struct {
-					Address string `bson:"Address"`
-				}
-				if err = txCursor.Decode(&tx); err == nil && tx.Address != "" {
-					affectedAddresses[tx.Address] = true
-				}
-			}
-		}
+        // Update sync state
+        err = StoreLastKnownBlockNumber(blockNumber)
+        if err != nil {
+            return nil, err
+        }
 
-		// Delete transactions
-		_, err = configs.TransactionByAddressCollections.DeleteMany(sessCtx, bson.M{
-			"BlockNumber": blockNumber,
-			"blockHash":   blockHash,
-		})
-		if err != nil {
-			return nil, err
-		}
+        return nil, nil
+    })
 
-		// Clean up and track addresses from transfers
-		transferCursor, err := configs.TransferCollections.Find(sessCtx, bson.M{
-			"blockNumber": blockNumber,
-			"blockHash":   blockHash,
-		})
-		if err == nil {
-			defer transferCursor.Close(sessCtx)
-			for transferCursor.Next(sessCtx) {
-				var transfer models.Transfer
-				if err = transferCursor.Decode(&transfer); err == nil {
-					if transfer.From != "" {
-						affectedAddresses[transfer.From] = true
-					}
-					if transfer.To != "" {
-						affectedAddresses[transfer.To] = true
-					}
-				}
-			}
-		}
+    if err != nil {
+        configs.Logger.Error("Failed to execute rollback transaction",
+            zap.Error(err))
+        return err
+    }
 
-		// Delete transfers
-		_, err = configs.TransferCollections.DeleteMany(sessCtx, bson.M{
-			"blockNumber": blockNumber,
-			"blockHash":   blockHash,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		// Clean up and track addresses from internal transactions
-		internalTxCursor, err := configs.InternalTransactionByAddressCollections.Find(sessCtx, bson.M{
-			"BlockNumber": blockNumber,
-			"blockHash":   blockHash,
-		})
-		if err == nil {
-			defer internalTxCursor.Close(sessCtx)
-			for internalTxCursor.Next(sessCtx) {
-				var tx struct {
-					Address string `bson:"Address"`
-				}
-				if err = internalTxCursor.Decode(&tx); err == nil && tx.Address != "" {
-					affectedAddresses[tx.Address] = true
-				}
-			}
-		}
-
-		// Delete internal transactions
-		_, err = configs.InternalTransactionByAddressCollections.DeleteMany(sessCtx, bson.M{
-			"BlockNumber": blockNumber,
-			"blockHash":   blockHash,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		// Clean up contract-related data
-		_, err = configs.ContractCodeCollection.DeleteMany(sessCtx, bson.M{
-			"BlockNumber": blockNumber,
-			"blockHash":   blockHash,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		// Only update sync state if we actually rolled back something
-		if result.DeletedCount > 0 {
-			prevBlock := utils.SubtractHexNumbers(blockNumber, "0x1")
-			_, err = configs.GetCollection(configs.DB, syncStateCollection).UpdateOne(
-				sessCtx,
-				bson.M{"_id": "last_synced_block"},
-				bson.M{"$set": bson.M{"block_number": prevBlock}},
-				options.Update().SetUpsert(true),
-			)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			// If block doesn't exist, update sync state to last valid block
-			lastValidBlock := utils.SubtractHexNumbers(blockNumber, "0x1")
-			_, err = configs.GetCollection(configs.DB, syncStateCollection).UpdateOne(
-				sessCtx,
-				bson.M{"_id": "last_synced_block"},
-				bson.M{"$set": bson.M{"block_number": lastValidBlock}},
-				options.Update().SetUpsert(true),
-			)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		return nil, nil
-	})
-
-	if err != nil {
-		configs.Logger.Error("Failed to execute rollback transaction",
-			zap.String("block", blockNumber),
-			zap.Error(err))
-		return
-	}
-
-	// Recalculate balances for all affected addresses
-	addressCount := 0
-	for address := range affectedAddresses {
-		updateAddressBalance(address)
-		addressCount++
-	}
-
-	configs.Logger.Info("Successfully rolled back block and cleaned up related collections",
-		zap.String("block", blockNumber),
-		zap.String("hash", blockHash),
-		zap.Int("addresses_updated", addressCount))
+    configs.Logger.Info("Successfully rolled back to block",
+        zap.String("block_number", blockNumber))
+    return nil
 }
 
 func updateAddressBalance(address string) {

@@ -6,6 +6,8 @@ import (
 	"Zond2mongoDB/models"
 	"Zond2mongoDB/rpc"
 	"Zond2mongoDB/utils"
+	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -323,110 +325,93 @@ func processSubsequentBlocks(currentBlock string) string {
 		maxRollback = "0x64" // 0x64 = 100 blocks
 	)
 
-	// Calculate minimum block number for rollback
-	minBlock := utils.SubtractHexNumbers(currentBlock, maxRollback)
-
-	// Get the parent hash of the current block we're trying to process
+	// Get the block data from the node
 	blockData, err := rpc.GetBlockByNumberMainnet(currentBlock)
 	if err != nil {
-		logger.Error("Failed to get initial block data",
+		logger.Error("Failed to get block data",
 			zap.String("block", currentBlock),
 			zap.Error(err))
-		return utils.SubtractHexNumbers(currentBlock, "0x1") // Move back one block
+		panic(err) // Force retry
 	}
 
 	if blockData == nil || blockData.Result.ParentHash == "" {
 		logger.Error("Invalid block data received",
 			zap.String("block", currentBlock))
-		return utils.SubtractHexNumbers(currentBlock, "0x1")
+		panic(fmt.Errorf("invalid block data for block %s", currentBlock))
 	}
 
-	// Get the hash of the block that should be the parent in our DB
+	// Get the parent block's hash from our DB
 	parentBlockNum := utils.SubtractHexNumbers(currentBlock, "0x1")
 	dbParentHash := db.GetLatestBlockHashHeaderFromDB(parentBlockNum)
 
-	// If the parent hashes match, process the block normally
-	if blockData.Result.ParentHash == dbParentHash {
-		db.UpdateTransactionStatuses(blockData)
-		processBlockAndUpdateValidators(currentBlock, blockData, dbParentHash)
-		logger.Info("Block processed successfully",
-			zap.String("block", currentBlock),
-			zap.String("hash", blockData.Result.Hash))
-		return utils.AddHexNumbers(currentBlock, "0x1")
-	}
-
-	// Parent hash mismatch or missing parent - need to handle potential fork
-	logger.Warn("Parent hash mismatch or missing parent detected",
-		zap.String("block", currentBlock),
-		zap.String("expected_parent", dbParentHash),
-		zap.String("actual_parent", blockData.Result.ParentHash))
-
-	// If parent block is missing, we need to roll back to the last known good block
-	if dbParentHash == "" {
-		lastGoodBlock := findLastValidBlock(currentBlock, maxRollback)
-		if lastGoodBlock == "" {
-			logger.Error("Failed to find any valid blocks within range",
-				zap.String("current_block", currentBlock),
-				zap.String("max_rollback", maxRollback))
-			// Move back by maxRollback blocks to try to get past the fork
-			lastGoodBlock = utils.SubtractHexNumbers(currentBlock, maxRollback)
-		}
-
-		// Update sync state to last good block
-		db.StoreLastKnownBlockNumber(lastGoodBlock)
-
-		logger.Info("Rolled back to last valid block",
-			zap.String("last_valid_block", lastGoodBlock))
-
-		// Add a delay to allow network to stabilize
-		time.Sleep(5 * time.Second)
-
-		// Return next block after last good block
-		return utils.AddHexNumbers(lastGoodBlock, "0x1")
-	}
-
-	// Find the fork point by walking backwards
-	validBlock := findForkPoint(parentBlockNum, minBlock)
-	if validBlock == "" {
-		logger.Error("Failed to find fork point within range",
+	// If this is not the genesis block and we don't have the parent, we need to sync the parent first
+	if parentBlockNum != "0x0" && dbParentHash == "" {
+		logger.Info("Missing parent block, syncing parent first",
 			zap.String("current_block", currentBlock),
-			zap.String("min_block", minBlock))
-		// Move back by maxRollback blocks to try to get past the fork
-		return utils.SubtractHexNumbers(currentBlock, maxRollback)
+			zap.String("parent_block", parentBlockNum))
+		return parentBlockNum
 	}
 
-	// Roll back all blocks after the fork point
-	rollbackCount := 0
-	for blockNum := parentBlockNum; utils.CompareHexNumbers(blockNum, validBlock) > 0; blockNum = utils.SubtractHexNumbers(blockNum, "0x1") {
-		logger.Info("Rolling back block",
-			zap.String("block", blockNum))
-		db.Rollback(blockNum)
-		rollbackCount++
+	// For non-genesis blocks, verify parent hash
+	if parentBlockNum != "0x0" && blockData.Result.ParentHash != dbParentHash {
+		logger.Warn("Parent hash mismatch detected",
+			zap.String("block", currentBlock),
+			zap.String("expected_parent", dbParentHash),
+			zap.String("actual_parent", blockData.Result.ParentHash))
+
+		// Roll back one block and try again
+		err = db.Rollback(currentBlock)
+		if err != nil {
+			logger.Error("Failed to rollback block",
+				zap.String("block", currentBlock),
+				zap.Error(err))
+		}
+		return parentBlockNum
 	}
 
-	// Update sync state to fork point
-	db.StoreLastKnownBlockNumber(validBlock)
+	// Process the block
+	db.UpdateTransactionStatuses(blockData)
+	if err := processBlock(blockData); err != nil {
+		logger.Error("Failed to process block",
+			zap.String("block", currentBlock),
+			zap.Error(err))
+		panic(err) // Force retry
+	}
 
-	logger.Info("Chain reorganization complete",
-		zap.String("last_valid_block", validBlock),
-		zap.Int("blocks_rolled_back", rollbackCount))
+	logger.Info("Block processed successfully",
+		zap.String("block", currentBlock),
+		zap.String("hash", blockData.Result.Hash))
 
-	// Add a delay to allow network to stabilize
-	time.Sleep(5 * time.Second)
+	// Update sync state after successful processing
+	db.StoreLastKnownBlockNumber(currentBlock)
 
-	// Return next block after fork point
-	return utils.AddHexNumbers(validBlock, "0x1")
+	// Return next block number
+	return utils.AddHexNumbers(currentBlock, "0x1")
 }
 
-func processBlockAndUpdateValidators(blockNumber string, block *models.ZondDatabaseBlock, previousHash string) {
+func processBlock(block *models.ZondDatabaseBlock) error {
+	if block == nil || block.Result.Number == "" {
+		return errors.New("invalid block data")
+	}
+
+	// Verify parent hash consistency before processing
+	parentNumber := utils.SubtractHexNumbers(block.Result.Number, "0x1")
+	if parentNumber != "0x0" { // Skip parent check for genesis block
+		parentHash := db.GetLatestBlockHashHeaderFromDB(parentNumber)
+		if parentHash == "" {
+			return fmt.Errorf("parent block %s not found", parentNumber)
+		}
+		if parentHash != block.Result.ParentHash {
+			return fmt.Errorf("parent hash mismatch for block %s: expected %s, got %s",
+				block.Result.Number, parentHash, block.Result.ParentHash)
+		}
+	}
+
+	// Process the block
 	db.InsertBlockDocument(*block)
 	db.ProcessTransactions(*block)
-	db.UpdateValidators(blockNumber, previousHash)
-	if err := processBlock(block); err != nil {
-		configs.Logger.Error("Failed to process block",
-			zap.String("block", blockNumber),
-			zap.Error(err))
-	}
+
+	return nil
 }
 
 func runPeriodicTask(task func(), interval time.Duration, taskName string) {
@@ -459,41 +444,39 @@ func runPeriodicTask(task func(), interval time.Duration, taskName string) {
 }
 
 func runTaskWithRetry(task func(), taskName string) {
-	const maxRetries = 3
-	const retryDelay = 10 * time.Second
+	maxAttempts := 5
+	attempt := 1
 
-	for attempt := 1; attempt <= maxRetries; attempt++ {
+	for attempt <= maxAttempts {
+		logger.Info("Running periodic task",
+			zap.String("task", taskName),
+			zap.Int("attempt", attempt))
+
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					logger.Error("Recovered from panic in task execution",
+					logger.Error("Task panicked",
 						zap.String("task", taskName),
-						zap.Any("error", r),
-						zap.Int("attempt", attempt))
+						zap.Any("error", r))
 				}
 			}()
-
-			logger.Info("Running periodic task",
-				zap.String("task", taskName),
-				zap.Int("attempt", attempt))
-
 			task()
-
+			// Only mark as complete if no panic occurred
 			logger.Info("Completed periodic task",
 				zap.String("task", taskName),
 				zap.Int("attempt", attempt))
-
-			// If we get here, task completed successfully
+			attempt = maxAttempts + 1 // Exit loop on success
 			return
 		}()
 
-		// If we get here and it's not the last attempt, retry after delay
-		if attempt < maxRetries {
+		if attempt <= maxAttempts {
+			delay := time.Duration(1<<uint(attempt-1)) * time.Second
 			logger.Warn("Retrying task after failure",
 				zap.String("task", taskName),
 				zap.Int("attempt", attempt),
-				zap.Duration("delay", retryDelay))
-			time.Sleep(retryDelay)
+				zap.Duration("delay", delay))
+			time.Sleep(delay)
+			attempt++
 		}
 	}
 }
@@ -522,40 +505,31 @@ func processBlockPeriodically() {
 
 	if err != nil {
 		logger.Error("Failed to get latest block after retries", zap.Error(err))
-		return
+		panic(err) // Force task retry by panicking
 	}
 
 	// Check if we need to process new blocks
 	if utils.CompareHexNumbers(latestBlockHex, nextBlock) > 0 {
 		blocksBehind := utils.SubtractHexNumbers(latestBlockHex, nextBlock)
+		logger.Info("Processing blocks",
+			zap.String("current_block", nextBlock),
+			zap.String("latest_block", latestBlockHex),
+			zap.String("blocks_behind", blocksBehind))
+
 		if utils.CompareHexNumbers(blocksBehind, "0x32") > 0 { // Use batch sync if more than 50 blocks behind
 			logger.Info("Switching to batch sync mode",
 				zap.String("blocks_behind", blocksBehind),
 				zap.String("from_block", nextBlock),
 				zap.String("to_block", latestBlockHex))
-
-			// Store current sync state before batch sync
-			db.StoreLastKnownBlockNumber(nextBlock)
-
-			// Perform batch sync
-			syncedBlock := batchSync(nextBlock, latestBlockHex)
-
-			// Verify sync progress
-			if utils.CompareHexNumbers(syncedBlock, nextBlock) > 0 {
-				logger.Info("Batch sync completed successfully",
-					zap.String("synced_to", syncedBlock))
-				nextBlock = syncedBlock
-			} else {
-				logger.Warn("Batch sync made no progress",
-					zap.String("last_block", nextBlock))
-			}
+			batchSync(nextBlock, latestBlockHex)
 		} else {
-			// Process blocks one by one for small ranges
-			nextBlock = processSubsequentBlocks(nextBlock)
+			// Process single block
+			processSubsequentBlocks(nextBlock)
 		}
-
-		// Update sync state after processing
-		db.StoreLastKnownBlockNumber(nextBlock)
+	} else {
+		logger.Info("No new blocks to process",
+			zap.String("current_block", nextBlock),
+			zap.String("latest_block", latestBlockHex))
 	}
 }
 
@@ -612,14 +586,28 @@ func updateValidatorsPeriodically() {
 	}
 }
 
-func processBlock(block *models.ZondDatabaseBlock) error {
-	// Update pending transactions that are now mined
-	if err := UpdatePendingTransactionsInBlock(block); err != nil {
-		configs.Logger.Error("Failed to update pending transactions in block",
-			zap.String("block", block.Result.Number),
-			zap.Error(err))
-	}
+func updateSyncState(blockNumber string) string {
+    // First verify block exists in DB
+    blockHash := db.GetLatestBlockHashHeaderFromDB(blockNumber)
+    if blockHash == "" {
+        logger.Error("Cannot update sync state - block not found in DB",
+            zap.String("block_number", blockNumber))
+        // Roll back to last known good block
+        previousBlock := utils.SubtractHexNumbers(blockNumber, "0x1")
+        return findLastValidBlock(previousBlock, utils.SubtractHexNumbers(previousBlock, "0x64")) // Roll back up to 100 blocks
+    }
 
-	// Continue with existing block processing...
-	return nil
+    // Verify parent hash consistency
+    parentNumber := utils.SubtractHexNumbers(blockNumber, "0x1")
+    parentHash := db.GetLatestBlockHashHeaderFromDB(parentNumber)
+    if parentHash == "" && parentNumber != "0x0" { // Allow genesis block to have no parent
+        logger.Error("Cannot update sync state - parent block missing",
+            zap.String("block_number", blockNumber),
+            zap.String("parent_number", parentNumber))
+        return findLastValidBlock(parentNumber, utils.SubtractHexNumbers(parentNumber, "0x64"))
+    }
+
+    // Only update sync state if block and parent verification passed
+    db.StoreLastKnownBlockNumber(blockNumber)
+    return blockNumber
 }

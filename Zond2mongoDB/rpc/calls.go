@@ -579,8 +579,8 @@ func GetValidators() models.ResultValidator {
 					zap.Error(err))
 				continue
 			}
-			slotNumber := index % 100 // Assuming 100 slots per epoch
-			validatorMap[slotNumber] = append(validatorMap[slotNumber], validator.Validator.PublicKey)
+			// Use the actual validator index as the slot number instead of modulo
+			validatorMap[index] = append(validatorMap[index], validator.Validator.PublicKey)
 		}
 
 		zap.L().Info("Processed validator page",
@@ -610,9 +610,14 @@ func GetValidators() models.ResultValidator {
 		}
 	}
 
+	totalProcessed := 0
+	for _, validators := range validatorMap {
+		totalProcessed += len(validators)
+	}
+
 	zap.L().Info("Completed fetching all validators",
 		zap.Int("total_pages", currentPage),
-		zap.Int("total_validators_processed", len(validatorMap)),
+		zap.Int("total_validators_processed", totalProcessed),
 		zap.Int("total_slots", len(allValidators.ValidatorsBySlotNumber)),
 		zap.Int("expected_total", totalValidators))
 
