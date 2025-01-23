@@ -13,6 +13,50 @@ import (
 	"go.uber.org/zap"
 )
 
+const syncStateCollection = "sync_state"
+
+// GetLastKnownBlockNumber retrieves the last successfully synced block number
+func GetLastKnownBlockNumber() string {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var result struct {
+		BlockNumber string `bson:"block_number"`
+	}
+
+	syncColl := configs.GetCollection(configs.DB, syncStateCollection)
+	err := syncColl.FindOne(ctx, bson.M{
+		"_id": "last_synced_block",
+	}).Decode(&result)
+
+	if err != nil {
+		configs.Logger.Warn("Failed to get last known block number", zap.Error(err))
+		return "0x0"
+	}
+
+	return result.BlockNumber
+}
+
+// StoreLastKnownBlockNumber stores the last successfully synced block number
+func StoreLastKnownBlockNumber(blockNumber string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	syncColl := configs.GetCollection(configs.DB, syncStateCollection)
+	_, err := syncColl.UpdateOne(
+		ctx,
+		bson.M{"_id": "last_synced_block"},
+		bson.M{"$set": bson.M{"block_number": blockNumber}},
+		options.Update().SetUpsert(true),
+	)
+
+	if err != nil {
+		configs.Logger.Warn("Failed to store last known block number",
+			zap.String("block", blockNumber),
+			zap.Error(err))
+	}
+}
+
 func GetLatestBlockFromDB() *models.ZondDatabaseBlock {
 	if !IsCollectionsExist() {
 		return nil
@@ -51,10 +95,18 @@ func GetLatestBlockNumberFromDB() string {
 	err := configs.BlocksCollections.FindOne(ctx, filter, options).Decode(&Zond)
 
 	if err != nil {
-		configs.Logger.Info("Failed to do FindOne in the blocks collection", zap.Error(err))
+		configs.Logger.Warn("Failed to get latest block number", zap.Error(err))
+		// Try to get the last known block number from a persistent store
+		lastKnown := GetLastKnownBlockNumber()
+		if lastKnown != "0x0" {
+			configs.Logger.Info("Using last known block number", zap.String("block", lastKnown))
+			return lastKnown
+		}
 		return "0x0"
 	}
 
+	// Store this successful block number
+	StoreLastKnownBlockNumber(Zond.Result.Number)
 	return Zond.Result.Number
 }
 

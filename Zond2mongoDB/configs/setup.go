@@ -111,6 +111,17 @@ func ConnectDB() *mongo.Client {
 	// Initialize collections
 	initializeCollections(db)
 
+	// Initialize sync state collection
+	_, err = db.Collection("sync_state").UpdateOne(
+		ctx,
+		bson.M{"_id": "last_synced_block"},
+		bson.M{"$setOnInsert": bson.M{"block_number": "0x0"}},
+		options.Update().SetUpsert(true),
+	)
+	if err != nil {
+		Logger.Error("Failed to initialize sync state collection", zap.Error(err))
+	}
+
 	return client
 }
 

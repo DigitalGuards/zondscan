@@ -72,7 +72,12 @@ func batchSync(fromBlock string, toBlock string) string {
 }
 
 func Sync() {
-	nextBlock := utils.AddHexNumbers(db.GetLatestBlockNumberFromDB(), "0x1")
+	// Try to get the last synced block, fallback to latest from DB if not found
+	nextBlock := db.GetLastKnownBlockNumber()
+	if nextBlock == "0x0" {
+		nextBlock = db.GetLatestBlockNumberFromDB()
+	}
+	nextBlock = utils.AddHexNumbers(nextBlock, "0x1")
 	logger.Info("Starting sync from block number", zap.String("block", nextBlock))
 
 	wg := sync.WaitGroup{}
@@ -80,6 +85,8 @@ func Sync() {
 	maxHex, err := rpc.GetLatestBlock()
 	if err != nil {
 		logger.Error("Failed to get latest block", zap.Error(err))
+		// Don't exit on RPC error, retry after delay
+		time.Sleep(10 * time.Second)
 		return
 	}
 	logger.Info("Latest block from network", zap.String("block", maxHex))
@@ -145,6 +152,14 @@ func consumer(ch <-chan (<-chan Data)) {
 			}
 			logger.Info("Processed transactions for blocks",
 				zap.Ints("block_numbers", i.blockNumbers))
+
+			// Store the last block number from this batch
+			if len(i.blockNumbers) > 0 {
+				lastBlock := utils.IntToHex(i.blockNumbers[len(i.blockNumbers)-1])
+				db.StoreLastKnownBlockNumber(lastBlock)
+				logger.Debug("Updated last synced block",
+					zap.String("block", lastBlock))
+			}
 		}
 	}
 }
