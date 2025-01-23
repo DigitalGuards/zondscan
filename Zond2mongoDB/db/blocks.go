@@ -4,6 +4,7 @@ import (
 	"Zond2mongoDB/configs"
 	"Zond2mongoDB/models"
 	"Zond2mongoDB/utils"
+	"Zond2mongoDB/validation"
 	"context"
 	"math/big"
 	"time"
@@ -31,10 +32,28 @@ func GetLastKnownBlockNumber() string {
 	}).Decode(&result)
 
 	if err != nil {
-		configs.Logger.Warn("Failed to get last known block number", zap.Error(err))
+		if err == mongo.ErrNoDocuments {
+			configs.Logger.Info("No sync state found, this appears to be the first run")
+		} else {
+			configs.Logger.Warn("Failed to get last known block number", zap.Error(err))
+		}
 		return "0x0"
 	}
 
+	if result.BlockNumber == "" {
+		configs.Logger.Warn("Found sync state but block number is empty")
+		return "0x0"
+	}
+
+	// Validate the block number format
+	if !validation.IsValidHexString(result.BlockNumber) {
+		configs.Logger.Warn("Invalid block number format in sync state",
+			zap.String("block", result.BlockNumber))
+		return "0x0"
+	}
+
+	configs.Logger.Info("Found last known block in sync state",
+		zap.String("block", result.BlockNumber))
 	return result.BlockNumber
 }
 
@@ -82,32 +101,48 @@ func GetLatestBlockFromDB() *models.ZondDatabaseBlock {
 
 func GetLatestBlockNumberFromDB() string {
 	if !IsCollectionsExist() {
+		configs.Logger.Info("No collections exist yet")
 		return "0x0"
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// First try to get the count of blocks
+	count, err := configs.BlocksCollections.CountDocuments(ctx, bson.D{})
+	if err != nil {
+		configs.Logger.Warn("Failed to count blocks", zap.Error(err))
+		return "0x0"
+	}
+
+	if count == 0 {
+		configs.Logger.Info("No blocks in database")
+		return "0x0"
+	}
+
+	// Get the latest block number
 	filter := bson.D{}
-	options := options.FindOne().SetProjection(bson.M{"result.number": 1}).SetSort(bson.M{"result.number": -1})
+	findOptions := options.FindOne().SetProjection(bson.M{"result.number": 1}).SetSort(bson.M{"result.number": -1})
 
 	var Zond models.ZondDatabaseBlock
-
-	err := configs.BlocksCollections.FindOne(ctx, filter, options).Decode(&Zond)
+	err = configs.BlocksCollections.FindOne(ctx, filter, findOptions).Decode(&Zond)
 
 	if err != nil {
-		configs.Logger.Warn("Failed to get latest block number", zap.Error(err))
-		// Try to get the last known block number from a persistent store
-		lastKnown := GetLastKnownBlockNumber()
-		if lastKnown != "0x0" {
-			configs.Logger.Info("Using last known block number", zap.String("block", lastKnown))
-			return lastKnown
+		if err == mongo.ErrNoDocuments {
+			configs.Logger.Info("No blocks found in database")
+		} else {
+			configs.Logger.Warn("Failed to get latest block number", zap.Error(err))
 		}
 		return "0x0"
 	}
 
-	// Store this successful block number
-	StoreLastKnownBlockNumber(Zond.Result.Number)
+	if Zond.Result.Number == "" {
+		configs.Logger.Warn("Found block but number is empty")
+		return "0x0"
+	}
+
+	configs.Logger.Info("Found latest block in database",
+		zap.String("block", Zond.Result.Number))
 	return Zond.Result.Number
 }
 

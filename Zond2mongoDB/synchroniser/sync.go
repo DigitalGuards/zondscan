@@ -102,13 +102,26 @@ func Sync() {
 
 	// Retry getting initial sync points with exponential backoff
 	for retries := 0; retries < 5; retries++ {
-		// Try to get the last synced block, fallback to latest from DB if not found
+		// Try to get the last synced block
 		nextBlock = db.GetLastKnownBlockNumber()
 		if nextBlock == "0x0" {
+			// If no last known block, try getting latest from DB
 			nextBlock = db.GetLatestBlockNumberFromDB()
+			if nextBlock == "0x0" {
+				// If no blocks in DB, start from genesis
+				nextBlock = "0x0"
+				logger.Info("No existing blocks found, starting from genesis")
+			} else {
+				logger.Info("Starting from latest block in DB",
+					zap.String("block", nextBlock))
+			}
+		} else {
+			logger.Info("Continuing from last known block",
+				zap.String("block", nextBlock))
 		}
 		nextBlock = utils.AddHexNumbers(nextBlock, "0x1")
 
+		// Get latest block from network
 		maxHex, err = rpc.GetLatestBlock()
 		if err == nil {
 			break
