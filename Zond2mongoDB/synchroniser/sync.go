@@ -277,126 +277,145 @@ func processInitialBlock() {
 	db.ProcessTransactions(*block)
 }
 
+// Helper function to find the last valid block within a range
+func findLastValidBlock(currentBlock string, maxRollback string) string {
+	for blockNum := currentBlock; utils.CompareHexNumbers(blockNum, utils.SubtractHexNumbers(currentBlock, maxRollback)) >= 0; blockNum = utils.SubtractHexNumbers(blockNum, "0x1") {
+		dbHash := db.GetLatestBlockHashHeaderFromDB(blockNum)
+		if dbHash != "" {
+			chainBlock, err := rpc.GetBlockByNumberMainnet(blockNum)
+			if err == nil && chainBlock != nil && dbHash == chainBlock.Result.Hash {
+				return blockNum
+			}
+		}
+	}
+	return ""
+}
+
+// Helper function to find the fork point
+func findForkPoint(startBlock string, endBlock string) string {
+	for blockNum := startBlock; utils.CompareHexNumbers(blockNum, endBlock) >= 0; blockNum = utils.SubtractHexNumbers(blockNum, "0x1") {
+		dbHash := db.GetLatestBlockHashHeaderFromDB(blockNum)
+		if dbHash == "" {
+			logger.Debug("Block not found in DB during rollback search",
+				zap.String("block", blockNum))
+			continue
+		}
+
+		chainBlock, err := rpc.GetBlockByNumberMainnet(blockNum)
+		if err != nil {
+			logger.Warn("Failed to get block during rollback search",
+				zap.String("block", blockNum),
+				zap.Error(err))
+			continue
+		}
+
+		if chainBlock != nil && dbHash == chainBlock.Result.Hash {
+			return blockNum
+		}
+	}
+	return ""
+}
+
 func processSubsequentBlocks(currentBlock string) string {
 	const (
 		maxRetries  = 3
 		retryDelay  = 2 * time.Second
-		maxRollback = "0x32" // 0x32 = 50
+		maxRollback = "0x64" // 0x64 = 100 blocks
 	)
 
-	for retry := 0; retry < maxRetries; retry++ {
-		blockData, err := rpc.GetBlockByNumberMainnet(currentBlock)
-		if err != nil {
-			logger.Warn("Failed to get block data",
-				zap.String("block", currentBlock),
-				zap.Int("retry", retry+1),
-				zap.Error(err))
-			time.Sleep(retryDelay)
-			continue
-		}
+	// Calculate minimum block number for rollback
+	minBlock := utils.SubtractHexNumbers(currentBlock, maxRollback)
 
-		if blockData == nil || blockData.Result.ParentHash == "" {
-			logger.Warn("Block has no parent hash",
-				zap.String("block", currentBlock),
-				zap.Int("retry", retry+1))
-			time.Sleep(retryDelay)
-			continue
-		}
-
-		db.UpdateTransactionStatuses(blockData)
-		previousHash := blockData.Result.ParentHash
-		currentDBHash := db.GetLatestBlockHashHeaderFromDB(db.GetLatestBlockNumberFromDB())
-
-		if previousHash == currentDBHash {
-			processBlockAndUpdateValidators(currentBlock, blockData, previousHash)
-			logger.Info("Block processed successfully",
-				zap.String("block", currentBlock),
-				zap.String("hash", blockData.Result.Hash))
-			return utils.AddHexNumbers(currentBlock, "0x1")
-		}
-
-		// If we've tried multiple times and still have hash mismatch
-		if retry == maxRetries-1 {
-			logger.Warn("Potential chain reorganization after retries",
-				zap.String("block", currentBlock),
-				zap.String("expected_parent", currentDBHash),
-				zap.String("actual_parent", previousHash))
-
-			// Handle chain reorganization
-			startRollback := utils.SubtractHexNumbers(currentBlock, "0x1")
-
-			// Start from current block and walk back until we find a matching block
-			var validBlock string
-			maxRollback := utils.SubtractHexNumbers(startRollback, "0x64") // Max 100 blocks back
-
-			for blockNum := startRollback; utils.CompareHexNumbers(blockNum, maxRollback) >= 0; blockNum = utils.SubtractHexNumbers(blockNum, "0x1") {
-				// Get block from chain
-				blockData, err := rpc.GetBlockByNumberMainnet(blockNum)
-				if err != nil {
-					logger.Warn("Failed to get block during rollback search",
-						zap.String("block", blockNum),
-						zap.Error(err))
-					continue
-				}
-
-				// Get block hash from DB
-				dbHash := db.GetLatestBlockHashHeaderFromDB(blockNum)
-				if dbHash == "" {
-					logger.Debug("Block not found in DB during rollback search",
-						zap.String("block", blockNum))
-					continue
-				}
-
-				// Compare hashes
-				if dbHash == blockData.Result.Hash {
-					validBlock = blockNum
-					logger.Info("Found valid block during rollback search",
-						zap.String("block", blockNum),
-						zap.String("hash", dbHash))
-					break
-				}
-
-				logger.Debug("Hash mismatch during rollback search",
-					zap.String("block", blockNum),
-					zap.String("db_hash", dbHash),
-					zap.String("chain_hash", blockData.Result.Hash))
-			}
-
-			if validBlock == "" {
-				logger.Error("Failed to find valid block within rollback range",
-					zap.String("start", startRollback),
-					zap.String("end", maxRollback))
-				return maxRollback
-			}
-
-			// Roll back all blocks after the valid block
-			rollbackCount := 0
-			for blockNum := startRollback; utils.CompareHexNumbers(blockNum, validBlock) > 0; blockNum = utils.SubtractHexNumbers(blockNum, "0x1") {
-				logger.Info("Rolling back block",
-					zap.String("block", blockNum))
-				db.Rollback(blockNum)
-				rollbackCount++
-			}
-
-			logger.Info("Chain reorganization complete",
-				zap.String("last_valid_block", validBlock),
-				zap.Int("blocks_rolled_back", rollbackCount))
-
-			// Add a delay to allow network to stabilize
-			time.Sleep(5 * time.Second)
-			return utils.AddHexNumbers(validBlock, "0x1")
-		}
-
-		// If we get here, we'll retry with the same block
-		logger.Info("Retrying block due to hash mismatch",
+	// Get the parent hash of the current block we're trying to process
+	blockData, err := rpc.GetBlockByNumberMainnet(currentBlock)
+	if err != nil {
+		logger.Error("Failed to get initial block data",
 			zap.String("block", currentBlock),
-			zap.Int("retry", retry+1),
-			zap.String("expected_parent", currentDBHash),
-			zap.String("actual_parent", previousHash))
-		time.Sleep(retryDelay)
+			zap.Error(err))
+		return utils.SubtractHexNumbers(currentBlock, "0x1") // Move back one block
 	}
 
-	return currentBlock
+	if blockData == nil || blockData.Result.ParentHash == "" {
+		logger.Error("Invalid block data received",
+			zap.String("block", currentBlock))
+		return utils.SubtractHexNumbers(currentBlock, "0x1")
+	}
+
+	// Get the hash of the block that should be the parent in our DB
+	parentBlockNum := utils.SubtractHexNumbers(currentBlock, "0x1")
+	dbParentHash := db.GetLatestBlockHashHeaderFromDB(parentBlockNum)
+
+	// If the parent hashes match, process the block normally
+	if blockData.Result.ParentHash == dbParentHash {
+		db.UpdateTransactionStatuses(blockData)
+		processBlockAndUpdateValidators(currentBlock, blockData, dbParentHash)
+		logger.Info("Block processed successfully",
+			zap.String("block", currentBlock),
+			zap.String("hash", blockData.Result.Hash))
+		return utils.AddHexNumbers(currentBlock, "0x1")
+	}
+
+	// Parent hash mismatch or missing parent - need to handle potential fork
+	logger.Warn("Parent hash mismatch or missing parent detected",
+		zap.String("block", currentBlock),
+		zap.String("expected_parent", dbParentHash),
+		zap.String("actual_parent", blockData.Result.ParentHash))
+
+	// If parent block is missing, we need to roll back to the last known good block
+	if dbParentHash == "" {
+		lastGoodBlock := findLastValidBlock(currentBlock, maxRollback)
+		if lastGoodBlock == "" {
+			logger.Error("Failed to find any valid blocks within range",
+				zap.String("current_block", currentBlock),
+				zap.String("max_rollback", maxRollback))
+			// Move back by maxRollback blocks to try to get past the fork
+			lastGoodBlock = utils.SubtractHexNumbers(currentBlock, maxRollback)
+		}
+
+		// Update sync state to last good block
+		db.StoreLastKnownBlockNumber(lastGoodBlock)
+
+		logger.Info("Rolled back to last valid block",
+			zap.String("last_valid_block", lastGoodBlock))
+
+		// Add a delay to allow network to stabilize
+		time.Sleep(5 * time.Second)
+
+		// Return next block after last good block
+		return utils.AddHexNumbers(lastGoodBlock, "0x1")
+	}
+
+	// Find the fork point by walking backwards
+	validBlock := findForkPoint(parentBlockNum, minBlock)
+	if validBlock == "" {
+		logger.Error("Failed to find fork point within range",
+			zap.String("current_block", currentBlock),
+			zap.String("min_block", minBlock))
+		// Move back by maxRollback blocks to try to get past the fork
+		return utils.SubtractHexNumbers(currentBlock, maxRollback)
+	}
+
+	// Roll back all blocks after the fork point
+	rollbackCount := 0
+	for blockNum := parentBlockNum; utils.CompareHexNumbers(blockNum, validBlock) > 0; blockNum = utils.SubtractHexNumbers(blockNum, "0x1") {
+		logger.Info("Rolling back block",
+			zap.String("block", blockNum))
+		db.Rollback(blockNum)
+		rollbackCount++
+	}
+
+	// Update sync state to fork point
+	db.StoreLastKnownBlockNumber(validBlock)
+
+	logger.Info("Chain reorganization complete",
+		zap.String("last_valid_block", validBlock),
+		zap.Int("blocks_rolled_back", rollbackCount))
+
+	// Add a delay to allow network to stabilize
+	time.Sleep(5 * time.Second)
+
+	// Return next block after fork point
+	return utils.AddHexNumbers(validBlock, "0x1")
 }
 
 func processBlockAndUpdateValidators(blockNumber string, block *models.ZondDatabaseBlock, previousHash string) {
