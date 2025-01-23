@@ -950,11 +950,26 @@ func GetTokenSymbol(contractAddress string) (string, error) {
 func GetTokenDecimals(contractAddress string) (uint8, error) {
 	result, err := CallContractMethod(contractAddress, SIG_DECIMALS)
 	if err != nil {
+		zap.L().Info("Failed to get token decimals",
+			zap.String("contract_address", contractAddress),
+			zap.Error(err))
 		return 0, err
+	}
+
+	// Validate response length
+	if len(result) < 2 {
+		zap.L().Warn("Token decimals response too short",
+			zap.String("contract_address", contractAddress),
+			zap.String("result", result))
+		return 0, fmt.Errorf("invalid token decimals response length")
 	}
 
 	val, err := strconv.ParseUint(result[2:], 16, 8)
 	if err != nil {
+		zap.L().Warn("Failed to parse token decimals",
+			zap.String("contract_address", contractAddress),
+			zap.String("result", result),
+			zap.Error(err))
 		return 0, err
 	}
 
