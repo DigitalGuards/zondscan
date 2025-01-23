@@ -834,7 +834,7 @@ func GetTokenInfo(contractAddress string) (name string, symbol string, decimals 
 	// Track if we successfully got any token information
 	gotTokenInfo := false
 
-	name, err := getTokenName(contractAddress)
+	name, err := GetTokenName(contractAddress)
 	if err != nil {
 		zap.L().Info("Failed to get token name",
 			zap.String("contract_address", contractAddress),
@@ -847,7 +847,7 @@ func GetTokenInfo(contractAddress string) (name string, symbol string, decimals 
 		gotTokenInfo = true
 	}
 
-	symbol, err = getTokenSymbol(contractAddress)
+	symbol, err = GetTokenSymbol(contractAddress)
 	if err != nil {
 		zap.L().Info("Failed to get token symbol",
 			zap.String("contract_address", contractAddress),
@@ -860,7 +860,7 @@ func GetTokenInfo(contractAddress string) (name string, symbol string, decimals 
 		gotTokenInfo = true
 	}
 
-	decimals, err = getTokenDecimals(contractAddress)
+	decimals, err = GetTokenDecimals(contractAddress)
 	if err != nil {
 		zap.L().Info("Failed to get token decimals",
 			zap.String("contract_address", contractAddress),
@@ -885,35 +885,69 @@ func GetTokenInfo(contractAddress string) (name string, symbol string, decimals 
 	return name, symbol, decimals, false
 }
 
-func getTokenName(contractAddress string) (string, error) {
+func GetTokenName(contractAddress string) (string, error) {
 	result, err := CallContractMethod(contractAddress, SIG_NAME)
 	if err != nil {
 		return "", err
 	}
 
-	nameHex := strings.TrimRight(result[66:], "0")
-	if decoded, err := hex.DecodeString(nameHex); err != nil {
-		return "", err
-	} else {
-		return string(decoded), nil
+	// Check if result is long enough before slicing
+	if len(result) < 66 {
+		zap.L().Warn("Token name response too short",
+			zap.String("contract_address", contractAddress),
+			zap.String("result", result))
+		return "", fmt.Errorf("invalid token name response length")
 	}
+
+	// Extract the dynamic part (skip function selector and offset)
+	nameHex := strings.TrimRight(result[66:], "0")
+	if nameHex == "" {
+		return "", nil
+	}
+
+	decoded, err := hex.DecodeString(nameHex)
+	if err != nil {
+		zap.L().Warn("Failed to decode token name",
+			zap.String("contract_address", contractAddress),
+			zap.Error(err))
+		return "", err
+	}
+
+	return string(decoded), nil
 }
 
-func getTokenSymbol(contractAddress string) (string, error) {
+func GetTokenSymbol(contractAddress string) (string, error) {
 	result, err := CallContractMethod(contractAddress, SIG_SYMBOL)
 	if err != nil {
 		return "", err
 	}
 
-	symbolHex := strings.TrimRight(result[66:], "0")
-	if decoded, err := hex.DecodeString(symbolHex); err != nil {
-		return "", err
-	} else {
-		return string(decoded), nil
+	// Check if result is long enough before slicing
+	if len(result) < 66 {
+		zap.L().Warn("Token symbol response too short",
+			zap.String("contract_address", contractAddress),
+			zap.String("result", result))
+		return "", fmt.Errorf("invalid token symbol response length")
 	}
+
+	// Extract the dynamic part (skip function selector and offset)
+	symbolHex := strings.TrimRight(result[66:], "0")
+	if symbolHex == "" {
+		return "", nil
+	}
+
+	decoded, err := hex.DecodeString(symbolHex)
+	if err != nil {
+		zap.L().Warn("Failed to decode token symbol",
+			zap.String("contract_address", contractAddress),
+			zap.Error(err))
+		return "", err
+	}
+
+	return string(decoded), nil
 }
 
-func getTokenDecimals(contractAddress string) (uint8, error) {
+func GetTokenDecimals(contractAddress string) (uint8, error) {
 	result, err := CallContractMethod(contractAddress, SIG_DECIMALS)
 	if err != nil {
 		return 0, err

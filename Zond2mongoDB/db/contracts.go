@@ -42,17 +42,27 @@ func processContracts(tx *models.Transaction) (string, string, string, bool) {
 				if err != nil {
 					configs.Logger.Warn("Failed to get contract code", zap.Error(err))
 				} else {
-					// Try to get token info
-					name, symbol, decimals, isToken := rpc.GetTokenInfo(contractAddress)
-
+					// Try to get token info with proper error handling
 					contractInfo := &models.ContractInfo{
 						ContractCreatorAddress: from,
 						ContractAddress:        contractAddress,
 						ContractCode:           code,
-						TokenName:              name,     // Will be empty for non-tokens
-						TokenSymbol:            symbol,   // Will be empty for non-tokens
-						TokenDecimals:          decimals, // Will be 0 for non-tokens
-						IsToken:                isToken,
+						TokenName:              "",
+						TokenSymbol:            "",
+						TokenDecimals:          0,
+						IsToken:                false,
+					}
+
+					// Attempt to get token info, but don't fail if we can't
+					if name, symbol, decimals, isToken := rpc.GetTokenInfo(contractAddress); isToken {
+						contractInfo.TokenName = name
+						contractInfo.TokenSymbol = symbol
+						contractInfo.TokenDecimals = decimals
+						contractInfo.IsToken = true
+						configs.Logger.Info("Contract identified as token",
+							zap.String("address", contractAddress),
+							zap.String("name", name),
+							zap.String("symbol", symbol))
 					}
 
 					configs.Logger.Info("Processing contract",

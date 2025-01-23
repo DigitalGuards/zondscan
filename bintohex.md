@@ -3,6 +3,49 @@
 ## Core Principle
 Store all blockchain data in its original hex string format from the RPC node, maintaining data integrity and format consistency throughout the system.
 
+## BackendAPI Endpoints (Hex Format)
+
+### Block Endpoints
+- GET `/api/block/{number}` - Returns block data with hex strings
+  * number: Block number in hex (e.g., "0x1234")
+  * Returns: Gas, transactions, hashes in original hex format
+
+- GET `/api/blocks` - Returns list of blocks
+  * All numeric values as hex strings
+  * Timestamps in hex format
+  * Gas values preserved as hex
+
+### Transaction Endpoints
+- GET `/api/transaction/{hash}` - Returns transaction details
+  * hash: Transaction hash (0x prefixed)
+  * Returns: Gas, value, nonce in original hex format
+
+- GET `/api/transactions` - Returns transaction list
+  * All amounts in hex format
+  * Gas prices as hex strings
+  * Block numbers in hex
+
+### Address Endpoints
+- GET `/api/address/{address}` - Returns address details
+  * address: 0x prefixed address
+  * Returns: Balance in hex format
+  * Contract status preserved as hex
+
+- GET `/api/address/{address}/transactions` - Returns address transactions
+  * All values in original hex format
+  * Gas and amounts as hex strings
+
+### Contract Endpoints
+- GET `/api/contract/{address}` - Returns contract details
+  * address: Contract address (0x prefixed)
+  * Returns: Code and status in hex format
+  * Token info preserved in original format
+
+### Validator Endpoints
+- GET `/api/validators` - Returns validator list
+  * All numeric values as hex strings
+  * Addresses in 0x prefixed format
+
 ## Completed Changes (2025-01-23)
 
 ### Phase 1: Model Updates ✅
@@ -145,3 +188,21 @@ All collections now store hex strings directly:
    - Improved hex validation
    - Better error handling
    - Enhanced logging
+
+## API Response Format
+All numeric values in API responses are now returned in their original hex format:
+```json
+{
+  "block": {
+    "number": "0x1234",
+    "timestamp": "0x65af12d4",
+    "gasUsed": "0x5208",
+    "transactions": [
+      {
+        "hash": "0x...",
+        "value": "0x2386f26fc10000",
+        "gasPrice": "0x4a817c800"
+      }
+    ]
+  }
+}
