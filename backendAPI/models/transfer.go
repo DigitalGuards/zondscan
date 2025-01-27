@@ -3,21 +3,19 @@ package models
 import "go.mongodb.org/mongo-driver/bson/primitive"
 
 type Transfer struct {
-	ID              primitive.ObjectID `bson:"_id"`
-	BlockNumber     uint64             `json:"blockNumber"`
-	BlockTimestamp  uint64             `json:"blockTimestamp"`
-	From            string             `json:"from"`
-	To              string             `json:"to"`
-	TxHash          string             `json:"txHash"`
-	Pk              string             `json:"pk"`
-	Signature       string             `json:"signature"`
-	Nonce           uint64             `json:"nonce"`
-	Value           uint64             `json:"value"`    // Store numeric value
-	GasUsed         uint64             `json:"gasUsed"`  // Store numeric value
-	GasPrice        uint64             `json:"gasPrice"` // Store numeric value
-	Status          uint32             `json:"status"`
-	Size            uint64             `json:"size"`
-	ContractAddress string             `json:"contractAddress"` // Contract address if this is a contract creation
+	ID             primitive.ObjectID `bson:"_id,omitempty"`
+	BlockNumber    string             `bson:"blockNumber"`
+	BlockTimestamp string             `bson:"blockTimestamp"`
+	From           string             `bson:"from"`
+	To             string             `bson:"to"`
+	TxHash         string             `bson:"txHash"`
+	Value          string             `bson:"value"`
+	GasUsed        string             `bson:"gasUsed"`
+	GasPrice       string             `bson:"gasPrice"`
+	Nonce          string             `bson:"nonce"`
+	Signature      string             `bson:"signature"`
+	Pk             string             `bson:"pk"`
+	Size           string             `bson:"size"`
 }
 
 type TransactionsVolume struct {

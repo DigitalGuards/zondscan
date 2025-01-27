@@ -439,71 +439,30 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 					gasPriceStr = "0x0"
 				}
 
-				// Convert value from hex string to uint64 (for backward compatibility)
-				value := uint64(0)
-				if valueStr != "0x0" {
-					valueHex := valueStr
-					if valueHex[:2] == "0x" {
-						valueHex = valueHex[2:]
+				ensureHexPrefix := func(s string) string {
+					if s == "" || s == "0x" || s == "0x0" {
+						return "0x0"
 					}
-					value, err = strconv.ParseUint(valueHex, 16, 64)
-					if err != nil {
-						fmt.Println("Error parsing value:", err)
+					if !strings.HasPrefix(s, "0x") {
+						return "0x" + s
 					}
-				}
-
-				// Convert gas values from hex string to uint64
-				gasUsed := uint64(0)
-				if gasUsedStr != "0x0" {
-					gasHex := gasUsedStr
-					if gasHex[:2] == "0x" {
-						gasHex = gasHex[2:]
-					}
-					gasUsed, err = strconv.ParseUint(gasHex, 16, 64)
-					if err != nil {
-						fmt.Println("Error parsing gas used:", err)
-					}
-				}
-
-				gasPrice := uint64(0)
-				if gasPriceStr != "0x0" {
-					gasPriceHex := gasPriceStr
-					if gasPriceHex[:2] == "0x" {
-						gasPriceHex = gasPriceHex[2:]
-					}
-					gasPrice, err = strconv.ParseUint(gasPriceHex, 16, 64)
-					if err != nil {
-						fmt.Println("Error parsing gas price:", err)
-					}
-				}
-
-				// Convert nonce from hex string to uint64
-				nonce := uint64(0)
-				if tx.Nonce != "" {
-					nonceStr := tx.Nonce
-					if nonceStr[:2] == "0x" {
-						nonceStr = nonceStr[2:]
-					}
-					nonce, err = strconv.ParseUint(nonceStr, 16, 64)
-					if err != nil {
-						fmt.Println("Error parsing nonce:", err)
-					}
+					return s
 				}
 
 				result = models.Transfer{
 					ID:             primitive.NewObjectID(),
-					BlockNumber:    block.Result.Number,
-					BlockTimestamp: block.Result.Timestamp,
+					BlockNumber:    ensureHexPrefix(block.Result.Number),
+					BlockTimestamp: ensureHexPrefix(block.Result.Timestamp),
 					From:           from,
 					To:             to,
 					TxHash:         txHash,
-					Value:          value,
-					GasUsed:        gasUsed,
-					GasPrice:       gasPrice,
-					Nonce:          nonce,
+					Value:          ensureHexPrefix(valueStr),
+					GasUsed:        ensureHexPrefix(gasUsedStr),
+					GasPrice:       ensureHexPrefix(gasPriceStr),
+					Nonce:          ensureHexPrefix(tx.Nonce),
 					Signature:      tx.Signature,
 					Pk:             tx.PublicKey,
-					Size:           block.Result.Size,
+					Size:           ensureHexPrefix(block.Result.Size),
 				}
 				return result, nil
 			}
@@ -582,11 +541,21 @@ func GetTransactionByHash(hash string) (*models.Transaction, error) {
 		}
 		return nil, err
 	}
-	blockNumberStr := strconv.FormatUint(transfer.BlockNumber, 10)
+
+	// Convert hex string to decimal string for display
+	blockNum := transfer.BlockNumber
+	if strings.HasPrefix(blockNum, "0x") {
+		// Remove 0x prefix and parse as hex
+		num, err := strconv.ParseUint(blockNum[2:], 16, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid block number format: %v", err)
+		}
+		blockNum = strconv.FormatUint(num, 10)
+	}
 
 	// Transfer.TxHash is already in hex string format
 	return &models.Transaction{
 		Hash:        transfer.TxHash,
-		BlockNumber: blockNumberStr,
+		BlockNumber: blockNum,
 	}, nil
 }

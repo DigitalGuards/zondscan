@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -57,12 +58,12 @@ func UserRoute(router *gin.Engine) {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			
+
 			if tx != nil {
 				// Transaction is mined - return formatted response
 				c.JSON(http.StatusOK, gin.H{
 					"transaction": gin.H{
-						"hash":        tx.Hash,        // Already has 0x prefix
+						"hash":        tx.Hash, // Already has 0x prefix
 						"status":      "mined",
 						"blockNumber": tx.BlockNumber,
 						"timestamp":   time.Now().Unix(),
@@ -178,8 +179,15 @@ func UserRoute(router *gin.Engine) {
 		}
 
 		var latestBlockNumber uint64
-		if len(latestBlock) > 0 {
-			latestBlockNumber = latestBlock[0].Result.Number
+		if len(latestBlock) > 0 && latestBlock[0].Result.Number != "" {
+			numStr := latestBlock[0].Result.Number
+			if strings.HasPrefix(numStr, "0x") {
+				numStr = numStr[2:] // Remove "0x" prefix
+				latestBlockNumber, err = strconv.ParseUint(numStr, 16, 64)
+				if err != nil {
+					fmt.Printf("Error parsing block number: %v\n", err)
+				}
+			}
 		}
 
 		c.JSON(http.StatusOK, gin.H{
@@ -250,8 +258,15 @@ func UserRoute(router *gin.Engine) {
 		}
 
 		var latestBlockNumber uint64
-		if len(latestBlock) > 0 {
-			latestBlockNumber = latestBlock[0].Result.Number
+		if len(latestBlock) > 0 && latestBlock[0].Result.Number != "" {
+			numStr := latestBlock[0].Result.Number
+			if strings.HasPrefix(numStr, "0x") {
+				numStr = numStr[2:] // Remove "0x" prefix
+				latestBlockNumber, err = strconv.ParseUint(numStr, 16, 64)
+				if err != nil {
+					fmt.Printf("Error parsing block number: %v\n", err)
+				}
+			}
 		}
 
 		// Response aggregation
@@ -279,8 +294,15 @@ func UserRoute(router *gin.Engine) {
 		}
 
 		var latestBlockNumber uint64
-		if len(latestBlock) > 0 {
-			latestBlockNumber = latestBlock[0].Result.Number
+		if len(latestBlock) > 0 && latestBlock[0].Result.Number != "" {
+			numStr := latestBlock[0].Result.Number
+			if strings.HasPrefix(numStr, "0x") {
+				numStr = numStr[2:] // Remove "0x" prefix
+				latestBlockNumber, err = strconv.ParseUint(numStr, 16, 64)
+				if err != nil {
+					fmt.Printf("Error parsing block number: %v\n", err)
+				}
+			}
 		}
 
 		c.JSON(http.StatusOK, gin.H{
@@ -292,10 +314,26 @@ func UserRoute(router *gin.Engine) {
 	router.GET("/latestblock", func(c *gin.Context) {
 		latestBlock, err := db.ReturnLatestBlock()
 		if err != nil {
-			fmt.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to fetch latest block: %v", err),
+			})
+			return
 		}
+
+		var blockNumber uint64
+		if len(latestBlock) > 0 && latestBlock[0].Result.Number != "" {
+			numStr := latestBlock[0].Result.Number
+			if strings.HasPrefix(numStr, "0x") {
+				numStr = numStr[2:] // Remove "0x" prefix
+				blockNumber, err = strconv.ParseUint(numStr, 16, 64)
+				if err != nil {
+					fmt.Printf("Error parsing block number: %v\n", err)
+				}
+			}
+		}
+
 		c.JSON(http.StatusOK, gin.H{
-			"response": latestBlock,
+			"blockNumber": blockNumber,
 		})
 	})
 
@@ -375,7 +413,20 @@ func UserRoute(router *gin.Engine) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get latest block"})
 			return
 		}
-		currentEpoch := int(latestBlock[0].Result.Number / 128) // Each epoch is 128 blocks
+
+		var currentEpoch int
+		if len(latestBlock) > 0 && latestBlock[0].Result.Number != "" {
+			numStr := latestBlock[0].Result.Number
+			if strings.HasPrefix(numStr, "0x") {
+				numStr = numStr[2:] // Remove "0x" prefix
+				blockNum, err := strconv.ParseUint(numStr, 16, 64)
+				if err != nil {
+					fmt.Printf("Error parsing block number: %v\n", err)
+				} else {
+					currentEpoch = int(blockNum / 128) // Each epoch is 128 blocks
+				}
+			}
+		}
 
 		// Initialize response
 		response := models.ValidatorResponse{
@@ -452,16 +503,62 @@ func UserRoute(router *gin.Engine) {
 		})
 	})
 
+	router.GET("/debug/blocks", func(c *gin.Context) {
+		count, err := db.CountBlocksNetwork()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to count blocks: %v", err),
+				"step":  "count_blocks",
+			})
+			return
+		}
+
+		latest, err := db.ReturnLatestBlock()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":       fmt.Sprintf("Failed to get latest block: %v", err),
+				"step":        "get_latest",
+				"block_count": count,
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"total_blocks": count,
+			"latest_block": latest,
+		})
+	})
+
 	router.GET("/block/:query", func(c *gin.Context) {
-		value := c.Param("query")
-		intValue, err := strconv.ParseUint(value, 10, 64)
-		if err != nil {
-			fmt.Println(err)
+		blockStr := c.Param("query")
+		var blockNum uint64
+		var err error
+
+		if strings.HasPrefix(blockStr, "0x") {
+			// Handle hex format by removing 0x prefix
+			blockNum, err = strconv.ParseUint(blockStr[2:], 16, 64)
+		} else {
+			// Handle decimal format
+			blockNum, err = strconv.ParseUint(blockStr, 10, 64)
 		}
-		query, err := db.ReturnSingleBlock(intValue)
+
 		if err != nil {
-			fmt.Println(err)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Invalid block number. Please provide a decimal number or hex with 0x prefix: " + err.Error(),
+			})
+			return
 		}
-		c.JSON(http.StatusOK, gin.H{"response": query})
+
+		block, err := db.ReturnSingleBlock(blockNum)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"block": block,
+		})
 	})
 }

@@ -3,52 +3,97 @@
 ## Core Principle
 Store all blockchain data in its original hex string format from the RPC node, maintaining data integrity and format consistency throughout the system.
 
-## BackendAPI Endpoints (Hex Format)
+## Hex String Implementation in Zond Explorer
 
-### Block Endpoints
-- GET `/api/block/{number}` - Returns block data with hex strings
-  * number: Block number in hex (e.g., "0x1234")
-  * Returns: Gas, transactions, hashes in original hex format
+### Overview
+All blockchain data is stored in its original hex string format from the RPC node to maintain precision and compatibility. Numbers are stored with '0x' prefix.
 
-- GET `/api/blocks` - Returns list of blocks
-  * All numeric values as hex strings
-  * Timestamps in hex format
-  * Gas values preserved as hex
+### Implementation Status (2025-01-27)
 
-### Transaction Endpoints
-- GET `/api/transaction/{hash}` - Returns transaction details
-  * hash: Transaction hash (0x prefixed)
-  * Returns: Gas, value, nonce in original hex format
+#### Phase 1: Model Updates
+1. **Models Converted to Hex Strings**
+   - All numeric fields now use string type
+   - Original hex format preserved from RPC
+   - Consistent 0x prefix handling
+   - No binary/uint64 conversions
 
-- GET `/api/transactions` - Returns transaction list
-  * All amounts in hex format
-  * Gas prices as hex strings
-  * Block numbers in hex
+#### Phase 2: Code Updates
+1. **Zond2mongoDB**
+   - Direct RPC response storage
+   - Hex format validation
+   - No intermediate conversions
 
-### Address Endpoints
-- GET `/api/address/{address}` - Returns address details
-  * address: 0x prefixed address
-  * Returns: Balance in hex format
-  * Contract status preserved as hex
+2. **BackendAPI**
+   - Support for both decimal and hex inputs
+   - Automatic format detection and conversion
+   - Enhanced error handling
+   - New debug endpoints
 
-- GET `/api/address/{address}/transactions` - Returns address transactions
-  * All values in original hex format
-  * Gas and amounts as hex strings
+#### Phase 3: Database Collections
+All collections store hex strings:
+- Blocks: numbers, gas, timestamps
+- Transfers: amounts, addresses
+- Addresses: balances, IDs
+- Contracts: status, addresses
 
-### Contract Endpoints
-- GET `/api/contract/{address}` - Returns contract details
-  * address: Contract address (0x prefixed)
-  * Returns: Code and status in hex format
-  * Token info preserved in original format
+### API Endpoints
 
-### Validator Endpoints
-- GET `/api/validators` - Returns validator list
-  * All numeric values as hex strings
-  * Addresses in 0x prefixed format
+#### Block Endpoints
+- GET `/block/{number}`
+  * Accepts: decimal ("300") or hex ("0x12c")
+  * Returns: All fields in hex format
+
+- GET `/debug/blocks`
+  * Returns: Block count and latest block info
+
+- GET `/latestblock`
+  * Returns: Current block number in decimal
+
+#### Transaction Endpoints
+- GET `/transaction/{hash}`
+  * Input: 0x-prefixed hash
+  * Returns: Gas, value, nonce in hex
+
+#### Address Endpoints
+- GET `/address/{address}/transactions`
+  * Returns: All values in hex format
+
+#### Validator Endpoints
+- GET `/validators`
+  * Returns: Stats in hex format
+  * Epoch calculations from hex blocks
+
+### Benefits
+1. Data Integrity: Exact RPC format preserved
+2. Zero Conversion: Original format stored
+3. Better Debugging: Human-readable hex
+4. Simplified Code: No conversions needed
+5. Direct Blockchain Tool Compatibility
+6. Improved Performance
+7. Enhanced Reliability
+8. Better Error Detection
+
+### Example Response
+```json
+{
+  "block": {
+    "number": "0x12c",
+    "timestamp": "0x65ad5a90",
+    "gasLimit": "0x1c9c380",
+    "gasUsed": "0x0"
+  }
+}
+```
+
+### Implementation Notes
+- All numeric model fields use string type
+- Automatic hex/decimal conversion in API
+- Frontend handles display conversion
+- Consistent 0x prefix across system
 
 ## Completed Changes (2025-01-23)
 
-### Phase 1: Model Updates ✅
+### Phase 1: Model Updates 
 1. **All Models**:
    - Using string fields for all RPC data (numbers, addresses, hashes)
    - Storing original hex strings without conversion
@@ -61,7 +106,7 @@ Store all blockchain data in its original hex string format from the RPC node, m
    - "0x" prefix validation
    - No conversion to binary/uint64
 
-### Phase 2: Code Updates ✅
+### Phase 2: Code Updates 
 1. **Zond2mongoDB Changes**:
    - Store RPC responses directly without conversion
    - Validate hex string formats
@@ -76,7 +121,7 @@ Store all blockchain data in its original hex string format from the RPC node, m
    - Maintain consistent hex string format
    - Enhanced error reporting for invalid formats
 
-### Phase 3: Database Operations ✅
+### Phase 3: Database Operations 
 All collections now store hex strings directly:
 - Blocks collection (numbers, gas, timestamps)
 - Transfer collection (amounts, addresses)
@@ -84,7 +129,7 @@ All collections now store hex strings directly:
 - Address collection (balances, IDs)
 - Contract collection (status, addresses)
 
-### Phase 4: Latest Improvements (2025-01-23) ✅
+### Phase 4: Latest Improvements (2025-01-23) 
 1. **Transaction Processing**:
    - Fixed GetBalance response handling
    - Improved contract status handling
@@ -108,16 +153,6 @@ All collections now store hex strings directly:
    - Improved error messages
    - Enhanced logging for debugging
    - Graceful handling of invalid data
-
-## Benefits
-1. ✅ Data Integrity (exact RPC format preserved)
-2. ✅ Zero Conversion (store and serve original format)
-3. ✅ Better Debugging (human-readable hex in MongoDB)
-4. ✅ Simplified Code (removed all conversions)
-5. ✅ Direct Compatibility with blockchain tools
-6. ✅ Improved Performance (no conversion overhead)
-7. ✅ Enhanced Reliability (no data loss from conversions)
-8. ✅ Better Error Detection (consistent validation)
 
 ## Remaining Work
 
@@ -188,21 +223,3 @@ All collections now store hex strings directly:
    - Improved hex validation
    - Better error handling
    - Enhanced logging
-
-## API Response Format
-All numeric values in API responses are now returned in their original hex format:
-```json
-{
-  "block": {
-    "number": "0x1234",
-    "timestamp": "0x65af12d4",
-    "gasUsed": "0x5208",
-    "transactions": [
-      {
-        "hash": "0x...",
-        "value": "0x2386f26fc10000",
-        "gasPrice": "0x4a817c800"
-      }
-    ]
-  }
-}

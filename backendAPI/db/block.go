@@ -5,6 +5,8 @@ import (
 	"backendAPI/models"
 	"context"
 	"fmt"
+	"strings"
+	"strconv"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -17,13 +19,24 @@ func ReturnSingleBlock(block uint64) (models.ZondUint64Version, error) {
 
 	var result models.ZondUint64Version
 
-	filter := primitive.D{{Key: "result.number", Value: block}}
+	// Convert decimal block number to hex format with 0x prefix
+	hexBlock := fmt.Sprintf("0x%x", block)
+	filter := primitive.D{{Key: "result.number", Value: hexBlock}}
+
 	err := configs.BlocksCollection.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
-		fmt.Println(err)
+		// Try with zero-padded hex if the first attempt failed
+		hexBlockPadded := fmt.Sprintf("0x%02x", block)
+		if hexBlockPadded != hexBlock {
+			filter = primitive.D{{Key: "result.number", Value: hexBlockPadded}}
+			err = configs.BlocksCollection.FindOne(ctx, filter).Decode(&result)
+		}
+		if err != nil {
+			return result, fmt.Errorf("block %d not found", block)
+		}
 	}
 
-	return result, err
+	return result, nil
 }
 
 func ReturnLatestBlock() ([]models.ZondUint64Version, error) {
@@ -43,14 +56,14 @@ func ReturnLatestBlock() ([]models.ZondUint64Version, error) {
 
 	results, err := configs.BlocksCollection.Find(ctx, primitive.D{}, opts)
 	if err != nil {
-		fmt.Println(err)
+		return blocks, fmt.Errorf("failed to query latest block: %v", err)
 	}
 
 	defer results.Close(ctx)
 	for results.Next(ctx) {
 		var singleBlock models.ZondUint64Version
 		if err = results.Decode(&singleBlock); err != nil {
-			fmt.Println(err)
+			return blocks, fmt.Errorf("failed to decode block: %v", err)
 		}
 		blocks = append(blocks, singleBlock)
 	}
@@ -122,10 +135,20 @@ func ReturnHashToBlockNumber(query string) (uint64, error) {
 	filter := primitive.D{{Key: "result.hash", Value: query}}
 	err := configs.BlocksCollection.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
-		fmt.Println(err)
+		return 0, fmt.Errorf("failed to find block: %v", err)
 	}
 
-	return result.Result.Number, err
+	// Convert hex string to uint64
+	numStr := result.Result.Number
+	if strings.HasPrefix(numStr, "0x") {
+		numStr = numStr[2:] // Remove "0x" prefix
+		num, err := strconv.ParseUint(numStr, 16, 64)
+		if err != nil {
+			return 0, fmt.Errorf("failed to parse block number: %v", err)
+		}
+		return num, nil
+	}
+	return 0, fmt.Errorf("invalid block number format: %s", numStr)
 }
 
 func ReturnBlockSizes() ([]primitive.M, error) {
