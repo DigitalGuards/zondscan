@@ -63,6 +63,33 @@ All collections store hex strings:
   * Returns: Stats in hex format
   * Epoch calculations from hex blocks
 
+### Transaction Endpoint
+
+### Collection Structure
+- Collection name: `transactionByAddress` (camelCase)
+- Field types:
+  - `txType`: string
+  - `from`: string
+  - `to`: string
+  - `txHash`: string
+  - `timeStamp`: string
+  - `amount`: float64 (8 decimal places)
+  - `paidFees`: float64 (8 decimal places)
+
+### API Changes
+- Fixed `/txs` endpoint to properly return latest transactions
+- Collection name fixed from snake_case to camelCase
+- Model updated to match MongoDB schema
+- Empty array returned instead of null when no transactions found
+- Proper error handling added
+- Changed amount and fees to float64 for better precision
+- Numbers formatted to 8 decimal places to avoid scientific notation
+
+### Conversion Notes
+- Block numbers are stored in hex format with "0x" prefix
+- Values are stored in hex format and converted to float64 for display
+- Timestamps are stored as strings
+
 ### Benefits
 1. Data Integrity: Exact RPC format preserved
 2. Zero Conversion: Original format stored

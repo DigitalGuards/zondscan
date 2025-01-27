@@ -35,13 +35,13 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 	nonce := tx.Nonce
 	txType := tx.Type
 
-	// Convert value to float32 for display
+	// Convert value to float64 for display
 	value := new(big.Int)
 	value.SetString(tx.Value[2:], 16)
 	divisor := new(big.Float).SetFloat64(float64(configs.QUANTA))
 	bigIntAsFloat := new(big.Float).SetInt(value)
 	resultBigFloat := new(big.Float).Quo(bigIntAsFloat, divisor)
-	valueFloat32, _ := resultBigFloat.Float32()
+	valueFloat64, _ := resultBigFloat.Float64()
 
 	hashmap := map[string]string{"from": tx.From, "to": tx.To}
 
@@ -64,15 +64,15 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 			divisor := new(big.Float).SetFloat64(float64(configs.QUANTA))
 			bigIntAsFloat := new(big.Float).SetInt(getBalanceResult)
 			resultBigFloat := new(big.Float).Quo(bigIntAsFloat, divisor)
-			resultFloat32, _ := resultBigFloat.Float32()
+			resultFloat64, _ := resultBigFloat.Float64()
 
-			UpsertTransactions(address, resultFloat32, isContract)
+			UpsertTransactions(address, resultFloat64, isContract)
 		}
 	}
 
 	transactionType, callType, fromInternal, toInternal, inputInternal, outputInternal, InternalTracerAddress, valueInternal, gasInternal, gasUsedInternal, addressFunctionIdentifier, amountFunctionIdentifier := rpc.CallDebugTraceTransaction(tx.Hash)
 	if transactionType == "CALL" || InternalTracerAddress != nil {
-		InternalTransactionByAddressCollection(transactionType, callType, txHash, fromInternal, toInternal, fmt.Sprintf("0x%x", inputInternal), fmt.Sprintf("0x%x", outputInternal), InternalTracerAddress, float32(valueInternal), fmt.Sprintf("0x%x", gasInternal), fmt.Sprintf("0x%x", gasUsedInternal), addressFunctionIdentifier, fmt.Sprintf("0x%x", amountFunctionIdentifier), blockTimestamp)
+		InternalTransactionByAddressCollection(transactionType, callType, txHash, fromInternal, toInternal, fmt.Sprintf("0x%x", inputInternal), fmt.Sprintf("0x%x", outputInternal), InternalTracerAddress, float64(valueInternal), fmt.Sprintf("0x%x", gasInternal), fmt.Sprintf("0x%x", gasUsedInternal), addressFunctionIdentifier, fmt.Sprintf("0x%x", amountFunctionIdentifier), blockTimestamp)
 	}
 
 	// Calculate fees using hex strings
@@ -85,13 +85,13 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 	divisor = new(big.Float).SetFloat64(float64(configs.QUANTA))
 	feesFloat := new(big.Float).SetInt(feesBig)
 	feesResult := new(big.Float).Quo(feesFloat, divisor)
-	fees, _ := feesResult.Float32()
+	fees, _ := feesResult.Float64()
 
-	TransactionByAddressCollection(blockTimestamp, txType, from, to, txHash, valueFloat32, fees)
-	TransferCollection(blockNumber, blockTimestamp, from, to, txHash, pk, signature, nonce, valueFloat32, data, contractAddress, statusTx, size, fees)
+	TransactionByAddressCollection(blockTimestamp, txType, from, to, txHash, valueFloat64, fees)
+	TransferCollection(blockNumber, blockTimestamp, from, to, txHash, pk, signature, nonce, valueFloat64, data, contractAddress, statusTx, size, fees)
 }
 
-func TransferCollection(blockNumber string, blockTimestamp string, from string, to string, hash string, pk string, signature string, nonce string, value float32, data string, contractAddress string, status string, size string, paidFees float32) (*mongo.InsertOneResult, error) {
+func TransferCollection(blockNumber string, blockTimestamp string, from string, to string, hash string, pk string, signature string, nonce string, value float64, data string, contractAddress string, status string, size string, paidFees float64) (*mongo.InsertOneResult, error) {
 	var doc primitive.D
 
 	baseDoc := primitive.D{
@@ -128,7 +128,7 @@ func TransferCollection(blockNumber string, blockTimestamp string, from string, 
 	return result, err
 }
 
-func InternalTransactionByAddressCollection(transactionType string, callType string, hash string, from string, to string, input string, output string, traceAddress []int, value float32, gas string, gasUsed string, addressFunctionIdentifier string, amountFunctionIdentifier string, blockTimestamp string) (*mongo.InsertOneResult, error) {
+func InternalTransactionByAddressCollection(transactionType string, callType string, hash string, from string, to string, input string, output string, traceAddress []int, value float64, gas string, gasUsed string, addressFunctionIdentifier string, amountFunctionIdentifier string, blockTimestamp string) (*mongo.InsertOneResult, error) {
 	doc := primitive.D{
 		{Key: "type", Value: transactionType},
 		{Key: "callType", Value: callType},
@@ -155,7 +155,7 @@ func InternalTransactionByAddressCollection(transactionType string, callType str
 	return result, nil
 }
 
-func TransactionByAddressCollection(timeStamp string, txType string, from string, to string, hash string, amount float32, paidFees float32) (*mongo.InsertOneResult, error) {
+func TransactionByAddressCollection(timeStamp string, txType string, from string, to string, hash string, amount float64, paidFees float64) (*mongo.InsertOneResult, error) {
 	doc := primitive.D{
 		{Key: "txType", Value: txType},
 		{Key: "from", Value: from},
@@ -174,7 +174,7 @@ func TransactionByAddressCollection(timeStamp string, txType string, from string
 	return result, err
 }
 
-func UpsertTransactions(address string, value float32, isContract bool) (*mongo.UpdateResult, error) {
+func UpsertTransactions(address string, value float64, isContract bool) (*mongo.UpdateResult, error) {
 	filter := primitive.D{{Key: "id", Value: address}}
 	update := primitive.D{
 		{Key: "$set", Value: primitive.D{
