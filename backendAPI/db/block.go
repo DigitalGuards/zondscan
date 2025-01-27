@@ -5,8 +5,8 @@ import (
 	"backendAPI/models"
 	"context"
 	"fmt"
-	"strings"
 	"strconv"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -39,36 +39,21 @@ func ReturnSingleBlock(block uint64) (models.ZondUint64Version, error) {
 	return result, nil
 }
 
-func ReturnLatestBlock() ([]models.ZondUint64Version, error) {
+// GetLatestBlockFromSyncState returns the latest block number from the sync_state collection
+func GetLatestBlockFromSyncState() (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	var blocks []models.ZondUint64Version
 	defer cancel()
 
-	projection := primitive.D{
-		{Key: "result.number", Value: 1},
-		{Key: "result.timestamp", Value: 1},
+	var result struct {
+		BlockNumber string `bson:"block_number"`
 	}
 
-	opts := options.Find().
-		SetProjection(projection).
-		SetSort(primitive.D{{Key: "result.number", Value: -1}}).
-		SetLimit(1)
-
-	results, err := configs.BlocksCollection.Find(ctx, primitive.D{}, opts)
+	err := configs.GetCollection(configs.DB, "sync_state").FindOne(ctx, primitive.D{{Key: "_id", Value: "last_synced_block"}}).Decode(&result)
 	if err != nil {
-		return blocks, fmt.Errorf("failed to query latest block: %v", err)
+		return "", fmt.Errorf("failed to get sync state: %v", err)
 	}
 
-	defer results.Close(ctx)
-	for results.Next(ctx) {
-		var singleBlock models.ZondUint64Version
-		if err = results.Decode(&singleBlock); err != nil {
-			return blocks, fmt.Errorf("failed to decode block: %v", err)
-		}
-		blocks = append(blocks, singleBlock)
-	}
-
-	return blocks, nil
+	return result.BlockNumber, nil
 }
 
 func ReturnLatestBlocks(page int, limit int) ([]models.Result, error) {

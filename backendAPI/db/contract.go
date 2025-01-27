@@ -67,9 +67,7 @@ func ReturnContractCode(query string) (models.ContractInfo, error) {
 	var result models.ContractInfo
 
 	// Remove "0x" prefix if present
-	if strings.HasPrefix(query, "0x") {
-		query = query[2:]
-	}
+	query = strings.TrimPrefix(query, "0x")
 
 	// Try to decode the query as a hex address
 	address, err := hex.DecodeString(query)
