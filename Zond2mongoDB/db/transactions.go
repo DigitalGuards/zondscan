@@ -87,7 +87,7 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 	feesResult := new(big.Float).Quo(feesFloat, divisor)
 	fees, _ := feesResult.Float64()
 
-	TransactionByAddressCollection(blockTimestamp, txType, from, to, txHash, valueFloat64, fees)
+	TransactionByAddressCollection(blockTimestamp, txType, from, to, txHash, valueFloat64, fees, blockNumber)
 	TransferCollection(blockNumber, blockTimestamp, from, to, txHash, pk, signature, nonce, valueFloat64, data, contractAddress, statusTx, size, fees)
 }
 
@@ -155,7 +155,7 @@ func InternalTransactionByAddressCollection(transactionType string, callType str
 	return result, nil
 }
 
-func TransactionByAddressCollection(timeStamp string, txType string, from string, to string, hash string, amount float64, paidFees float64) (*mongo.InsertOneResult, error) {
+func TransactionByAddressCollection(timeStamp string, txType string, from string, to string, hash string, amount float64, paidFees float64, blockNumber string) (*mongo.InsertOneResult, error) {
 	doc := primitive.D{
 		{Key: "txType", Value: txType},
 		{Key: "from", Value: from},
@@ -164,6 +164,7 @@ func TransactionByAddressCollection(timeStamp string, txType string, from string
 		{Key: "timeStamp", Value: timeStamp},
 		{Key: "amount", Value: amount},
 		{Key: "paidFees", Value: paidFees},
+		{Key: "blockNumber", Value: blockNumber},
 	}
 
 	result, err := configs.TransactionByAddressCollections.InsertOne(context.TODO(), doc)

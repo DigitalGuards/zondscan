@@ -25,9 +25,13 @@ func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
 		{Key: "inOut", Value: 1},
 		{Key: "txType", Value: 1},
 		{Key: "address", Value: 1},
+		{Key: "from", Value: 1},
+		{Key: "to", Value: 1},
 		{Key: "txHash", Value: 1},
 		{Key: "timeStamp", Value: 1},
 		{Key: "amount", Value: 1},
+		{Key: "paidFees", Value: 1},
+		{Key: "blockNumber", Value: 1},
 	}
 
 	opts := options.Find().
@@ -37,6 +41,7 @@ func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
 	results, err := configs.TransactionByAddressCollection.Find(ctx, primitive.D{}, opts)
 	if err != nil {
 		fmt.Println(err)
+		return nil, err
 	}
 
 	defer results.Close(ctx)
@@ -44,6 +49,7 @@ func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
 		var singleTransaction models.TransactionByAddress
 		if err = results.Decode(&singleTransaction); err != nil {
 			fmt.Println(err)
+			continue
 		}
 		transactions = append(transactions, singleTransaction)
 	}
@@ -198,6 +204,7 @@ func ReturnTransactionsNetwork(page int) ([]models.TransactionByAddress, error) 
 		{Key: "timeStamp", Value: 1},
 		{Key: "amount", Value: 1},
 		{Key: "paidFees", Value: 1},
+		{Key: "blockNumber", Value: 1},
 	}
 
 	opts := options.Find().
