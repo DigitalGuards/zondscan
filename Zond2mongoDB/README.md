@@ -68,6 +68,9 @@ This is the Golang implementation of the QRL blockchain synchronizer to MongoDB.
 │   ├── calls.go    # RPC call definitions
 │   └── client.go   # RPC client
 │
+├── services/       # Business logic layer
+│   └── validator_service.go # Validator data processing and storage
+│
 └── synchroniser/   # Blockchain synchronization
     └── sync.go     # Core sync logic
 ```
@@ -79,7 +82,7 @@ This is the Golang implementation of the QRL blockchain synchronizer to MongoDB.
 ```env
 MONGOURI=mongodb://localhost:27017
 NODE_URL=http://localhost:8545
-BEACONCHAIN_API=http://beaconnodehttpapi:3500 |
+BEACONCHAIN_API=http://beaconnodehttpapi:3500
 ```
 
 2. Build the application:
@@ -111,12 +114,93 @@ pm2 start ./syncer.exe --name "synchroniser"
 
 ## Key Components
 
-- **Synchroniser**: Core component that manages the blockchain synchronization process
-- **RPC Client**: Handles communication with the Zond node
-- **Database Layer**: Manages MongoDB operations and data persistence
-- **Models**: Defines data structures for blockchain entities
-- **Contract Handling**: Manages smart contract interactions and events
-- **Logging**: Provides detailed logging for monitoring and debugging
+### Synchroniser
+- Core component that manages the blockchain synchronization process
+- Handles periodic updates of validators and contract data
+- Maintains data consistency across node updates
+
+### Validator System
+- **Service Layer** (`services/validator_service.go`): 
+  - Handles validator data processing and storage
+  - Manages deduplication of validator records
+  - Provides clean interfaces for validator operations
+- **Data Storage**:
+  - Stores all validators in a single document for efficient retrieval
+  - Maintains validator status, epochs, and balances
+  - Supports pagination for large validator sets
+- **Beacon Chain Integration**:
+  - Fetches validator data from the beacon chain API
+  - Processes validator updates every epoch
+  - Tracks validator activation and exit epochs
+
+### Contract System
+- **Enhanced Contract Detection**:
+  - Automatically detects contract creation transactions
+  - Identifies and indexes ERC20 tokens
+  - Stores contract metadata and status
+- **Contract Storage**:
+  - Maintains contract addresses and creation information
+  - Tracks contract status and verification
+  - Stores token information for ERC20 contracts
+
+### RPC Client
+- Handles communication with the Zond node
+- Manages beacon chain API interactions
+- Provides robust error handling and retry mechanisms
+
+### Database Layer
+- Manages MongoDB operations and data persistence
+- Implements efficient querying patterns
+- Handles atomic updates for consistency
+
+### Models
+- Defines comprehensive data structures for blockchain entities
+- Supports both legacy and new beacon chain formats
+- Includes helper methods for data conversion
+
+## Data Structures
+
+### Validator Storage
+```json
+{
+  "_id": "validators",
+  "epoch": "123456",
+  "validators": [
+    {
+      "index": "123",
+      "publicKeyHex": "abcdef...",
+      "effectiveBalance": "32000000000",
+      "activationEpoch": "12346",
+      "exitEpoch": "18446744073709551615",
+      "withdrawableEpoch": "18446744073709551615",
+      "slashed": false,
+      "isLeader": true
+    }
+  ],
+  "updatedAt": "1683924000"
+}
+```
+
+### Contract Storage
+```json
+{
+  "address": "abcdef...",
+  "status": "1",
+  "isToken": true,
+  "name": "Token Name",
+  "symbol": "TKN",
+  "decimals": 18,
+  "creatorAddress": "abcdef...",
+  "creationTransaction": "abcdef...",
+  "updatedAt": "1683924000"
+}
+```
+
+### Data Format Notes
+- Numeric values (epochs, balances, timestamps) are stored as decimal strings
+- Dilithium public keys and addresses are stored in hex format WITHOUT "0x" prefix
+- Timestamps are stored as Unix timestamps in decimal format
+- Contract-related addresses and hashes are stored in hex format WITHOUT "0x" prefix
 
 ## License
 

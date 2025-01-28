@@ -1,6 +1,8 @@
 package models
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"strconv"
 )
 
@@ -25,8 +27,8 @@ type ResultValidator struct {
 // New beacon chain API validator models
 type BeaconValidatorResponse struct {
 	ValidatorList []BeaconValidator `json:"validatorList"`
-	NextPageToken string           `json:"nextPageToken"`
-	TotalSize     int              `json:"totalSize"`
+	NextPageToken string            `json:"nextPageToken"`
+	TotalSize     int               `json:"totalSize"`
 }
 
 type BeaconValidator struct {
@@ -37,18 +39,50 @@ type BeaconValidator struct {
 type ValidatorDetails struct {
 	PublicKey                  string `json:"publicKey"`
 	WithdrawalCredentials      string `json:"withdrawalCredentials"`
-	EffectiveBalance          string `json:"effectiveBalance"`
-	Slashed                   bool   `json:"slashed"`
+	EffectiveBalance           string `json:"effectiveBalance"`
+	Slashed                    bool   `json:"slashed"`
 	ActivationEligibilityEpoch string `json:"activationEligibilityEpoch"`
-	ActivationEpoch           string `json:"activationEpoch"`
-	ExitEpoch                 string `json:"exitEpoch"`
-	WithdrawableEpoch         string `json:"withdrawableEpoch"`
+	ActivationEpoch            string `json:"activationEpoch"`
+	ExitEpoch                  string `json:"exitEpoch"`
+	WithdrawableEpoch          string `json:"withdrawableEpoch"`
+}
+
+// MongoDB storage model
+type ValidatorStorage struct {
+	ID         string            `bson:"_id" json:"_id"`
+	Epoch      string            `bson:"epoch" json:"epoch"`           // Stored as decimal
+	Validators []ValidatorRecord `bson:"validators" json:"validators"` // All validator details
+	UpdatedAt  string            `bson:"updatedAt" json:"updatedAt"`   // Unix timestamp
+}
+
+type ValidatorRecord struct {
+	Index                      string `bson:"index" json:"index"`                                       // Decimal string
+	PublicKeyHex               string `bson:"publicKeyHex" json:"publicKeyHex"`                         // Converted from base64 to hex
+	WithdrawalCredentialsHex   string `bson:"withdrawalCredentialsHex" json:"withdrawalCredentialsHex"` // Converted from base64 to hex
+	EffectiveBalance           string `bson:"effectiveBalance" json:"effectiveBalance"`                 // Decimal string
+	Slashed                    bool   `bson:"slashed" json:"slashed"`
+	ActivationEligibilityEpoch string `bson:"activationEligibilityEpoch" json:"activationEligibilityEpoch"` // Decimal string
+	ActivationEpoch            string `bson:"activationEpoch" json:"activationEpoch"`                       // Decimal string
+	ExitEpoch                  string `bson:"exitEpoch" json:"exitEpoch"`                                   // Decimal string
+	WithdrawableEpoch          string `bson:"withdrawableEpoch" json:"withdrawableEpoch"`                   // Decimal string
+	SlotNumber                 string `bson:"slotNumber" json:"slotNumber"`                                 // Decimal string
+	IsLeader                   bool   `bson:"isLeader" json:"isLeader"`
+}
+
+// Helper methods for base64 to hex conversion
+func Base64ToHex(b64 string) string {
+	data, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return ""
+	}
+	return hex.EncodeToString(data)
 }
 
 // Frontend validator models
 type ValidatorResponse struct {
-	Validators  []Validator `json:"validators"`
-	TotalStaked string      `json:"totalStaked"`
+	Validators  []ValidatorRecord `json:"validators"`
+	TotalStaked string            `json:"totalStaked"` // Decimal string
+	Epoch       string            `json:"epoch"`       // Decimal string
 }
 
 type Validator struct {

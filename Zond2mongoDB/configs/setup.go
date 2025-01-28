@@ -221,6 +221,16 @@ func GetCollection(client *mongo.Client, collectionName string) *mongo.Collectio
 	return collection
 }
 
+// Getter for contracts collection
+func GetContractsCollection() *mongo.Collection {
+	return GetCollection(DB, CONTRACT_CODE_COLLECTION)
+}
+
+// Getter for validator collection
+func GetValidatorCollection() *mongo.Collection {
+	return GetCollection(DB, VALIDATORS_COLLECTION)
+}
+
 func GetListCollectionNames(client *mongo.Client) []string {
 	result, err := client.Database("qrldata-b2h").ListCollectionNames(
 		context.TODO(),

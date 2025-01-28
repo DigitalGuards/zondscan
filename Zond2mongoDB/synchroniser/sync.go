@@ -8,6 +8,7 @@ import (
 	"Zond2mongoDB/utils"
 	"errors"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -258,13 +259,11 @@ func processInitialBlock() {
 
 	// Initialize validators first
 	configs.Logger.Info("Initializing validators")
-	validators := rpc.GetValidators()
-	if validators.ValidatorsBySlotNumber != nil && len(validators.ValidatorsBySlotNumber) > 0 {
-		db.InsertValidators(validators)
-		configs.Logger.Info("Successfully initialized validators",
-			zap.Int("num_slots", len(validators.ValidatorsBySlotNumber)))
+	err := syncValidators()
+	if err != nil {
+		configs.Logger.Error("Failed to initialize validators", zap.Error(err))
 	} else {
-		configs.Logger.Error("Failed to initialize validators - got empty data")
+		configs.Logger.Info("Successfully initialized validators")
 	}
 
 	// Process genesis block
@@ -576,38 +575,55 @@ func singleBlockInsertion() {
 // New function to periodically update validators
 func updateValidatorsPeriodically() {
 	configs.Logger.Info("Updating validators")
-	validators := rpc.GetValidators()
-	if validators.ValidatorsBySlotNumber != nil && len(validators.ValidatorsBySlotNumber) > 0 {
-		db.InsertValidators(validators)
-		configs.Logger.Info("Successfully updated validators",
-			zap.Int("num_slots", len(validators.ValidatorsBySlotNumber)))
+	err := syncValidators()
+	if err != nil {
+		configs.Logger.Error("Failed to update validators", zap.Error(err))
 	} else {
-		configs.Logger.Error("Failed to update validators - got empty data")
+		configs.Logger.Info("Successfully updated validators")
 	}
 }
 
 func updateSyncState(blockNumber string) string {
-    // First verify block exists in DB
-    blockHash := db.GetLatestBlockHashHeaderFromDB(blockNumber)
-    if blockHash == "" {
-        logger.Error("Cannot update sync state - block not found in DB",
-            zap.String("block_number", blockNumber))
-        // Roll back to last known good block
-        previousBlock := utils.SubtractHexNumbers(blockNumber, "0x1")
-        return findLastValidBlock(previousBlock, utils.SubtractHexNumbers(previousBlock, "0x64")) // Roll back up to 100 blocks
-    }
+	// First verify block exists in DB
+	blockHash := db.GetLatestBlockHashHeaderFromDB(blockNumber)
+	if blockHash == "" {
+		logger.Error("Cannot update sync state - block not found in DB",
+			zap.String("block_number", blockNumber))
+		// Roll back to last known good block
+		previousBlock := utils.SubtractHexNumbers(blockNumber, "0x1")
+		return findLastValidBlock(previousBlock, utils.SubtractHexNumbers(previousBlock, "0x64")) // Roll back up to 100 blocks
+	}
 
-    // Verify parent hash consistency
-    parentNumber := utils.SubtractHexNumbers(blockNumber, "0x1")
-    parentHash := db.GetLatestBlockHashHeaderFromDB(parentNumber)
-    if parentHash == "" && parentNumber != "0x0" { // Allow genesis block to have no parent
-        logger.Error("Cannot update sync state - parent block missing",
-            zap.String("block_number", blockNumber),
-            zap.String("parent_number", parentNumber))
-        return findLastValidBlock(parentNumber, utils.SubtractHexNumbers(parentNumber, "0x64"))
-    }
+	// Verify parent hash consistency
+	parentNumber := utils.SubtractHexNumbers(blockNumber, "0x1")
+	parentHash := db.GetLatestBlockHashHeaderFromDB(parentNumber)
+	if parentHash == "" && parentNumber != "0x0" { // Allow genesis block to have no parent
+		logger.Error("Cannot update sync state - parent block missing",
+			zap.String("block_number", blockNumber),
+			zap.String("parent_number", parentNumber))
+		return findLastValidBlock(parentNumber, utils.SubtractHexNumbers(parentNumber, "0x64"))
+	}
 
-    // Only update sync state if block and parent verification passed
-    db.StoreLastKnownBlockNumber(blockNumber)
-    return blockNumber
+	// Only update sync state if block and parent verification passed
+	db.StoreLastKnownBlockNumber(blockNumber)
+	return blockNumber
+}
+
+func syncValidators() error {
+	// Get current epoch from latest block
+	latestBlock, err := rpc.GetLatestBlock()
+	if err != nil {
+		return fmt.Errorf("failed to get latest block: %v", err)
+	}
+	currentEpoch := strconv.FormatUint(uint64(utils.HexToInt(latestBlock).Int64()/128), 10)
+
+	// Get validators from beacon chain
+	err = rpc.GetValidators()
+	if err != nil {
+		logger.Error("Failed to get validators", zap.Error(err))
+		return err
+	}
+
+	logger.Info("Successfully synced validators", zap.String("epoch", currentEpoch))
+	return nil
 }

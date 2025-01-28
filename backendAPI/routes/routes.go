@@ -419,7 +419,7 @@ func UserRoute(router *gin.Engine) {
 
 	router.GET("/validators", func(c *gin.Context) {
 		pageToken := c.Query("page_token")
-		rawValidators, err := db.ReturnValidators(pageToken)
+		validatorResponse, err := db.ReturnValidators(pageToken)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": fmt.Sprintf("Failed to fetch validators: %v", err),
@@ -427,73 +427,7 @@ func UserRoute(router *gin.Engine) {
 			return
 		}
 
-		latestBlockNumber, err := db.GetLatestBlockFromSyncState()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to get latest block: %v", err),
-			})
-			return
-		}
-
-		var latestBlockNum uint64
-		if strings.HasPrefix(latestBlockNumber, "0x") {
-			latestBlockNum, err = strconv.ParseUint(latestBlockNumber[2:], 16, 64)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"error": fmt.Sprintf("Failed to parse block number: %v", err),
-				})
-				return
-			}
-		}
-
-		currentEpoch := int(latestBlockNum / 128) // Each epoch is 128 blocks
-
-		// Initialize response
-		response := models.ValidatorResponse{
-			Validators:    make([]models.Validator, 0),
-			TotalStaked:   "0",
-			NextPageToken: pageToken, // Pass through the page token
-		}
-
-		totalStaked := float64(0)
-
-		processedValidators := make(map[string]bool)
-
-		// Process validators by slot
-		for _, slotValidators := range rawValidators.Resultvalidator.Validatorsbyslotnumber {
-			// Process leader
-			validatorEntry := models.Validator{
-				Address:      slotValidators.Leader,
-				Uptime:       100.0, // TODO: Calculate actual uptime from historical data
-				Age:          currentEpoch,
-				StakedAmount: "40000000000000000000000", // 40000 Quanta in Wei (18 decimal places)
-				IsActive:     true,
-			}
-			response.Validators = append(response.Validators, validatorEntry)
-			totalStaked += 40000000000000000000000
-
-			// Process attestors
-			for _, attestor := range slotValidators.Attestors {
-				if _, exists := processedValidators[attestor]; exists {
-					continue
-				}
-				processedValidators[attestor] = true
-
-				validatorEntry := models.Validator{
-					Address:      attestor,
-					Uptime:       100.0,
-					Age:          currentEpoch,
-					StakedAmount: "40000000000000000000000", // 40000 Quanta in Wei (18 decimal places)
-					IsActive:     true,
-				}
-				response.Validators = append(response.Validators, validatorEntry)
-				totalStaked += 40000000000000000000000
-			}
-		}
-
-		response.TotalStaked = fmt.Sprintf("%.0f", totalStaked)
-
-		c.JSON(http.StatusOK, response)
+		c.JSON(http.StatusOK, validatorResponse)
 	})
 
 	router.GET("/transactions", func(c *gin.Context) {
