@@ -91,6 +91,11 @@ export default function TransactionCard({ transaction }: TransactionCardProps): 
                 <div className="flex-shrink-0">
                   <CopyHashButton hash={txHash} />
                 </div>
+                {parseFloat(String(transaction.Amount)) === 0 && (
+                  <span className="text-xs lg:text-sm px-2 py-0.5 bg-[#3d3d3d] text-gray-300 rounded-md">
+                    Contract Call
+                  </span>
+                )}
               </div>
             </div>
           </div>
