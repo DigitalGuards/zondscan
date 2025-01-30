@@ -128,14 +128,15 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 
 	var transactions []models.TransactionByAddress
 
-	decoded, err := hex.DecodeString(strings.TrimPrefix(address, "0x"))
-	if err != nil {
-		return nil, err
+	// Ensure address has 0x prefix
+	if !strings.HasPrefix(address, "0x") {
+		address = "0x" + address
 	}
 
+	// Query for transactions where the address is either the sender or receiver
 	filter := primitive.D{{Key: "$or", Value: []primitive.D{
-		{{Key: "from", Value: decoded}},
-		{{Key: "to", Value: decoded}},
+		{{Key: "from", Value: address}},
+		{{Key: "to", Value: address}},
 	}}}
 
 	projection := primitive.D{
@@ -147,6 +148,7 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 		{Key: "from", Value: 1},
 		{Key: "to", Value: 1},
 		{Key: "paidFees", Value: 1},
+		{Key: "blockNumber", Value: 1},
 	}
 
 	opts := options.Find().
@@ -155,6 +157,7 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 
 	results, err := configs.TransactionByAddressCollection.Find(ctx, filter, opts)
 	if err != nil {
+		fmt.Printf("Error querying transactions: %v\n", err)
 		return nil, err
 	}
 	defer results.Close(ctx)
@@ -162,27 +165,25 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 	for results.Next(ctx) {
 		var singleTransaction models.TransactionByAddress
 		if err := results.Decode(&singleTransaction); err != nil {
+			fmt.Printf("Error decoding transaction: %v\n", err)
 			continue
 		}
 
-		// Compare addresses without 0x prefix
-		from := strings.TrimPrefix(singleTransaction.From, "0x")
-		addr := strings.TrimPrefix(address, "0x")
-
-		if from == addr && singleTransaction.To != "" {
-			singleTransaction.InOut = 0
+		if singleTransaction.From == address {
+			singleTransaction.InOut = 0 // Outgoing
 			singleTransaction.Address = singleTransaction.To
 		} else {
-			if singleTransaction.To == "" {
-				singleTransaction.InOut = 0
-				singleTransaction.Address = singleTransaction.From
-			} else {
-				singleTransaction.InOut = 1
-				singleTransaction.Address = singleTransaction.From
-			}
+			singleTransaction.InOut = 1 // Incoming
+			singleTransaction.Address = singleTransaction.From
 		}
 
 		transactions = append(transactions, singleTransaction)
+	}
+
+	if len(transactions) == 0 {
+		fmt.Printf("No transactions found for address: %s\n", address)
+	} else {
+		fmt.Printf("Found %d transactions for address: %s\n", len(transactions), address)
 	}
 
 	return transactions, nil
@@ -299,43 +300,25 @@ func CountTransactionsNetwork() (int, error) {
 
 func CountTransactions(address string) (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	var transactions []models.TransactionByAddress
 	defer cancel()
 
-	projection := primitive.D{
-		{Key: "inOut", Value: 1},
-		{Key: "txType", Value: 1},
-		{Key: "address", Value: 1},
-		{Key: "txHash", Value: 1},
-		{Key: "timeStamp", Value: 1},
-		{Key: "amount", Value: 1},
+	// Ensure address has 0x prefix
+	if !strings.HasPrefix(address, "0x") {
+		address = "0x" + address
 	}
 
-	opts := options.Find().
-		SetProjection(projection).
-		SetSort(primitive.D{{Key: "timeStamp", Value: -1}})
+	filter := primitive.D{{Key: "$or", Value: []primitive.D{
+		{{Key: "from", Value: address}},
+		{{Key: "to", Value: address}},
+	}}}
 
-	decoded, err := hex.DecodeString(strings.TrimPrefix(address, "0x"))
+	count, err := configs.TransactionByAddressCollection.CountDocuments(ctx, filter)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("Error counting transactions: %v\n", err)
+		return 0, err
 	}
 
-	filter := primitive.D{{Key: "address", Value: decoded}}
-	results, err := configs.TransactionByAddressCollection.Find(ctx, filter, opts)
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	defer results.Close(ctx)
-	for results.Next(ctx) {
-		var singleTransaction models.TransactionByAddress
-		if err = results.Decode(&singleTransaction); err != nil {
-			fmt.Println(err)
-		}
-		transactions = append(transactions, singleTransaction)
-	}
-
-	return len(transactions), nil
+	return int(count), nil
 }
 
 func ReturnSingleTransfer(query string) (models.Transfer, error) {

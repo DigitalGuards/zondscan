@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -25,21 +26,37 @@ func ReturnSingleAddress(query string) (models.Address, error) {
 	var result models.Address
 	defer cancel()
 
-	address, err := hex.DecodeString(query[2:])
-	if err != nil {
-		fmt.Printf("Error decoding address %s: %v\n", query, err)
-		return result, err
+	// Remove hex prefix if present
+	addressHex := query
+	if len(query) > 2 && query[:2] == "0x" {
+		addressHex = query[2:]
 	}
 
-	filter := bson.D{{Key: "id", Value: address}}
-	err = configs.AddressesCollection.FindOne(ctx, filter).Decode(&result)
+	// Try to find existing address
+	filter := bson.D{{Key: "id", Value: addressHex}}
+	err := configs.AddressesCollection.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			fmt.Printf("No address found for %s\n", query)
+			// Address not found, create new one
+			balance, errMsg := GetBalance(query)
+			if errMsg != "" {
+				return result, fmt.Errorf("error getting balance: %s", errMsg)
+			}
+
+			result = models.Address{
+				ObjectId: primitive.NewObjectID(),
+				ID:       addressHex,
+				Balance:  balance,
+				Nonce:    0, // Default nonce for new address
+			}
+
+			_, err = configs.AddressesCollection.InsertOne(ctx, result)
+			if err != nil {
+				return result, fmt.Errorf("error creating new address: %v", err)
+			}
 		} else {
-			fmt.Printf("Error querying address %s: %v\n", query, err)
+			return result, fmt.Errorf("error querying address: %v", err)
 		}
-		return result, err
 	}
 
 	return result, nil

@@ -247,25 +247,25 @@ func UserRoute(router *gin.Engine) {
 			fmt.Printf("Error getting rank: %v\n", err)
 		}
 
-		// All transactions by the address
-		TransactionsByAddress, err := db.ReturnAllTransactionsByAddress(param)
+		// Get all transactions by the address
+		transactionsByAddress, err := db.ReturnAllTransactionsByAddress(param)
 		if err != nil {
 			fmt.Printf("Error getting transactions: %v\n", err)
 		}
 
-		// All internal transactions by the address
-		InternalTransactionsByAddress, err := db.ReturnAllInternalTransactionsByAddress(param)
+		// Get all internal transactions by the address
+		internalTransactionsByAddress, err := db.ReturnAllInternalTransactionsByAddress(param)
 		if err != nil {
 			fmt.Printf("Error getting internal transactions: %v\n", err)
 		}
 
-		// Contract code (if applicable)
+		// Get contract code data
 		contractCodeData, err := db.ReturnContractCode(param)
-		// Don't treat missing contract code as an error since not all addresses are contracts
-		if err != nil && err != mongo.ErrNoDocuments {
+		if err != nil {
 			fmt.Printf("Error getting contract code: %v\n", err)
 		}
 
+		// Get latest block number
 		latestBlockNumber, err := db.GetLatestBlockFromSyncState()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
@@ -290,8 +290,8 @@ func UserRoute(router *gin.Engine) {
 			"address":                          addressData,
 			"transactions_count":               countTransactions,
 			"rank":                             rank,
-			"transactions_by_address":          TransactionsByAddress,
-			"internal_transactions_by_address": InternalTransactionsByAddress,
+			"transactions_by_address":          transactionsByAddress,
+			"internal_transactions_by_address": internalTransactionsByAddress,
 			"contract_code":                    contractCodeData,
 			"latestBlock":                      latestBlockNum,
 		})
