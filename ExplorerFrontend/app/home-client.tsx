@@ -74,7 +74,7 @@ export default function HomeClient() {
 
             // Handle latest block response
             if (latestBlockResponse.status === 'fulfilled') {
-              newData.blockHeight.value = latestBlockResponse.value.data.response?.[0]?.result?.number?.toString() || "0";
+              newData.blockHeight.value = latestBlockResponse.value.data.blockNumber?.toString() || "0";
               newData.blockHeight.isLoading = false;
               newData.blockHeight.error = false;
             } else {

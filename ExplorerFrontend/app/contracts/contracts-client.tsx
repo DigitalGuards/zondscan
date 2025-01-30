@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import axios from 'axios';
-import { decodeBase64ToHexadecimal } from '../lib/helpers';
+import { decodeToHex } from '../lib/helpers';
 import config from '../../config.js';
 
 interface ContractData {
@@ -33,14 +33,8 @@ const truncateMiddle = (str: string, startChars = 6, endChars = 6): string => {
 };
 
 const decodeField = (value: string): string => {
-  try {
-    if (!value) return '';
-    const decoded = "0x" + decodeBase64ToHexadecimal(value);
-    return decoded;
-  } catch (error) {
-    console.error('Error decoding:', error);
-    return '';
-  }
+  if (!value) return '';
+  return value;
 };
 
 function Pagination({ 
@@ -245,15 +239,15 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
   const transformedData = React.useMemo(() => {
     console.log('Raw contracts:', contracts);
     return contracts.map((item: any, index: number) => {
-      console.log('Processing item:', item);
+      console.log('Raw item before transform:', item);
       const transformed = {
         _id: item._id || `contract-${index}`,
-        contractCreatorAddress: '0x' + decodeBase64ToHexadecimal(item.contractCreatorAddress),
-        contractAddress: '0x' + decodeBase64ToHexadecimal(item.contractAddress),
-        tokenName: item.tokenName,
-        tokenSymbol: item.tokenSymbol,
+        contractCreatorAddress: item.contractCreatorAddress,
+        contractAddress: item.contractAddress,
+        tokenName: item.tokenName || '',
+        tokenSymbol: item.tokenSymbol || '',
         tokenDecimals: item.tokenDecimals,
-        isToken: item.isToken
+        isToken: item.isToken || false
       };
       console.log('Transformed item:', transformed);
       return transformed;

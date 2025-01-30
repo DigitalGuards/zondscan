@@ -9,16 +9,6 @@ interface RichlistProps {
   richlist: any[];
 }
 
-function decodeBase64ToHexadecimal(rawData: string): string {
-  const decoded = atob(rawData);
-  let hex = '';
-  for (let i = 0; i < decoded.length; i++) {
-    const byte = decoded.charCodeAt(i).toString(16);
-    hex += byte.length === 1 ? '0' + byte : byte;
-  }
-  return hex;
-}
-
 export default function RichlistClient({ richlist }: RichlistProps) {
   const [windowWidth, setWindowWidth] = React.useState(typeof window !== 'undefined' ? window.innerWidth : 0);
 
@@ -46,10 +36,10 @@ export default function RichlistClient({ richlist }: RichlistProps) {
             <div>
               <span className="text-[#ffa729] text-sm">Address:</span>
               <Link 
-                href={`/address/0x${decodeBase64ToHexadecimal(item.id)}`}
+                href={`/address/${item.id}`}
                 className="ml-2 text-white hover:text-[#ffa729] text-sm break-all"
               >
-                0x{decodeBase64ToHexadecimal(item.id)}
+                {item.id}
               </Link>
             </div>
             <div>
@@ -87,10 +77,10 @@ export default function RichlistClient({ richlist }: RichlistProps) {
               </td>
               <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap">
                 <Link 
-                  href={`/address/0x${decodeBase64ToHexadecimal(item.id)}`}
+                  href={`/address/${item.id}`}
                   className="text-[#ffa729] hover:text-[#ffb954] transition-colors text-sm"
                 >
-                  0x{decodeBase64ToHexadecimal(item.id)}
+                  {item.id}
                 </Link>
               </td>
               <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-right text-gray-300 text-sm">

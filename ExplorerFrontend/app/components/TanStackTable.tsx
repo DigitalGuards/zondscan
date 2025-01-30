@@ -15,7 +15,7 @@ import {
   Header,
   Cell
 } from "@tanstack/react-table";
-import { decodeBase64ToHexadecimal, epochToISO, formatAmount } from "../lib/helpers";
+import { formatAmount, formatTimestamp, normalizeHexString } from "../lib/helpers";
 import DebouncedInput from "./DebouncedInput";
 import { DownloadBtn, DownloadBtnInternal } from "./DownloadBtn";
 import Link from "next/link";
@@ -158,8 +158,8 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
       id: "Addresses",
       cell: (info) => {
         const { from, to } = info.getValue();
-        const fromAddress = from ? "0x" + decodeBase64ToHexadecimal(from) : "";
-        const toAddress = to ? "0x" + decodeBase64ToHexadecimal(to) : "";
+        const fromAddress = from ? "0x" + normalizeHexString(from) : "";
+        const toAddress = to ? "0x" + normalizeHexString(to) : "";
         return (
           <div className="flex flex-col gap-1">
             {fromAddress && (
@@ -185,7 +185,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
     }),
     columnHelper.accessor("TxHash", {
       cell: (info) => {
-        const fullHash = "0x" + decodeBase64ToHexadecimal(info.getValue());
+        const fullHash = "0x" + normalizeHexString(info.getValue());
         return (
           <span>
             <Link href={"/tx/" + fullHash} title={fullHash}>
@@ -197,7 +197,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
       header: "Transaction Hash",
     }),
     columnHelper.accessor("TimeStamp", {
-      cell: (info) => <span>{epochToISO(info.getValue())}</span>,
+      cell: (info) => <span>{formatTimestamp(info.getValue())}</span>,
       header: "Timestamp",
     }),
     columnHelper.accessor("formattedAmount", {
@@ -222,7 +222,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
     }),
     internalColumnHelper.accessor("From", {
       cell: (info) => {
-        const fullAddress = "0x" + decodeBase64ToHexadecimal(info.getValue());
+        const fullAddress = "0x" + normalizeHexString(info.getValue());
         return (
           <span>
             <Link href={"/address/" + fullAddress} title={fullAddress}>
@@ -235,7 +235,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
     }),
     internalColumnHelper.accessor("To", {
       cell: (info) => {
-        const fullAddress = "0x" + decodeBase64ToHexadecimal(info.getValue());
+        const fullAddress = "0x" + normalizeHexString(info.getValue());
         return (
           <span>
             <Link href={"/address/" + fullAddress} title={fullAddress}>
@@ -248,7 +248,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
     }),
     internalColumnHelper.accessor("Hash", {
       cell: (info) => {
-        const fullHash = "0x" + decodeBase64ToHexadecimal(info.getValue());
+        const fullHash = "0x" + normalizeHexString(info.getValue());
         return (
           <span>
             <Link href={"/tx/" + fullHash} title={fullHash}>
@@ -272,7 +272,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
       header: "Token Units",
     }),
     internalColumnHelper.accessor("BlockTimestamp", {
-      cell: (info) => <span>{epochToISO(info.getValue())}</span>,
+      cell: (info) => <span>{formatTimestamp(info.getValue())}</span>,
       header: "Timestamp",
     }),
     internalColumnHelper.accessor("Output", {
@@ -324,10 +324,10 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
           <div>
             <div className="text-xs text-gray-400">Transaction Hash</div>
             <Link 
-              href={"/tx/0x" + decodeBase64ToHexadecimal(data.TxHash)}
+              href={"/tx/0x" + normalizeHexString(data.TxHash)}
               className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
             >
-              {"0x" + decodeBase64ToHexadecimal(data.TxHash)}
+              {"0x" + normalizeHexString(data.TxHash)}
             </Link>
           </div>
 
@@ -335,10 +335,10 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
             <div className="text-xs text-gray-400">From</div>
             {data.From && (
               <Link 
-                href={"/address/0x" + decodeBase64ToHexadecimal(data.From)}
+                href={"/address/0x" + normalizeHexString(data.From)}
                 className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
               >
-                {"0x" + decodeBase64ToHexadecimal(data.From)}
+                {"0x" + normalizeHexString(data.From)}
               </Link>
             )}
           </div>
@@ -347,10 +347,10 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
             <div className="text-xs text-gray-400">To</div>
             {data.To && (
               <Link 
-                href={"/address/0x" + decodeBase64ToHexadecimal(data.To)}
+                href={"/address/0x" + normalizeHexString(data.To)}
                 className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
               >
-                {"0x" + decodeBase64ToHexadecimal(data.To)}
+                {"0x" + normalizeHexString(data.To)}
               </Link>
             )}
           </div>
@@ -368,7 +368,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
 
           <div>
             <div className="text-xs text-gray-400">Time</div>
-            <div className="text-sm text-white">{epochToISO(data.TimeStamp)}</div>
+            <div className="text-sm text-white">{formatTimestamp(data.TimeStamp)}</div>
           </div>
         </div>
       </div>
@@ -391,30 +391,30 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
           <div>
             <div className="text-xs text-gray-400">Transaction Hash</div>
             <Link 
-              href={"/tx/0x" + decodeBase64ToHexadecimal(data.Hash)}
+              href={"/tx/0x" + normalizeHexString(data.Hash)}
               className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
             >
-              {"0x" + decodeBase64ToHexadecimal(data.Hash)}
+              {"0x" + normalizeHexString(data.Hash)}
             </Link>
           </div>
 
           <div>
             <div className="text-xs text-gray-400">From</div>
             <Link 
-              href={"/address/0x" + decodeBase64ToHexadecimal(data.From)}
+              href={"/address/0x" + normalizeHexString(data.From)}
               className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
             >
-              {"0x" + decodeBase64ToHexadecimal(data.From)}
+              {"0x" + normalizeHexString(data.From)}
             </Link>
           </div>
 
           <div>
             <div className="text-xs text-gray-400">To</div>
             <Link 
-              href={"/address/0x" + decodeBase64ToHexadecimal(data.To)}
+              href={"/address/0x" + normalizeHexString(data.To)}
               className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
             >
-              {"0x" + decodeBase64ToHexadecimal(data.To)}
+              {"0x" + normalizeHexString(data.To)}
             </Link>
           </div>
 
@@ -431,7 +431,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
 
           <div>
             <div className="text-xs text-gray-400">Time</div>
-            <div className="text-sm text-white">{epochToISO(data.BlockTimestamp)}</div>
+            <div className="text-sm text-white">{formatTimestamp(data.BlockTimestamp)}</div>
           </div>
 
           <div>

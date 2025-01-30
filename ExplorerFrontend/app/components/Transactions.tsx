@@ -13,7 +13,7 @@ import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 import Link from "next/link";
 import config from '../../config';
-import { decodeBase64ToHexadecimal } from '../lib/helpers';
+import { decodeToHex } from '../lib/helpers';
 
 interface Transaction {
   id: number;
@@ -33,13 +33,13 @@ interface DecoderParams {
 }
 
 const Decoder = (params: DecoderParams): JSX.Element => {
-  const output = "0x" + decodeBase64ToHexadecimal(params.row.TxHash);
+  const output = "0x" + decodeToHex(params.row.TxHash);
   const url = `${config.siteUrl}/tx/${output}`;
   return <Link href={url}>{output}</Link>;
 };
 
 const DecoderAddress = (params: DecoderParams): JSX.Element => {
-  const output = "0x" + decodeBase64ToHexadecimal(params.row.Address);
+  const output = "0x" + decodeToHex(params.row.Address);
   const url = `${config.siteUrl}/address/${output}`;
   return <Link href={url}>{output}</Link>;
 };

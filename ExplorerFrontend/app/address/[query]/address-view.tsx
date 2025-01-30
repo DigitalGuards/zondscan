@@ -7,6 +7,7 @@ import TanStackTable from "../../components/TanStackTable";
 import BalanceDisplay from "./balance-display";
 import ActivityDisplay from "./activity-display";
 import type { AddressData } from "./types";
+import Link from "next/link";
 
 interface AddressViewProps {
     addressData: AddressData;
@@ -49,28 +50,30 @@ export default function AddressView({ addressData, addressSegment }: AddressView
 
     let addressType = "";
     let addressIcon = null;
-    if (addressSegment.slice(0, 3) === "0x2") {
-        addressType = "Dilithium Address";
-        addressIcon = (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 md:h-6 md:w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-        );
-    } else if (addressSegment.slice(0, 3) === "0x1") {
-        addressType = "XMSS Address";
-        addressIcon = (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 md:h-6 md:w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-        );
-    } else if (addressData.contract_code && addressData.contract_code.contractCode) {
+    const contractData = addressData.contract_code;
+
+    if (contractData && contractData.contractCode) {
         addressType = "Contract";
         addressIcon = (
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 md:h-6 md:w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
             </svg>
         );
-    } else {
+    } else if (addressSegment.slice(0, 3) === "0x2") {
+        addressType = "Dilithium Address";
+        addressIcon = (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 md:h-6 md:w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+        );
+    } /* else if (addressSegment.slice(0, 3) === "0x1") {
+        addressType = "XMSS Address";
+        addressIcon = (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 md:h-6 md:w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+        );
+    } */ else {
         addressType = "Address";
         addressIcon = (
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 md:h-6 md:w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -117,11 +120,11 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                     </div>
 
                     {/* Contract Information */}
-                    {addressData.contract_code && addressData.contract_code.contractCode && (
+                    {contractData && contractData.contractCode && (
                         <div className="mt-4 md:mt-6">
                             <div className="rounded-xl bg-[#2d2d2d] border border-[#3d3d3d] p-3 md:p-4 lg:p-6 space-y-3 md:space-y-4">
                                 <h3 className="text-base md:text-lg font-semibold text-[#ffa729]">
-                                    {addressData.contract_code.isToken ? 'Token Contract' : 'Contract'} Information
+                                    {contractData.isToken ? 'Token Contract' : 'Contract'} Information
                                 </h3>
                                 
                                 <div className="space-y-3">
@@ -130,23 +133,23 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                         <div className="text-xs md:text-sm text-gray-400 mb-1">Creator Address</div>
                                         <div className="flex items-center space-x-2">
                                             <AddressDisplay 
-                                                address={addressData.contract_code.decodedCreatorAddress || 'Unknown'} 
+                                                address={contractData.contractCreatorAddress || 'Unknown'} 
                                                 type="Creator"
                                             />
-                                            {addressData.contract_code.decodedCreatorAddress && (
-                                                <CopyAddressButton address={addressData.contract_code.decodedCreatorAddress} />
+                                            {contractData.contractCreatorAddress && (
+                                                <CopyAddressButton address={contractData.contractCreatorAddress} />
                                             )}
                                         </div>
                                     </div>
 
                                     {/* Token Information */}
-                                    {addressData.contract_code.isToken && (
+                                    {contractData.isToken && (
                                         <>
                                             {/* Token Name */}
                                             <div>
                                                 <div className="text-xs md:text-sm text-gray-400 mb-1">Token Name</div>
                                                 <div className="text-xs md:text-sm text-gray-300">
-                                                    {addressData.contract_code.tokenName || 'Unknown'}
+                                                    {contractData.tokenName || 'Unknown'}
                                                 </div>
                                             </div>
 
@@ -154,7 +157,7 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                             <div>
                                                 <div className="text-xs md:text-sm text-gray-400 mb-1">Token Symbol</div>
                                                 <div className="text-xs md:text-sm text-gray-300">
-                                                    {addressData.contract_code.tokenSymbol || 'Unknown'}
+                                                    {contractData.tokenSymbol || 'Unknown'}
                                                 </div>
                                             </div>
 
@@ -162,7 +165,7 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                             <div>
                                                 <div className="text-xs md:text-sm text-gray-400 mb-1">Token Decimals</div>
                                                 <div className="text-xs md:text-sm text-gray-300">
-                                                    {addressData.contract_code.tokenDecimals || '0'}
+                                                    {contractData.tokenDecimals || '0'}
                                                 </div>
                                             </div>
                                         </>
@@ -172,7 +175,27 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                     <div>
                                         <div className="text-xs md:text-sm text-gray-400 mb-1">Contract Size</div>
                                         <div className="text-xs md:text-sm text-gray-300">
-                                            {addressData.contract_code.contractSize || 0} bytes
+                                            {/* Base64 string is 4/3 the size of the binary data */}
+                                            {Math.floor(contractData.contractCode.length * 0.75)} bytes
+                                        </div>
+                                    </div>
+
+                                    {/* Creation Transaction */}
+                                    <div>
+                                        <div className="text-xs md:text-sm text-gray-400 mb-1">Creation Transaction</div>
+                                        <div className="flex items-center space-x-2">
+                                            <Link href={`/tx/${contractData.creationTransaction}`} className="text-xs md:text-sm text-[#ffa729] hover:text-[#ffb952]">
+                                                {contractData.creationTransaction}
+                                            </Link>
+                                            <CopyAddressButton address={contractData.creationTransaction} />
+                                        </div>
+                                    </div>
+
+                                    {/* Contract Status */}
+                                    <div>
+                                        <div className="text-xs md:text-sm text-gray-400 mb-1">Status</div>
+                                        <div className="text-xs md:text-sm text-gray-300">
+                                            {contractData.status === "0x1" ? "Success" : "Failed"}
                                         </div>
                                     </div>
                                 </div>

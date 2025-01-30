@@ -95,25 +95,22 @@ export function formatAmount(amount) {
       const fractionalPart = value % divisor;
       totalNum = Number(wholePart) + Number(fractionalPart) / Number(divisor);
     }
-    // Handle float values (already scaled) from database
-    else if (typeof amount === 'number' && amount < 1000000000000000000) {
-      totalNum = amount;
+    // Handle decimal numbers (convert to wei/shor format first)
+    else if (typeof amount === 'number' || (typeof amount === 'string' && !isNaN(amount))) {
+      const floatValue = parseFloat(amount);
+      if (floatValue < 1000000000000000000) { // If number is already in QRL format
+        totalNum = floatValue;
+      } else {
+        const value = BigInt(Math.floor(floatValue));
+        const divisor = BigInt('1000000000000000000'); // 10^18
+        const wholePart = value / divisor;
+        const fractionalPart = value % divisor;
+        totalNum = Number(wholePart) + Number(fractionalPart) / Number(divisor);
+      }
     }
-    // Handle raw number values (need scaling) from database
-    else if (typeof amount === 'number') {
-      const value = BigInt(Math.floor(amount));
-      const divisor = BigInt('1000000000000000000'); // 10^18
-      const wholePart = value / divisor;
-      const fractionalPart = value % divisor;
-      totalNum = Number(wholePart) + Number(fractionalPart) / Number(divisor);
-    }
-    // Handle other formats
+    // Handle other formats (assuming they're in wei/shor)
     else {
-      const value = BigInt(amount);
-      const divisor = BigInt('1000000000000000000'); // 10^18
-      const wholePart = value / divisor;
-      const fractionalPart = value % divisor;
-      totalNum = Number(wholePart) + Number(fractionalPart) / Number(divisor);
+      throw new Error('Invalid amount format');
     }
   } catch (error) {
     console.error('Error converting amount:', error, amount);
@@ -125,18 +122,7 @@ export function formatAmount(amount) {
     return ['0.00', 'QRL'];
   } else if (totalNum < 0.000001) {
     // For very small numbers, show all significant digits without trailing zeros
-    const str = totalNum.toFixed(21).replace(/\.?0+$/, '');
-    // Remove any scientific notation
-    const parts = str.split('e');
-    if (parts.length === 2) {
-      const mantissa = parts[0];
-      const exponent = parseInt(parts[1]);
-      if (exponent < 0) {
-        const abs = Math.abs(exponent);
-        return ['0.' + '0'.repeat(abs-1) + mantissa.replace('.', ''), 'QRL'];
-      }
-    }
-    return [str, 'QRL'];
+    return [totalNum.toFixed(18).replace(/\.?0+$/, ''), 'QRL'];
   } else if (totalNum < 1) {
     // For numbers less than 1, show up to 6 decimal places
     return [totalNum.toFixed(6).replace(/\.?0+$/, ''), 'QRL'];
@@ -149,15 +135,21 @@ export function formatAmount(amount) {
   }
 }
 
-export function decodeBase64ToHexadecimal(rawData) {
-  if (!rawData) return '';
-  const decoded = atob(rawData);
-  let hex = '';
-  for (let i = 0; i < decoded.length; i++) {
-    const byte = decoded.charCodeAt(i).toString(16);
-    hex += byte.length === 1 ? '0' + byte : byte;
+export function normalizeHexString(hexData) {
+  if (!hexData) return '';
+  
+  // If it starts with 0x, remove the prefix
+  if (typeof hexData === 'string' && hexData.startsWith('0x')) {
+    return hexData.slice(2);
   }
-  return hex;
+  
+  // If it's a valid hex string without prefix, return as is
+  if (typeof hexData === 'string' && /^[0-9a-fA-F]+$/.test(hexData)) {
+    return hexData;
+  }
+  
+  console.error('Invalid hex string:', hexData);
+  return '';
 }
 
 export function epochToISO(timestamp) {

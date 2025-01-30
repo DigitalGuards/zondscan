@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { decodeBase64ToHexadecimal, formatAmount, truncateHash } from "../../lib/helpers";
+import { normalizeHexString, formatAmount, truncateHash } from "../../lib/helpers";
 import { SendIcon, ReceiveIcon } from './TransactionIcons';
 import CopyHashButton from "../../components/CopyHashButton";
 import type { TransactionCardProps } from './types';
@@ -19,7 +19,7 @@ export default function TransactionCard({ transaction }: TransactionCardProps): 
     second: '2-digit'
   });
 
-  const txHash = "0x" + decodeBase64ToHexadecimal(transaction.TxHash);
+  const txHash = transaction.TxHash;
   const [formattedAmount, unit] = formatAmount(transaction.Amount);
 
   const handleClick = (): void => {

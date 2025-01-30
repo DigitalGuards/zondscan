@@ -33,9 +33,19 @@ const BlockCard: React.FC<BlockCardProps> = ({ blockData }) => {
     return `${hash.substring(0, 6)}...${hash.substring(hash.length - 4)}`;
   };
 
+  // Convert block number from hex to decimal if needed
+  const formatBlockNumber = (number: string | number): number => {
+    if (typeof number === 'string' && number.startsWith('0x')) {
+      return parseInt(number, 16);
+    }
+    return typeof number === 'number' ? number : parseInt(number);
+  };
+
+  const blockNumber = formatBlockNumber(blockData.number);
+
   return (
     <a 
-      href={`/block/${blockData.number}`}
+      href={`/block/${blockNumber}`}
       className='relative overflow-hidden rounded-xl 
                 bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
                 border border-[#3d3d3d] shadow-xl
@@ -50,7 +60,7 @@ const BlockCard: React.FC<BlockCardProps> = ({ blockData }) => {
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 sm:w-8 sm:h-8 text-[#ffa729] group-hover:scale-110 transition-transform duration-300">
                 <path strokeLinecap="round" strokeLinejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
               </svg>
-              <span className="text-gray-300 ml-2 sm:hidden">Block #{blockData.number}</span>
+              <span className="text-gray-300 ml-2 sm:hidden">Block #{blockNumber}</span>
             </div>
             <div className="flex flex-col items-end sm:items-center">
               <p className="text-gray-300 mt-0 sm:mt-2 text-sm sm:text-base">Confirmed</p>
@@ -61,7 +71,7 @@ const BlockCard: React.FC<BlockCardProps> = ({ blockData }) => {
           {/* Right Section - Block Info */}
           <div className="flex-1 sm:ml-8 space-y-2 w-full">
             <h2 className="text-lg font-semibold text-[#ffa729] group-hover:scale-105 transition-transform duration-300 hidden sm:block">
-              Block #{blockData.number}
+              Block #{blockNumber}
             </h2>
             <div className="flex items-center text-gray-400">
               <span className="sm:inline hidden">Hash: </span>

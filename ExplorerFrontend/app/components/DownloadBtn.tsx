@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { decodeBase64ToHexadecimal, formatTimestamp } from '../lib/helpers';
+import { formatTimestamp, normalizeHexString } from '../lib/helpers';
 import { MouseEvent } from 'react';
 import type { DownloadBtnProps, DownloadBtnInternalProps } from './types';
 
@@ -24,11 +24,11 @@ export function DownloadBtn({ data = [], fileName }: DownloadBtnProps): JSX.Elem
           convertedItem[key] = formatTimestamp(Number(value));
         } else if (key === 'Address' || key === 'TxHash') {
           if (typeof value === 'string') {
-            convertedItem[key] = "0x" + decodeBase64ToHexadecimal(value);
+            convertedItem[key] = "0x" + normalizeHexString(value);
           }
         } else if (key === 'From' || key === 'To') {
           if (typeof value === 'string') {
-            convertedItem[key] = value ? "0x" + decodeBase64ToHexadecimal(value) : "No Address Found";
+            convertedItem[key] = value ? "0x" + normalizeHexString(value) : "No Address Found";
           }
         } else {
           convertedItem[key] = value;
@@ -82,7 +82,7 @@ export function DownloadBtnInternal({ data = [], fileName }: DownloadBtnInternal
             convertedItem[key] = formatTimestamp(Number(value));
           } else if (['AddressFunctionIdentifier', 'From', 'To', 'Hash'].includes(key)) {
             if (typeof value === 'string') {
-              convertedItem[key] = "0x" + decodeBase64ToHexadecimal(value);
+              convertedItem[key] = "0x" + normalizeHexString(value);
             }
           } else if (typeof value !== 'object') { // Skip arrays and objects
             convertedItem[key] = value;
