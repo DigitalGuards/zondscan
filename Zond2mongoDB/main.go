@@ -42,6 +42,10 @@ func main() {
 	logger.Info("Starting pending transaction sync service...")
 	synchroniser.StartPendingTransactionSync()
 
+	// Start contract reprocessing job
+	logger.Info("Starting contract reprocessing service...")
+	db.StartContractReprocessingJob()
+
 	// Start blockchain sync
 	synchroniser.Sync()
 }
