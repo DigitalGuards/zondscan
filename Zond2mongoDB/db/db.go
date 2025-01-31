@@ -24,11 +24,16 @@ func CountWallets() int64 {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	results, err := configs.AddressesCollections.CountDocuments(ctx, bson.M{})
+	// Only count addresses that are not contracts
+	filter := bson.M{"isContract": false}
+	results, err := configs.AddressesCollections.CountDocuments(ctx, filter)
 	if err != nil {
-		configs.Logger.Info("Failed to find wallet count document", zap.Error(err))
+		configs.Logger.Error("Failed to count wallets", zap.Error(err))
 		return 0
 	}
+
+	configs.Logger.Debug("Counted wallets",
+		zap.Int64("total_non_contract_addresses", results))
 
 	return results
 }

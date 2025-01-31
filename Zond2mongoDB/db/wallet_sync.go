@@ -11,18 +11,21 @@ import (
 	"go.uber.org/zap"
 )
 
-// StartWalletCountSync starts a goroutine that syncs wallet count every 24 hours
+// StartWalletCountSync starts a goroutine that syncs wallet count every 4 hours
 func StartWalletCountSync() {
+	configs.Logger.Info("Initializing wallet count sync service")
 	go func() {
-		ticker := time.NewTicker(24 * time.Hour)
+		ticker := time.NewTicker(4 * time.Hour)
 		defer ticker.Stop()
 
-		// Do an initial count
+		// Do an initial count immediately
+		configs.Logger.Info("Performing initial wallet count sync")
 		if err := syncWalletCount(); err != nil {
 			configs.Logger.Error("Failed initial wallet count sync", zap.Error(err))
 		}
 
-		// Then sync every 24 hours
+		// Then sync every 4 hours
+		configs.Logger.Info("Starting periodic wallet count sync (every 4 hours)")
 		for range ticker.C {
 			if err := syncWalletCount(); err != nil {
 				configs.Logger.Error("Failed wallet count sync", zap.Error(err))
@@ -38,6 +41,7 @@ func syncWalletCount() error {
 
 	// Get the current count
 	count := CountWallets()
+	configs.Logger.Info("Current wallet count", zap.Int64("count", count))
 
 	// Store the count in the database
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
