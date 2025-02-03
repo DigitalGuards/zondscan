@@ -18,8 +18,10 @@ clean_pm2() {
     # Delete all PM2 logs
     pm2 flush || print_status "No logs to flush"
 
-    # Stop and delete all processes
-    pm2 delete all || print_status "No processes to delete"
+    # Stop and delete only processes started by this deployment
+    for name in handler synchroniser; do
+        pm2 delete $name || print_status "No process named $name to delete"
+    done
 
     # Clear PM2 dump file
     pm2 cleardump || print_status "No dump file to clear"
@@ -99,7 +101,7 @@ setup_server() {
     cat > .env.development << EOL
 GIN_MODE=release
 MONGOURI=mongodb://localhost:27017/qrldata-b2h?readPreference=primary
-HTTP_PORT=:8080
+HTTP_PORT=:8081
 NODE_URL=http://REDACTED:8545
 EOL
 
@@ -121,14 +123,14 @@ setup_frontend() {
     cat > .env << EOL
 DATABASE_URL=mongodb://localhost:27017/qrldata-b2h?readPreference=primary
 NEXT_PUBLIC_DOMAIN_NAME=http://localhost:3000
-NEXT_PUBLIC_HANDLER_URL=http://127.0.0.1:8080
+NEXT_PUBLIC_HANDLER_URL=http://127.0.0.1:8081
 EOL
 
     # Create .env.local file
     cat > .env.local << EOL
 DATABASE_URL=mongodb://localhost:27017/qrldata-b2h?readPreference=primary
 DOMAIN_NAME=http://localhost:3000
-HANDLER_URL=http://127.0.0.1:8080
+HANDLER_URL=http://127.0.0.1:8081
 EOL
 
     # Install dependencies
@@ -186,11 +188,11 @@ main() {
 
     # Check if MongoDB and Zond node are running
     #check_mongodb
-    #check_zond_node
+    check_zond_node
 
     # Check if required ports are available
     #check_port 3000
-    check_port 8080
+    check_port 8081
 
     # Clone and setup
     clone_repo
@@ -202,7 +204,7 @@ main() {
     print_status "Deployment complete! Services are starting up..."
     echo -e "\nAccess points:"
     echo "- Frontend: http://localhost:3000"
-    echo "- Server API: http://localhost:8080"
+    echo "- Server API: http://localhost:8081"
     echo -e "\nMake sure you have:"
     echo "1. MongoDB running on localhost:27017"
     echo "2. Zond node accessible at http://REDACTED:8545"
