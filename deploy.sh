@@ -50,14 +50,37 @@ check_mongodb() {
     fi
 }
 
+# Prompt for node selection
+select_node() {
+    print_status "Select Zond node to use:"
+    PS3="Please choose the node (1-2): "
+    options=("Local node (127.0.0.1:8545)" "Remote node (REDACTED:8545)")
+    select opt in "${options[@]}"
+    do
+        case $opt in
+            "Local node (127.0.0.1:8545)")
+                NODE_URL="http://127.0.0.1:8545"
+                break
+                ;;
+            "Remote node (REDACTED:8545)")
+                NODE_URL="http://REDACTED:8545"
+                break
+                ;;
+            *) echo "Invalid option. Please try again.";;
+        esac
+    done
+    print_status "Selected node: $NODE_URL"
+    export NODE_URL
+}
+
 # Check if Zond node is accessible
 check_zond_node() {
     RESPONSE=$(curl --silent --fail -X POST -H "Content-Type: application/json" \
         --data '{"jsonrpc":"2.0","id":1,"method":"net_listening","params":[]}' \
-        http://REDACTED:8545)
+        $NODE_URL)
 
     if [[ $? -ne 0 || -z "$RESPONSE" ]]; then
-        print_error "Zond node is not accessible."
+        print_error "Zond node is not accessible at $NODE_URL"
     fi
 }
 
@@ -102,7 +125,7 @@ setup_server() {
 GIN_MODE=release
 MONGOURI=mongodb://localhost:27017/qrldata-b2h?readPreference=primary
 HTTP_PORT=:8080
-NODE_URL=http://REDACTED:8545
+NODE_URL=$NODE_URL
 EOL
 
     # Build the server
@@ -154,7 +177,7 @@ setup_synchronizer() {
     # Create .env file
     cat > .env << EOL
 MONGOURI=mongodb://localhost:27017
-NODE_URL=http://REDACTED:8545
+NODE_URL=$NODE_URL
 BEACONCHAIN_API=http://REDACTED:3500
 EOL
 
@@ -186,6 +209,9 @@ main() {
     # Check for required tools
     check_dependencies
 
+    # Prompt for node selection
+    select_node
+
     # Check if MongoDB and Zond node are running
     #check_mongodb
     check_zond_node
@@ -207,7 +233,7 @@ main() {
     echo "- Server API: http://localhost:8080"
     echo -e "\nMake sure you have:"
     echo "1. MongoDB running on localhost:27017"
-    echo "2. Zond node accessible at http://REDACTED:8545"
+    echo "2. Zond node accessible at $NODE_URL"
     echo -e "\nTo monitor services:"
     echo "pm2 status"
     echo -e "\nTo view logs:"
