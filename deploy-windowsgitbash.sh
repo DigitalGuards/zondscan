@@ -107,8 +107,8 @@ setup_frontend() {
     # Create .env file
     cat > .env << EOL
 DATABASE_URL=mongodb://localhost:27017/qrldata-b2h?readPreference=primary
-NEXT_PUBLIC_DOMAIN_NAME=http://localhost:3000
-NEXT_PUBLIC_HANDLER_URL=http://127.0.0.1:8080
+DOMAIN_NAME=http://localhost:3000
+HANDLER_URL=http://127.0.0.1:8080
 EOL
 
     # Create .env.local file
