@@ -173,9 +173,9 @@ main() {
 
     # Clone and setup
     clone_repo
-    setup_server        # Start the server before building the frontend
-    setup_frontend
+    setup_server
     setup_synchronizer
+    setup_frontend
     save_pm2
 
     print_status "Deployment complete! Services are starting up..."
