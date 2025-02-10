@@ -125,9 +125,9 @@ EOL
     print_status "Updating browserslist database..."
     npx browserslist@latest --update-db || print_error "Failed to update browserslist"
 
-    # Start frontend in development mode with PM2
+    # Start frontend in development mode with PM2 using npm.cmd
     print_status "Starting frontend in development mode..."
-    pm2 start npm --name "frontend" -- run dev || print_error "Failed to start frontend"
+    pm2 start bash --name "frontend" -- -c "npm run dev" || print_error "Failed to start frontend"
 }
 
 # Setup blockchain synchronizer
