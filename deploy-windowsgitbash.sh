@@ -40,12 +40,11 @@ check_dependencies() {
     fi
 }
 
-# Check if MongoDB is running
-#check_mongodb() {
-#    if ! nc -z localhost 27017; then
-#        print_error "MongoDB is not running on localhost:27017."
-#    fi
-#}
+check_mongodb() {
+   if ! nc -z localhost 27017; then
+        print_error "MongoDB is not running on localhost:27017."
+    fi
+}
 
 # Check if Zond node is accessible
 check_zond_node() {
@@ -169,13 +168,13 @@ main() {
     check_dependencies
 
     # Check if MongoDB and Zond node are running
-    #check_mongodb
+    check_mongodb
     check_zond_node
 
     # Clone and setup
     clone_repo
     setup_server        # Start the server before building the frontend
-    #setup_frontend
+    setup_frontend
     setup_synchronizer
     save_pm2
 
