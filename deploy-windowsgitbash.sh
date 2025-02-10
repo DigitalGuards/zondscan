@@ -127,7 +127,7 @@ EOL
 
     # Start frontend in development mode with PM2
     print_status "Starting frontend in development mode..."
-    cd "$BASE_DIR/ExplorerFrontend" && pm2 start "npm run dev" --name "frontend" || print_error "Failed to start frontend"
+    pm2 start npm --name "frontend" -- run dev || print_error "Failed to start frontend"
 }
 
 # Setup blockchain synchronizer
@@ -148,7 +148,7 @@ EOL
 
     # Start synchronizer with PM2, explicitly setting environment variables
     print_status "Starting synchronizer with PM2..."
-    pm2 start ./syncer.exe --name "synchroniser" --cwd "$BASE_DIR/Zond2mongoDB" || print_error "Failed to start synchronizer"
+    pm2 start ./synchroniser.exe --name "synchroniser" --cwd "$BASE_DIR/Zond2mongoDB" || print_error "Failed to start synchronizer"
 }
 
 # Save PM2 processes
