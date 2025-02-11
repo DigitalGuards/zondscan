@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 # Helper functions for status and error messages
 print_status() {
     echo -e "\033[1;34m[*]\033[0m $1"
@@ -19,7 +18,7 @@ clean_pm2() {
     pm2 flush || print_status "No logs to flush"
 
     # Stop and delete only processes started by this deployment
-    for name in handler synchroniser; do
+    for name in handler synchroniser frontend; do
         pm2 delete $name || print_status "No process named $name to delete"
     done
 
@@ -166,7 +165,7 @@ EOL
 
     # Start frontend in development mode with PM2
     print_status "Starting frontend in development mode..."
-    cd "$BASE_DIR/ExplorerFrontend" && pm2 start "npm start" --name "frontend" || print_error "Failed to start frontend"
+    cd "$BASE_DIR/ExplorerFrontend" && pm2 start "npm run dev" --name "frontend" || print_error "Failed to start frontend"
 }
 
 # Setup blockchain synchronizer
@@ -213,17 +212,17 @@ main() {
     select_node
 
     # Check if MongoDB and Zond node are running
-    #check_mongodb
+    check_mongodb
     check_zond_node
 
     # Check if required ports are available
-    #check_port 3000
+    check_port 3000
     check_port 8080
 
     # Clone and setup
     clone_repo
     setup_server        # Start the server before building the frontend
-    #setup_frontend
+    setup_frontend
     setup_synchronizer
     save_pm2
 
