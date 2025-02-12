@@ -43,6 +43,7 @@ type ContractInfo struct {
 	Name                string `bson:"name" json:"name"`
 	Symbol              string `bson:"symbol" json:"symbol"`
 	Decimals            uint8  `bson:"decimals" json:"decimals"`
+	TotalSupply         string `bson:"totalSupply" json:"totalSupply"`
 	ContractCode        string `bson:"contractCode" json:"contractCode"`
 	CreatorAddress      string `bson:"creatorAddress" json:"creatorAddress"`
 	CreationTransaction string `bson:"creationTransaction" json:"creationTransaction"`

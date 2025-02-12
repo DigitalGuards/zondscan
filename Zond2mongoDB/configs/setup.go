@@ -108,6 +108,37 @@ func ConnectDB() *mongo.Client {
 	}
 	ensureCollection(db, "totalCirculatingSupply", circulatingValidator)
 
+	// Token Balances
+	tokenBalanceValidator := bson.M{
+		"$jsonSchema": bson.M{
+			"bsonType": "object",
+			"required": []string{"contractAddress", "holderAddress", "balance", "blockNumber", "updatedAt"},
+			"properties": bson.M{
+				"contractAddress": bson.M{
+					"bsonType":    "string",
+					"description": "must be a hex string and is required",
+				},
+				"holderAddress": bson.M{
+					"bsonType":    "string",
+					"description": "must be a hex string and is required",
+				},
+				"balance": bson.M{
+					"bsonType":    "string",
+					"description": "must be a hex string and is required",
+				},
+				"blockNumber": bson.M{
+					"bsonType":    "string",
+					"description": "must be a hex string and is required",
+				},
+				"updatedAt": bson.M{
+					"bsonType":    "string",
+					"description": "must be a string and is required",
+				},
+			},
+		},
+	}
+	ensureCollection(db, "tokenBalances", tokenBalanceValidator)
+
 	// Initialize collections
 	initializeCollections(db)
 
@@ -160,8 +191,24 @@ func ensureCollection(db *mongo.Database, name string, validator bson.M) {
 func initializeCollections(db *mongo.Database) {
 	ctx := context.Background()
 
+	// Initialize token balances collection with compound index
+	tokenBalancesCollection := db.Collection("tokenBalances")
+	_, err := tokenBalancesCollection.Indexes().CreateOne(
+		ctx,
+		mongo.IndexModel{
+			Keys: bson.D{
+				{Key: "contractAddress", Value: 1},
+				{Key: "holderAddress", Value: 1},
+			},
+			Options: options.Index().SetUnique(true),
+		},
+	)
+	if err != nil {
+		Logger.Error("Failed to create index for token balances collection", zap.Error(err))
+	}
+
 	// Initialize CoinGecko collection with empty document
-	_, err := db.Collection("coingecko").UpdateOne(
+	_, err = db.Collection("coingecko").UpdateOne(
 		ctx,
 		bson.M{},
 		bson.M{"$setOnInsert": bson.M{
@@ -229,6 +276,11 @@ func GetContractsCollection() *mongo.Collection {
 // Getter for validator collection
 func GetValidatorCollection() *mongo.Collection {
 	return GetCollection(DB, VALIDATORS_COLLECTION)
+}
+
+// Getter for token balances collection
+func GetTokenBalancesCollection() *mongo.Collection {
+	return GetCollection(DB, "tokenBalances")
 }
 
 func GetListCollectionNames(client *mongo.Client) []string {

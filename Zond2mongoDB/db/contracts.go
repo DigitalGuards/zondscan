@@ -94,6 +94,17 @@ func processContracts(tx *models.Transaction) (string, string, string, bool) {
 			// Get token information
 			name, symbol, decimals, isToken := rpc.GetTokenInfo(contractAddress)
 
+			// Get total supply if it's a token
+			var totalSupply string
+			if isToken {
+				totalSupply, err = rpc.GetTokenTotalSupply(contractAddress)
+				if err != nil {
+					configs.Logger.Error("Failed to get token total supply",
+						zap.String("address", contractAddress),
+						zap.Error(err))
+				}
+			}
+
 			// Store complete contract information
 			contract := models.ContractInfo{
 				Address:             contractAddress,
@@ -102,6 +113,7 @@ func processContracts(tx *models.Transaction) (string, string, string, bool) {
 				Name:                name,
 				Symbol:              symbol,
 				Decimals:            decimals,
+				TotalSupply:         totalSupply,
 				ContractCode:        contractCode,
 				CreatorAddress:      tx.From,
 				CreationTransaction: tx.Hash,
@@ -134,6 +146,7 @@ func ReprocessIncompleteContracts() error {
 	filter := bson.M{
 		"$or": []bson.M{
 			{"contractCode": ""},
+			{"isToken": true, "totalSupply": ""},
 			{"isToken": false, "name": "", "symbol": ""},
 		},
 	}
@@ -173,6 +186,26 @@ func ReprocessIncompleteContracts() error {
 				contract.Name = name
 				contract.Symbol = symbol
 				contract.Decimals = decimals
+
+				// Get total supply for new tokens
+				totalSupply, err := rpc.GetTokenTotalSupply(contract.Address)
+				if err != nil {
+					configs.Logger.Error("Failed to get token total supply",
+						zap.String("address", contract.Address),
+						zap.Error(err))
+				} else {
+					contract.TotalSupply = totalSupply
+				}
+			}
+		} else if contract.IsToken && contract.TotalSupply == "" {
+			// Get total supply for existing tokens that are missing it
+			totalSupply, err := rpc.GetTokenTotalSupply(contract.Address)
+			if err != nil {
+				configs.Logger.Error("Failed to get token total supply",
+					zap.String("address", contract.Address),
+					zap.Error(err))
+			} else {
+				contract.TotalSupply = totalSupply
 			}
 		}
 
