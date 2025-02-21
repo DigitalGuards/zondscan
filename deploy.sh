@@ -18,7 +18,7 @@ clean_pm2() {
     pm2 flush || print_status "No logs to flush"
 
     # Stop and delete only processes started by this deployment
-    for name in handler synchroniser frontend; do
+    for name in handler syncer frontend; do
         pm2 delete $name || print_status "No process named $name to delete"
     done
 
@@ -114,7 +114,7 @@ clone_repo() {
 }
 
 # Setup server environment
-setup_server() {
+setup_backendapi() {
     print_status "Setting up server..."
     cd "$BASE_DIR/backendAPI" || print_error "Server directory not found"
 
@@ -189,7 +189,7 @@ EOL
 
     # Start synchronizer with PM2, explicitly setting environment variables
     print_status "Starting synchronizer with PM2..."
-     pm2 start ./syncer --name "synchroniser" --cwd "$BASE_DIR/Zond2mongoDB" || print_error "Failed to start synchronizer"
+     pm2 start ./syncer --name "syncer" --cwd "$BASE_DIR/Zond2mongoDB" || print_error "Failed to start synchronizer"
 }
 
 # Save PM2 processes
@@ -221,8 +221,8 @@ main() {
 
     # Clone and setup
     clone_repo
-    setup_server        # Start the server before building the frontend
-    setup_frontend
+    #setup_backendapi        # Start the server before building the frontend
+    #setup_frontend
     setup_synchronizer
     save_pm2
 

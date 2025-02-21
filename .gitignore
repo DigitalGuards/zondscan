@@ -32,3 +32,5 @@ QRLtoMongoDB-PoS/syncer
 todo.md
 notes
 tokentracking.md
+Zond2mongoDB/logs/reindex_contracts.log
+Zond2mongoDB/logs/reindex_tokens.log

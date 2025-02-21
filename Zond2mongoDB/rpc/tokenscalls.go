@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"os"
 	"strconv"
@@ -15,7 +16,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Common ERC20 function signatures
+// Method signatures for ERC20 token functions
 const (
 	SIG_NAME     = "0x06fdde03" // name()
 	SIG_SYMBOL   = "0x95d89b41" // symbol()
@@ -23,6 +24,9 @@ const (
 	SIG_BALANCE  = "0x70a08231" // balanceOf(address)
 	SIG_SUPPLY   = "0x18160ddd" // totalSupply()
 )
+
+// Transfer event signature: keccak256("Transfer(address,address,uint256)")
+const TransferEventSignature = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
 // CallContractMethod makes a zond_call to a contract method and returns the result
 func CallContractMethod(contractAddress string, methodSig string) (string, error) {
@@ -50,7 +54,7 @@ func CallContractMethod(contractAddress string, methodSig string) (string, error
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := GetHTTPClient().Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to execute request: %v", err)
 	}
@@ -113,26 +117,49 @@ func GetTokenName(contractAddress string) (string, error) {
 		return "", err
 	}
 
-	// Decode the ABI-encoded string
-	if len(result) < 130 {
-		return "", fmt.Errorf("response too short")
+	// Remove 0x prefix
+	if strings.HasPrefix(result, "0x") {
+		result = result[2:]
 	}
 
-	// Extract the string length and data
-	dataStart := 2 + 64 // skip "0x" and first 32 bytes
-	lengthHex := result[dataStart : dataStart+64]
-	length, err := strconv.ParseInt(lengthHex, 16, 64)
-	if err != nil {
-		return "", err
+	// If the result is empty or all zeros, return an error
+	if len(result) == 0 || strings.TrimLeft(result, "0") == "" {
+		return "", fmt.Errorf("empty result")
 	}
 
-	dataHex := result[dataStart+64 : dataStart+64+int(length)*2]
-	nameBytes, err := hex.DecodeString(dataHex)
-	if err != nil {
-		return "", err
+	// Handle different response formats:
+	
+	// Format 1: Dynamic string (most common)
+	// First 32 bytes (64 chars) contain the offset to the string data
+	// Next 32 bytes contain the string length
+	// Followed by the string data
+	if len(result) >= 128 {
+		// Try parsing as dynamic string
+		offsetHex := result[:64]
+		offset, err := strconv.ParseInt(offsetHex, 16, 64)
+		if err == nil && offset*2 < int64(len(result)) {
+			// Get the length from the offset position
+			startPos := offset * 2
+			if startPos+64 <= int64(len(result)) {
+				lengthHex := result[startPos : startPos+64]
+				length, err := strconv.ParseInt(lengthHex, 16, 64)
+				if err == nil && startPos+64+length*2 <= int64(len(result)) {
+					dataHex := result[startPos+64 : startPos+64+length*2]
+					if nameBytes, err := hex.DecodeString(dataHex); err == nil {
+						return string(nameBytes), nil
+					}
+				}
+			}
+		}
 	}
 
-	return string(nameBytes), nil
+	// Format 2: Fixed string (less common)
+	// The entire response is the hex-encoded string
+	if nameBytes, err := hex.DecodeString(strings.TrimRight(result, "0")); err == nil {
+		return string(nameBytes), nil
+	}
+
+	return "", fmt.Errorf("failed to decode token name")
 }
 
 // GetTokenSymbol retrieves the symbol of an ERC20 token
@@ -194,27 +221,167 @@ func GetTokenTotalSupply(contractAddress string) (string, error) {
 		return "", fmt.Errorf("response too short")
 	}
 
-	// Total supply is a uint256, return the hex string as is
-	return result, nil
+	// Convert hex to decimal
+	bigInt := new(big.Int)
+	if _, ok := bigInt.SetString(strings.TrimPrefix(result, "0x"), 16); !ok {
+		return "", fmt.Errorf("failed to parse total supply")
+	}
+
+	// Return decimal string
+	return bigInt.String(), nil
 }
 
 // GetTokenBalance retrieves the balance of an ERC20 token for a specific address
 func GetTokenBalance(contractAddress string, holderAddress string) (string, error) {
-	// Pad the address to 32 bytes
-	paddedAddress := fmt.Sprintf("%s%s", SIG_BALANCE, strings.TrimPrefix(holderAddress, "0x"))
-	for len(paddedAddress) < 74 { // 2 (0x) + 8 (function selector) + 64 (32 bytes)
-		paddedAddress = paddedAddress + "0"
+    // balanceOf(address) function signature
+    methodID := "0x70a08231"
+    
+    // Remove 0x prefix and pad address to 32 bytes
+    address := strings.TrimPrefix(holderAddress, "0x")
+    for len(address) < 64 {
+        address = "0" + address
+    }
+    
+    // Combine method ID and padded address
+    data := methodID + address
+    
+    // Make the call
+    result, err := CallContractMethod(contractAddress, data)
+    if err != nil {
+        return "", fmt.Errorf("contract call failed: %v", err)
+    }
+    
+    // Parse result
+    if len(result) < 2 {
+        return "0", nil
+    }
+    
+    // Convert hex string to big.Int
+    bigInt := new(big.Int)
+    bigInt.SetString(strings.TrimPrefix(result, "0x"), 16)
+    
+    return bigInt.String(), nil
+}
+
+// DecodeTransferEvent decodes token transfers from both:
+// 1. Direct transfer calls (tx.data starting with 0xa9059cbb)
+// 2. Transfer events in transaction logs
+func DecodeTransferEvent(data string) (string, string, string) {
+	// First try to decode direct transfer call
+	if len(data) >= 10 && data[:10] == "0xa9059cbb" {
+		if len(data) != 138 { // 2 (0x) + 8 (func) + 64 (to) + 64 (amount) = 138
+			return "", "", ""
+		}
+
+		// Extract recipient address (remove leading zeros)
+		recipient := "0x" + trimLeftZeros(data[34:74])
+		if len(recipient) != 42 { // Check if it's a valid address length (0x + 40 hex chars)
+			return "", "", ""
+		}
+
+		// Extract amount
+		amount := "0x" + data[74:]
+		return "", recipient, amount
 	}
 
-	result, err := CallContractMethod(contractAddress, paddedAddress)
+	return "", "", ""
+}
+
+// GetTransactionReceipt gets the transaction receipt which includes logs
+func GetTransactionReceipt(txHash string) (*models.TransactionReceipt, error) {
+	if txHash == "" {
+		return nil, fmt.Errorf("transaction hash cannot be empty")
+	}
+
+	nodeURL := os.Getenv("NODE_URL")
+	if nodeURL == "" {
+		return nil, fmt.Errorf("NODE_URL environment variable is not set")
+	}
+
+	group := models.JsonRPC{
+		Jsonrpc: "2.0",
+		Method:  "zond_getTransactionReceipt",
+		Params:  []interface{}{txHash},
+		ID:      1,
+	}
+
+	b, err := json.Marshal(group)
 	if err != nil {
-		return "", err
+		return nil, fmt.Errorf("failed to marshal request: %v", err)
 	}
 
-	if len(result) < 66 {
-		return "", fmt.Errorf("response too short")
+	// Make HTTP request
+	resp, err := GetHTTPClient().Post(nodeURL, "application/json", bytes.NewBuffer(b))
+	if err != nil {
+		return nil, fmt.Errorf("failed to make RPC request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %v", err)
 	}
 
-	// Balance is a uint256, return the hex string as is
-	return result, nil
+	// First unmarshal into a map to check for JSON-RPC error
+	var rawResponse map[string]interface{}
+	if err := json.Unmarshal(body, &rawResponse); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON response: %v", err)
+	}
+
+	// Check for JSON-RPC error
+	if errObj, ok := rawResponse["error"]; ok {
+		return nil, fmt.Errorf("RPC error: %v", errObj)
+	}
+
+	var receipt models.TransactionReceipt
+	if err := json.Unmarshal(body, &receipt); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal receipt: %v", err)
+	}
+
+	return &receipt, nil
+}
+
+// ProcessTransferLogs processes Transfer events from transaction logs
+func ProcessTransferLogs(receipt *models.TransactionReceipt) []TransferEvent {
+	var transfers []TransferEvent
+
+	for _, log := range receipt.Result.Logs {
+		// Check if this is a Transfer event
+		if len(log.Topics) == 3 && log.Topics[0] == TransferEventSignature {
+			// Topics[1] is from address (padded to 32 bytes)
+			from := "0x" + trimLeftZeros(log.Topics[1][26:])
+
+			// Topics[2] is to address (padded to 32 bytes)
+			to := "0x" + trimLeftZeros(log.Topics[2][26:])
+
+			// Log.Data contains the amount (32 bytes)
+			amount := log.Data
+
+			if len(from) == 42 && len(to) == 42 {
+				transfers = append(transfers, TransferEvent{
+					From:   from,
+					To:     to,
+					Amount: amount,
+				})
+			}
+		}
+	}
+
+	return transfers
+}
+
+type TransferEvent struct {
+	From   string
+	To     string
+	Amount string
+}
+
+// Helper function to trim leading zeros from hex string
+func trimLeftZeros(hex string) string {
+	for i := 0; i < len(hex); i++ {
+		if hex[i] != '0' {
+			return hex[i:]
+		}
+	}
+	return "0"
 }

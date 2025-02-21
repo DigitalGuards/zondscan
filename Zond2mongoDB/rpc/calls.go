@@ -20,17 +20,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// Global HTTP client with connection pooling and timeouts
-var httpClient = &http.Client{
-	Timeout: 30 * time.Second,
-	Transport: &http.Transport{
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 100,
-		IdleConnTimeout:     90 * time.Second,
-		DisableCompression:  true,
-	},
-}
-
 func GetLatestBlock() (string, error) {
 	var Zond models.RPC
 
@@ -57,7 +46,7 @@ func GetLatestBlock() (string, error) {
 		}
 		req.Header.Set("Content-Type", "application/json")
 
-		resp, err = httpClient.Do(req)
+		resp, err = GetHTTPClient().Do(req)
 		if err == nil && resp != nil {
 			break
 		}
@@ -130,7 +119,7 @@ func GetBlockByNumberMainnet(blockNumber string) (*models.ZondDatabaseBlock, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := httpClient.Do(req)
+	resp, err := GetHTTPClient().Do(req)
 	if err != nil {
 		zap.L().Info("Failed to get response from RPC call", zap.Error(err))
 		return nil, err
@@ -199,7 +188,7 @@ func GetContractAddress(txHash string) (string, string, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := httpClient.Do(req)
+	resp, err := GetHTTPClient().Do(req)
 	if err != nil {
 		zap.L().Info("Failed to execute request", zap.Error(err))
 		return "", "", err
@@ -268,7 +257,7 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := httpClient.Do(req)
+	resp, err := GetHTTPClient().Do(req)
 	if err != nil {
 		zap.L().Error("Failed to execute request", zap.Error(err))
 		return "", "", "", "", 0, 0, nil, 0, 0, 0, "", 0
@@ -321,7 +310,7 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 		tracerResponse.Result.Type == "CALL"
 
 	if !hasValidCallData {
-		return "", "", "", "", 0, 0, nil, 0, 0, gasUsed, "", 0
+		return "", "", "", "", 0, 0, nil, 0, 0, 0, "", 0
 	}
 
 	// Validate addresses
@@ -348,11 +337,25 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 			zap.L().Error("Invalid output format", zap.String("output", tracerResponse.Result.Output))
 			output = 0
 		} else if tracerResponse.Result.Output != "0x" && len(tracerResponse.Result.Output) > 2 {
-			if parsed, err := strconv.ParseUint(tracerResponse.Result.Output[2:], 16, 64); err == nil {
-				output = parsed
-			} else {
-				zap.L().Warn("Failed to parse output value", zap.Error(err))
+			// Remove "0x" prefix and leading zeros
+			hexStr := strings.TrimPrefix(tracerResponse.Result.Output, "0x")
+			hexStr = strings.TrimLeft(hexStr, "0")
+			
+			// If it's an address (40 characters), just store 1 to indicate success
+			if len(tracerResponse.Result.Output) == 42 { // "0x" + 40 chars
+				output = 1
+			} else if hexStr == "" {
 				output = 0
+			} else {
+				// Try to parse as uint64 if it's a small enough number
+				if parsed, err := strconv.ParseUint(hexStr, 16, 64); err == nil {
+					output = parsed
+				} else {
+					// For larger numbers, just store 1 to indicate success
+					zap.L().Debug("Output value too large for uint64, storing 1", 
+						zap.String("output", tracerResponse.Result.Output))
+					output = 1
+				}
 			}
 		}
 	}
@@ -362,8 +365,12 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 		if !validation.IsValidHexString(tracerResponse.Result.Value) {
 			zap.L().Error("Invalid value format", zap.String("value", tracerResponse.Result.Value))
 		} else {
+			// Remove "0x" prefix and leading zeros
+			hexStr := strings.TrimPrefix(tracerResponse.Result.Value, "0x")
+			hexStr = strings.TrimLeft(hexStr, "0")
+			
 			bigInt := new(big.Int)
-			if _, ok := bigInt.SetString(tracerResponse.Result.Value[2:], 16); !ok {
+			if _, ok := bigInt.SetString(hexStr, 16); !ok {
 				zap.L().Warn("Failed to parse value")
 			}
 		}
@@ -464,7 +471,7 @@ func GetBalance(address string) (string, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := httpClient.Do(req)
+	resp, err := GetHTTPClient().Do(req)
 	if err != nil {
 		zap.L().Info("Failed to execute request", zap.Error(err))
 		return "", err
@@ -503,9 +510,7 @@ func GetValidators() error {
 
 	// Base URL for the validators endpoint
 	baseURL := strings.TrimRight(beaconchainURL, "/") + "/zond/v1alpha1/validators"
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
+	client := GetHTTPClient()
 
 	// Get current epoch from latest block
 	latestBlock, err := GetLatestBlock()
@@ -606,7 +611,7 @@ func GetCode(address string, blockNrOrHash string) (string, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := httpClient.Do(req)
+	resp, err := GetHTTPClient().Do(req)
 	if err != nil {
 		zap.L().Info("Failed to execute request", zap.Error(err))
 		return "", err
@@ -667,7 +672,7 @@ func ZondCall(contractAddress string) (*models.ZondResponse, error) {
 		return nil, err
 	}
 
-	resp, err := http.Post(os.Getenv("NODE_URL"), "application/json", bytes.NewBuffer(jsonPayload))
+	resp, err := GetHTTPClient().Post(os.Getenv("NODE_URL"), "application/json", bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		zap.L().Info("Failed to get a response from HTTP POST request", zap.Error(err))
 		return nil, err
@@ -726,7 +731,7 @@ func ZondGetLogs(contractAddress string) (*models.ZondResponse, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := httpClient.Do(req)
+	resp, err := GetHTTPClient().Do(req)
 	if err != nil {
 		zap.L().Info("Failed to get response from RPC call", zap.Error(err))
 		return nil, err

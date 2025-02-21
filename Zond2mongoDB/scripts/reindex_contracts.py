@@ -7,9 +7,26 @@ import json
 import requests
 from pymongo import MongoClient
 from dotenv import load_dotenv
+import logging
 
 # Load environment variables
 load_dotenv()
+
+# Set up logging
+log_dir = os.path.join(os.path.dirname(__file__), '../logs')
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, 'reindex_contracts.log')
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler(log_file),
+        logging.StreamHandler()  # Also log to console
+    ]
+)
+
+logger = logging.getLogger(__name__)
 
 # MongoDB connection
 MONGO_URI = os.getenv('MONGOURI', 'mongodb://localhost:27017')
@@ -29,7 +46,7 @@ def make_rpc_call(method, params):
         response = requests.post(NODE_URL, json=payload, headers=headers)
         return response.json().get('result')
     except Exception as e:
-        print(f"RPC call failed: {e}")
+        logger.error(f"RPC call failed: {e}")
         return None
 
 def get_contract_code(address):
@@ -69,7 +86,7 @@ def get_token_info(contract_address):
                 name = bytes.fromhex(name_hex).decode('utf-8')
                 is_token = True
         except Exception as e:
-            print(f"Error decoding name for {contract_address}: {e}")
+            logger.error(f"Error decoding name for {contract_address}: {e}")
     
     # Try to get token symbol
     symbol_result = call_contract_method(contract_address, SYMBOL_SIG)
@@ -80,7 +97,7 @@ def get_token_info(contract_address):
                 symbol = bytes.fromhex(symbol_hex).decode('utf-8')
                 is_token = True
         except Exception as e:
-            print(f"Error decoding symbol for {contract_address}: {e}")
+            logger.error(f"Error decoding symbol for {contract_address}: {e}")
     
     # Try to get decimals
     decimals_result = call_contract_method(contract_address, DECIMALS_SIG)
@@ -89,7 +106,7 @@ def get_token_info(contract_address):
             decimals = int(decimals_result[2:], 16)
             is_token = True
         except Exception as e:
-            print(f"Error decoding decimals for {contract_address}: {e}")
+            logger.error(f"Error decoding decimals for {contract_address}: {e}")
     
     return name, symbol, decimals, is_token
 
@@ -101,16 +118,16 @@ def process_contract_creation(transfer_doc, contracts_collection):
     # Get transaction receipt to find contract address
     receipt = get_transaction_receipt(tx_hash)
     if not receipt or not receipt.get('contractAddress'):
-        print(f"No contract address found for transaction {tx_hash}")
+        logger.error(f"No contract address found for transaction {tx_hash}")
         return False
         
-    contract_address = receipt['contractAddress']
-    creator_address = "0x" + transfer_doc['from'].hex() if isinstance(transfer_doc['from'], bytes) else transfer_doc['from']
+    contract_address = receipt['contractAddress'].lower()  # Store as lowercase hex
+    creator_address = ("0x" + transfer_doc['from'].hex() if isinstance(transfer_doc['from'], bytes) else transfer_doc['from']).lower()
     
     # Get contract code
     contract_code = get_contract_code(contract_address)
     if not contract_code or contract_code == "0x":
-        print(f"No code found for contract {contract_address}")
+        logger.error(f"No code found for contract {contract_address}")
         return False
     
     # Get token information
@@ -118,117 +135,122 @@ def process_contract_creation(transfer_doc, contracts_collection):
     
     # Create contract document
     contract_doc = {
-        "contractAddress": bytes.fromhex(contract_address[2:]),  # Store as bytes with '0x' prefix
-        "contractCreatorAddress": bytes.fromhex(creator_address[2:]),
-        "contractCode": bytes.fromhex(contract_code[2:]),
-        "creationTransaction": transfer_doc['txHash'],
+        "address": contract_address,  # Store as hex string
+        "creatorAddress": creator_address,
+        "code": contract_code,
+        "creationTransaction": tx_hash,
         "status": receipt.get('status', '0x1'),  # Default to success if status not present
         "isToken": is_token,
-        "tokenName": name if is_token else "",
-        "tokenSymbol": symbol if is_token else "",
-        "tokenDecimals": decimals if is_token else 0,
+        "name": name if is_token else "",
+        "symbol": symbol if is_token else "",
+        "decimals": decimals if is_token else 0,
+        "creationBlockNumber": transfer_doc.get('blockNumber', '0x0'),
         "updatedAt": datetime.utcnow().isoformat()
     }
     
     # Insert or update contract
-    contracts_collection.update_one(
-        {"contractAddress": contract_doc["contractAddress"]},
-        {"$set": contract_doc},
-        upsert=True
-    )
+    try:
+        result = contracts_collection.update_one(
+            {"address": contract_doc["address"]},
+            {"$set": contract_doc},
+            upsert=True
+        )
+        logger.info(f"MongoDB update result - Matched: {result.matched_count}, Modified: {result.modified_count}, Upserted: {result.upserted_id is not None}")
+    except Exception as e:
+        logger.error(f"Error updating contract in MongoDB: {e}")
+        return False
     
     return True
 
 def main():
     # Connect to MongoDB
+    logger.info(f"Connecting to MongoDB at {MONGO_URI}")
     client = MongoClient(MONGO_URI)
-    db = client['qrldata-b2h']  # Connect to correct database
-    transfers_collection = db.transfer
+    db = client['qrldata-b2h']
+    
+    # Get collections
     contracts_collection = db.contractCode
+    transfer_collection = db.transfer
     
-    # Debug: Print database and collection names
-    print("Available databases:", client.list_database_names())
-    print("Available collections:", db.list_collection_names())
+    # Print available databases and collections
+    logger.info("\nAvailable databases: %s", client.list_database_names())
+    logger.info("Available collections: %s", db.list_collection_names())
     
-    # Debug: Print a few sample documents
-    print("\nSample documents from transfer collection:")
-    sample_docs = transfers_collection.find({"contractAddress": {"$exists": True}}).limit(3)
-    for doc in sample_docs:
-        print("\nDocument:")
+    # Sample some documents from transfer collection
+    logger.info("\nSample documents from transfer collection:\n")
+    sample_transfers = list(transfer_collection.find().limit(1))
+    for doc in sample_transfers:
+        logger.info("Document:")
         for key, value in doc.items():
-            if isinstance(value, bytes):
-                print(f"{key}: 0x{value.hex()}")
-            else:
-                print(f"{key}: {value}")
+            logger.info(f"{key}: {value}")
     
-    # Find all documents that have a contractAddress field
-    query = {"contractAddress": {"$exists": True}}
-    contract_txs = transfers_collection.find(query)
-    total_txs = transfers_collection.count_documents(query)
+    # Process contract creations
+    logger.info("\nProcessing contract creations...")
+    transfers = transfer_collection.find({"contractAddress": {"$exists": True}})
+    total_transfers = transfer_collection.count_documents({"contractAddress": {"$exists": True}})
+    contracts_created = 0
     
-    print(f"\nFound {total_txs} contract creation transactions to process")
+    logger.info(f"\nFound {total_transfers} potential contract creation transactions")
     
-    if total_txs == 0:
-        print("No transactions found. Exiting.")
-        return
+    for i, transfer in enumerate(transfers, 1):
+        logger.info(f"\nProcessing transaction {i}/{total_transfers}")
         
-    processed = 0
-    successful = 0
-    
-    for tx in contract_txs:
-        processed += 1
-        print(f"\nProcessing transaction {processed}/{total_txs}")
-        
-        # Get the contract address directly from the document
-        contract_address = tx['contractAddress']
-        creator_address = tx['from']
-        
-        print(f"Raw contract address: {contract_address}")
-        print(f"Raw creator address: {creator_address}")
-        
-        # Get contract code
-        contract_code = get_contract_code(contract_address)
-        if not contract_code or contract_code == "0x":
-            print(f"No code found for contract {contract_address}")
-            continue
-        
-        # Get token information
-        name, symbol, decimals, is_token = get_token_info(contract_address)
-        if is_token:
-            print(f"Found token contract: Name={name}, Symbol={symbol}, Decimals={decimals}")
-        
-        # Create contract document
-        contract_doc = {
-            "contractAddress": contract_address,  # Keep original format
-            "contractCreatorAddress": creator_address,  # Keep original format
-            "contractCode": contract_code,  # Keep as hex string
-            "creationTransaction": tx['txHash'],
-            "status": tx.get('status', '0x1'),
-            "isToken": is_token,
-            "tokenName": name if is_token else "",
-            "tokenSymbol": symbol if is_token else "",
-            "tokenDecimals": decimals if is_token else 0,
-            "updatedAt": datetime.utcnow().isoformat()
-        }
-        
-        # Insert or update contract
-        contracts_collection.update_one(
-            {"contractAddress": contract_doc["contractAddress"]},
-            {"$set": contract_doc},
-            upsert=True
-        )
-        
-        successful += 1
+        try:
+            # Get the contract address directly from the document
+            contract_address = transfer['contractAddress']
+            creator_address = transfer['from']
             
-        if processed % 10 == 0:
-            print(f"Progress: {processed}/{total_txs} transactions processed, {successful} contracts created")
+            logger.info(f"Raw contract address: {contract_address}")
+            logger.info(f"Raw creator address: {creator_address}")
+            
+            # Get contract code
+            contract_code = get_contract_code(contract_address)
+            if not contract_code or contract_code == "0x":
+                logger.error(f"No code found for contract {contract_address}")
+                continue
+            
+            # Get token information
+            name, symbol, decimals, is_token = get_token_info(contract_address)
+            if is_token:
+                logger.info(f"Found token contract: Name={name}, Symbol={symbol}, Decimals={decimals}")
+            
+            # Create contract document
+            contract_doc = {
+                "address": contract_address,
+                "creatorAddress": creator_address,
+                "code": contract_code,
+                "creationTransaction": transfer['txHash'],
+                "status": transfer.get('status', '0x1'),
+                "isToken": is_token,
+                "name": name if is_token else "",
+                "symbol": symbol if is_token else "",
+                "decimals": decimals if is_token else 0,
+                "creationBlockNumber": transfer.get('blockNumber', '0x0'),
+                "updatedAt": datetime.utcnow().isoformat()
+            }
+            
+            # Insert or update contract
+            try:
+                result = contracts_collection.update_one(
+                    {"address": contract_doc["address"]},
+                    {"$set": contract_doc},
+                    upsert=True
+                )
+                logger.info(f"MongoDB update result - Matched: {result.matched_count}, Modified: {result.modified_count}, Upserted: {result.upserted_id is not None}")
+                contracts_created += 1
+            except Exception as e:
+                logger.error(f"Error updating contract in MongoDB: {e}")
+            
+            if (i % 10) == 0:
+                logger.info(f"Progress: {i}/{total_transfers} transactions processed, {contracts_created} contracts created")
         
-        # Small delay to avoid overwhelming the node
-        time.sleep(0.1)
+        except Exception as e:
+            logger.error(f"Error processing transaction: {e}")
+            continue
     
-    print(f"\nReindexing complete!")
-    print(f"Total transactions processed: {processed}")
-    print(f"Total contracts created: {successful}")
+    logger.info("\nReindexing complete!")
+    logger.info(f"Total transactions processed: {total_transfers}")
+    logger.info(f"Total contracts created: {contracts_created}")
 
 if __name__ == "__main__":
-    main() 
+    main()

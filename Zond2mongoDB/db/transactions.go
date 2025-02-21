@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
@@ -18,9 +18,89 @@ func ProcessTransactions(blockData interface{}) {
 	for _, tx := range blockData.(models.ZondDatabaseBlock).Result.Transactions {
 		to, contractAddress, statusTx, isContract := processContracts(&tx)
 
-		// Process XMSS bitfield with full hex strings
-		processXMSSBitfield(tx.From, tx.Signature)
 		processTransactionData(&tx, blockData.(models.ZondDatabaseBlock).Result.Timestamp, to, contractAddress, statusTx, isContract, blockData.(models.ZondDatabaseBlock).Result.Size)
+
+		// Process token transfers for both contract creation and interaction
+		targetAddress := to
+		if contractAddress != "" {
+			targetAddress = contractAddress
+		}
+
+		if targetAddress != "" {
+			configs.Logger.Debug("Checking for token transfers",
+				zap.String("targetAddress", targetAddress),
+				zap.String("txHash", tx.Hash))
+
+			// Check if this is a token contract
+			contract := GetContractByAddress(targetAddress)
+			if contract == nil {
+				configs.Logger.Debug("Contract not found in database",
+					zap.String("address", targetAddress))
+			} else if !contract.IsToken {
+				configs.Logger.Debug("Contract is not a token",
+					zap.String("address", targetAddress))
+			} else {
+				configs.Logger.Debug("Found token contract",
+					zap.String("address", targetAddress),
+					zap.String("name", contract.Name),
+					zap.String("symbol", contract.Symbol))
+
+				// First check direct transfer calls
+				from, recipient, amount := rpc.DecodeTransferEvent(tx.Data)
+				if from != "" && recipient != "" && amount != "" {
+					configs.Logger.Info("Found direct token transfer",
+						zap.String("contract", targetAddress),
+						zap.String("from", from),
+						zap.String("to", recipient),
+						zap.String("amount", amount))
+					
+					// Update token balances
+					if err := StoreTokenBalance(targetAddress, from, amount, tx.BlockNumber); err != nil {
+						configs.Logger.Error("Failed to store token balance for sender",
+							zap.String("contract", targetAddress),
+							zap.String("holder", from),
+							zap.Error(err))
+					}
+					if err := StoreTokenBalance(targetAddress, recipient, amount, tx.BlockNumber); err != nil {
+						configs.Logger.Error("Failed to store token balance for recipient",
+							zap.String("contract", targetAddress),
+							zap.String("holder", recipient),
+							zap.Error(err))
+					}
+				}
+
+				// Then check transfer events in logs
+				receipt, err := rpc.GetTransactionReceipt(tx.Hash)
+				if err != nil {
+					configs.Logger.Error("Failed to get transaction receipt",
+						zap.String("hash", tx.Hash),
+						zap.Error(err))
+				} else {
+					transfers := rpc.ProcessTransferLogs(receipt)
+					for _, transfer := range transfers {
+						configs.Logger.Info("Found token transfer event",
+							zap.String("contract", targetAddress),
+							zap.String("from", transfer.From),
+							zap.String("to", transfer.To),
+							zap.String("amount", transfer.Amount))
+						
+						// Update token balances
+						if err := StoreTokenBalance(targetAddress, transfer.From, transfer.Amount, tx.BlockNumber); err != nil {
+							configs.Logger.Error("Failed to store token balance for sender",
+								zap.String("contract", targetAddress),
+								zap.String("holder", transfer.From),
+								zap.Error(err))
+						}
+						if err := StoreTokenBalance(targetAddress, transfer.To, transfer.Amount, tx.BlockNumber); err != nil {
+							configs.Logger.Error("Failed to store token balance for recipient",
+								zap.String("contract", targetAddress),
+								zap.String("holder", transfer.To),
+								zap.Error(err))
+						}
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -92,9 +172,9 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 }
 
 func TransferCollection(blockNumber string, blockTimestamp string, from string, to string, hash string, pk string, signature string, nonce string, value float64, data string, contractAddress string, status string, size string, paidFees float64) (*mongo.InsertOneResult, error) {
-	var doc primitive.D
+	var doc bson.D
 
-	baseDoc := primitive.D{
+	baseDoc := bson.D{
 		{Key: "blockNumber", Value: blockNumber},
 		{Key: "blockTimestamp", Value: blockTimestamp},
 		{Key: "from", Value: from},
@@ -109,14 +189,14 @@ func TransferCollection(blockNumber string, blockTimestamp string, from string, 
 	}
 
 	if contractAddress == "" {
-		doc = append(baseDoc, primitive.E{Key: "to", Value: to})
+		doc = append(baseDoc, bson.E{Key: "to", Value: to})
 		if data != "" {
-			doc = append(doc, primitive.E{Key: "data", Value: data})
+			doc = append(doc, bson.E{Key: "data", Value: data})
 		}
 	} else {
-		doc = append(baseDoc, primitive.E{Key: "contractAddress", Value: contractAddress})
+		doc = append(baseDoc, bson.E{Key: "contractAddress", Value: contractAddress})
 		if data != "" {
-			doc = append(doc, primitive.E{Key: "data", Value: data})
+			doc = append(doc, bson.E{Key: "data", Value: data})
 		}
 	}
 
@@ -129,7 +209,7 @@ func TransferCollection(blockNumber string, blockTimestamp string, from string, 
 }
 
 func InternalTransactionByAddressCollection(transactionType string, callType string, hash string, from string, to string, input string, output string, traceAddress []int, value float64, gas string, gasUsed string, addressFunctionIdentifier string, amountFunctionIdentifier string, blockTimestamp string) (*mongo.InsertOneResult, error) {
-	doc := primitive.D{
+	doc := bson.D{
 		{Key: "type", Value: transactionType},
 		{Key: "callType", Value: callType},
 		{Key: "hash", Value: hash},
@@ -156,7 +236,7 @@ func InternalTransactionByAddressCollection(transactionType string, callType str
 }
 
 func TransactionByAddressCollection(timeStamp string, txType string, from string, to string, hash string, amount float64, paidFees float64, blockNumber string) (*mongo.InsertOneResult, error) {
-	doc := primitive.D{
+	doc := bson.D{
 		{Key: "txType", Value: txType},
 		{Key: "from", Value: from},
 		{Key: "to", Value: to},
@@ -176,9 +256,9 @@ func TransactionByAddressCollection(timeStamp string, txType string, from string
 }
 
 func UpsertTransactions(address string, value float64, isContract bool) (*mongo.UpdateResult, error) {
-	filter := primitive.D{{Key: "id", Value: address}}
-	update := primitive.D{
-		{Key: "$set", Value: primitive.D{
+	filter := bson.D{{Key: "id", Value: address}}
+	update := bson.D{
+		{Key: "$set", Value: bson.D{
 			{Key: "id", Value: address},
 			{Key: "balance", Value: value},
 			{Key: "isContract", Value: isContract},
@@ -190,4 +270,14 @@ func UpsertTransactions(address string, value float64, isContract bool) (*mongo.
 		configs.Logger.Warn("Failed to update address collection: ", zap.Error(err))
 	}
 	return result, err
+}
+
+func GetContractByAddress(address string) *models.ContractInfo {
+	collection := configs.GetCollection(configs.DB, "contractCode")
+	var contract models.ContractInfo
+	err := collection.FindOne(context.Background(), bson.M{"address": address}).Decode(&contract)
+	if err != nil {
+		return nil
+	}
+	return &contract
 }

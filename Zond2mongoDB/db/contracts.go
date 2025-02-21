@@ -198,7 +198,7 @@ func ReprocessIncompleteContracts() error {
 				}
 			}
 		} else if contract.IsToken && contract.TotalSupply == "" {
-			// Get total supply for existing tokens that are missing it
+			// Get total supply for token with missing supply
 			totalSupply, err := rpc.GetTokenTotalSupply(contract.Address)
 			if err != nil {
 				configs.Logger.Error("Failed to get token total supply",
