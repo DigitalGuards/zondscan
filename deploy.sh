@@ -52,8 +52,8 @@ check_mongodb() {
 # Prompt for node selection
 select_node() {
     print_status "Select Zond node to use:"
-    PS3="Please choose the node (1-2): "
-    options=("Local node (127.0.0.1:8545)" "Remote node (REDACTED:8545)")
+    PS3="Please choose the node (1-3): "
+    options=("Local node (127.0.0.1:8545)" "Remote node (REDACTED:8545)" "TestnetV1 node (35.158.17.89:32813)")
     select opt in "${options[@]}"
     do
         case $opt in
@@ -63,6 +63,10 @@ select_node() {
                 ;;
             "Remote node (REDACTED:8545)")
                 NODE_URL="http://REDACTED:8545"
+                break
+                ;;
+            "TestnetV1 node (35.158.17.89:32813)")
+                NODE_URL="http://35.158.17.89:32813"
                 break
                 ;;
             *) echo "Invalid option. Please try again.";;
