@@ -4,12 +4,6 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import config from '../../config';
 import { toFixed, formatAmount, epochsToDays, formatAddress } from '../lib/helpers';
-import { getDilithiumAddressFromPK } from '@theqrl/wallet.js';
-
-// Convert base64 to hex string
-function base64ToHex(base64: string): string {
-  return Buffer.from(base64, 'base64').toString('hex');
-}
 
 interface Validator {
   address: string;
@@ -58,12 +52,22 @@ export default function ValidatorsWrapper() {
         
         // Process validators to decode addresses
         const processedValidators = validatorsData.map((validator: any) => {
-          const publicKey = Buffer.from(validator.address, 'base64');
-          const dilithiumAddress = getDilithiumAddressFromPK(publicKey);
-          const hexAddress = Buffer.from(dilithiumAddress).toString('hex');
+          // The address from the API is the validator's public key in hex format
+          // We need to convert it to a proper QRL address with Z prefix
+          let formattedAddress = validator.address;
+          
+          try {
+            // The public key is already in hex format, just add the Z prefix
+            formattedAddress = 'Z' + validator.address;
+          } catch (error) {
+            console.error('Error formatting validator address:', error);
+            // If conversion fails, use the original address
+            formattedAddress = validator.address;
+          }
+          
           return {
             ...validator,
-            address: formatAddress(hexAddress)
+            address: formattedAddress
           };
         });
         
