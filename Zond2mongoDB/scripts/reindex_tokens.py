@@ -83,52 +83,78 @@ def get_logs(contract_address, from_block, to_block):
         "toBlock": hex(to_block)
     }])
 
-def process_transfer_logs(logs, contract_address, token_balances_collection):
+def process_transfer_logs(logs, contract_address, token_balances_collection, token_transfers_collection, contract):
     """Process Transfer event logs and update balances."""
-    if not logs:
-        return
-
-    # Track unique addresses that need balance updates
-    addresses_to_update = set()
-    
     for log in logs:
-        try:
-            # Extract from and to addresses from topics
-            from_addr = "0x" + log["topics"][1][-40:]
-            to_addr = "0x" + log["topics"][2][-40:]
-            
-            addresses_to_update.add(from_addr.lower())
-            addresses_to_update.add(to_addr.lower())
-        except (KeyError, IndexError) as e:
-            logger.error(f"Error processing log: {e}")
-            logger.error(f"Log data: {log}")
+        # Extract transfer details
+        topics = log.get('topics', [])
+        if len(topics) != 3:  # Transfer event has 3 topics
             continue
-    
-    # Update balances for all affected addresses
-    for address in addresses_to_update:
-        logger.info(f"Getting balance for {address}...")
-        current_balance = get_token_balance(contract_address, address)
-        if current_balance is not None:
+        
+        try:
+            from_addr = '0x' + topics[1][-40:]  # Remove padding
+            to_addr = '0x' + topics[2][-40:]  # Remove padding
+            amount = int(log.get('data', '0x0'), 16)
+            block_number = log.get('blockNumber')
+            tx_hash = log.get('transactionHash')
+            
+            # Get block timestamp
+            block = make_rpc_call("zond_getBlockByNumber", [block_number, False])
+            if not block:
+                logger.error(f"Could not get block {block_number}")
+                continue
+            block_timestamp = block.get('timestamp')
+            if not block_timestamp:
+                logger.error(f"No timestamp in block {block_number}")
+                continue
+            
+            # Store token transfer
+            transfer = {
+                'contractAddress': contract_address,
+                'from': from_addr,
+                'to': to_addr,
+                'amount': str(amount),  # Convert to string to match Go model
+                'blockNumber': block_number,
+                'txHash': tx_hash,
+                'timestamp': block_timestamp,
+                'tokenSymbol': contract.get('symbol', ''),
+                'tokenDecimals': contract.get('decimals', 0),
+                'tokenName': contract.get('name', ''),
+                'transferType': 'event'
+            }
+            
             try:
-                # Update in MongoDB
+                token_transfers_collection.insert_one(transfer)
+            except Exception as e:
+                if 'duplicate key error' not in str(e):  # Ignore duplicates
+                    logger.error(f"Failed to store transfer {tx_hash}: {e}")
+            
+            # Update balances (existing logic)
+            update_balance = {'$inc': {'balance': -amount}} if from_addr != '0x0000000000000000000000000000000000000000' else {}
+            if update_balance:
                 token_balances_collection.update_one(
-                    {
-                        "contractAddress": contract_address.lower(),
-                        "holderAddress": address.lower()
-                    },
-                    {
-                        "$set": {
-                            "balance": str(current_balance),
-                            "updatedAt": datetime.utcnow().isoformat()
-                        }
-                    },
+                    {'contractAddress': contract_address, 'holderAddress': from_addr},
+                    update_balance,
                     upsert=True
                 )
-                logger.info(f"Updated balance for {address}: {current_balance}")
-            except Exception as e:
-                logger.error(f"Error updating balance in MongoDB: {e}")
-        else:
-            logger.info(f"Failed to get balance for {address}")
+            
+            if to_addr != '0x0000000000000000000000000000000000000000':
+                token_balances_collection.update_one(
+                    {'contractAddress': contract_address, 'holderAddress': to_addr},
+                    {'$inc': {'balance': amount}},
+                    upsert=True
+                )
+            
+            # Update last processed block
+            token_balances_collection.update_one(
+                {'contractAddress': contract_address, 'holderAddress': 'lastProcessedBlock'},
+                {'$set': {'balance': int(block_number, 16)}},
+                upsert=True
+            )
+            
+        except Exception as e:
+            logger.error(f"Error processing transfer in block {block_number}: {str(e)}", exc_info=True)
+            continue
 
 def get_last_processed_block(token_balances_collection, contract_address):
     """Get the last processed block for a contract."""
@@ -154,6 +180,13 @@ def main():
     # Get collections
     contracts_collection = db.contractCode  # Changed from contracts to contractCode
     token_balances_collection = db.tokenBalances  # Changed from tokenbalances to tokenBalances
+    token_transfers_collection = db.tokenTransfers  # New collection for token transfers
+    
+    # Create indexes for token transfers collection
+    token_transfers_collection.create_index([("contractAddress", 1), ("blockNumber", 1)])
+    token_transfers_collection.create_index([("from", 1), ("blockNumber", 1)])
+    token_transfers_collection.create_index([("to", 1), ("blockNumber", 1)])
+    token_transfers_collection.create_index([("txHash", 1)], unique=True)
     
     # Check all contracts
     logger.info("\nChecking all contracts in database:")
@@ -196,7 +229,7 @@ def main():
                 transfer_count = len(logs)
                 total_transfers += transfer_count
                 logger.info(f"Found {transfer_count} transfer events (total: {total_transfers})")
-                process_transfer_logs(logs, contract_address, token_balances_collection)
+                process_transfer_logs(logs, contract_address, token_balances_collection, token_transfers_collection, contract)
             
             current_block = end_block + 1
             time.sleep(0.1)  # Rate limiting

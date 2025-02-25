@@ -80,11 +80,23 @@ def get_token_info(contract_address):
     name_result = call_contract_method(contract_address, NAME_SIG)
     if name_result and len(name_result) >= 66:
         try:
-            # Remove function selector and length prefix
+            # Remove function selector and length prefix, and handle dynamic strings
             name_hex = name_result[66:].rstrip("0")
             if name_hex:
-                name = bytes.fromhex(name_hex).decode('utf-8')
-                is_token = True
+                # Handle both fixed and dynamic strings
+                try:
+                    # Try to decode as dynamic string first
+                    offset = int(name_result[2:66], 16) * 2  # Convert offset to hex string position
+                    length = int(name_result[offset+2:offset+66], 16) * 2  # Get string length
+                    name_hex = name_result[offset+66:offset+66+length].rstrip("0")
+                except:
+                    # If dynamic string parsing fails, try fixed string
+                    name_hex = name_result[66:].rstrip("0")
+                
+                if name_hex:
+                    name = bytes.fromhex(name_hex).decode('utf-8').strip()
+                    is_token = True
+                    logger.info(f"Decoded token name for {contract_address}: '{name}'")
         except Exception as e:
             logger.error(f"Error decoding name for {contract_address}: {e}")
     
@@ -92,10 +104,20 @@ def get_token_info(contract_address):
     symbol_result = call_contract_method(contract_address, SYMBOL_SIG)
     if symbol_result and len(symbol_result) >= 66:
         try:
-            symbol_hex = symbol_result[66:].rstrip("0")
+            # Handle both fixed and dynamic strings
+            try:
+                # Try to decode as dynamic string first
+                offset = int(symbol_result[2:66], 16) * 2
+                length = int(symbol_result[offset+2:offset+66], 16) * 2
+                symbol_hex = symbol_result[offset+66:offset+66+length].rstrip("0")
+            except:
+                # If dynamic string parsing fails, try fixed string
+                symbol_hex = symbol_result[66:].rstrip("0")
+            
             if symbol_hex:
-                symbol = bytes.fromhex(symbol_hex).decode('utf-8')
+                symbol = bytes.fromhex(symbol_hex).decode('utf-8').strip()
                 is_token = True
+                logger.info(f"Decoded token symbol for {contract_address}: '{symbol}'")
         except Exception as e:
             logger.error(f"Error decoding symbol for {contract_address}: {e}")
     
@@ -148,6 +170,10 @@ def process_contract_creation(transfer_doc, contracts_collection):
         "updatedAt": datetime.utcnow().isoformat()
     }
     
+    # Log contract details before storing
+    if is_token:
+        logger.info(f"Storing token contract - Address: {contract_address}, Name: '{name}', Symbol: '{symbol}', Decimals: {decimals}")
+    
     # Insert or update contract
     try:
         result = contracts_collection.update_one(
@@ -193,15 +219,28 @@ def main():
     logger.info(f"\nFound {total_transfers} potential contract creation transactions")
     
     for i, transfer in enumerate(transfers, 1):
-        logger.info(f"\nProcessing transaction {i}/{total_transfers}")
-        
         try:
             # Get the contract address directly from the document
-            contract_address = transfer['contractAddress']
-            creator_address = transfer['from']
+            contract_address = transfer.get('contractAddress')
+            if not contract_address:
+                logger.error(f"No contract address found in transfer document")
+                continue
+                
+            creator_address = transfer.get('from')
+            if not creator_address:
+                logger.error(f"No creator address found in transfer document")
+                continue
             
-            logger.info(f"Raw contract address: {contract_address}")
-            logger.info(f"Raw creator address: {creator_address}")
+            # Convert bytes to hex strings if needed
+            if isinstance(contract_address, bytes):
+                contract_address = "0x" + contract_address.hex()
+            if isinstance(creator_address, bytes):
+                creator_address = "0x" + creator_address.hex()
+                
+            contract_address = contract_address.lower()
+            creator_address = creator_address.lower()
+            
+            logger.info(f"Processing contract creation - Contract: {contract_address}, Creator: {creator_address}")
             
             # Get contract code
             contract_code = get_contract_code(contract_address)
@@ -212,14 +251,14 @@ def main():
             # Get token information
             name, symbol, decimals, is_token = get_token_info(contract_address)
             if is_token:
-                logger.info(f"Found token contract: Name={name}, Symbol={symbol}, Decimals={decimals}")
+                logger.info(f"Found token contract: Name='{name}', Symbol='{symbol}', Decimals={decimals}")
             
             # Create contract document
             contract_doc = {
                 "address": contract_address,
                 "creatorAddress": creator_address,
                 "code": contract_code,
-                "creationTransaction": transfer['txHash'],
+                "creationTransaction": ("0x" + transfer['txHash'].hex() if isinstance(transfer['txHash'], bytes) else transfer['txHash']),
                 "status": transfer.get('status', '0x1'),
                 "isToken": is_token,
                 "name": name if is_token else "",
@@ -236,17 +275,13 @@ def main():
                     {"$set": contract_doc},
                     upsert=True
                 )
-                logger.info(f"MongoDB update result - Matched: {result.matched_count}, Modified: {result.modified_count}, Upserted: {result.upserted_id is not None}")
+                logger.info(f"Contract {contract_address} updated - Matched: {result.matched_count}, Modified: {result.modified_count}, Upserted: {result.upserted_id is not None}")
                 contracts_created += 1
             except Exception as e:
                 logger.error(f"Error updating contract in MongoDB: {e}")
-            
-            if (i % 10) == 0:
-                logger.info(f"Progress: {i}/{total_transfers} transactions processed, {contracts_created} contracts created")
-        
+                
         except Exception as e:
-            logger.error(f"Error processing transaction: {e}")
-            continue
+            logger.error(f"Error processing transfer {i}/{total_transfers}: {str(e)}", exc_info=True)
     
     logger.info("\nReindexing complete!")
     logger.info(f"Total transactions processed: {total_transfers}")

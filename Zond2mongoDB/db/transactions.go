@@ -54,6 +54,26 @@ func ProcessTransactions(blockData interface{}) {
 						zap.String("to", recipient),
 						zap.String("amount", amount))
 					
+					// Store token transfer
+					transfer := models.TokenTransfer{
+						ContractAddress: targetAddress,
+						From:           from,
+						To:             recipient,
+						Amount:         amount,
+						BlockNumber:    tx.BlockNumber,
+						TxHash:         tx.Hash,
+						Timestamp:      blockData.(models.ZondDatabaseBlock).Result.Timestamp,
+						TokenSymbol:    contract.Symbol,
+						TokenDecimals:  contract.Decimals,
+						TokenName:      contract.Name,
+						TransferType:   "direct",
+					}
+					if err := StoreTokenTransfer(transfer); err != nil {
+						configs.Logger.Error("Failed to store token transfer",
+							zap.String("txHash", tx.Hash),
+							zap.Error(err))
+					}
+					
 					// Update token balances
 					if err := StoreTokenBalance(targetAddress, from, amount, tx.BlockNumber); err != nil {
 						configs.Logger.Error("Failed to store token balance for sender",
@@ -77,24 +97,44 @@ func ProcessTransactions(blockData interface{}) {
 						zap.Error(err))
 				} else {
 					transfers := rpc.ProcessTransferLogs(receipt)
-					for _, transfer := range transfers {
+					for _, transferEvent := range transfers {
 						configs.Logger.Info("Found token transfer event",
 							zap.String("contract", targetAddress),
-							zap.String("from", transfer.From),
-							zap.String("to", transfer.To),
-							zap.String("amount", transfer.Amount))
+							zap.String("from", transferEvent.From),
+							zap.String("to", transferEvent.To),
+							zap.String("amount", transferEvent.Amount))
 						
-						// Update token balances
-						if err := StoreTokenBalance(targetAddress, transfer.From, transfer.Amount, tx.BlockNumber); err != nil {
-							configs.Logger.Error("Failed to store token balance for sender",
-								zap.String("contract", targetAddress),
-								zap.String("holder", transfer.From),
+						// Store token transfer
+						transfer := models.TokenTransfer{
+							ContractAddress: targetAddress,
+							From:           transferEvent.From,
+							To:             transferEvent.To,
+							Amount:         transferEvent.Amount,
+							BlockNumber:    tx.BlockNumber,
+							TxHash:         tx.Hash,
+							Timestamp:      blockData.(models.ZondDatabaseBlock).Result.Timestamp,
+							TokenSymbol:    contract.Symbol,
+							TokenDecimals:  contract.Decimals,
+							TokenName:      contract.Name,
+							TransferType:   "event",
+						}
+						if err := StoreTokenTransfer(transfer); err != nil {
+							configs.Logger.Error("Failed to store token transfer",
+								zap.String("txHash", tx.Hash),
 								zap.Error(err))
 						}
-						if err := StoreTokenBalance(targetAddress, transfer.To, transfer.Amount, tx.BlockNumber); err != nil {
+						
+						// Update token balances
+						if err := StoreTokenBalance(targetAddress, transferEvent.From, transferEvent.Amount, tx.BlockNumber); err != nil {
+							configs.Logger.Error("Failed to store token balance for sender",
+								zap.String("contract", targetAddress),
+								zap.String("holder", transferEvent.From),
+								zap.Error(err))
+						}
+						if err := StoreTokenBalance(targetAddress, transferEvent.To, transferEvent.Amount, tx.BlockNumber); err != nil {
 							configs.Logger.Error("Failed to store token balance for recipient",
 								zap.String("contract", targetAddress),
-								zap.String("holder", transfer.To),
+								zap.String("holder", transferEvent.To),
 								zap.Error(err))
 						}
 					}
