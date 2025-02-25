@@ -120,9 +120,7 @@ func GetTokenName(contractAddress string) (string, error) {
 	}
 
 	// Remove 0x prefix
-	if strings.HasPrefix(result, "0x") {
-		result = result[2:]
-	}
+	result = strings.TrimPrefix(result, "0x")
 
 	// If the result is empty or all zeros, return an error
 	if len(result) == 0 || strings.TrimLeft(result, "0") == "" {

@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"Zond2mongoDB/configs"
 	"Zond2mongoDB/models"
 	"Zond2mongoDB/services"
 	"Zond2mongoDB/utils"
@@ -279,6 +280,7 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 	// Initialize default values for gas and gasUsed
 	gas = 0
 	gasUsed = 0
+	value = 0 // Initialize value to 0
 
 	// Validate and parse gas values
 	if tracerResponse.Result.Gas != "" {
@@ -298,6 +300,28 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 			gasUsed = parsed
 		} else {
 			zap.L().Warn("Failed to parse gasUsed value", zap.Error(err))
+		}
+	}
+
+	// Parse the value field
+	if tracerResponse.Result.Value != "" {
+		if !validation.IsValidHexString(tracerResponse.Result.Value) {
+			zap.L().Error("Invalid value format", zap.String("value", tracerResponse.Result.Value))
+		} else {
+			// Convert hex value to big.Int
+			valueBigInt := new(big.Int)
+			valueBigInt.SetString(tracerResponse.Result.Value[2:], 16)
+
+			// Convert to float32 (with proper scaling)
+			divisor := new(big.Float).SetFloat64(float64(configs.QUANTA))
+			bigIntAsFloat := new(big.Float).SetInt(valueBigInt)
+			resultBigFloat := new(big.Float).Quo(bigIntAsFloat, divisor)
+			valueFloat64, _ := resultBigFloat.Float64()
+			value = float32(valueFloat64)
+
+			zap.L().Debug("Parsed transaction value",
+				zap.String("hex_value", tracerResponse.Result.Value),
+				zap.Float32("parsed_value", value))
 		}
 	}
 
@@ -356,22 +380,6 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 						zap.String("output", tracerResponse.Result.Output))
 					output = 1
 				}
-			}
-		}
-	}
-
-	// Validate and process value
-	if tracerResponse.Result.Value != "" {
-		if !validation.IsValidHexString(tracerResponse.Result.Value) {
-			zap.L().Error("Invalid value format", zap.String("value", tracerResponse.Result.Value))
-		} else {
-			// Remove "0x" prefix and leading zeros
-			hexStr := strings.TrimPrefix(tracerResponse.Result.Value, "0x")
-			hexStr = strings.TrimLeft(hexStr, "0")
-
-			bigInt := new(big.Int)
-			if _, ok := bigInt.SetString(hexStr, 16); !ok {
-				zap.L().Warn("Failed to parse value")
 			}
 		}
 	}
@@ -439,7 +447,7 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 		0, // input is not used in the current implementation
 		output,
 		traceAddress,
-		0, // value is not used in the current implementation
+		value, // Now using the parsed value instead of hardcoded 0
 		gas,
 		gasUsed,
 		addressFunctionidentifier,
@@ -577,13 +585,6 @@ func GetValidators() error {
 		zap.String("current_epoch", currentEpoch))
 
 	return nil
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 func GetCode(address string, blockNrOrHash string) (string, error) {
