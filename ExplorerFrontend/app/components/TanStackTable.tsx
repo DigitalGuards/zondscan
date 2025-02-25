@@ -15,7 +15,7 @@ import {
   Header,
   Cell
 } from "@tanstack/react-table";
-import { formatAmount, formatTimestamp, normalizeHexString } from "../lib/helpers";
+import { formatAmount, formatTimestamp, normalizeHexString, formatAddress } from "../lib/helpers";
 import DebouncedInput from "./DebouncedInput";
 import { DownloadBtn, DownloadBtnInternal } from "./DownloadBtn";
 import Link from "next/link";
@@ -158,8 +158,8 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
       id: "Addresses",
       cell: (info) => {
         const { from, to } = info.getValue();
-        const fromAddress = from ? "0x" + normalizeHexString(from) : "";
-        const toAddress = to ? "0x" + normalizeHexString(to) : "";
+        const fromAddress = from ? formatAddress("0x" + normalizeHexString(from)) : "";
+        const toAddress = to ? formatAddress("0x" + normalizeHexString(to)) : "";
         return (
           <div className="flex flex-col gap-1">
             {fromAddress && (
@@ -222,7 +222,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
     }),
     internalColumnHelper.accessor("From", {
       cell: (info) => {
-        const fullAddress = "0x" + normalizeHexString(info.getValue());
+        const fullAddress = formatAddress("0x" + normalizeHexString(info.getValue()));
         return (
           <span>
             <Link href={"/address/" + fullAddress} title={fullAddress}>
@@ -235,7 +235,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
     }),
     internalColumnHelper.accessor("To", {
       cell: (info) => {
-        const fullAddress = "0x" + normalizeHexString(info.getValue());
+        const fullAddress = formatAddress("0x" + normalizeHexString(info.getValue()));
         return (
           <span>
             <Link href={"/address/" + fullAddress} title={fullAddress}>
@@ -335,10 +335,10 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
             <div className="text-xs text-gray-400">From</div>
             {data.From && (
               <Link 
-                href={"/address/0x" + normalizeHexString(data.From)}
+                href={"/address/" + formatAddress("0x" + normalizeHexString(data.From))}
                 className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
               >
-                {"0x" + normalizeHexString(data.From)}
+                {truncateMiddle(formatAddress("0x" + normalizeHexString(data.From)))}
               </Link>
             )}
           </div>
@@ -347,10 +347,10 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
             <div className="text-xs text-gray-400">To</div>
             {data.To && (
               <Link 
-                href={"/address/0x" + normalizeHexString(data.To)}
+                href={"/address/" + formatAddress("0x" + normalizeHexString(data.To))}
                 className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
               >
-                {"0x" + normalizeHexString(data.To)}
+                {truncateMiddle(formatAddress("0x" + normalizeHexString(data.To)))}
               </Link>
             )}
           </div>
@@ -401,20 +401,20 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
           <div>
             <div className="text-xs text-gray-400">From</div>
             <Link 
-              href={"/address/0x" + normalizeHexString(data.From)}
+              href={"/address/" + formatAddress("0x" + normalizeHexString(data.From))}
               className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
             >
-              {"0x" + normalizeHexString(data.From)}
+              {truncateMiddle(formatAddress("0x" + normalizeHexString(data.From)))}
             </Link>
           </div>
 
           <div>
             <div className="text-xs text-gray-400">To</div>
             <Link 
-              href={"/address/0x" + normalizeHexString(data.To)}
+              href={"/address/" + formatAddress("0x" + normalizeHexString(data.To))}
               className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
             >
-              {"0x" + normalizeHexString(data.To)}
+              {truncateMiddle(formatAddress("0x" + normalizeHexString(data.To)))}
             </Link>
           </div>
 

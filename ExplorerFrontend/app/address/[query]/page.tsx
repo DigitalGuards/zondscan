@@ -1,15 +1,12 @@
-import React from "react";
+'use client';
+
+import React, { Suspense } from "react";
 import axios from "axios";
 import { Metadata } from 'next';
 import config from '../../../config';
 import AddressView from "./address-view";
 import type { AddressData } from "./types";
-
-const decodeToHex = (input: string): string => {
-    if (!input) return '0x0';
-    const decoded = Buffer.from(input, 'base64');
-    return decoded.toString('hex');
-};
+import { decodeToHex, formatAddress } from '../../lib/helpers';
 
 const getData = async (address: string): Promise<AddressData | null> => {
     try {
@@ -28,10 +25,12 @@ const getData = async (address: string): Promise<AddressData | null> => {
 
         // Decode contract addresses if present
         if (response.data.contract_code && response.data.contract_code.contractCode) {
+            const rawCreatorAddress = response.data.contract_code.contractCreatorAddress ? 
+                `0x${decodeToHex(response.data.contract_code.contractCreatorAddress)}` : '0x0';
+                
             response.data.contract_code = {
                 ...response.data.contract_code,
-                decodedCreatorAddress: response.data.contract_code.contractCreatorAddress ? 
-                    `0x${decodeToHex(response.data.contract_code.contractCreatorAddress)}` : '0x0',
+                decodedCreatorAddress: formatAddress(rawCreatorAddress),
                 decodedContractAddress: response.data.contract_code.contractAddress ? 
                     `0x${decodeToHex(response.data.contract_code.contractAddress)}` : '0x0',
                 contractSize: response.data.contract_code.contractCode ? 

@@ -143,6 +143,11 @@ export function normalizeHexString(hexData) {
     return hexData.slice(2);
   }
   
+  // If it starts with Z, remove the prefix
+  if (typeof hexData === 'string' && hexData.startsWith('Z')) {
+    return hexData.slice(1);
+  }
+  
   // If it's a valid hex string without prefix, return as is
   if (typeof hexData === 'string' && /^[0-9a-fA-F]+$/.test(hexData)) {
     return hexData;
@@ -215,4 +220,37 @@ export function toHexString(num) {
 export function truncateHash(hash, startLength = 6, endLength = 4) {
   if (!hash || hash.length < startLength + endLength) return hash;
   return `${hash.slice(0, startLength)}...${hash.slice(-endLength)}`;
+}
+
+/**
+ * Formats an address to ensure it has the correct prefix (Z for QRL addresses)
+ * @param {string} address - The address to format
+ * @param {boolean} forceZPrefix - Whether to force Z prefix even for contract addresses
+ * @returns {string} - The formatted address
+ */
+export function formatAddress(address) {
+  if (!address) return '';
+  
+  // If already has Z prefix, return as is
+  if (address.startsWith('Z')) {
+    return address;
+  }
+  
+  // If has 0x prefix, convert to Z prefix
+  if (address.startsWith('0x')) {
+    // For contract addresses (starting with 0x7), keep the 0x prefix
+    if (address.startsWith('0x7')) {
+      return address;
+    }
+    // For regular addresses, convert to Z prefix
+    return 'Z' + address.slice(2);
+  }
+  
+  // If no prefix, add Z prefix
+  if (/^[0-9a-fA-F]+$/.test(address)) {
+    return 'Z' + address;
+  }
+  
+  // If invalid format, return as is
+  return address;
 }
