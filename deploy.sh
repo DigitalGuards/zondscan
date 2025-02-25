@@ -65,8 +65,8 @@ select_node() {
                 NODE_URL="http://REDACTED:8545"
                 break
                 ;;
-            "TestnetV1 node (35.158.17.89:32813)")
-                NODE_URL="http://35.158.17.89:32813"
+            "TestnetV1 node (35.158.17.89:32837)")
+                NODE_URL="http://35.158.17.89:32837"
                 break
                 ;;
             *) echo "Invalid option. Please try again.";;
