@@ -54,11 +54,11 @@ export default function SearchBar(): JSX.Element {
             e.preventDefault();
             navigateHandler();
           }}
-          className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+          className="flex flex-col sm:flex-row gap-3 sm:gap-6">
           <input
             type="text"
             placeholder="Search by Address / Txn Hash / Block.."
-            className="flex-1 py-3 sm:py-4 px-4 sm:px-5 text-sm sm:text-base text-gray-300 
+            className="flex-1 py-3 sm:py-4 px-4 sm:px-6 text-sm sm:text-base text-gray-300 
                      bg-[#1a1a1a] rounded-xl
                      border border-[#3d3d3d]
                      outline-none shadow-lg
@@ -70,7 +70,7 @@ export default function SearchBar(): JSX.Element {
           />
           <button
             type="submit"
-            className="px-6 sm:px-8 py-3 sm:py-4 bg-[#ffa729] text-white text-sm sm:text-base
+            className="px-8 sm:px-10 py-3 sm:py-4 bg-[#ffa729] text-white text-sm sm:text-base
                      rounded-xl shadow-lg font-medium whitespace-nowrap
                      hover:bg-[#ff9709] hover:shadow-2xl hover:scale-105 
                      active:scale-95 transition-all duration-300 

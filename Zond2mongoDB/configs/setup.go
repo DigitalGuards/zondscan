@@ -34,17 +34,21 @@ func ConnectDB() *mongo.Client {
 	fmt.Println("Connected to MongoDB")
 
 	// Initialize collections with validators
-	db := client.Database("qrldata")
+	db := client.Database("qrldata-b2h")
 
 	// Daily Transactions Volume
 	volumeValidator := bson.M{
 		"$jsonSchema": bson.M{
 			"bsonType": "object",
-			"required": []string{"volume"},
+			"required": []string{"volume", "timestamp"},
 			"properties": bson.M{
 				"volume": bson.M{
-					"bsonType":    "long",
-					"description": "must be a long/int64 and is required",
+					"bsonType":    "string",
+					"description": "must be a hex string and is required",
+				},
+				"timestamp": bson.M{
+					"bsonType":    "string",
+					"description": "must be a hex string and is required",
 				},
 			},
 		},
@@ -106,6 +110,17 @@ func ConnectDB() *mongo.Client {
 
 	// Initialize collections
 	initializeCollections(db)
+
+	// Initialize sync state collection
+	_, err = db.Collection("sync_state").UpdateOne(
+		ctx,
+		bson.M{"_id": "last_synced_block"},
+		bson.M{"$setOnInsert": bson.M{"block_number": "0x0"}},
+		options.Update().SetUpsert(true),
+	)
+	if err != nil {
+		Logger.Error("Failed to initialize sync state collection", zap.Error(err))
+	}
 
 	return client
 }
@@ -175,7 +190,10 @@ func initializeCollections(db *mongo.Database) {
 	_, err = db.Collection("dailyTransactionsVolume").UpdateOne(
 		ctx,
 		bson.M{},
-		bson.M{"$setOnInsert": bson.M{"volume": int64(0)}},
+		bson.M{"$setOnInsert": bson.M{
+			"volume":    "0x0",
+			"timestamp": "0x0",
+		}},
 		options.Update().SetUpsert(true),
 	)
 	if err != nil {
@@ -199,12 +217,22 @@ var DB *mongo.Client = ConnectDB()
 
 // Getting database collections
 func GetCollection(client *mongo.Client, collectionName string) *mongo.Collection {
-	collection := client.Database("qrldata").Collection(collectionName)
+	collection := client.Database("qrldata-b2h").Collection(collectionName)
 	return collection
 }
 
+// Getter for contracts collection
+func GetContractsCollection() *mongo.Collection {
+	return GetCollection(DB, CONTRACT_CODE_COLLECTION)
+}
+
+// Getter for validator collection
+func GetValidatorCollection() *mongo.Collection {
+	return GetCollection(DB, VALIDATORS_COLLECTION)
+}
+
 func GetListCollectionNames(client *mongo.Client) []string {
-	result, err := client.Database("qrldata").ListCollectionNames(
+	result, err := client.Database("qrldata-b2h").ListCollectionNames(
 		context.TODO(),
 		bson.D{})
 

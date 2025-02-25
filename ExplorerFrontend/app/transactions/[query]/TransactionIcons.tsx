@@ -3,8 +3,8 @@ import { SVGIconProps } from './types';
 export function ReceiveIcon(props: SVGIconProps): JSX.Element {
   return (
     <svg 
-      width="73px" 
-      height="73px" 
+      width="100%" 
+      height="100%" 
       viewBox="0 0 73 73" 
       version="1.1" 
       xmlns="http://www.w3.org/2000/svg"
@@ -34,8 +34,8 @@ export function ReceiveIcon(props: SVGIconProps): JSX.Element {
 export function SendIcon(props: SVGIconProps): JSX.Element {
   return (
     <svg 
-      width="73px" 
-      height="73px" 
+      width="100%" 
+      height="100%" 
       viewBox="0 0 73 73" 
       version="1.1" 
       xmlns="http://www.w3.org/2000/svg"

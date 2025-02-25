@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -57,12 +58,12 @@ func UserRoute(router *gin.Engine) {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			
+
 			if tx != nil {
 				// Transaction is mined - return formatted response
 				c.JSON(http.StatusOK, gin.H{
 					"transaction": gin.H{
-						"hash":        tx.Hash,        // Already has 0x prefix
+						"hash":        tx.Hash, // Already has 0x prefix
 						"status":      "mined",
 						"blockNumber": tx.BlockNumber,
 						"timestamp":   time.Now().Unix(),
@@ -157,35 +158,57 @@ func UserRoute(router *gin.Engine) {
 
 		page, err := strconv.Atoi(pageStr)
 		if err != nil {
-			fmt.Println(err)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": fmt.Sprintf("Invalid page number: %v", err),
+			})
+			return
 		}
 
 		txs, err := db.ReturnTransactionsNetwork(page)
 		if err != nil {
-			fmt.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to fetch transactions: %v", err),
+			})
+			return
 		}
 
 		// Transaction count for the address
 		countTransactions, err := db.CountTransactionsNetwork()
 		if err != nil {
-			fmt.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to count transactions: %v", err),
+			})
+			return
 		}
 
-		// Get latest block for confirmation count
-		latestBlock, err := db.ReturnLatestBlock()
+		latestBlockNumber, err := db.GetLatestBlockFromSyncState()
 		if err != nil {
-			fmt.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to get latest block: %v", err),
+			})
+			return
 		}
 
-		var latestBlockNumber uint64
-		if len(latestBlock) > 0 {
-			latestBlockNumber = latestBlock[0].Result.Number
+		var latestBlockNum uint64
+		if strings.HasPrefix(latestBlockNumber, "0x") {
+			latestBlockNum, err = strconv.ParseUint(latestBlockNumber[2:], 16, 64)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": fmt.Sprintf("Failed to parse block number: %v", err),
+				})
+				return
+			}
+		}
+
+		// Return empty array instead of null if no transactions
+		if txs == nil {
+			txs = make([]models.TransactionByAddress, 0)
 		}
 
 		c.JSON(http.StatusOK, gin.H{
 			"txs":         txs,
 			"total":       countTransactions,
-			"latestBlock": latestBlockNumber,
+			"latestBlock": latestBlockNum,
 		})
 	})
 
@@ -224,34 +247,42 @@ func UserRoute(router *gin.Engine) {
 			fmt.Printf("Error getting rank: %v\n", err)
 		}
 
-		// All transactions by the address
-		TransactionsByAddress, err := db.ReturnAllTransactionsByAddress(param)
+		// Get all transactions by the address
+		transactionsByAddress, err := db.ReturnAllTransactionsByAddress(param)
 		if err != nil {
 			fmt.Printf("Error getting transactions: %v\n", err)
 		}
 
-		// All internal transactions by the address
-		InternalTransactionsByAddress, err := db.ReturnAllInternalTransactionsByAddress(param)
+		// Get all internal transactions by the address
+		internalTransactionsByAddress, err := db.ReturnAllInternalTransactionsByAddress(param)
 		if err != nil {
 			fmt.Printf("Error getting internal transactions: %v\n", err)
 		}
 
-		// Contract code (if applicable)
+		// Get contract code data
 		contractCodeData, err := db.ReturnContractCode(param)
-		// Don't treat missing contract code as an error since not all addresses are contracts
-		if err != nil && err != mongo.ErrNoDocuments {
+		if err != nil {
 			fmt.Printf("Error getting contract code: %v\n", err)
 		}
 
-		// Get latest block for confirmation count
-		latestBlock, err := db.ReturnLatestBlock()
+		// Get latest block number
+		latestBlockNumber, err := db.GetLatestBlockFromSyncState()
 		if err != nil {
-			fmt.Printf("Error getting latest block: %v\n", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to get latest block: %v", err),
+			})
+			return
 		}
 
-		var latestBlockNumber uint64
-		if len(latestBlock) > 0 {
-			latestBlockNumber = latestBlock[0].Result.Number
+		var latestBlockNum uint64
+		if strings.HasPrefix(latestBlockNumber, "0x") {
+			latestBlockNum, err = strconv.ParseUint(latestBlockNumber[2:], 16, 64)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": fmt.Sprintf("Failed to parse block number: %v", err),
+				})
+				return
+			}
 		}
 
 		// Response aggregation
@@ -259,10 +290,10 @@ func UserRoute(router *gin.Engine) {
 			"address":                          addressData,
 			"transactions_count":               countTransactions,
 			"rank":                             rank,
-			"transactions_by_address":          TransactionsByAddress,
-			"internal_transactions_by_address": InternalTransactionsByAddress,
+			"transactions_by_address":          transactionsByAddress,
+			"internal_transactions_by_address": internalTransactionsByAddress,
 			"contract_code":                    contractCodeData,
-			"latestBlock":                      latestBlockNumber,
+			"latestBlock":                      latestBlockNum,
 		})
 	})
 
@@ -273,30 +304,57 @@ func UserRoute(router *gin.Engine) {
 			fmt.Println(err)
 		}
 
-		latestBlock, err := db.ReturnLatestBlock()
+		latestBlockNumber, err := db.GetLatestBlockFromSyncState()
 		if err != nil {
-			fmt.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to get latest block: %v", err),
+			})
+			return
 		}
 
-		var latestBlockNumber uint64
-		if len(latestBlock) > 0 {
-			latestBlockNumber = latestBlock[0].Result.Number
+		var latestBlockNum uint64
+		if strings.HasPrefix(latestBlockNumber, "0x") {
+			latestBlockNum, err = strconv.ParseUint(latestBlockNumber[2:], 16, 64)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": fmt.Sprintf("Failed to parse block number: %v", err),
+				})
+				return
+			}
 		}
 
 		c.JSON(http.StatusOK, gin.H{
 			"response":    query,
-			"latestBlock": latestBlockNumber,
+			"latestBlock": latestBlockNum,
 		})
 	})
 
 	router.GET("/latestblock", func(c *gin.Context) {
-		latestBlock, err := db.ReturnLatestBlock()
+		blockNumber, err := db.GetLatestBlockFromSyncState()
 		if err != nil {
-			fmt.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to fetch latest block: %v", err),
+			})
+			return
 		}
-		c.JSON(http.StatusOK, gin.H{
-			"response": latestBlock,
-		})
+
+		// Convert hex to decimal
+		if strings.HasPrefix(blockNumber, "0x") {
+			num, err := strconv.ParseUint(blockNumber[2:], 16, 64)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": fmt.Sprintf("Failed to parse block number: %v", err),
+				})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{
+				"blockNumber": num,
+			})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Invalid block number format in sync state",
+			})
+		}
 	})
 
 	router.GET("/coinbase/:query", func(c *gin.Context) {
@@ -361,7 +419,7 @@ func UserRoute(router *gin.Engine) {
 
 	router.GET("/validators", func(c *gin.Context) {
 		pageToken := c.Query("page_token")
-		rawValidators, err := db.ReturnValidators(pageToken)
+		validatorResponse, err := db.ReturnValidators(pageToken)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": fmt.Sprintf("Failed to fetch validators: %v", err),
@@ -369,60 +427,7 @@ func UserRoute(router *gin.Engine) {
 			return
 		}
 
-		// Get the current epoch from the latest block
-		latestBlock, err := db.ReturnLatestBlock()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get latest block"})
-			return
-		}
-		currentEpoch := int(latestBlock[0].Result.Number / 128) // Each epoch is 128 blocks
-
-		// Initialize response
-		response := models.ValidatorResponse{
-			Validators:    make([]models.Validator, 0),
-			TotalStaked:   "0",
-			NextPageToken: pageToken, // Pass through the page token
-		}
-
-		totalStaked := float64(0)
-
-		processedValidators := make(map[string]bool)
-
-		// Process validators by slot
-		for _, slotValidators := range rawValidators.Resultvalidator.Validatorsbyslotnumber {
-			// Process leader
-			validatorEntry := models.Validator{
-				Address:      slotValidators.Leader,
-				Uptime:       100.0, // TODO: Calculate actual uptime from historical data
-				Age:          currentEpoch,
-				StakedAmount: "40000000000000000000000", // 40000 Quanta in Wei (18 decimal places)
-				IsActive:     true,
-			}
-			response.Validators = append(response.Validators, validatorEntry)
-			totalStaked += 40000000000000000000000
-
-			// Process attestors
-			for _, attestor := range slotValidators.Attestors {
-				if _, exists := processedValidators[attestor]; exists {
-					continue
-				}
-				processedValidators[attestor] = true
-
-				validatorEntry := models.Validator{
-					Address:      attestor,
-					Uptime:       100.0,
-					Age:          currentEpoch,
-					StakedAmount: "40000000000000000000000", // 40000 Quanta in Wei (18 decimal places)
-					IsActive:     true,
-				}
-				response.Validators = append(response.Validators, validatorEntry)
-				totalStaked += 40000000000000000000000
-			}
-		}
-
-		response.TotalStaked = fmt.Sprintf("%.0f", totalStaked)
-
-		c.JSON(http.StatusOK, response)
+		c.JSON(http.StatusOK, validatorResponse)
 	})
 
 	router.GET("/transactions", func(c *gin.Context) {
@@ -452,16 +457,73 @@ func UserRoute(router *gin.Engine) {
 		})
 	})
 
+	router.GET("/debug/blocks", func(c *gin.Context) {
+		count, err := db.CountBlocksNetwork()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to count blocks: %v", err),
+				"step":  "count_blocks",
+			})
+			return
+		}
+
+		latestBlockNumber, err := db.GetLatestBlockFromSyncState()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":       fmt.Sprintf("Failed to get latest block: %v", err),
+				"step":        "get_latest",
+				"block_count": count,
+			})
+			return
+		}
+
+		var latestBlockNum uint64
+		if strings.HasPrefix(latestBlockNumber, "0x") {
+			latestBlockNum, err = strconv.ParseUint(latestBlockNumber[2:], 16, 64)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": fmt.Sprintf("Failed to parse block number: %v", err),
+				})
+				return
+			}
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"total_blocks": count,
+			"latest_block": latestBlockNum,
+		})
+	})
+
 	router.GET("/block/:query", func(c *gin.Context) {
-		value := c.Param("query")
-		intValue, err := strconv.ParseUint(value, 10, 64)
-		if err != nil {
-			fmt.Println(err)
+		blockStr := c.Param("query")
+		var blockNum uint64
+		var err error
+
+		if strings.HasPrefix(blockStr, "0x") {
+			// Handle hex format by removing 0x prefix
+			blockNum, err = strconv.ParseUint(blockStr[2:], 16, 64)
+		} else {
+			// Handle decimal format
+			blockNum, err = strconv.ParseUint(blockStr, 10, 64)
 		}
-		query, err := db.ReturnSingleBlock(intValue)
+
 		if err != nil {
-			fmt.Println(err)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Invalid block number. Please provide a decimal number or hex with 0x prefix: " + err.Error(),
+			})
+			return
 		}
-		c.JSON(http.StatusOK, gin.H{"response": query})
+
+		block, err := db.ReturnSingleBlock(blockNum)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"block": block,
+		})
 	})
 }

@@ -9,11 +9,11 @@ interface PageProps {
 }
 
 function isEmptyTransaction(txData: any): boolean {
-  return !txData.hash && 
-         !txData.from && 
-         !txData.to && 
-         (!txData.value || txData.value === 0) &&
-         (!txData.blockNumber || txData.blockNumber === 0);
+  return !txData.TxHash && 
+         !txData.From && 
+         !txData.To && 
+         (!txData.Value || txData.Value === '0x0') &&
+         (!txData.BlockNumber || txData.BlockNumber === '0x0');
 }
 
 async function getTransaction(txHash: string): Promise<TransactionDetails> {
@@ -49,65 +49,23 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
   const txData = data.response;
   console.log('Transaction data:', JSON.stringify(txData, null, 2));
 
-  // Helper function to handle address decoding
-  const decodeAddress = (address: string | null | undefined): string => {
-    console.log('Decoding address:', address);
-    if (!address) return '';
-    // Check if it's already a hex address (starts with 0x)
-    if (address.startsWith('0x')) {
-      console.log('Address is already hex:', address);
-      return address;
-    }
-    // Otherwise decode from base64
-    try {
-      const decoded = decodeBase64ToHexadecimal(address);
-      console.log('Decoded address:', decoded);
-      return decoded; // decodeBase64ToHexadecimal already adds '0x' prefix
-    } catch (error) {
-      console.error('Error decoding address:', error);
-      return address;
-    }
-  };
-
-  // Helper function to convert number to hex string with proper scaling
-  const formatBigValue = (value: string | number | null | undefined): string => {
-    if (value === null || value === undefined) return '0x0';
-    
-    try {
-      // Convert to string and then BigInt
-      const numStr = value.toString();
-      const num = BigInt(numStr);
-      
-      // Return hex string
-      return '0x' + num.toString(16);
-    } catch (error) {
-      console.error('Error converting value:', error);
-      return '0x0';
-    }
-  };
-
-  // Helper function to ensure integer values
-  const ensureInteger = (value: any): number => {
-    if (typeof value === 'number') {
-      return Math.floor(value);
-    }
-    if (typeof value === 'string') {
-      return Math.floor(parseFloat(value));
-    }
-    return 0;
+  // Helper function to handle hex values
+  const ensureHexString = (value: string | null | undefined): string => {
+    if (!value) return '0x0';
+    return value.startsWith('0x') ? value : `0x${value}`;
   };
 
   const transaction = {
-    hash: txData.hash || txHash,
-    blockNumber: ensureInteger(txData.blockNumber) || '',
-    from: decodeAddress(txData.from),
-    to: decodeAddress(txData.to),
-    value: formatBigValue(txData.value),
-    timestamp: ensureInteger(txData.blockTimestamp || txData.timestamp) || 0,
-    gasUsed: formatBigValue(txData.gasUsed),
-    gasPrice: formatBigValue(txData.gasPrice),
-    nonce: ensureInteger(txData.nonce),
-    latestBlock: ensureInteger(data.latestBlock)
+    hash: txData.TxHash,
+    blockNumber: txData.BlockNumber ? parseInt(txData.BlockNumber, 16) : 0,
+    from: txData.From,
+    to: txData.To,
+    value: ensureHexString(txData.Value),
+    timestamp: txData.BlockTimestamp ? parseInt(txData.BlockTimestamp, 16) : 0,
+    gasUsed: ensureHexString(txData.GasUsed),
+    gasPrice: ensureHexString(txData.GasPrice),
+    nonce: txData.Nonce ? parseInt(txData.Nonce, 16) : 0,
+    latestBlock: data.latestBlock
   };
 
   console.log('Processed transaction:', JSON.stringify(transaction, null, 2));

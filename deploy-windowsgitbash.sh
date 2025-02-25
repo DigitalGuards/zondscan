@@ -40,12 +40,11 @@ check_dependencies() {
     fi
 }
 
-# Check if MongoDB is running
-#check_mongodb() {
-#    if ! nc -z localhost 27017; then
-#        print_error "MongoDB is not running on localhost:27017."
-#    fi
-#}
+check_mongodb() {
+   if ! nc -z localhost 27017; then
+        print_error "MongoDB is not running on localhost:27017."
+    fi
+}
 
 # Check if Zond node is accessible
 check_zond_node() {
@@ -85,7 +84,7 @@ setup_server() {
     print_status "Creating .env.development file..."
     cat > .env.development << EOL
 GIN_MODE=release
-MONGOURI=mongodb://localhost:27017/qrldata?readPreference=primary
+MONGOURI=mongodb://localhost:27017/qrldata-b2h?readPreference=primary
 HTTP_PORT=:8080
 NODE_URL=http://REDACTED:8545
 EOL
@@ -106,14 +105,14 @@ setup_frontend() {
 
     # Create .env file
     cat > .env << EOL
-DATABASE_URL=mongodb://localhost:27017/qrldata?readPreference=primary
-NEXT_PUBLIC_DOMAIN_NAME=http://localhost:3000
-NEXT_PUBLIC_HANDLER_URL=http://127.0.0.1:8080
+DATABASE_URL=mongodb://localhost:27017/qrldata-b2h?readPreference=primary
+DOMAIN_NAME=http://localhost:3000
+HANDLER_URL=http://127.0.0.1:8080
 EOL
 
     # Create .env.local file
     cat > .env.local << EOL
-DATABASE_URL=mongodb://localhost:27017/qrldata?readPreference=primary
+DATABASE_URL=mongodb://localhost:27017/qrldata-b2h?readPreference=primary
 DOMAIN_NAME=http://localhost:3000
 HANDLER_URL=http://127.0.0.1:8080
 EOL
@@ -126,9 +125,9 @@ EOL
     print_status "Updating browserslist database..."
     npx browserslist@latest --update-db || print_error "Failed to update browserslist"
 
-    # Start frontend in development mode with PM2
+    # Start frontend in development mode with PM2 using npm.cmd
     print_status "Starting frontend in development mode..."
-    cd "$BASE_DIR/ExplorerFrontend" && pm2 start "npm run dev" --name "frontend" || print_error "Failed to start frontend"
+    pm2 start bash --name "frontend" -- -c "npm run dev" || print_error "Failed to start frontend"
 }
 
 # Setup blockchain synchronizer
@@ -149,7 +148,7 @@ EOL
 
     # Start synchronizer with PM2, explicitly setting environment variables
     print_status "Starting synchronizer with PM2..."
-    pm2 start ./syncer.exe --name "synchroniser" --cwd "$BASE_DIR/Zond2mongoDB" || print_error "Failed to start synchronizer"
+    pm2 start ./synchroniser.exe --name "synchroniser" --cwd "$BASE_DIR/Zond2mongoDB" || print_error "Failed to start synchronizer"
 }
 
 # Save PM2 processes
@@ -169,14 +168,14 @@ main() {
     check_dependencies
 
     # Check if MongoDB and Zond node are running
-    #check_mongodb
+    check_mongodb
     check_zond_node
 
     # Clone and setup
     clone_repo
-    setup_server        # Start the server before building the frontend
-    #setup_frontend
+    setup_server
     setup_synchronizer
+    setup_frontend
     save_pm2
 
     print_status "Deployment complete! Services are starting up..."

@@ -4,18 +4,18 @@ import axios from 'axios';
 import React, { useState, useEffect } from 'react';
 import config from '../../../config';
 import Link from 'next/link';
-import { decodeBase64ToHexadecimal, formatAmount } from '../../lib/helpers';
+import { formatAmount } from '../../lib/helpers';
 
 type Block = {
-  baseFeePerGas: number;
-  gasLimit: number;
-  gasUsed: number;
+  baseFeePerGas: string;
+  gasLimit: string;
+  gasUsed: string;
   hash: string;
-  number: number;
+  number: string;
   parentHash: string;
   receiptsRoot: string;
   stateRoot: string;
-  timestamp: number;
+  timestamp: string;
   transactions: Array<{
     hash: string;
     from: string;
@@ -23,15 +23,15 @@ type Block = {
     value: string;
   }>;
   transactionsRoot: string;
-  difficulty: number;
+  difficulty: string;
   extraData: string;
   logsBloom: string;
   miner: string;
   mixHash: string;
   nonce: string;
   sha3Uncles: string;
-  size: number;
-  totalDifficulty: number;
+  size: string;
+  totalDifficulty: string;
   uncles: string[];
   withdrawals: any[];
   withdrawalsRoot: string;
@@ -40,6 +40,25 @@ type Block = {
 interface BlockDetailClientProps {
   blockNumber: string;
 }
+
+// Helper function to format hex values
+const formatHexValue = (hex: string | null | undefined): string => {
+  if (!hex) return '0';
+  const num = typeof hex === 'string' && hex.startsWith('0x') ? 
+    parseInt(hex, 16) : 
+    parseInt(hex);
+  return isNaN(num) ? '0' : num.toLocaleString();
+};
+
+// Helper function to format timestamp
+const formatTimestamp = (timestamp: string | null | undefined): string => {
+  if (!timestamp) return 'N/A';
+  const timestampNum = typeof timestamp === 'string' && timestamp.startsWith('0x') ? 
+    parseInt(timestamp, 16) : 
+    parseInt(timestamp);
+  if (isNaN(timestampNum)) return 'N/A';
+  return new Date(timestampNum * 1000).toLocaleString();
+};
 
 export default function BlockDetailClient({ blockNumber }: BlockDetailClientProps) {
   const [blockData, setBlockData] = useState<Block | null>(null);
@@ -51,7 +70,41 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
       try {
         setLoading(true);
         const response = await axios.get(`${config.handlerUrl}/block/${blockNumber}`);
-        setBlockData(response.data?.response?.result || response.data);
+        
+        // Extract the block data from the nested response
+        const block = response.data?.block?.result;
+        if (!block) {
+          throw new Error('Invalid block data received');
+        }
+
+        // Map the API response to our Block type
+        const mappedBlock: Block = {
+          baseFeePerGas: block.baseFeePerGas || '0x0',
+          gasLimit: block.gasLimit || '0x0',
+          gasUsed: block.gasUsed || '0x0',
+          hash: block.hash || '',
+          number: block.number || '0x0',
+          parentHash: block.parentHash || '',
+          receiptsRoot: block.receiptsRoot || '',
+          stateRoot: block.stateRoot || '',
+          timestamp: block.timestamp || '0x0',
+          transactions: block.transactions || [],
+          transactionsRoot: block.transactionsRoot || '',
+          difficulty: block.difficulty || '0x0',
+          extraData: block.extraData || '',
+          logsBloom: block.logsBloom || '',
+          miner: block.miner || '',
+          mixHash: block.mixHash || '',
+          nonce: block.nonce || '',
+          sha3Uncles: block.sha3Uncles || '',
+          size: block.size || '0x0',
+          totalDifficulty: block.totalDifficulty || '0x0',
+          uncles: block.uncles || [],
+          withdrawals: block.withdrawals || [],
+          withdrawalsRoot: block.withdrawalsRoot || ''
+        };
+
+        setBlockData(mappedBlock);
         setError(null);
       } catch (err) {
         console.error('Error fetching block:', err);
@@ -108,9 +161,9 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
               </svg>
               <div>
-                <h1 className="text-2xl font-bold text-[#ffa729]">Block #{blockNumber}</h1>
+                <h1 className="text-2xl font-bold text-[#ffa729]">Block #{formatHexValue(blockData?.number)}</h1>
                 <p className="text-gray-400 mt-1">
-                  {new Date(blockData.timestamp * 1000).toLocaleString()}
+                  {formatTimestamp(blockData?.timestamp)}
                 </p>
               </div>
             </div>
@@ -122,15 +175,15 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <h2 className="text-sm font-semibold text-gray-400 mb-2">Hash</h2>
-                <p className="text-gray-300 break-all font-mono">{blockData.hash}</p>
+                <p className="text-gray-300 break-all font-mono">{blockData?.hash}</p>
               </div>
               <div>
                 <h2 className="text-sm font-semibold text-gray-400 mb-2">Parent Hash</h2>
                 <Link 
-                  href={`/block/${blockData.number - 1}`}
+                  href={`/block/${parseInt(blockData?.number || '0', 16) - 1}`}
                   className="text-gray-300 hover:text-[#ffa729] break-all font-mono transition-colors"
                 >
-                  {blockData.parentHash}
+                  {blockData?.parentHash}
                 </Link>
               </div>
             </div>
@@ -139,15 +192,15 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <h2 className="text-sm font-semibold text-gray-400 mb-2">Gas Used</h2>
-                <p className="text-gray-300">{blockData.gasUsed.toLocaleString()}</p>
+                <p className="text-gray-300">{formatHexValue(blockData?.gasUsed)}</p>
               </div>
               <div>
                 <h2 className="text-sm font-semibold text-gray-400 mb-2">Gas Limit</h2>
-                <p className="text-gray-300">{blockData.gasLimit.toLocaleString()}</p>
+                <p className="text-gray-300">{formatHexValue(blockData?.gasLimit)}</p>
               </div>
               <div>
                 <h2 className="text-sm font-semibold text-gray-400 mb-2">Base Fee</h2>
-                <p className="text-gray-300">{blockData.baseFeePerGas || 'N/A'}</p>
+                <p className="text-gray-300">{formatHexValue(blockData?.baseFeePerGas)}</p>
               </div>
             </div>
 
@@ -211,19 +264,19 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <h2 className="text-sm font-semibold text-gray-400 mb-2">State Root</h2>
-                <p className="text-gray-300 break-all font-mono">{blockData.stateRoot}</p>
+                <p className="text-gray-300 break-all font-mono">{blockData?.stateRoot}</p>
               </div>
               <div>
                 <h2 className="text-sm font-semibold text-gray-400 mb-2">Receipts Root</h2>
-                <p className="text-gray-300 break-all font-mono">{blockData.receiptsRoot}</p>
+                <p className="text-gray-300 break-all font-mono">{blockData?.receiptsRoot}</p>
               </div>
               <div>
                 <h2 className="text-sm font-semibold text-gray-400 mb-2">Transactions Root</h2>
-                <p className="text-gray-300 break-all font-mono">{blockData.transactionsRoot}</p>
+                <p className="text-gray-300 break-all font-mono">{blockData?.transactionsRoot}</p>
               </div>
               <div>
                 <h2 className="text-sm font-semibold text-gray-400 mb-2">Extra Data</h2>
-                <p className="text-gray-300 break-all font-mono">{blockData.extraData}</p>
+                <p className="text-gray-300 break-all font-mono">{blockData?.extraData}</p>
               </div>
             </div>
           </div>

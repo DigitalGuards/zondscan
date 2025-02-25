@@ -10,7 +10,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Link from "next/link";
 import Image from 'next/image';
-import { decodeBase64ToHexadecimal } from '../lib/helpers';
+import { decodeToHex } from '../lib/helpers';
 import { Transaction, TransactionType } from './types';
 
 interface TransactionsDisplayProps {
@@ -27,7 +27,7 @@ const Item = styled(Paper)(({ theme }) => ({
 }));
 
 function decodeToTxHash(txHash: string): string {
-  return decodeBase64ToHexadecimal(txHash);
+  return decodeToHex(txHash);
 }
 
 function convertTime(timestamp: number): string {

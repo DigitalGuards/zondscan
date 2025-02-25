@@ -25,9 +25,13 @@ func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
 		{Key: "inOut", Value: 1},
 		{Key: "txType", Value: 1},
 		{Key: "address", Value: 1},
+		{Key: "from", Value: 1},
+		{Key: "to", Value: 1},
 		{Key: "txHash", Value: 1},
 		{Key: "timeStamp", Value: 1},
 		{Key: "amount", Value: 1},
+		{Key: "paidFees", Value: 1},
+		{Key: "blockNumber", Value: 1},
 	}
 
 	opts := options.Find().
@@ -37,6 +41,7 @@ func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
 	results, err := configs.TransactionByAddressCollection.Find(ctx, primitive.D{}, opts)
 	if err != nil {
 		fmt.Println(err)
+		return nil, err
 	}
 
 	defer results.Close(ctx)
@@ -44,47 +49,12 @@ func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
 		var singleTransaction models.TransactionByAddress
 		if err = results.Decode(&singleTransaction); err != nil {
 			fmt.Println(err)
+			continue
 		}
 		transactions = append(transactions, singleTransaction)
 	}
 
 	return transactions, nil
-}
-
-func ReturnLastSixTransactions() []models.TransactionByAddress {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	var transactions []models.TransactionByAddress
-	defer cancel()
-
-	projection := primitive.D{
-		{Key: "inOut", Value: 1},
-		{Key: "txType", Value: 1},
-		{Key: "address", Value: 1},
-		{Key: "txHash", Value: 1},
-		{Key: "timeStamp", Value: 1},
-		{Key: "amount", Value: 1},
-	}
-
-	opts := options.Find().
-		SetProjection(projection).
-		SetSort(primitive.D{{Key: "timeStamp", Value: -1}}).
-		SetLimit(6)
-
-	results, err := configs.TransactionByAddressCollection.Find(ctx, primitive.D{}, opts)
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	defer results.Close(ctx)
-	for results.Next(ctx) {
-		var singleTransaction models.TransactionByAddress
-		if err = results.Decode(&singleTransaction); err != nil {
-			fmt.Println(err)
-		}
-		transactions = append(transactions, singleTransaction)
-	}
-
-	return transactions
 }
 
 func ReturnAllInternalTransactionsByAddress(address string) ([]models.TraceResult, error) {
@@ -93,7 +63,7 @@ func ReturnAllInternalTransactionsByAddress(address string) ([]models.TraceResul
 
 	var transactions []models.TraceResult
 
-	decoded, err := hex.DecodeString(address[2:])
+	decoded, err := hex.DecodeString(strings.TrimPrefix(address, "0x"))
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +108,7 @@ func ReturnAllInternalTransactionsByAddress(address string) ([]models.TraceResul
 
 		from := hex.EncodeToString([]byte(singleTransaction.From))
 
-		if from == address[2:] {
+		if from == strings.TrimPrefix(address, "0x") {
 			singleTransaction.InOut = 0
 			singleTransaction.Address = []byte(singleTransaction.To)
 		} else {
@@ -158,14 +128,15 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 
 	var transactions []models.TransactionByAddress
 
-	decoded, err := hex.DecodeString(address[2:])
-	if err != nil {
-		return nil, err
+	// Ensure address has 0x prefix
+	if !strings.HasPrefix(address, "0x") {
+		address = "0x" + address
 	}
 
+	// Query for transactions where the address is either the sender or receiver
 	filter := primitive.D{{Key: "$or", Value: []primitive.D{
-		{{Key: "from", Value: decoded}},
-		{{Key: "to", Value: decoded}},
+		{{Key: "from", Value: address}},
+		{{Key: "to", Value: address}},
 	}}}
 
 	projection := primitive.D{
@@ -177,6 +148,7 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 		{Key: "from", Value: 1},
 		{Key: "to", Value: 1},
 		{Key: "paidFees", Value: 1},
+		{Key: "blockNumber", Value: 1},
 	}
 
 	opts := options.Find().
@@ -185,6 +157,7 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 
 	results, err := configs.TransactionByAddressCollection.Find(ctx, filter, opts)
 	if err != nil {
+		fmt.Printf("Error querying transactions: %v\n", err)
 		return nil, err
 	}
 	defer results.Close(ctx)
@@ -192,25 +165,25 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 	for results.Next(ctx) {
 		var singleTransaction models.TransactionByAddress
 		if err := results.Decode(&singleTransaction); err != nil {
+			fmt.Printf("Error decoding transaction: %v\n", err)
 			continue
 		}
 
-		from := hex.EncodeToString(singleTransaction.From)
-
-		if from == address[2:] && singleTransaction.To != nil {
-			singleTransaction.InOut = 0
+		if singleTransaction.From == address {
+			singleTransaction.InOut = 0 // Outgoing
 			singleTransaction.Address = singleTransaction.To
 		} else {
-			if singleTransaction.To == nil {
-				singleTransaction.InOut = 0
-				singleTransaction.Address = singleTransaction.From
-			} else {
-				singleTransaction.InOut = 1
-				singleTransaction.Address = singleTransaction.From
-			}
+			singleTransaction.InOut = 1 // Incoming
+			singleTransaction.Address = singleTransaction.From
 		}
 
 		transactions = append(transactions, singleTransaction)
+	}
+
+	if len(transactions) == 0 {
+		fmt.Printf("No transactions found for address: %s\n", address)
+	} else {
+		fmt.Printf("Found %d transactions for address: %s\n", len(transactions), address)
 	}
 
 	return transactions, nil
@@ -226,40 +199,35 @@ func ReturnTransactionsNetwork(page int) ([]models.TransactionByAddress, error) 
 	projection := primitive.D{
 		{Key: "inOut", Value: 1},
 		{Key: "txType", Value: 1},
-		{Key: "address", Value: 1},
+		{Key: "from", Value: 1},
+		{Key: "to", Value: 1},
 		{Key: "txHash", Value: 1},
 		{Key: "timeStamp", Value: 1},
 		{Key: "amount", Value: 1},
-		{Key: "blockNumber", Value: 1},
-		{Key: "from", Value: 1},
-		{Key: "to", Value: 1},
 		{Key: "paidFees", Value: 1},
+		{Key: "blockNumber", Value: 1},
 	}
 
 	opts := options.Find().
 		SetProjection(projection).
 		SetSort(primitive.D{{Key: "timeStamp", Value: -1}})
 
-	if limit != 0 {
-		if page == 0 {
-			page = 1
-		}
-		opts.SetSkip(int64((page - 1) * limit))
-		opts.SetLimit(int64(limit))
+	if page == 0 {
+		page = 1
 	}
+	opts.SetSkip(int64((page - 1) * limit))
+	opts.SetLimit(int64(limit))
 
-	results, err := configs.TransactionByAddressCollection.Find(ctx, primitive.D{}, opts)
+	results, err := configs.GetCollection(configs.DB, "transactionByAddress").Find(ctx, primitive.D{}, opts)
 	if err != nil {
-		fmt.Println(err)
-		return nil, err
+		return nil, fmt.Errorf("failed to query transactions: %v", err)
 	}
 
 	defer results.Close(ctx)
 	for results.Next(ctx) {
 		var singleTransaction models.TransactionByAddress
 		if err = results.Decode(&singleTransaction); err != nil {
-			fmt.Println(err)
-			continue
+			return nil, fmt.Errorf("failed to decode transaction: %v", err)
 		}
 		transactions = append(transactions, singleTransaction)
 	}
@@ -295,7 +263,7 @@ func ReturnTransactions(address string, page, limit int) ([]models.TransactionBy
 		opts.SetLimit(int64(limit))
 	}
 
-	decoded, err := hex.DecodeString(address[2:])
+	decoded, err := hex.DecodeString(strings.TrimPrefix(address, "0x"))
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -320,78 +288,37 @@ func ReturnTransactions(address string, page, limit int) ([]models.TransactionBy
 
 func CountTransactionsNetwork() (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	var transactions []models.TransactionByAddress
 	defer cancel()
 
-	projection := primitive.D{
-		{Key: "inOut", Value: 1},
-		{Key: "txType", Value: 1},
-		{Key: "address", Value: 1},
-		{Key: "txHash", Value: 1},
-		{Key: "timeStamp", Value: 1},
-		{Key: "amount", Value: 1},
-	}
-
-	opts := options.Find().
-		SetProjection(projection).
-		SetSort(primitive.D{{Key: "timeStamp", Value: -1}})
-
-	results, err := configs.TransactionByAddressCollection.Find(ctx, primitive.D{}, opts)
+	count, err := configs.GetCollection(configs.DB, "transactionByAddress").CountDocuments(ctx, primitive.D{})
 	if err != nil {
-		fmt.Println(err)
+		return 0, fmt.Errorf("failed to count transactions: %v", err)
 	}
 
-	defer results.Close(ctx)
-	for results.Next(ctx) {
-		var singleTransaction models.TransactionByAddress
-		if err = results.Decode(&singleTransaction); err != nil {
-			fmt.Println(err)
-		}
-		transactions = append(transactions, singleTransaction)
-	}
-
-	return len(transactions), nil
+	return int(count), nil
 }
 
 func CountTransactions(address string) (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	var transactions []models.TransactionByAddress
 	defer cancel()
 
-	projection := primitive.D{
-		{Key: "inOut", Value: 1},
-		{Key: "txType", Value: 1},
-		{Key: "address", Value: 1},
-		{Key: "txHash", Value: 1},
-		{Key: "timeStamp", Value: 1},
-		{Key: "amount", Value: 1},
+	// Ensure address has 0x prefix
+	if !strings.HasPrefix(address, "0x") {
+		address = "0x" + address
 	}
 
-	opts := options.Find().
-		SetProjection(projection).
-		SetSort(primitive.D{{Key: "timeStamp", Value: -1}})
+	filter := primitive.D{{Key: "$or", Value: []primitive.D{
+		{{Key: "from", Value: address}},
+		{{Key: "to", Value: address}},
+	}}}
 
-	decoded, err := hex.DecodeString(address[2:])
+	count, err := configs.TransactionByAddressCollection.CountDocuments(ctx, filter)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("Error counting transactions: %v\n", err)
+		return 0, err
 	}
 
-	filter := primitive.D{{Key: "address", Value: decoded}}
-	results, err := configs.TransactionByAddressCollection.Find(ctx, filter, opts)
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	defer results.Close(ctx)
-	for results.Next(ctx) {
-		var singleTransaction models.TransactionByAddress
-		if err = results.Decode(&singleTransaction); err != nil {
-			fmt.Println(err)
-		}
-		transactions = append(transactions, singleTransaction)
-	}
-
-	return len(transactions), nil
+	return int(count), nil
 }
 
 func ReturnSingleTransfer(query string) (models.Transfer, error) {
@@ -415,26 +342,10 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 		// Found in blocks collection, convert to Transfer model
 		for _, tx := range block.Result.Transactions {
 			if tx.Hash == query {
-				// Convert from address
-				from, err := hex.DecodeString(tx.From[2:])
-				if err != nil {
-					fmt.Println("Error decoding from address:", err)
-				}
-
-				// Convert to address if it exists
-				var to []byte
-				if tx.To != "" {
-					to, err = hex.DecodeString(tx.To[2:])
-					if err != nil {
-						fmt.Println("Error decoding to address:", err)
-					}
-				}
-
-				// Convert transaction hash
-				txHash, err := hex.DecodeString(tx.Hash[2:])
-				if err != nil {
-					fmt.Println("Error decoding transaction hash:", err)
-				}
+				// Use hex strings directly
+				from := tx.From
+				to := tx.To
+				txHash := tx.Hash
 
 				// Store original hex value
 				valueStr := tx.Value
@@ -453,88 +364,30 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 					gasPriceStr = "0x0"
 				}
 
-				// Convert value from hex string to uint64 (for backward compatibility)
-				value := uint64(0)
-				if valueStr != "0x0" {
-					valueHex := valueStr
-					if valueHex[:2] == "0x" {
-						valueHex = valueHex[2:]
+				ensureHexPrefix := func(s string) string {
+					if s == "" || s == "0x" || s == "0x0" {
+						return "0x0"
 					}
-					value, err = strconv.ParseUint(valueHex, 16, 64)
-					if err != nil {
-						fmt.Println("Error parsing value:", err)
+					if !strings.HasPrefix(s, "0x") {
+						return "0x" + s
 					}
-				}
-
-				// Convert gas values from hex string to uint64
-				gasUsed := uint64(0)
-				if gasUsedStr != "0x0" {
-					gasHex := gasUsedStr
-					if gasHex[:2] == "0x" {
-						gasHex = gasHex[2:]
-					}
-					gasUsed, err = strconv.ParseUint(gasHex, 16, 64)
-					if err != nil {
-						fmt.Println("Error parsing gas used:", err)
-					}
-				}
-
-				gasPrice := uint64(0)
-				if gasPriceStr != "0x0" {
-					gasPriceHex := gasPriceStr
-					if gasPriceHex[:2] == "0x" {
-						gasPriceHex = gasPriceHex[2:]
-					}
-					gasPrice, err = strconv.ParseUint(gasPriceHex, 16, 64)
-					if err != nil {
-						fmt.Println("Error parsing gas price:", err)
-					}
-				}
-
-				// Convert nonce from hex string to uint64
-				nonce := uint64(0)
-				if tx.Nonce != "" {
-					nonceStr := tx.Nonce
-					if nonceStr[:2] == "0x" {
-						nonceStr = nonceStr[2:]
-					}
-					nonce, err = strconv.ParseUint(nonceStr, 16, 64)
-					if err != nil {
-						fmt.Println("Error parsing nonce:", err)
-					}
-				}
-
-				// Convert signature and public key if available
-				var signature, pk []byte
-				if tx.Signature != "" {
-					signature, err = hex.DecodeString(tx.Signature[2:])
-					if err != nil {
-						fmt.Println("Error decoding signature:", err)
-					}
-				}
-				if tx.PublicKey != "" {
-					pk, err = hex.DecodeString(tx.PublicKey[2:])
-					if err != nil {
-						fmt.Println("Error decoding public key:", err)
-					}
+					return s
 				}
 
 				result = models.Transfer{
 					ID:             primitive.NewObjectID(),
-					BlockNumber:    block.Result.Number,
-					BlockTimestamp: block.Result.Timestamp,
+					BlockNumber:    ensureHexPrefix(block.Result.Number),
+					BlockTimestamp: ensureHexPrefix(block.Result.Timestamp),
 					From:           from,
 					To:             to,
 					TxHash:         txHash,
-					Value:          value,
-					GasUsed:        gasUsed,
-					GasPrice:       gasPrice,
-					Nonce:          nonce,
-					Signature:      signature,
-					Pk:             pk,
-					Size:           block.Result.Size,
-					FromStr:        tx.From,
-					ToStr:          tx.To,
+					Value:          ensureHexPrefix(valueStr),
+					GasUsed:        ensureHexPrefix(gasUsedStr),
+					GasPrice:       ensureHexPrefix(gasPriceStr),
+					Nonce:          ensureHexPrefix(tx.Nonce),
+					Signature:      tx.Signature,
+					Pk:             tx.PublicKey,
+					Size:           ensureHexPrefix(block.Result.Size),
 				}
 				return result, nil
 			}
@@ -542,7 +395,7 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 	}
 
 	// If not found in blocks, try the transfers collection (fallback)
-	decoded, err := hex.DecodeString(query[2:])
+	decoded, err := hex.DecodeString(strings.TrimPrefix(query, "0x"))
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -551,14 +404,6 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 	err = configs.TransferCollections.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
 		fmt.Println(err)
-	}
-
-	// Add hex string representations for the fallback case too
-	if result.From != nil {
-		result.FromStr = "0x" + hex.EncodeToString(result.From)
-	}
-	if result.To != nil {
-		result.ToStr = "0x" + hex.EncodeToString(result.To)
 	}
 
 	return result, err
@@ -570,7 +415,7 @@ func ReturnSingleCoinbaseTransfer(query string) (models.Transfer, error) {
 
 	var result models.Transfer
 
-	decoded, err := hex.DecodeString(query[2:])
+	decoded, err := hex.DecodeString(strings.TrimPrefix(query, "0x"))
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -600,35 +445,40 @@ func ReturnDailyTransactionsVolume() int64 {
 }
 
 func GetTransactionByHash(hash string) (*models.Transaction, error) {
-    collection := configs.GetCollection(configs.DB, "transfer")
-    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
+	collection := configs.GetCollection(configs.DB, "transfer")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-    // Remove "0x" prefix if present and decode hex to bytes
-    if strings.HasPrefix(hash, "0x") {
-        hash = hash[2:]
-    }
-    hashBytes, err := hex.DecodeString(hash)
-    if err != nil {
-        return nil, fmt.Errorf("invalid hash format: %v", err)
-    }
+	// Remove "0x" prefix if present and decode hex to bytes
+	hash = strings.TrimPrefix(hash, "0x")
+	hashBytes, err := hex.DecodeString(hash)
+	if err != nil {
+		return nil, fmt.Errorf("invalid hash format: %v", err)
+	}
 
-    var transfer models.Transfer
-    err = collection.FindOne(ctx, bson.M{"txhash": hashBytes}).Decode(&transfer)
-    if err != nil {
-        if err == mongo.ErrNoDocuments {
-            return nil, nil // Return nil if not found
-        }
-        return nil, err
-    }
+	var transfer models.Transfer
+	err = collection.FindOne(ctx, bson.M{"txhash": hashBytes}).Decode(&transfer)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil // Return nil if not found
+		}
+		return nil, err
+	}
 
-    // Convert back to hex string with "0x" prefix
-    txHashHex := "0x" + hex.EncodeToString(transfer.TxHash)
-    blockNumberStr := strconv.FormatUint(transfer.BlockNumber, 10)
+	// Convert hex string to decimal string for display
+	blockNum := transfer.BlockNumber
+	if strings.HasPrefix(blockNum, "0x") {
+		// Remove 0x prefix and parse as hex
+		num, err := strconv.ParseUint(blockNum[2:], 16, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid block number format: %v", err)
+		}
+		blockNum = strconv.FormatUint(num, 10)
+	}
 
-    // Convert Transfer to Transaction
-    return &models.Transaction{
-        Hash:        txHashHex,
-        BlockNumber: blockNumberStr,
-    }, nil
+	// Transfer.TxHash is already in hex string format
+	return &models.Transaction{
+		Hash:        transfer.TxHash,
+		BlockNumber: blockNum,
+	}, nil
 }

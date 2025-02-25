@@ -13,7 +13,9 @@ import (
 )
 
 func main() {
-	var logger *zap.Logger = L.FileLogger(configs.Filename)
+	logger := L.FileLogger(configs.Filename)
+	zap.ReplaceGlobals(logger)
+	defer logger.Sync()
 
 	logger.Info("Initializing QRL to MongoDB synchronizer...")
 	logger.Info("Connecting to MongoDB and RPC node...")
@@ -31,15 +33,19 @@ func main() {
 	logger.Info("Starting blockchain synchronization process...")
 	logger.Info("MongoDB URL: " + os.Getenv("MONGOURI"))
 	logger.Info("Node URL: " + os.Getenv("NODE_URL"))
-	
+
 	// Start wallet count sync
 	logger.Info("Starting wallet count sync service...")
 	db.StartWalletCountSync()
-	
+
 	// Start pending transaction sync
 	logger.Info("Starting pending transaction sync service...")
 	synchroniser.StartPendingTransactionSync()
-	
+
+	// Start contract reprocessing job
+	logger.Info("Starting contract reprocessing service...")
+	db.StartContractReprocessingJob()
+
 	// Start blockchain sync
 	synchroniser.Sync()
 }

@@ -5,11 +5,8 @@ import (
 	"Zond2mongoDB/models"
 	"Zond2mongoDB/rpc"
 	"context"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"math/big"
-	"strconv"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -19,75 +16,32 @@ import (
 
 func ProcessTransactions(blockData interface{}) {
 	for _, tx := range blockData.(models.ZondDatabaseBlock).Result.Transactions {
-		to, contractAddressByte, statusTx, isContract := processContracts(&tx)
+		to, contractAddress, statusTx, isContract := processContracts(&tx)
 
-		processXMSSBitfield(tx.From[0:3], tx.Signature[2:10])
-		processTransactionData(&tx, blockData.(models.ZondDatabaseBlock).Result.Timestamp, to, contractAddressByte, statusTx, isContract, blockData.(models.ZondDatabaseBlock).Result.Size)
+		// Process XMSS bitfield with full hex strings
+		processXMSSBitfield(tx.From, tx.Signature)
+		processTransactionData(&tx, blockData.(models.ZondDatabaseBlock).Result.Timestamp, to, contractAddress, statusTx, isContract, blockData.(models.ZondDatabaseBlock).Result.Size)
 	}
 }
 
-func processTransactionData(tx *models.Transaction, blockTimestamp uint64, to []byte, contractAddressByte []byte, statusTx uint8, isContract bool, size uint64) {
-	from, err := hex.DecodeString(tx.From[2:])
-	if err != nil {
-		configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
-	}
+func processTransactionData(tx *models.Transaction, blockTimestamp string, to string, contractAddress string, statusTx string, isContract bool, size string) {
+	from := tx.From
+	txHash := tx.Hash
+	blockNumber := tx.BlockNumber
+	gasPrice := tx.GasPrice
+	pk := tx.PublicKey
+	signature := tx.Signature
+	data := tx.Data
+	nonce := tx.Nonce
+	txType := tx.Type
 
-	txHash, err := hex.DecodeString(tx.Hash[2:])
-	if err != nil {
-		configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
-	}
-
-	blockNumber, err := strconv.ParseUint(tx.BlockNumber[2:], 16, 64)
-	if err != nil {
-		configs.Logger.Warn("Failed to ParseUint: ", zap.Error(err))
-	}
-
-	gasPrice, err := strconv.ParseUint(tx.GasPrice[2:], 16, 64)
-	if err != nil {
-		configs.Logger.Warn("Failed to ParseUint: ", zap.Error(err))
-	}
-
-	pk, err := hex.DecodeString(tx.PublicKey[2:])
-	if err != nil {
-		configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
-	}
-
-	signature, err := hex.DecodeString(tx.Signature[2:])
-	if err != nil {
-		configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
-	}
-
-	var data []byte
-
-	data = nil
-
-	if tx.Data != "" {
-		data, err = hex.DecodeString(tx.Data[2:])
-		if err != nil {
-			configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
-		}
-	}
-
-	nonce, err := strconv.ParseUint(tx.Nonce[2:], 16, 64)
-	if err != nil {
-		configs.Logger.Warn("Failed to ParseUint: ", zap.Error(err))
-	}
-
+	// Convert value to float64 for display
 	value := new(big.Int)
 	value.SetString(tx.Value[2:], 16)
-
 	divisor := new(big.Float).SetFloat64(float64(configs.QUANTA))
-
 	bigIntAsFloat := new(big.Float).SetInt(value)
-
 	resultBigFloat := new(big.Float).Quo(bigIntAsFloat, divisor)
-
-	valueFloat32, _ := resultBigFloat.Float32()
-
-	txType, err := strconv.ParseUint(tx.Type[2:], 16, 8)
-	if err != nil {
-		configs.Logger.Warn("Failed to ParseUint: ", zap.Error(err))
-	}
+	valueFloat64, _ := resultBigFloat.Float64()
 
 	hashmap := map[string]string{"from": tx.From, "to": tx.To}
 
@@ -99,47 +53,45 @@ func processTransactionData(tx *models.Transaction, blockTimestamp uint64, to []
 				continue
 			}
 
-			var Balance models.GetBalance
-			err = json.Unmarshal([]byte(responseBalance), &Balance)
-			if err != nil {
-				configs.Logger.Warn("Failed to parse JSON response: ", zap.Error(err))
-				continue
-			}
-
-			addressBytes, err := hex.DecodeString(address[2:])
-			if err != nil {
-				configs.Logger.Warn("Failed to hex decode string: ", zap.Error(err))
-				continue
-			}
-
 			getBalanceResult := new(big.Int)
-			getBalanceResult.SetString(Balance.Result[2:], 16)
+			if responseBalance != "" && len(responseBalance) > 2 {
+				getBalanceResult.SetString(responseBalance[2:], 16)
+			} else {
+				configs.Logger.Warn("Invalid balance response", zap.String("balance", responseBalance))
+				continue
+			}
 
 			divisor := new(big.Float).SetFloat64(float64(configs.QUANTA))
-
 			bigIntAsFloat := new(big.Float).SetInt(getBalanceResult)
-
 			resultBigFloat := new(big.Float).Quo(bigIntAsFloat, divisor)
+			resultFloat64, _ := resultBigFloat.Float64()
 
-			resultFloat32, _ := resultBigFloat.Float32()
-
-			UpsertTransactions(addressBytes, resultFloat32, isContract)
+			UpsertTransactions(address, resultFloat64, isContract)
 		}
 	}
 
 	transactionType, callType, fromInternal, toInternal, inputInternal, outputInternal, InternalTracerAddress, valueInternal, gasInternal, gasUsedInternal, addressFunctionIdentifier, amountFunctionIdentifier := rpc.CallDebugTraceTransaction(tx.Hash)
-	if string(transactionType[:]) == "CALL" || InternalTracerAddress != nil {
-		InternalTransactionByAddressCollection(transactionType, callType, txHash, fromInternal, toInternal, inputInternal, outputInternal, InternalTracerAddress, float32(valueInternal), gasInternal, gasUsedInternal, addressFunctionIdentifier, amountFunctionIdentifier, blockTimestamp)
+	if transactionType == "CALL" || InternalTracerAddress != nil {
+		InternalTransactionByAddressCollection(transactionType, callType, txHash, fromInternal, toInternal, fmt.Sprintf("0x%x", inputInternal), fmt.Sprintf("0x%x", outputInternal), InternalTracerAddress, float64(valueInternal), fmt.Sprintf("0x%x", gasInternal), fmt.Sprintf("0x%x", gasUsedInternal), addressFunctionIdentifier, fmt.Sprintf("0x%x", amountFunctionIdentifier), blockTimestamp)
 	}
 
-	// Calculate fees using float64 first, then convert to float32
-	fees := float32((float64(gasPrice) * float64(gasUsedInternal)) / float64(configs.QUANTA))
+	// Calculate fees using hex strings
+	gasPriceBig := new(big.Int)
+	gasPriceBig.SetString(gasPrice[2:], 16)
+	gasUsedBig := new(big.Int)
+	gasUsedBig.SetString(fmt.Sprintf("%x", gasUsedInternal), 16)
+	feesBig := new(big.Int).Mul(gasPriceBig, gasUsedBig)
 
-	TransactionByAddressCollection(blockTimestamp, uint8(txType), from, to, txHash, valueFloat32, fees)
-	TransferCollection(blockNumber, blockTimestamp, from, to, txHash, pk, signature, nonce, valueFloat32, data, contractAddressByte, uint8(statusTx), size, fees)
+	divisor = new(big.Float).SetFloat64(float64(configs.QUANTA))
+	feesFloat := new(big.Float).SetInt(feesBig)
+	feesResult := new(big.Float).Quo(feesFloat, divisor)
+	fees, _ := feesResult.Float64()
+
+	TransactionByAddressCollection(blockTimestamp, txType, from, to, txHash, valueFloat64, fees, blockNumber)
+	TransferCollection(blockNumber, blockTimestamp, from, to, txHash, pk, signature, nonce, valueFloat64, data, contractAddress, statusTx, size, fees)
 }
 
-func TransferCollection(blockNumber uint64, blockTimestamp uint64, from []byte, to []byte, hash []byte, pk []byte, signature []byte, nonce uint64, value float32, data []byte, contractAddress []byte, status uint8, size uint64, paidFees float32) (*mongo.InsertOneResult, error) {
+func TransferCollection(blockNumber string, blockTimestamp string, from string, to string, hash string, pk string, signature string, nonce string, value float64, data string, contractAddress string, status string, size string, paidFees float64) (*mongo.InsertOneResult, error) {
 	var doc primitive.D
 
 	baseDoc := primitive.D{
@@ -156,14 +108,14 @@ func TransferCollection(blockNumber uint64, blockTimestamp uint64, from []byte, 
 		{Key: "paidFees", Value: paidFees},
 	}
 
-	if contractAddress == nil {
+	if contractAddress == "" {
 		doc = append(baseDoc, primitive.E{Key: "to", Value: to})
-		if data != nil {
+		if data != "" {
 			doc = append(doc, primitive.E{Key: "data", Value: data})
 		}
 	} else {
 		doc = append(baseDoc, primitive.E{Key: "contractAddress", Value: contractAddress})
-		if data != nil {
+		if data != "" {
 			doc = append(doc, primitive.E{Key: "data", Value: data})
 		}
 	}
@@ -176,7 +128,7 @@ func TransferCollection(blockNumber uint64, blockTimestamp uint64, from []byte, 
 	return result, err
 }
 
-func InternalTransactionByAddressCollection(transactionType []byte, callType []byte, hash []byte, from []byte, to []byte, input uint64, output uint64, traceAddress []int, value float32, gas uint64, gasUsed uint64, addressFunctionIdentifier []byte, amountFunctionIdentifier uint64, blockTimestamp uint64) (*mongo.InsertOneResult, error) {
+func InternalTransactionByAddressCollection(transactionType string, callType string, hash string, from string, to string, input string, output string, traceAddress []int, value float64, gas string, gasUsed string, addressFunctionIdentifier string, amountFunctionIdentifier string, blockTimestamp string) (*mongo.InsertOneResult, error) {
 	doc := primitive.D{
 		{Key: "type", Value: transactionType},
 		{Key: "callType", Value: callType},
@@ -200,12 +152,10 @@ func InternalTransactionByAddressCollection(transactionType []byte, callType []b
 		return nil, err
 	}
 
-	fmt.Println(result)
-
 	return result, nil
 }
 
-func TransactionByAddressCollection(timeStamp uint64, txType uint8, from []byte, to []byte, hash []byte, amount float32, paidFees float32) (*mongo.InsertOneResult, error) {
+func TransactionByAddressCollection(timeStamp string, txType string, from string, to string, hash string, amount float64, paidFees float64, blockNumber string) (*mongo.InsertOneResult, error) {
 	doc := primitive.D{
 		{Key: "txType", Value: txType},
 		{Key: "from", Value: from},
@@ -214,6 +164,7 @@ func TransactionByAddressCollection(timeStamp uint64, txType uint8, from []byte,
 		{Key: "timeStamp", Value: timeStamp},
 		{Key: "amount", Value: amount},
 		{Key: "paidFees", Value: paidFees},
+		{Key: "blockNumber", Value: blockNumber},
 	}
 
 	result, err := configs.TransactionByAddressCollections.InsertOne(context.TODO(), doc)
@@ -224,7 +175,7 @@ func TransactionByAddressCollection(timeStamp uint64, txType uint8, from []byte,
 	return result, err
 }
 
-func UpsertTransactions(address []byte, value float32, isContract bool) (*mongo.UpdateResult, error) {
+func UpsertTransactions(address string, value float64, isContract bool) (*mongo.UpdateResult, error) {
 	filter := primitive.D{{Key: "id", Value: address}}
 	update := primitive.D{
 		{Key: "$set", Value: primitive.D{

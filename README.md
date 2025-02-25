@@ -48,7 +48,7 @@ touch .env && touch .env.local
 
 | VARIABLE | VALUE |
 | ------ | ------ |
-| DATABASE_URL | mongodb://localhost:27017/qrldata?readPreference=primary |
+| DATABASE_URL | mongodb://localhost:27017/qrldata-b2h?readPreference=primary |
 | NEXT_PUBLIC_DOMAIN_NAME | http://localhost:3000 (dev) OR http://your_domain_name.io (prod) |
 | NEXT_PUBLIC_HANDLER_URL | http://localhost:8080 (dev) OR http://your_domain_name.io:8443 (prod) |
 
@@ -56,7 +56,7 @@ touch .env && touch .env.local
 
 | VARIABLE | VALUE |
 | ------ | ------ |
-| DATABASE_URL | mongodb://localhost:27017/qrldata?readPreference=primary |
+| DATABASE_URL | mongodb://localhost:27017/qrldata-b2h?readPreference=primary |
 | DOMAIN_NAME | http://localhost:3000 (dev) OR http://your_domain_name.io (prod) |
 | HANDLER_URL | http://localhost:8080 (dev) OR http://your_domain_name.io:8443 (prod) |
 
@@ -80,7 +80,7 @@ touch .env.development && touch .env.production
 | VARIABLE | VALUE |
 | ------ | ------ |
 | GIN_MODE | release |
-| MONGOURI | mongodb://localhost:27017/qrldata?readPreference=primary |
+| MONGOURI | mongodb://localhost:27017/qrldata-b2h?readPreference=primary |
 | HTTP_PORT | :8080 |
 | NODE_URL | http://localhost:8545 |
 

@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 # Helper functions for status and error messages
 print_status() {
     echo -e "\033[1;34m[*]\033[0m $1"
@@ -18,8 +17,10 @@ clean_pm2() {
     # Delete all PM2 logs
     pm2 flush || print_status "No logs to flush"
 
-    # Stop and delete all processes
-    pm2 delete all || print_status "No processes to delete"
+    # Stop and delete only processes started by this deployment
+    for name in handler synchroniser frontend; do
+        pm2 delete $name || print_status "No process named $name to delete"
+    done
 
     # Clear PM2 dump file
     pm2 cleardump || print_status "No dump file to clear"
@@ -48,14 +49,37 @@ check_mongodb() {
     fi
 }
 
+# Prompt for node selection
+select_node() {
+    print_status "Select Zond node to use:"
+    PS3="Please choose the node (1-2): "
+    options=("Local node (127.0.0.1:8545)" "Remote node (REDACTED:8545)")
+    select opt in "${options[@]}"
+    do
+        case $opt in
+            "Local node (127.0.0.1:8545)")
+                NODE_URL="http://127.0.0.1:8545"
+                break
+                ;;
+            "Remote node (REDACTED:8545)")
+                NODE_URL="http://REDACTED:8545"
+                break
+                ;;
+            *) echo "Invalid option. Please try again.";;
+        esac
+    done
+    print_status "Selected node: $NODE_URL"
+    export NODE_URL
+}
+
 # Check if Zond node is accessible
 check_zond_node() {
     RESPONSE=$(curl --silent --fail -X POST -H "Content-Type: application/json" \
         --data '{"jsonrpc":"2.0","id":1,"method":"net_listening","params":[]}' \
-        http://REDACTED:8545)
+        $NODE_URL)
 
     if [[ $? -ne 0 || -z "$RESPONSE" ]]; then
-        print_error "Zond node is not accessible."
+        print_error "Zond node is not accessible at $NODE_URL"
     fi
 }
 
@@ -98,9 +122,9 @@ setup_server() {
     print_status "Creating .env.development file..."
     cat > .env.development << EOL
 GIN_MODE=release
-MONGOURI=mongodb://localhost:27017/qrldata?readPreference=primary
+MONGOURI=mongodb://localhost:27017/qrldata-b2h?readPreference=primary
 HTTP_PORT=:8080
-NODE_URL=http://REDACTED:8545
+NODE_URL=$NODE_URL
 EOL
 
     # Build the server
@@ -119,14 +143,14 @@ setup_frontend() {
 
     # Create .env file
     cat > .env << EOL
-DATABASE_URL=mongodb://localhost:27017/qrldata?readPreference=primary
-NEXT_PUBLIC_DOMAIN_NAME=http://localhost:3000
-NEXT_PUBLIC_HANDLER_URL=http://127.0.0.1:8080
+DATABASE_URL=mongodb://localhost:27017/qrldata-b2h?readPreference=primary
+DOMAIN_NAME=http://localhost:3000
+HANDLER_URL=http://127.0.0.1:8080
 EOL
 
     # Create .env.local file
     cat > .env.local << EOL
-DATABASE_URL=mongodb://localhost:27017/qrldata?readPreference=primary
+DATABASE_URL=mongodb://localhost:27017/qrldata-b2h?readPreference=primary
 DOMAIN_NAME=http://localhost:3000
 HANDLER_URL=http://127.0.0.1:8080
 EOL
@@ -141,7 +165,7 @@ EOL
 
     # Start frontend in development mode with PM2
     print_status "Starting frontend in development mode..."
-    cd "$BASE_DIR/ExplorerFrontend" && pm2 start "npm start" --name "frontend" || print_error "Failed to start frontend"
+    cd "$BASE_DIR/ExplorerFrontend" && pm2 start "npm run dev" --name "frontend" || print_error "Failed to start frontend"
 }
 
 # Setup blockchain synchronizer
@@ -152,7 +176,7 @@ setup_synchronizer() {
     # Create .env file
     cat > .env << EOL
 MONGOURI=mongodb://localhost:27017
-NODE_URL=http://REDACTED:8545
+NODE_URL=$NODE_URL
 BEACONCHAIN_API=http://REDACTED:3500
 EOL
 
@@ -184,18 +208,21 @@ main() {
     # Check for required tools
     check_dependencies
 
+    # Prompt for node selection
+    select_node
+
     # Check if MongoDB and Zond node are running
     check_mongodb
     check_zond_node
 
     # Check if required ports are available
-    #check_port 3000
+    check_port 3000
     check_port 8080
 
     # Clone and setup
     clone_repo
     setup_server        # Start the server before building the frontend
-    #setup_frontend
+    setup_frontend
     setup_synchronizer
     save_pm2
 
@@ -205,7 +232,7 @@ main() {
     echo "- Server API: http://localhost:8080"
     echo -e "\nMake sure you have:"
     echo "1. MongoDB running on localhost:27017"
-    echo "2. Zond node accessible at http://REDACTED:8545"
+    echo "2. Zond node accessible at $NODE_URL"
     echo -e "\nTo monitor services:"
     echo "pm2 status"
     echo -e "\nTo view logs:"

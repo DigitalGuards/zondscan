@@ -1,17 +1,16 @@
 import type { Transaction, InternalTransaction } from '../../components/types';
 
-interface ContractCode {
-  contractCreatorAddress: string | null;
-  contractAddress: string | null;
-  contractCode: string | null;
-  decodedCreatorAddress?: string;
-  decodedContractAddress?: string;
-  contractSize?: number;
-  // Token information
-  tokenName?: string;
-  tokenSymbol?: string;
-  tokenDecimals?: number;
-  isToken?: boolean;
+interface ContractData {
+  contractCreatorAddress: string;
+  contractAddress: string;
+  contractCode: string;
+  creationTransaction: string;
+  isToken: boolean;
+  status: string;
+  tokenDecimals: number;
+  tokenName: string;
+  tokenSymbol: string;
+  updatedAt: string;
 }
 
 export interface AddressData {
@@ -21,7 +20,7 @@ export interface AddressData {
   rank: number;
   transactions_by_address: Transaction[];
   internal_transactions_by_address: InternalTransaction[];
-  contract_code: ContractCode;
+  contract_code: ContractData | null;
   response: unknown;
 }
 

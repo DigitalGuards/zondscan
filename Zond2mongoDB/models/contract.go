@@ -35,14 +35,17 @@ type ResultContract struct {
 	Type              string `json:"type"`
 }
 
-// ContractInfo stores contract metadata including token information
+// ContractInfo represents contract information stored in MongoDB
 type ContractInfo struct {
-	ContractCreatorAddress []byte `json:"contractCreatorAddress" bson:"contractCreatorAddress"`
-	ContractAddress        []byte `json:"contractAddress" bson:"contractAddress"`
-	ContractCode           []byte `json:"contractCode" bson:"contractCode"`
-	// Token information
-	TokenName     string `json:"tokenName,omitempty" bson:"tokenName,omitempty"`
-	TokenSymbol   string `json:"tokenSymbol,omitempty" bson:"tokenSymbol,omitempty"`
-	TokenDecimals uint8  `json:"tokenDecimals,omitempty" bson:"tokenDecimals,omitempty"`
-	IsToken       bool   `json:"isToken" bson:"isToken"`
+	Address             string `bson:"address" json:"address"`
+	Status              string `bson:"status" json:"status"`
+	IsToken             bool   `bson:"isToken" json:"isToken"`
+	Name                string `bson:"name" json:"name"`
+	Symbol              string `bson:"symbol" json:"symbol"`
+	Decimals            uint8  `bson:"decimals" json:"decimals"`
+	ContractCode        string `bson:"contractCode" json:"contractCode"`
+	CreatorAddress      string `bson:"creatorAddress" json:"creatorAddress"`
+	CreationTransaction string `bson:"creationTransaction" json:"creationTransaction"`
+	CreationBlockNumber string `bson:"creationBlockNumber" json:"creationBlockNumber"`
+	UpdatedAt           string `bson:"updatedAt" json:"updatedAt"`
 }

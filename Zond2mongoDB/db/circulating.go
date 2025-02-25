@@ -39,7 +39,7 @@ func UpdateTotalBalance() {
 		return
 	}
 
-	destCollection := client.Database("qrldata").Collection("totalCirculatingSupply")
+	destCollection := client.Database("qrldata-b2h").Collection("totalCirculatingSupply")
 
 	// Get initial total balance
 	total := big.NewInt(0)

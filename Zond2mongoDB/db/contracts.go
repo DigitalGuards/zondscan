@@ -1,123 +1,222 @@
 package db
 
 import (
-    "Zond2mongoDB/configs"
-    "Zond2mongoDB/models"
-    "Zond2mongoDB/rpc"
-    "context"
-    "encoding/hex"
-    "strconv"
+	"Zond2mongoDB/configs"
+	"Zond2mongoDB/models"
+	"Zond2mongoDB/rpc"
+	"context"
+	"fmt"
+	"time"
 
-    "go.mongodb.org/mongo-driver/bson"
-    "go.mongodb.org/mongo-driver/mongo"
-    "go.mongodb.org/mongo-driver/mongo/options"
-    "go.uber.org/zap"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.uber.org/zap"
 )
 
-func processContracts(tx *models.Transaction) ([]byte, []byte, uint8, bool) {
-    var to []byte
-    var contractAddressByte []byte
-    var statusTx uint64
-    isContract := false
+// StoreContract stores contract information in the database
+func StoreContract(contract models.ContractInfo) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-    from, err := hex.DecodeString(tx.From[2:])
-    if err != nil {
-        configs.Logger.Warn("Failed to hex decode string", zap.Error(err))
-    }
+	opts := options.Update().SetUpsert(true)
+	filter := bson.M{"address": contract.Address}
+	update := bson.M{"$set": contract}
 
-    if tx.To != "" {
-        to, err = hex.DecodeString(tx.To[2:])
-        if err != nil {
-            configs.Logger.Warn("Failed to hex decode string", zap.Error(err))
-        }
-        contractAddressByte = nil
-    } else {
-        if tx.Type != "0x3" {
-            to = nil
+	_, err := configs.GetContractsCollection().UpdateOne(ctx, filter, update, opts)
+	if err != nil {
+		configs.Logger.Error("Failed to store contract",
+			zap.String("address", contract.Address),
+			zap.Error(err))
+		return err
+	}
 
-            contractAddress, status, err := rpc.GetContractAddress(tx.Hash)
-            if err != nil {
-                configs.Logger.Warn("Failed to do rpc request", zap.Error(err))
-            }
-
-            contractAddressByte, err = hex.DecodeString(contractAddress[2:])
-            if err != nil {
-                configs.Logger.Warn("Failed to hex decode string", zap.Error(err))
-            }
-
-            statusTx, err = strconv.ParseUint(status, 0, 8)
-            if err != nil {
-                configs.Logger.Warn("Failed to hex decode string", zap.Error(err))
-            }
-
-            if statusTx == 1 {
-                isContract = true
-
-                // Get contract code
-                code, err := rpc.GetCode(contractAddress, "latest")
-                if err != nil {
-                    configs.Logger.Warn("Failed to get contract code", zap.Error(err))
-                } else {
-                    // Convert hex code to bytes
-                    codeByte, err := hex.DecodeString(code[2:]) // Remove "0x" prefix
-                    if err != nil {
-                        configs.Logger.Warn("Failed to decode contract code", zap.Error(err))
-                        return from, to, uint8(statusTx), isContract
-                    }
-
-                    // Try to get token info
-                    name, symbol, decimals, isToken := rpc.GetTokenInfo(contractAddress)
-                    
-                    contractInfo := &models.ContractInfo{
-                        ContractCreatorAddress: from,
-                        ContractAddress:        contractAddressByte,
-                        ContractCode:           codeByte,
-                        TokenName:              name,    // Will be empty for non-tokens
-                        TokenSymbol:            symbol,  // Will be empty for non-tokens
-                        TokenDecimals:          decimals, // Will be 0 for non-tokens
-                        IsToken:                isToken,
-                    }
-
-                    configs.Logger.Info("Processing contract",
-                        zap.String("address", contractAddress))
-
-                    // Use upsert to update existing contract or insert new one
-                    filter := bson.M{"contractAddress": contractAddressByte}
-                    update := bson.M{"$set": contractInfo}
-                    opts := options.Update().SetUpsert(true)
-
-                    result, err := configs.ContractCodeCollection.UpdateOne(context.Background(), filter, update, opts)
-                    if err != nil {
-                        configs.Logger.Warn("Failed to store contract info", zap.Error(err))
-                    } else {
-                        configs.Logger.Info("Upserted contract",
-                            zap.String("address", contractAddress),
-                            zap.Int64("modified", result.ModifiedCount))
-                    }
-                }
-            }
-        }
-    }
-
-    return from, to, uint8(statusTx), isContract
+	return nil
 }
 
-// ContractCodeCollection inserts a new contract into the database
-func ContractCodeCollection(contractCreatorAddress []byte, contractAddress []byte, code []byte) (*mongo.InsertOneResult, error) {
-    var contractInfo models.ContractInfo
-    contractInfo.ContractCreatorAddress = contractCreatorAddress
-    contractInfo.ContractAddress = contractAddress
-    contractInfo.ContractCode = code
+// GetContract retrieves contract information from the database
+func GetContract(address string) (*models.ContractInfo, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-    // Try to get token information if we have a valid contract address
-    if len(contractAddress) > 0 {
-        addrHex := "0x" + hex.EncodeToString(contractAddress)
-        name, symbol, decimals, isToken := rpc.GetTokenInfo(addrHex)
-        contractInfo.TokenName = name
-        contractInfo.TokenSymbol = symbol
-        contractInfo.TokenDecimals = decimals
-        contractInfo.IsToken = isToken
-    }
+	var contract models.ContractInfo
+	err := configs.GetContractsCollection().FindOne(ctx, bson.M{"address": address}).Decode(&contract)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get contract: %v", err)
+	}
 
-    return configs.ContractCodeCollection.InsertOne(context.Background(), contractInfo)
+	return &contract, nil
+}
+
+// UpdateContractStatus updates the status of a contract
+func UpdateContractStatus(address string, status string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	update := bson.M{"$set": bson.M{"status": status}}
+	_, err := configs.GetContractsCollection().UpdateOne(ctx, bson.M{"address": address}, update)
+	if err != nil {
+		return fmt.Errorf("failed to update contract status: %v", err)
+	}
+
+	return nil
+}
+
+// processContracts processes contract-related information from a transaction
+func processContracts(tx *models.Transaction) (string, string, string, bool) {
+	var to string
+	var contractAddress string
+	var statusTx string
+	var isContract bool
+
+	// Check if it's a contract creation transaction
+	if tx.To == "" {
+		// Get contract address and status from transaction receipt
+		var err error
+		contractAddress, statusTx, err = rpc.GetContractAddress(tx.Hash)
+		if err != nil {
+			configs.Logger.Error("Failed to get contract address",
+				zap.String("hash", tx.Hash),
+				zap.Error(err))
+			return "", "", "", false
+		}
+
+		if contractAddress != "" {
+			isContract = true
+
+			// Get contract code
+			contractCode, err := rpc.GetCode(contractAddress, "latest")
+			if err != nil {
+				configs.Logger.Error("Failed to get contract code",
+					zap.String("address", contractAddress),
+					zap.Error(err))
+			}
+
+			// Get token information
+			name, symbol, decimals, isToken := rpc.GetTokenInfo(contractAddress)
+
+			// Store complete contract information
+			contract := models.ContractInfo{
+				Address:             contractAddress,
+				Status:              statusTx,
+				IsToken:             isToken,
+				Name:                name,
+				Symbol:              symbol,
+				Decimals:            decimals,
+				ContractCode:        contractCode,
+				CreatorAddress:      tx.From,
+				CreationTransaction: tx.Hash,
+				UpdatedAt:           time.Now().UTC().Format(time.RFC3339),
+			}
+
+			// Store the contract
+			err = StoreContract(contract)
+			if err != nil {
+				configs.Logger.Error("Failed to store contract",
+					zap.String("address", contractAddress),
+					zap.Error(err))
+			}
+		}
+	} else {
+		to = tx.To
+		statusTx = tx.Status
+		isContract = false
+	}
+
+	return to, contractAddress, statusTx, isContract
+}
+
+// ReprocessIncompleteContracts finds and updates contracts with missing information
+func ReprocessIncompleteContracts() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Find contracts with missing information
+	filter := bson.M{
+		"$or": []bson.M{
+			{"contractCode": ""},
+			{"isToken": false, "name": "", "symbol": ""},
+		},
+	}
+
+	cursor, err := configs.GetContractsCollection().Find(ctx, filter)
+	if err != nil {
+		configs.Logger.Error("Failed to query incomplete contracts", zap.Error(err))
+		return err
+	}
+	defer cursor.Close(ctx)
+
+	var processedCount int
+	for cursor.Next(ctx) {
+		var contract models.ContractInfo
+		if err := cursor.Decode(&contract); err != nil {
+			configs.Logger.Error("Failed to decode contract", zap.Error(err))
+			continue
+		}
+
+		// Get contract code if missing
+		if contract.ContractCode == "" {
+			contractCode, err := rpc.GetCode(contract.Address, "latest")
+			if err != nil {
+				configs.Logger.Error("Failed to get contract code",
+					zap.String("address", contract.Address),
+					zap.Error(err))
+			} else {
+				contract.ContractCode = contractCode
+			}
+		}
+
+		// Get token information if missing
+		if !contract.IsToken && contract.Name == "" && contract.Symbol == "" {
+			name, symbol, decimals, isToken := rpc.GetTokenInfo(contract.Address)
+			if isToken {
+				contract.IsToken = isToken
+				contract.Name = name
+				contract.Symbol = symbol
+				contract.Decimals = decimals
+			}
+		}
+
+		contract.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+
+		// Update the contract
+		err = StoreContract(contract)
+		if err != nil {
+			configs.Logger.Error("Failed to update contract",
+				zap.String("address", contract.Address),
+				zap.Error(err))
+			continue
+		}
+
+		processedCount++
+		if processedCount%100 == 0 {
+			configs.Logger.Info("Reprocessing progress",
+				zap.Int("processed_contracts", processedCount))
+		}
+	}
+
+	if err := cursor.Err(); err != nil {
+		configs.Logger.Error("Cursor error while reprocessing contracts", zap.Error(err))
+		return err
+	}
+
+	configs.Logger.Info("Completed reprocessing incomplete contracts",
+		zap.Int("total_processed", processedCount))
+	return nil
+}
+
+// StartContractReprocessingJob starts a background job to periodically reprocess incomplete contracts
+func StartContractReprocessingJob() {
+	go func() {
+		for {
+			configs.Logger.Info("Starting contract reprocessing job")
+
+			err := ReprocessIncompleteContracts()
+			if err != nil {
+				configs.Logger.Error("Contract reprocessing job failed", zap.Error(err))
+			}
+
+			// Wait for 1 hour before next run
+			time.Sleep(1 * time.Hour)
+		}
+	}()
 }

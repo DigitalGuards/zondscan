@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -25,21 +26,37 @@ func ReturnSingleAddress(query string) (models.Address, error) {
 	var result models.Address
 	defer cancel()
 
-	address, err := hex.DecodeString(query[2:])
-	if err != nil {
-		fmt.Printf("Error decoding address %s: %v\n", query, err)
-		return result, err
+	// Remove hex prefix if present
+	addressHex := query
+	if len(query) > 2 && query[:2] == "0x" {
+		addressHex = query[2:]
 	}
 
-	filter := primitive.D{{Key: "id", Value: address}}
-	err = configs.AddressesCollection.FindOne(ctx, filter).Decode(&result)
+	// Try to find existing address
+	filter := bson.D{{Key: "id", Value: addressHex}}
+	err := configs.AddressesCollection.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			fmt.Printf("No address found for %s\n", query)
+			// Address not found, create new one
+			balance, errMsg := GetBalance(query)
+			if errMsg != "" {
+				return result, fmt.Errorf("error getting balance: %s", errMsg)
+			}
+
+			result = models.Address{
+				ObjectId: primitive.NewObjectID(),
+				ID:       addressHex,
+				Balance:  balance,
+				Nonce:    0, // Default nonce for new address
+			}
+
+			_, err = configs.AddressesCollection.InsertOne(ctx, result)
+			if err != nil {
+				return result, fmt.Errorf("error creating new address: %v", err)
+			}
 		} else {
-			fmt.Printf("Error querying address %s: %v\n", query, err)
+			return result, fmt.Errorf("error querying address: %v", err)
 		}
-		return result, err
 	}
 
 	return result, nil
@@ -50,17 +67,17 @@ func ReturnRichlist() []models.Address {
 	var addresses []models.Address
 	defer cancel()
 
-	projection := primitive.D{
+	projection := bson.D{
 		{Key: "id", Value: 1},
 		{Key: "balance", Value: 1},
 	}
 
 	opts := options.Find().
 		SetProjection(projection).
-		SetSort(primitive.D{{Key: "balance", Value: -1}}).
+		SetSort(bson.D{{Key: "balance", Value: -1}}).
 		SetLimit(50)
 
-	results, err := configs.AddressesCollection.Find(ctx, primitive.D{}, opts)
+	results, err := configs.AddressesCollection.Find(ctx, bson.D{}, opts)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -87,16 +104,16 @@ func ReturnRankAddress(address string) (int64, error) {
 		fmt.Println(err)
 	}
 
-	projection := primitive.D{
+	projection := bson.D{
 		{Key: "id", Value: 1},
 		{Key: "balance", Value: 1},
 	}
 
 	opts := options.Find().
 		SetProjection(projection).
-		SetSort(primitive.D{{Key: "balance", Value: -1}})
+		SetSort(bson.D{{Key: "balance", Value: -1}})
 
-	results, err := configs.AddressesCollection.Find(ctx, primitive.D{}, opts)
+	results, err := configs.AddressesCollection.Find(ctx, bson.D{}, opts)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -192,7 +209,7 @@ func ReturnWalletDistribution(query uint64) (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := primitive.D{{Key: "balance", Value: primitive.D{
+	filter := bson.D{{Key: "balance", Value: bson.D{
 		{Key: "$gt", Value: (query * 1000000000000)},
 	}}}
 
@@ -209,10 +226,10 @@ func GetWalletCount() int64 {
 	defer cancel()
 
 	var result models.WalletCount
-
-	err := configs.WalletCountCollection.FindOne(ctx, primitive.D{}).Decode(&result)
+	err := configs.WalletCountCollections.FindOne(ctx, bson.M{"_id": "current_count"}).Decode(&result)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("Error getting wallet count: %v\n", err)
+		return 0
 	}
 
 	return result.Count

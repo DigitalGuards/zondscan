@@ -16,7 +16,7 @@ func InsertManyCoinbase(doc []interface{}) {
 	}
 }
 
-func InsertCoinbaseDocument(blockHash []byte, blockNumber uint64, from []byte, hash []byte, nonce uint64, transactionIndex uint64, blockproposerReward uint64, attestorReward uint64, feeReward uint64, txType uint8, chainId uint8, signature []byte, pk []byte) (*mongo.InsertOneResult, error) {
+func InsertCoinbaseDocument(blockHash string, blockNumber uint64, from string, hash string, nonce uint64, transactionIndex uint64, blockproposerReward uint64, attestorReward uint64, feeReward uint64, txType uint8, chainId uint8, signature string, pk string) (*mongo.InsertOneResult, error) {
 	doc := primitive.D{
 		{Key: "blockhash", Value: blockHash},
 		{Key: "blocknumber", Value: blockNumber},

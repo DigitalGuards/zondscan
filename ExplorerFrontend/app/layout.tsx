@@ -48,7 +48,7 @@ export const metadata = {
   
   openGraph: {
     title: 'QRL Zond Explorer',
-    description: 'QRL ZOND Web3/EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network',
+    description: 'QRL Zond Web3/EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network',
     type: 'website',
     locale: 'en_US',
     url: 'https://zondscan.com',
@@ -65,7 +65,7 @@ export const metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'QRL Zond Explorer',
-    description: 'QRL ZOND Web3/EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network',
+    description: 'QRL Zond Web3/EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network',
     images: ['/QRL.png'],
     creator: '@QRLedger',
     site: '@QRLedger',

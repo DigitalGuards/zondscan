@@ -1,12 +1,14 @@
 package models
 
 type ContractInfo struct {
-	ContractCreatorAddress []byte `json:"contractCreatorAddress" bson:"contractCreatorAddress"`
-	ContractAddress        []byte `json:"contractAddress" bson:"contractAddress"`
-	ContractCode           []byte `json:"contractCode" bson:"contractCode"`
-	// Token information
-	TokenName     string `json:"tokenName,omitempty" bson:"tokenName,omitempty"`
-	TokenSymbol   string `json:"tokenSymbol,omitempty" bson:"tokenSymbol,omitempty"`
-	TokenDecimals uint8  `json:"tokenDecimals,omitempty" bson:"tokenDecimals,omitempty"`
-	IsToken       bool   `json:"isToken" bson:"isToken"`
+	ContractCreatorAddress string `json:"contractCreatorAddress" bson:"contractCreatorAddress"`
+	ContractAddress        string `json:"contractAddress" bson:"contractAddress"`
+	ContractCode           string `json:"contractCode" bson:"contractCode"`
+	CreationTransaction    string `json:"creationTransaction" bson:"creationTransaction"`
+	IsToken                bool   `json:"isToken" bson:"isToken"`
+	Status                 string `json:"status" bson:"status"`
+	TokenDecimals          uint8  `json:"tokenDecimals" bson:"tokenDecimals"`
+	TokenName              string `json:"tokenName" bson:"tokenName"`
+	TokenSymbol            string `json:"tokenSymbol" bson:"tokenSymbol"`
+	UpdatedAt              string `json:"updatedAt" bson:"updatedAt"`
 }
