@@ -26,15 +26,12 @@ func ReturnSingleAddress(query string) (models.Address, error) {
 	var result models.Address
 	defer cancel()
 
-	// Remove hex prefix if present
+	// Store address as-is without stripping prefixes
 	addressHex := query
-	if len(query) > 2 && query[:2] == "0x" {
-		addressHex = query[2:]
-	}
 
 	// Try to find existing address
 	filter := bson.D{{Key: "id", Value: addressHex}}
-	err := configs.AddressesCollection.FindOne(ctx, filter).Decode(&result)
+	err := configs.AddressesCollections.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			// Address not found, create new one
@@ -50,7 +47,7 @@ func ReturnSingleAddress(query string) (models.Address, error) {
 				Nonce:    0, // Default nonce for new address
 			}
 
-			_, err = configs.AddressesCollection.InsertOne(ctx, result)
+			_, err = configs.AddressesCollections.InsertOne(ctx, result)
 			if err != nil {
 				return result, fmt.Errorf("error creating new address: %v", err)
 			}
@@ -77,7 +74,7 @@ func ReturnRichlist() []models.Address {
 		SetSort(bson.D{{Key: "balance", Value: -1}}).
 		SetLimit(50)
 
-	results, err := configs.AddressesCollection.Find(ctx, bson.D{}, opts)
+	results, err := configs.AddressesCollections.Find(ctx, bson.D{}, opts)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -99,7 +96,10 @@ func ReturnRankAddress(address string) (int64, error) {
 	var addresses []models.Address
 	defer cancel()
 
-	query, err := hex.DecodeString(address[2:])
+	// Store address as-is without stripping prefixes
+	addressHex := address
+
+	query, err := hex.DecodeString(addressHex)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -113,7 +113,7 @@ func ReturnRankAddress(address string) (int64, error) {
 		SetProjection(projection).
 		SetSort(bson.D{{Key: "balance", Value: -1}})
 
-	results, err := configs.AddressesCollection.Find(ctx, bson.D{}, opts)
+	results, err := configs.AddressesCollections.Find(ctx, bson.D{}, opts)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -213,7 +213,7 @@ func ReturnWalletDistribution(query uint64) (int64, error) {
 		{Key: "$gt", Value: (query * 1000000000000)},
 	}}}
 
-	results, err := configs.AddressesCollection.CountDocuments(ctx, filter)
+	results, err := configs.AddressesCollections.CountDocuments(ctx, filter)
 	if err != nil {
 		fmt.Println(err)
 	}

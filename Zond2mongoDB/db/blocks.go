@@ -169,73 +169,73 @@ func StoreLastKnownBlockNumber(blockNumber string) error {
 }
 
 func Rollback(blockNumber string) error {
-    ctx := context.Background()
+	ctx := context.Background()
 
-    // Find all blocks after the given block number
-    filter := bson.M{
-        "result.number": bson.M{
-            "$gt": blockNumber,
-        },
-    }
+	// Find all blocks after the given block number
+	filter := bson.M{
+		"result.number": bson.M{
+			"$gt": blockNumber,
+		},
+	}
 
-    // Get blocks to be removed for logging
-    cursor, err := configs.BlocksCollections.Find(ctx, filter)
-    if err != nil {
-        configs.Logger.Error("Failed to find blocks for rollback",
-            zap.String("from_block", blockNumber),
-            zap.Error(err))
-        return err
-    }
-    defer cursor.Close(ctx)
+	// Get blocks to be removed for logging
+	cursor, err := configs.BlocksCollections.Find(ctx, filter)
+	if err != nil {
+		configs.Logger.Error("Failed to find blocks for rollback",
+			zap.String("from_block", blockNumber),
+			zap.Error(err))
+		return err
+	}
+	defer cursor.Close(ctx)
 
-    var blocks []models.ZondDatabaseBlock
-    if err = cursor.All(ctx, &blocks); err != nil {
-        configs.Logger.Error("Failed to decode blocks for rollback",
-            zap.Error(err))
-        return err
-    }
+	var blocks []models.ZondDatabaseBlock
+	if err = cursor.All(ctx, &blocks); err != nil {
+		configs.Logger.Error("Failed to decode blocks for rollback",
+			zap.Error(err))
+		return err
+	}
 
-    // Log blocks being removed
-    for _, block := range blocks {
-        configs.Logger.Info("Rolling back block",
-            zap.String("number", block.Result.Number),
-            zap.String("hash", block.Result.Hash))
-    }
+	// Log blocks being removed
+	for _, block := range blocks {
+		configs.Logger.Info("Rolling back block",
+			zap.String("number", block.Result.Number),
+			zap.String("hash", block.Result.Hash))
+	}
 
-    // Delete blocks in a transaction
-    session, err := configs.DB.StartSession()
-    if err != nil {
-        configs.Logger.Error("Failed to start session for rollback",
-            zap.Error(err))
-        return err
-    }
-    defer session.EndSession(ctx)
+	// Delete blocks in a transaction
+	session, err := configs.DB.StartSession()
+	if err != nil {
+		configs.Logger.Error("Failed to start session for rollback",
+			zap.Error(err))
+		return err
+	}
+	defer session.EndSession(ctx)
 
-    _, err = session.WithTransaction(ctx, func(sessCtx mongo.SessionContext) (interface{}, error) {
-        // Delete blocks
-        _, err := configs.BlocksCollections.DeleteMany(sessCtx, filter)
-        if err != nil {
-            return nil, err
-        }
+	_, err = session.WithTransaction(ctx, func(sessCtx mongo.SessionContext) (interface{}, error) {
+		// Delete blocks
+		_, err := configs.BlocksCollections.DeleteMany(sessCtx, filter)
+		if err != nil {
+			return nil, err
+		}
 
-        // Update sync state
-        err = StoreLastKnownBlockNumber(blockNumber)
-        if err != nil {
-            return nil, err
-        }
+		// Update sync state
+		err = StoreLastKnownBlockNumber(blockNumber)
+		if err != nil {
+			return nil, err
+		}
 
-        return nil, nil
-    })
+		return nil, nil
+	})
 
-    if err != nil {
-        configs.Logger.Error("Failed to execute rollback transaction",
-            zap.Error(err))
-        return err
-    }
+	if err != nil {
+		configs.Logger.Error("Failed to execute rollback transaction",
+			zap.Error(err))
+		return err
+	}
 
-    configs.Logger.Info("Successfully rolled back to block",
-        zap.String("block_number", blockNumber))
-    return nil
+	configs.Logger.Info("Successfully rolled back to block",
+		zap.String("block_number", blockNumber))
+	return nil
 }
 
 func updateAddressBalance(address string) {

@@ -34,7 +34,7 @@ func ConnectDB() *mongo.Client {
 	fmt.Println("Connected to MongoDB")
 
 	// Initialize collections with validators
-	db := client.Database("qrldata-b2h")
+	db := client.Database("qrldata-z")
 
 	// Daily Transactions Volume
 	volumeValidator := bson.M{
@@ -264,7 +264,7 @@ var DB *mongo.Client = ConnectDB()
 
 // Getting database collections
 func GetCollection(client *mongo.Client, collectionName string) *mongo.Collection {
-	collection := client.Database("qrldata-b2h").Collection(collectionName)
+	collection := client.Database("qrldata-z").Collection(collectionName)
 	return collection
 }
 
@@ -284,7 +284,7 @@ func GetTokenBalancesCollection() *mongo.Collection {
 }
 
 func GetListCollectionNames(client *mongo.Client) []string {
-	result, err := client.Database("qrldata-b2h").ListCollectionNames(
+	result, err := client.Database("qrldata-z").ListCollectionNames(
 		context.TODO(),
 		bson.D{})
 

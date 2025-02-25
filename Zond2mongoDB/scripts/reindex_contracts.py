@@ -192,7 +192,7 @@ def main():
     # Connect to MongoDB
     logger.info(f"Connecting to MongoDB at {MONGO_URI}")
     client = MongoClient(MONGO_URI)
-    db = client['qrldata-b2h']
+    db = client['qrldata-z']
     
     # Get collections
     contracts_collection = db.contractCode

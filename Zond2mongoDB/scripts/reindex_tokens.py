@@ -130,7 +130,7 @@ def process_transfer_logs(logs, contract_address, token_balances_collection, tok
                     logger.error(f"Failed to store transfer {tx_hash}: {e}")
             
             # Update balances (existing logic)
-            update_balance = {'$inc': {'balance': -amount}} if from_addr != '0x0000000000000000000000000000000000000000' else {}
+            update_balance = {'$inc': {'balance': -amount}} if from_addr != '0x0000000000000000000000000000000000000000' and from_addr != 'Z0000000000000000000000000000000000000000' else {}
             if update_balance:
                 token_balances_collection.update_one(
                     {'contractAddress': contract_address, 'holderAddress': from_addr},
@@ -138,7 +138,7 @@ def process_transfer_logs(logs, contract_address, token_balances_collection, tok
                     upsert=True
                 )
             
-            if to_addr != '0x0000000000000000000000000000000000000000':
+            if to_addr != '0x0000000000000000000000000000000000000000' and to_addr != 'Z0000000000000000000000000000000000000000':
                 token_balances_collection.update_one(
                     {'contractAddress': contract_address, 'holderAddress': to_addr},
                     {'$inc': {'balance': amount}},
@@ -169,13 +169,50 @@ def get_last_processed_block(token_balances_collection, contract_address):
             return 0
     return 0
 
+# Helper function to validate address format
+def is_valid_address(address):
+    # Check for Z-prefix format
+    if address.startswith('Z'):
+        # Check if the rest is valid hex
+        try:
+            int(address[1:], 16)
+            return len(address) == 41  # Z + 40 hex chars
+        except ValueError:
+            return False
+    
+    # Check for 0x format
+    if address.startswith('0x'):
+        try:
+            int(address[2:], 16)
+            return len(address) == 42  # 0x + 40 hex chars
+        except ValueError:
+            return False
+    
+    return False
+
+# Helper function to normalize address format
+def normalize_address(address):
+    # If it's already a valid address, return it
+    if is_valid_address(address):
+        return address
+    
+    # Try to add 0x prefix if it's a valid hex string
+    try:
+        int(address, 16)
+        if len(address) == 40:
+            return '0x' + address
+    except ValueError:
+        pass
+    
+    return address
+
 def main():
     logger.info("Starting token reindexing...")
     
     # Connect to MongoDB
     logger.info(f"Connecting to MongoDB at {MONGO_URI}")
     client = MongoClient(MONGO_URI)
-    db = client['qrldata-b2h']  # Changed from qrldata to qrldata-b2h to match Go code
+    db = client['qrldata-z']  # Changed from qrldata to qrldata-z to match Go code
     
     # Get collections
     contracts_collection = db.contractCode  # Changed from contracts to contractCode

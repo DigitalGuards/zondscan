@@ -126,7 +126,7 @@ setup_backendapi() {
     print_status "Creating .env.development file..."
     cat > .env.development << EOL
 GIN_MODE=release
-MONGOURI=mongodb://localhost:27017/qrldata-b2h?readPreference=primary
+MONGOURI=mongodb://localhost:27017/qrldata-z?readPreference=primary
 HTTP_PORT=:8080
 NODE_URL=$NODE_URL
 EOL
@@ -147,14 +147,14 @@ setup_frontend() {
 
     # Create .env file
     cat > .env << EOL
-DATABASE_URL=mongodb://localhost:27017/qrldata-b2h?readPreference=primary
+DATABASE_URL=mongodb://localhost:27017/qrldata-z?readPreference=primary
 DOMAIN_NAME=http://localhost:3000
 HANDLER_URL=http://127.0.0.1:8080
 EOL
 
     # Create .env.local file
     cat > .env.local << EOL
-DATABASE_URL=mongodb://localhost:27017/qrldata-b2h?readPreference=primary
+DATABASE_URL=mongodb://localhost:27017/qrldata-z?readPreference=primary
 DOMAIN_NAME=http://localhost:3000
 HANDLER_URL=http://127.0.0.1:8080
 EOL
@@ -186,14 +186,14 @@ EOL
 
     # Build synchronizer
     print_status "Building synchronizer..."
-    go build -o syncer main.go || print_error "Failed to build synchronizer"
+    go build -o zsyncer main.go || print_error "Failed to build synchronizer"
 
     # Make the binary executable
-    chmod +x ./syncer
+    chmod +x ./zsyncer
 
     # Start synchronizer with PM2, explicitly setting environment variables
     print_status "Starting synchronizer with PM2..."
-     pm2 start ./syncer --name "syncer" --cwd "$BASE_DIR/Zond2mongoDB" || print_error "Failed to start synchronizer"
+     pm2 start ./zsyncer --name "syncer" --cwd "$BASE_DIR/Zond2mongoDB" || print_error "Failed to start synchronizer"
 }
 
 # Save PM2 processes

@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	AddressLength = 40 // Length of address without 0x prefix
+	AddressLength = 40 // Length of address without prefix (0x or Z)
 	HashLength    = 64 // Length of transaction/block hash without 0x prefix
 )
 
@@ -26,7 +26,20 @@ func IsValidHexString(hex string) bool {
 }
 
 // IsValidAddress checks if a string is a valid Zond address
+// Supports both legacy 0x format and new Z format
 func IsValidAddress(address string) bool {
+	// Check for new Z-prefix format
+	if strings.HasPrefix(address, "Z") {
+		// Validate the rest of the address is hex
+		for _, c := range address[1:] {
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+				return false
+			}
+		}
+		return len(address) == AddressLength+1 // +1 for "Z" prefix
+	}
+
+	// Check for legacy 0x format
 	if !IsValidHexString(address) {
 		return false
 	}
@@ -63,10 +76,46 @@ func ValidateHexString(hex string, expectedLength int) error {
 	return nil
 }
 
+// ValidateAddress validates an address string and returns an error if invalid
+// Supports both legacy 0x format and new Z format
+func ValidateAddress(address string) error {
+	if !IsValidAddress(address) {
+		return fmt.Errorf("invalid address format: %s", address)
+	}
+	return nil
+}
+
 // StripHexPrefix removes "0x" prefix if present
 func StripHexPrefix(hex string) string {
 	if strings.HasPrefix(hex, "0x") {
 		return hex[2:]
 	}
 	return hex
+}
+
+// StripAddressPrefix removes "0x" or "Z" prefix if present
+func StripAddressPrefix(address string) string {
+	if strings.HasPrefix(address, "0x") {
+		return address[2:]
+	}
+	if strings.HasPrefix(address, "Z") {
+		return address[1:]
+	}
+	return address
+}
+
+// ConvertToZAddress converts a 0x address to Z format if needed
+func ConvertToZAddress(address string) string {
+	// If already in Z format, return as is
+	if strings.HasPrefix(address, "Z") {
+		return address
+	}
+
+	// If in 0x format, convert to Z format
+	if strings.HasPrefix(address, "0x") {
+		return "Z" + address[2:]
+	}
+
+	// If no prefix, add Z prefix
+	return "Z" + address
 }

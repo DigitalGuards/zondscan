@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 
+	"Zond2mongoDB/validation"
+
 	"go.uber.org/zap"
 )
 
@@ -128,7 +130,7 @@ func GetTokenName(contractAddress string) (string, error) {
 	}
 
 	// Handle different response formats:
-	
+
 	// Format 1: Dynamic string (most common)
 	// First 32 bytes (64 chars) contain the offset to the string data
 	// Next 32 bytes contain the string length
@@ -233,34 +235,34 @@ func GetTokenTotalSupply(contractAddress string) (string, error) {
 
 // GetTokenBalance retrieves the balance of an ERC20 token for a specific address
 func GetTokenBalance(contractAddress string, holderAddress string) (string, error) {
-    // balanceOf(address) function signature
-    methodID := "0x70a08231"
-    
-    // Remove 0x prefix and pad address to 32 bytes
-    address := strings.TrimPrefix(holderAddress, "0x")
-    for len(address) < 64 {
-        address = "0" + address
-    }
-    
-    // Combine method ID and padded address
-    data := methodID + address
-    
-    // Make the call
-    result, err := CallContractMethod(contractAddress, data)
-    if err != nil {
-        return "", fmt.Errorf("contract call failed: %v", err)
-    }
-    
-    // Parse result
-    if len(result) < 2 {
-        return "0", nil
-    }
-    
-    // Convert hex string to big.Int
-    bigInt := new(big.Int)
-    bigInt.SetString(strings.TrimPrefix(result, "0x"), 16)
-    
-    return bigInt.String(), nil
+	// balanceOf(address) function signature
+	methodID := "0x70a08231"
+
+	// Remove 0x prefix and pad address to 32 bytes
+	address := strings.TrimPrefix(holderAddress, "0x")
+	for len(address) < 64 {
+		address = "0" + address
+	}
+
+	// Combine method ID and padded address
+	data := methodID + address
+
+	// Make the call
+	result, err := CallContractMethod(contractAddress, data)
+	if err != nil {
+		return "", fmt.Errorf("contract call failed: %v", err)
+	}
+
+	// Parse result
+	if len(result) < 2 {
+		return "0", nil
+	}
+
+	// Convert hex string to big.Int
+	bigInt := new(big.Int)
+	bigInt.SetString(strings.TrimPrefix(result, "0x"), 16)
+
+	return bigInt.String(), nil
 }
 
 // DecodeTransferEvent decodes token transfers from both:
@@ -384,4 +386,37 @@ func trimLeftZeros(hex string) string {
 		}
 	}
 	return "0"
+}
+
+// IsValidRecipient checks if a recipient address is valid
+func IsValidRecipient(recipient string) bool {
+	return validation.IsValidAddress(recipient)
+}
+
+// ParseTransferEvent parses a transfer event log
+func ParseTransferEvent(log models.Log) (string, string, *big.Int, error) {
+	// Extract addresses from topics
+	from := log.Topics[1]
+	to := log.Topics[2]
+
+	// Ensure addresses have proper format
+	if !strings.HasPrefix(from, "0x") && !strings.HasPrefix(from, "Z") {
+		from = "0x" + from
+	}
+
+	if !strings.HasPrefix(to, "0x") && !strings.HasPrefix(to, "Z") {
+		to = "0x" + to
+	}
+
+	// Validate addresses
+	if !validation.IsValidAddress(from) {
+		return "", "", nil, fmt.Errorf("invalid from address: %s", from)
+	}
+
+	if !validation.IsValidAddress(to) {
+		return "", "", nil, fmt.Errorf("invalid to address: %s", to)
+	}
+
+	// ... existing code ...
+	return "", "", nil, nil
 }

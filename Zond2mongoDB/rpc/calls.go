@@ -152,11 +152,11 @@ func GetBlockByNumberMainnet(blockNumber string) (*models.ZondDatabaseBlock, err
 			return nil, fmt.Errorf("invalid transaction hash: %v", err)
 		}
 		if tx.To != "" {
-			if err := validation.ValidateHexString(tx.To, validation.AddressLength); err != nil {
+			if err := validation.ValidateAddress(tx.To); err != nil {
 				return nil, fmt.Errorf("invalid to address: %v", err)
 			}
 		}
-		if err := validation.ValidateHexString(tx.From, validation.AddressLength); err != nil {
+		if err := validation.ValidateAddress(tx.From); err != nil {
 			return nil, fmt.Errorf("invalid from address: %v", err)
 		}
 	}
@@ -210,7 +210,7 @@ func GetContractAddress(txHash string) (string, string, error) {
 
 	// Validate contract address if present
 	if ContractAddress.Result.ContractAddress != "" {
-		if err := validation.ValidateHexString(ContractAddress.Result.ContractAddress, validation.AddressLength); err != nil {
+		if err := validation.ValidateAddress(ContractAddress.Result.ContractAddress); err != nil {
 			return "", "", fmt.Errorf("invalid contract address in response: %v", err)
 		}
 	}
@@ -313,21 +313,21 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 		return "", "", "", "", 0, 0, nil, 0, 0, 0, "", 0
 	}
 
-	// Validate addresses
+	// Validate addresses and convert to Z format
 	if tracerResponse.Result.From != "" {
-		if err := validation.ValidateHexString(tracerResponse.Result.From, validation.AddressLength); err != nil {
+		if err := validation.ValidateAddress(tracerResponse.Result.From); err != nil {
 			zap.L().Error("Invalid from address", zap.Error(err))
-			return "", "", "", "", 0, 0, nil, 0, 0, 0, "", 0
+			// Continue processing despite error
 		}
-		from = tracerResponse.Result.From
+		from = validation.ConvertToZAddress(tracerResponse.Result.From)
 	}
 
 	if tracerResponse.Result.To != "" {
-		if err := validation.ValidateHexString(tracerResponse.Result.To, validation.AddressLength); err != nil {
+		if err := validation.ValidateAddress(tracerResponse.Result.To); err != nil {
 			zap.L().Error("Invalid to address", zap.Error(err))
-			return "", "", "", "", 0, 0, nil, 0, 0, 0, "", 0
+			// Continue processing despite error
 		}
-		to = tracerResponse.Result.To
+		to = validation.ConvertToZAddress(tracerResponse.Result.To)
 	}
 
 	// Validate and process output
@@ -340,7 +340,7 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 			// Remove "0x" prefix and leading zeros
 			hexStr := strings.TrimPrefix(tracerResponse.Result.Output, "0x")
 			hexStr = strings.TrimLeft(hexStr, "0")
-			
+
 			// If it's an address (40 characters), just store 1 to indicate success
 			if len(tracerResponse.Result.Output) == 42 { // "0x" + 40 chars
 				output = 1
@@ -352,7 +352,7 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 					output = parsed
 				} else {
 					// For larger numbers, just store 1 to indicate success
-					zap.L().Debug("Output value too large for uint64, storing 1", 
+					zap.L().Debug("Output value too large for uint64, storing 1",
 						zap.String("output", tracerResponse.Result.Output))
 					output = 1
 				}
@@ -368,7 +368,7 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 			// Remove "0x" prefix and leading zeros
 			hexStr := strings.TrimPrefix(tracerResponse.Result.Value, "0x")
 			hexStr = strings.TrimLeft(hexStr, "0")
-			
+
 			bigInt := new(big.Int)
 			if _, ok := bigInt.SetString(hexStr, 16); !ok {
 				zap.L().Warn("Failed to parse value")
@@ -403,8 +403,9 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 			// Extract and validate address
 			if len(data) >= 64 {
 				extractedAddr := "0x" + data[24:64]
-				if err := validation.ValidateHexString(extractedAddr, validation.AddressLength); err == nil {
-					addressFunctionidentifier = extractedAddr
+				if err := validation.ValidateAddress(extractedAddr); err == nil {
+					// Convert to Z format before returning
+					addressFunctionidentifier = validation.ConvertToZAddress(extractedAddr)
 				} else {
 					zap.L().Error("Invalid extracted address", zap.Error(err))
 				}
@@ -447,7 +448,7 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 
 func GetBalance(address string) (string, error) {
 	// Validate input address format
-	if err := validation.ValidateHexString(address, validation.AddressLength); err != nil {
+	if err := validation.ValidateAddress(address); err != nil {
 		return "", fmt.Errorf("invalid address format: %v", err)
 	}
 
@@ -587,7 +588,7 @@ func min(a, b int) int {
 
 func GetCode(address string, blockNrOrHash string) (string, error) {
 	// Validate address format
-	if err := validation.ValidateHexString(address, validation.AddressLength); err != nil {
+	if err := validation.ValidateAddress(address); err != nil {
 		return "", fmt.Errorf("invalid address format: %v", err)
 	}
 
@@ -641,7 +642,7 @@ func GetCode(address string, blockNrOrHash string) (string, error) {
 
 func ZondCall(contractAddress string) (*models.ZondResponse, error) {
 	// Validate contract address format
-	if err := validation.ValidateHexString(contractAddress, validation.AddressLength); err != nil {
+	if err := validation.ValidateAddress(contractAddress); err != nil {
 		return nil, fmt.Errorf("invalid contract address format: %v", err)
 	}
 
@@ -702,7 +703,7 @@ func ZondCall(contractAddress string) (*models.ZondResponse, error) {
 
 func ZondGetLogs(contractAddress string) (*models.ZondResponse, error) {
 	// Validate contract address format
-	if err := validation.ValidateHexString(contractAddress, validation.AddressLength); err != nil {
+	if err := validation.ValidateAddress(contractAddress); err != nil {
 		return nil, fmt.Errorf("invalid contract address: %v", err)
 	}
 
