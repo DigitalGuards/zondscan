@@ -34,6 +34,7 @@ notes
 tokentracking.md
 Zond2mongoDB/logs/reindex_contracts.log
 Zond2mongoDB/logs/reindex_tokens.log
-Zond2mongoDB/logs/zond_sync.log
 nul
 .cursor/rules/commentrule.mdc
+Zond2mongoDB/logs/zond_sync.log
+zond-contract-example/
