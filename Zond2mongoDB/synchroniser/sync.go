@@ -6,12 +6,15 @@ import (
 	"Zond2mongoDB/models"
 	"Zond2mongoDB/rpc"
 	"Zond2mongoDB/utils"
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.uber.org/zap"
 )
 
@@ -19,6 +22,14 @@ type Data struct {
 	blockData    []interface{}
 	blockNumbers []int
 }
+
+// Constants for retries and error handling
+const (
+	// These are used in retry loops throughout the code
+	maxRetries  = 5  // Maximum number of retries for operations
+	retryDelay  = 2  // Base delay (seconds) between retries
+	maxRollback = 10 // Maximum blocks to rollback on sync issues
+)
 
 // batchSync handles syncing multiple blocks in parallel
 func batchSync(fromBlock string, toBlock string) string {
@@ -92,6 +103,23 @@ func batchSync(fromBlock string, toBlock string) string {
 
 	close(producers)
 	wg.Wait()
+
+	// Now process token transfers for the entire range
+	configs.Logger.Info("Processing token transfers after batch sync",
+		zap.String("from_block", fromBlock),
+		zap.String("to_block", toBlock))
+		
+	// Process a sample of blocks for token transfers
+	// Processing every block could be too intensive - so we'll do every 10th block
+	currentBlockForTokens := fromBlock
+	for utils.CompareHexNumbers(currentBlockForTokens, toBlock) < 0 {
+		processTokenTransfersForBlock(currentBlockForTokens)
+		
+		// Skip ahead 10 blocks
+		for i := 0; i < 10 && utils.CompareHexNumbers(currentBlockForTokens, toBlock) < 0; i++ {
+			currentBlockForTokens = utils.AddHexNumbers(currentBlockForTokens, "0x1")
+		}
+	}
 
 	return toBlock
 }
@@ -186,33 +214,36 @@ func Sync() {
 }
 
 func consumer(ch <-chan (<-chan Data)) {
-	// Consume the producer channels.
-	for Datas := range ch {
-		// Consume the Datas.
-		for i := range Datas {
-			if i.blockData == nil || len(i.blockData) == 0 {
-				continue
-			}
-			// Do stuff with the Datas, in order.
-			db.InsertManyBlockDocuments(i.blockData)
-			configs.Logger.Info("Inserted block batch",
-				zap.Int("count", len(i.blockData)))
+	var wg sync.WaitGroup
+	for producer := range ch {
+		wg.Add(1)
+		go func(p <-chan Data) {
+			defer wg.Done()
+			for data := range p {
+				// Only process if there's data to process
+				if len(data.blockData) > 0 {
+					db.InsertManyBlockDocuments(data.blockData)
+					configs.Logger.Info("Inserted block batch",
+						zap.Int("count", len(data.blockData)))
 
-			for x := 0; x < len(i.blockNumbers); x++ {
-				db.ProcessTransactions(i.blockData[x])
-			}
-			configs.Logger.Info("Processed transactions for blocks",
-				zap.Ints("block_numbers", i.blockNumbers))
+					for x := 0; x < len(data.blockNumbers); x++ {
+						db.ProcessTransactions(data.blockData[x])
+					}
+					configs.Logger.Info("Processed transactions for blocks",
+						zap.Ints("block_numbers", data.blockNumbers))
 
-			// Store the last block number from this batch
-			if len(i.blockNumbers) > 0 {
-				lastBlock := utils.IntToHex(i.blockNumbers[len(i.blockNumbers)-1])
-				db.StoreLastKnownBlockNumber(lastBlock)
-				configs.Logger.Debug("Updated last synced block",
-					zap.String("block", lastBlock))
+					// Store the last block number from this batch
+					if len(data.blockNumbers) > 0 {
+						lastBlock := utils.IntToHex(data.blockNumbers[len(data.blockNumbers)-1])
+						db.StoreLastKnownBlockNumber(lastBlock)
+						configs.Logger.Debug("Updated last synced block",
+							zap.String("block", lastBlock))
+					}
+				}
 			}
-		}
+		}(producer)
 	}
+	wg.Wait()
 }
 
 func producer(start string, end string) <-chan Data {
@@ -276,50 +307,100 @@ func processInitialBlock() {
 	db.ProcessTransactions(*block)
 }
 
-// Helper function to find the last valid block within a range
-func findLastValidBlock(currentBlock string, maxRollback string) string {
-	for blockNum := currentBlock; utils.CompareHexNumbers(blockNum, utils.SubtractHexNumbers(currentBlock, maxRollback)) >= 0; blockNum = utils.SubtractHexNumbers(blockNum, "0x1") {
-		dbHash := db.GetLatestBlockHashHeaderFromDB(blockNum)
-		if dbHash != "" {
-			chainBlock, err := rpc.GetBlockByNumberMainnet(blockNum)
-			if err == nil && chainBlock != nil && dbHash == chainBlock.Result.Hash {
-				return blockNum
-			}
+// Handles database reconsiliation in case a fork was detected
+func handleFork(lastBlock string) string {
+	configs.Logger.Warn("Potential block chain fork detected, attempting to find valid common ancestor")
+	validBlock := findLastValidBlock(lastBlock, maxRollback)
+	
+	if validBlock != lastBlock {
+		configs.Logger.Warn("Fork detected - pruning invalid blocks",
+			zap.String("from", validBlock),
+			zap.String("to", lastBlock))
+		
+		// Rollback the database to the valid block
+		err := db.Rollback(validBlock)
+		if err != nil {
+			configs.Logger.Error("Failed to rollback database",
+				zap.String("to_block", validBlock),
+				zap.Error(err))
 		}
+		
+		return validBlock
 	}
-	return ""
+	
+	configs.Logger.Error("Could not find common ancestor within rollback limit",
+		zap.String("last_block", lastBlock),
+		zap.Int("max_rollback", maxRollback))
+	return lastBlock
 }
 
-// Helper function to find the fork point
-func findForkPoint(startBlock string, endBlock string) string {
-	for blockNum := startBlock; utils.CompareHexNumbers(blockNum, endBlock) >= 0; blockNum = utils.SubtractHexNumbers(blockNum, "0x1") {
-		dbHash := db.GetLatestBlockHashHeaderFromDB(blockNum)
-		if dbHash == "" {
-			configs.Logger.Debug("Block not found in DB during rollback search",
-				zap.String("block", blockNum))
-			continue
+// Find the last valid block in the blockchain to recover from a fork
+func findLastValidBlock(fromBlock string, maxRollback int) string {
+	// Start from fromBlock and go back until we find a valid block
+	currentBlock := fromBlock
+	
+	for i := 0; i < maxRollback; i++ {
+		// Check if current block is valid (hash matches what's in the database)
+		if validateBlockHash(currentBlock) {
+			configs.Logger.Info("Found valid block", zap.String("block", currentBlock))
+			return currentBlock
 		}
-
-		chainBlock, err := rpc.GetBlockByNumberMainnet(blockNum)
-		if err != nil {
-			configs.Logger.Warn("Failed to get block during rollback search",
-				zap.String("block", blockNum),
-				zap.Error(err))
-			continue
-		}
-
-		if chainBlock != nil && dbHash == chainBlock.Result.Hash {
-			return blockNum
-		}
+		
+		// Move to previous block
+		currentBlock = utils.SubtractHexNumbers(currentBlock, "0x1")
 	}
-	return ""
+	
+	// If we reached maxRollback and still don't have a valid block, return initial block
+	configs.Logger.Warn("Could not find valid block within rollback limit", 
+		zap.String("fromBlock", fromBlock),
+		zap.Int("maxRollback", maxRollback))
+	return fromBlock
+}
+
+// Determine if a block hash matches what's in the database
+func validateBlockHash(blockNumber string) bool {
+	// Get block from node
+	nodeBlock, err := rpc.GetBlockByNumberMainnet(blockNumber)
+	if err != nil {
+		configs.Logger.Error("Failed to get block from node", 
+			zap.String("block", blockNumber),
+			zap.Error(err))
+		return false
+	}
+	
+	// Get block hash from database
+	dbBlock := db.GetLatestBlockFromDB()
+	if dbBlock == nil {
+		return false
+	}
+	
+	// Compare hashes
+	dbBlockNumber := dbBlock.Result.Number
+	if dbBlockNumber != blockNumber {
+		return false
+	}
+	
+	return dbBlock.Result.Hash == nodeBlock.Result.Hash
+}
+
+// Find the point where a fork happened
+func findForkPoint(startBlock string, maxRollback int) string {
+	currentBlock := startBlock
+	
+	for i := 0; i < maxRollback; i++ {
+		if validateBlockHash(currentBlock) {
+			return currentBlock
+		}
+		currentBlock = utils.SubtractHexNumbers(currentBlock, "0x1")
+	}
+	
+	return "0x0" // Failed to find fork point
 }
 
 func processSubsequentBlocks(currentBlock string) string {
 	const (
 		maxRetries  = 3
 		retryDelay  = 2 * time.Second
-		maxRollback = "0x64" // 0x64 = 100 blocks
 	)
 
 	// Get the block data from the node
@@ -463,7 +544,6 @@ func runTaskWithRetry(task func(), taskName string) {
 				zap.String("task", taskName),
 				zap.Int("attempt", attempt))
 			attempt = maxAttempts + 1 // Exit loop on success
-			return
 		}()
 
 		if attempt <= maxAttempts {
@@ -479,54 +559,76 @@ func runTaskWithRetry(task func(), taskName string) {
 }
 
 func processBlockPeriodically() {
-	// Get last known block from sync state
-	nextBlock := db.GetLastKnownBlockNumber()
-	if nextBlock == "0x0" {
-		nextBlock = db.GetLatestBlockNumberFromDB()
-	}
-	nextBlock = utils.AddHexNumbers(nextBlock, "0x1")
+	configs.Logger.Info("Starting block processing check")
 
-	// Get latest block number with retries
-	var latestBlockHex string
-	var err error
-	for retries := 0; retries < 3; retries++ {
-		latestBlockHex, err = rpc.GetLatestBlock()
-		if err == nil {
-			break
-		}
-		configs.Logger.Warn("Failed to get latest block, retrying...",
-			zap.Error(err),
-			zap.Int("retry", retries+1))
-		time.Sleep(time.Duration(1<<uint(retries)) * time.Second)
+	// Initialize collections if they don't exist
+	if !db.IsCollectionsExist() {
+		processInitialBlock()
+		return
 	}
 
+	// Process the latest block
+	latestBlock, err := rpc.GetLatestBlock()
 	if err != nil {
-		configs.Logger.Error("Failed to get latest block after retries", zap.Error(err))
-		panic(err) // Force task retry by panicking
+		configs.Logger.Error("Failed to get latest block", zap.Error(err))
+		return
 	}
 
-	// Check if we need to process new blocks
-	if utils.CompareHexNumbers(latestBlockHex, nextBlock) > 0 {
-		blocksBehind := utils.SubtractHexNumbers(latestBlockHex, nextBlock)
-		configs.Logger.Info("Processing blocks",
-			zap.String("current_block", nextBlock),
-			zap.String("latest_block", latestBlockHex),
-			zap.String("blocks_behind", blocksBehind))
+	lastProcessedBlock := db.GetLatestBlockNumberFromDB()
+	if lastProcessedBlock == "0x0" {
+		configs.Logger.Info("No blocks in database, initializing...")
+		processInitialBlock()
+		return
+	}
 
-		if utils.CompareHexNumbers(blocksBehind, "0x32") > 0 { // Use batch sync if more than 50 blocks behind
-			configs.Logger.Info("Switching to batch sync mode",
-				zap.String("blocks_behind", blocksBehind),
-				zap.String("from_block", nextBlock),
-				zap.String("to_block", latestBlockHex))
-			batchSync(nextBlock, latestBlockHex)
-		} else {
-			// Process single block
-			processSubsequentBlocks(nextBlock)
+	// Check if we're more than 50 blocks behind
+	lastProcessedBlockNum := utils.HexToInt(lastProcessedBlock).Int64()
+	latestBlockNum := utils.HexToInt(latestBlock).Int64()
+	
+	if latestBlockNum - lastProcessedBlockNum > 50 {
+		configs.Logger.Info("More than 50 blocks behind, switching to batch sync",
+			zap.Int64("lastProcessedBlock", lastProcessedBlockNum),
+			zap.Int64("latestBlock", latestBlockNum))
+		
+		// Use batch sync for faster processing
+		nextBlock := utils.AddHexNumbers(lastProcessedBlock, "0x1")
+		batchSync(nextBlock, latestBlock)
+	} else if utils.CompareHexNumbers(latestBlock, lastProcessedBlock) > 0 {
+		// Process blocks one by one when fewer than 50 blocks behind
+		nextBlock := utils.AddHexNumbers(lastProcessedBlock, "0x1")
+		configs.Logger.Info("Processing new blocks",
+			zap.String("from", nextBlock),
+			zap.String("to", latestBlock))
+		
+		// Process blocks one by one
+		currentBlock := nextBlock
+		for utils.CompareHexNumbers(currentBlock, latestBlock) <= 0 {
+			configs.Logger.Info("Processing block", zap.String("blockNumber", currentBlock))
+			
+			// Process the block
+			processSubsequentBlocks(currentBlock)
+			
+			// Process token transfers for this block
+			processTokenTransfersForBlock(currentBlock)
+			
+			// Move to next block
+			currentBlock = utils.AddHexNumbers(currentBlock, "0x1")
 		}
 	} else {
 		configs.Logger.Info("No new blocks to process",
-			zap.String("current_block", nextBlock),
-			zap.String("latest_block", latestBlockHex))
+			zap.String("latest_db", lastProcessedBlock),
+			zap.String("latest_node", latestBlock))
+	}
+}
+
+// New function to periodically update validators
+func updateValidatorsPeriodically() {
+	configs.Logger.Info("Updating validators")
+	err := syncValidators()
+	if err != nil {
+		configs.Logger.Error("Failed to update validators", zap.Error(err))
+	} else {
+		configs.Logger.Info("Successfully updated validators")
 	}
 }
 
@@ -552,59 +654,72 @@ func singleBlockInsertion() {
 		processInitialBlock()
 	}
 
-	// Start periodic tasks
-	go runPeriodicTask(func() {
-		processBlockPeriodically()
-	}, time.Second*30, "block_processing")
+	// Create a wait group to keep the main goroutine alive
+	var wg sync.WaitGroup
+	wg.Add(3)
 
-	go runPeriodicTask(func() {
+	// Define an initialization flag
+	var initialized int32
+	atomic.StoreInt32(&initialized, 0)
+
+	// Start periodic block processing task (every 30 seconds)
+	go func() {
+		defer wg.Done()
+		if atomic.CompareAndSwapInt32(&initialized, 0, 1) {
+			configs.Logger.Info("Starting periodic task",
+				zap.String("task", "block_processing"),
+				zap.Duration("interval", time.Second*30))
+
+			ticker := time.NewTicker(time.Second * 30)
+			defer ticker.Stop()
+
+			// Run immediately on start
+			processBlockPeriodically()
+
+			for range ticker.C {
+				processBlockPeriodically()
+			}
+		}
+	}()
+
+	// Start periodic data updates task (every 30 minutes)
+	go func() {
+		defer wg.Done()
+		configs.Logger.Info("Starting periodic task",
+			zap.String("task", "data_updates"),
+			zap.Duration("interval", time.Minute*30))
+
+		ticker := time.NewTicker(time.Minute * 30)
+		defer ticker.Stop()
+
+		// Run immediately on start
 		updateDataPeriodically()
-	}, time.Minute*30, "data_updates")
 
-	// Add new periodic task for validator updates (every 6 hours)
-	go runPeriodicTask(func() {
+		for range ticker.C {
+			updateDataPeriodically()
+		}
+	}()
+
+	// Start periodic validator updates task (every 6 hours)
+	go func() {
+		defer wg.Done()
+		configs.Logger.Info("Starting periodic task",
+			zap.String("task", "validator_updates"),
+			zap.Duration("interval", time.Hour*6))
+
+		ticker := time.NewTicker(time.Hour * 6)
+		defer ticker.Stop()
+
+		// Run immediately on start
 		updateValidatorsPeriodically()
-	}, time.Hour*6, "validator_updates")
+
+		for range ticker.C {
+			updateValidatorsPeriodically()
+		}
+	}()
 
 	// Keep the main goroutine alive
-	select {}
-}
-
-// New function to periodically update validators
-func updateValidatorsPeriodically() {
-	configs.Logger.Info("Updating validators")
-	err := syncValidators()
-	if err != nil {
-		configs.Logger.Error("Failed to update validators", zap.Error(err))
-	} else {
-		configs.Logger.Info("Successfully updated validators")
-	}
-}
-
-func updateSyncState(blockNumber string) string {
-	// First verify block exists in DB
-	blockHash := db.GetLatestBlockHashHeaderFromDB(blockNumber)
-	if blockHash == "" {
-		configs.Logger.Error("Cannot update sync state - block not found in DB",
-			zap.String("block_number", blockNumber))
-		// Roll back to last known good block
-		previousBlock := utils.SubtractHexNumbers(blockNumber, "0x1")
-		return findLastValidBlock(previousBlock, utils.SubtractHexNumbers(previousBlock, "0x64")) // Roll back up to 100 blocks
-	}
-
-	// Verify parent hash consistency
-	parentNumber := utils.SubtractHexNumbers(blockNumber, "0x1")
-	parentHash := db.GetLatestBlockHashHeaderFromDB(parentNumber)
-	if parentHash == "" && parentNumber != "0x0" { // Allow genesis block to have no parent
-		configs.Logger.Error("Cannot update sync state - parent block missing",
-			zap.String("block_number", blockNumber),
-			zap.String("parent_number", parentNumber))
-		return findLastValidBlock(parentNumber, utils.SubtractHexNumbers(parentNumber, "0x64"))
-	}
-
-	// Only update sync state if block and parent verification passed
-	db.StoreLastKnownBlockNumber(blockNumber)
-	return blockNumber
+	wg.Wait()
 }
 
 func syncValidators() error {
@@ -624,4 +739,33 @@ func syncValidators() error {
 
 	configs.Logger.Info("Successfully synced validators", zap.String("epoch", currentEpoch))
 	return nil
+}
+
+// processTokenTransfersForBlock processes all token transfers in a block
+// This is called after the initial sync is complete to ensure all token transfers are captured
+func processTokenTransfersForBlock(blockNumber string) {
+	// Get block from database to get timestamp
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	filter := bson.M{"result.number": blockNumber}
+	var block models.ZondDatabaseBlock
+	err := configs.BlocksCollections.FindOne(ctx, filter).Decode(&block)
+	if err != nil {
+		configs.Logger.Error("Failed to get block for token transfer processing",
+			zap.String("blockNumber", blockNumber),
+			zap.Error(err))
+		return
+	}
+
+	// Process token transfers
+	err = db.ProcessBlockTokenTransfers(blockNumber, block.Result.Timestamp)
+	if err != nil {
+		configs.Logger.Error("Failed to process token transfers for block",
+			zap.String("blockNumber", blockNumber),
+			zap.Error(err))
+	} else {
+		configs.Logger.Info("Processed token transfers for block",
+			zap.String("blockNumber", blockNumber))
+	}
 }

@@ -758,3 +758,66 @@ func ZondGetLogs(contractAddress string) (*models.ZondResponse, error) {
 
 	return &responseData, nil
 }
+
+// ZondGetBlockLogs retrieves logs for a specific block with optional topic filtering
+func ZondGetBlockLogs(blockNumber string, topics []string) (*models.ZondLogsResponse, error) {
+	// Validate block number format
+	if len(blockNumber) == 0 || (!strings.HasPrefix(blockNumber, "0x") && blockNumber != "latest") {
+		return nil, fmt.Errorf("invalid block number format: %s", blockNumber)
+	}
+
+	filter := map[string]interface{}{
+		"fromBlock": blockNumber,
+		"toBlock":   blockNumber,
+	}
+
+	// Add topics if provided
+	if len(topics) > 0 {
+		filter["topics"] = topics
+	}
+
+	group := models.JsonRPC{
+		Jsonrpc: "2.0",
+		Method:  "zond_getLogs",
+		Params:  []interface{}{filter},
+		ID:      1,
+	}
+
+	b, err := json.Marshal(group)
+	if err != nil {
+		zap.L().Info("Failed JSON marshal", zap.Error(err))
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
+	if err != nil {
+		zap.L().Info("Failed to create request", zap.Error(err))
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := GetHTTPClient().Do(req)
+	if err != nil {
+		zap.L().Info("Failed to get response from RPC call", zap.Error(err))
+		return nil, err
+	}
+	if resp == nil {
+		return nil, fmt.Errorf("received nil response")
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		zap.L().Info("Failed to read response body", zap.Error(err))
+		return nil, err
+	}
+
+	var responseData models.ZondLogsResponse
+	err = json.Unmarshal([]byte(string(body)), &responseData)
+	if err != nil {
+		zap.L().Info("Failed to unmarshal response", zap.Error(err))
+		return nil, err
+	}
+
+	return &responseData, nil
+}

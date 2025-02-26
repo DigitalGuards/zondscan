@@ -168,6 +168,47 @@ func StoreLastKnownBlockNumber(blockNumber string) error {
 	return nil
 }
 
+// GetLastSyncedBlock retrieves the last synced block from the database
+func GetLastSyncedBlock() (*models.ZondDatabaseBlock, error) {
+	// First check if we have a sync state document
+	collection := configs.GetCollection(configs.DB, "syncState")
+	ctx := context.Background()
+
+	var result struct {
+		BlockNumber string `bson:"blockNumber"`
+	}
+
+	err := collection.FindOne(ctx, bson.M{}).Decode(&result)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			configs.Logger.Info("No sync state found, starting from genesis block")
+			// Return a block with number "0x0" to start from genesis
+			return &models.ZondDatabaseBlock{
+				Result: models.Result{
+					Number: "0x0",
+				},
+			}, nil
+		}
+		return nil, err
+	}
+
+	if result.BlockNumber == "" {
+		configs.Logger.Warn("Found sync state but block number is empty")
+		return nil, nil
+	}
+
+	// Create a ZondDatabaseBlock object with the retrieved block number
+	block := &models.ZondDatabaseBlock{
+		Result: models.Result{
+			Number: result.BlockNumber,
+		},
+	}
+
+	configs.Logger.Info("Found last synced block in sync state",
+		zap.String("block", result.BlockNumber))
+	return block, nil
+}
+
 func Rollback(blockNumber string) error {
 	ctx := context.Background()
 

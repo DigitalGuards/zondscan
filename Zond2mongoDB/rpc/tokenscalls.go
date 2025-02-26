@@ -236,8 +236,8 @@ func GetTokenBalance(contractAddress string, holderAddress string) (string, erro
 	// balanceOf(address) function signature
 	methodID := "0x70a08231"
 
-	// Remove 0x prefix and pad address to 32 bytes
-	address := strings.TrimPrefix(holderAddress, "0x")
+	// Remove Z prefix and pad address to 32 bytes
+	address := strings.TrimPrefix(holderAddress, "Z")
 	for len(address) < 64 {
 		address = "0" + address
 	}
@@ -274,8 +274,8 @@ func DecodeTransferEvent(data string) (string, string, string) {
 		}
 
 		// Extract recipient address (remove leading zeros)
-		recipient := "0x" + trimLeftZeros(data[34:74])
-		if len(recipient) != 42 { // Check if it's a valid address length (0x + 40 hex chars)
+		recipient := "Z" + TrimLeftZeros(data[34:74])
+		if len(recipient) != 41 { // Check if it's a valid address length (Z + 40 hex chars)
 			return "", "", ""
 		}
 
@@ -348,22 +348,18 @@ func ProcessTransferLogs(receipt *models.TransactionReceipt) []TransferEvent {
 	for _, log := range receipt.Result.Logs {
 		// Check if this is a Transfer event
 		if len(log.Topics) == 3 && log.Topics[0] == TransferEventSignature {
-			// Topics[1] is from address (padded to 32 bytes)
-			from := "0x" + trimLeftZeros(log.Topics[1][26:])
-
-			// Topics[2] is to address (padded to 32 bytes)
-			to := "0x" + trimLeftZeros(log.Topics[2][26:])
-
-			// Log.Data contains the amount (32 bytes)
-			amount := log.Data
-
-			if len(from) == 42 && len(to) == 42 {
-				transfers = append(transfers, TransferEvent{
-					From:   from,
-					To:     to,
-					Amount: amount,
-				})
+			from, to, amount, err := ParseTransferEvent(log)
+			if err != nil {
+				// Log the error but continue processing other logs
+				zap.L().Error("Failed to parse transfer event", zap.Error(err))
+				continue
 			}
+
+			transfers = append(transfers, TransferEvent{
+				From:   from,
+				To:     to,
+				Amount: amount.String(),
+			})
 		}
 	}
 
@@ -376,8 +372,8 @@ type TransferEvent struct {
 	Amount string
 }
 
-// Helper function to trim leading zeros from hex string
-func trimLeftZeros(hex string) string {
+// TrimLeftZeros trims leading zeros from hex string
+func TrimLeftZeros(hex string) string {
 	for i := 0; i < len(hex); i++ {
 		if hex[i] != '0' {
 			return hex[i:]
@@ -397,13 +393,13 @@ func ParseTransferEvent(log models.Log) (string, string, *big.Int, error) {
 	from := log.Topics[1]
 	to := log.Topics[2]
 
-	// Ensure addresses have proper format
-	if !strings.HasPrefix(from, "0x") && !strings.HasPrefix(from, "Z") {
-		from = "0x" + from
+	// Ensure addresses have proper format with Z prefix (not 0x)
+	if !strings.HasPrefix(from, "Z") {
+		from = "Z" + TrimLeftZeros(from)
 	}
 
-	if !strings.HasPrefix(to, "0x") && !strings.HasPrefix(to, "Z") {
-		to = "0x" + to
+	if !strings.HasPrefix(to, "Z") {
+		to = "Z" + TrimLeftZeros(to)
 	}
 
 	// Validate addresses
@@ -415,6 +411,20 @@ func ParseTransferEvent(log models.Log) (string, string, *big.Int, error) {
 		return "", "", nil, fmt.Errorf("invalid to address: %s", to)
 	}
 
-	// ... existing code ...
-	return "", "", nil, nil
+	// Parse amount from data field
+	amount := new(big.Int)
+	if len(log.Data) > 2 {
+		// Remove 0x prefix if present
+		data := log.Data
+		if strings.HasPrefix(data, "0x") {
+			data = data[2:]
+		}
+		
+		// Set the value from hex string
+		if _, success := amount.SetString(data, 16); !success {
+			return "", "", nil, fmt.Errorf("failed to parse amount from data: %s", log.Data)
+		}
+	}
+
+	return from, to, amount, nil
 }
