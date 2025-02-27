@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 # MongoDB connection
 MONGO_URI = os.getenv('MONGOURI', 'mongodb://localhost:27017')
-NODE_URL = os.getenv('NODE_URL', 'http://REDACTED:4545')
+NODE_URL = os.getenv('NODE_URL', 'http://35.158.17.89:32837')
 
 # Constants
 TRANSFER_EVENT_SIGNATURE = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
@@ -92,8 +92,8 @@ def process_transfer_logs(logs, contract_address, token_balances_collection, tok
             continue
         
         try:
-            from_addr = '0x' + topics[1][-40:]  # Remove padding
-            to_addr = '0x' + topics[2][-40:]  # Remove padding
+            from_addr = 'Z' + topics[1][-40:]  # Remove padding
+            to_addr = 'Z' + topics[2][-40:]  # Remove padding
             amount = int(log.get('data', '0x0'), 16)
             block_number = log.get('blockNumber')
             tx_hash = log.get('transactionHash')
@@ -129,19 +129,54 @@ def process_transfer_logs(logs, contract_address, token_balances_collection, tok
                 if 'duplicate key error' not in str(e):  # Ignore duplicates
                     logger.error(f"Failed to store transfer {tx_hash}: {e}")
             
-            # Update balances (existing logic)
-            update_balance = {'$inc': {'balance': -amount}} if from_addr != '0x0000000000000000000000000000000000000000' and from_addr != 'Z0000000000000000000000000000000000000000' else {}
-            if update_balance:
+            # Update balances as strings to avoid integer overflow
+            if from_addr != '0x0000000000000000000000000000000000000000' and from_addr != 'Z0000000000000000000000000000000000000000':
+                # Get current balance
+                current_from_balance_doc = token_balances_collection.find_one(
+                    {'contractAddress': contract_address, 'holderAddress': from_addr}
+                )
+                
+                current_from_balance = 0
+                if current_from_balance_doc and 'balance' in current_from_balance_doc:
+                    # Convert existing balance to integer if it's a string
+                    if isinstance(current_from_balance_doc['balance'], str):
+                        try:
+                            current_from_balance = int(current_from_balance_doc['balance'])
+                        except ValueError:
+                            current_from_balance = 0
+                    else:
+                        current_from_balance = current_from_balance_doc['balance']
+                        
+                # Calculate new balance and store as string
+                new_from_balance = max(0, current_from_balance - amount)
                 token_balances_collection.update_one(
                     {'contractAddress': contract_address, 'holderAddress': from_addr},
-                    update_balance,
+                    {'$set': {'balance': str(new_from_balance)}},
                     upsert=True
                 )
             
             if to_addr != '0x0000000000000000000000000000000000000000' and to_addr != 'Z0000000000000000000000000000000000000000':
+                # Get current balance
+                current_to_balance_doc = token_balances_collection.find_one(
+                    {'contractAddress': contract_address, 'holderAddress': to_addr}
+                )
+                
+                current_to_balance = 0
+                if current_to_balance_doc and 'balance' in current_to_balance_doc:
+                    # Convert existing balance to integer if it's a string
+                    if isinstance(current_to_balance_doc['balance'], str):
+                        try:
+                            current_to_balance = int(current_to_balance_doc['balance'])
+                        except ValueError:
+                            current_to_balance = 0
+                    else:
+                        current_to_balance = current_to_balance_doc['balance']
+                        
+                # Calculate new balance and store as string
+                new_to_balance = current_to_balance + amount
                 token_balances_collection.update_one(
                     {'contractAddress': contract_address, 'holderAddress': to_addr},
-                    {'$inc': {'balance': amount}},
+                    {'$set': {'balance': str(new_to_balance)}},
                     upsert=True
                 )
             
@@ -206,6 +241,50 @@ def normalize_address(address):
     
     return address
 
+def update_missing_creation_blocks(contracts_collection):
+    """Update contracts with missing creation block numbers."""
+    logger.info("Checking for contracts with missing creation block numbers...")
+    
+    # Find contracts with missing or empty creation block numbers
+    missing_blocks = list(contracts_collection.find({
+        "$or": [
+            {"creationBlockNumber": ""},
+            {"creationBlockNumber": {"$exists": False}}
+        ]
+    }))
+    
+    if not missing_blocks:
+        logger.info("No contracts with missing creation block numbers found.")
+        return
+    
+    logger.info(f"Found {len(missing_blocks)} contracts with missing creation block numbers.")
+    
+    updated_count = 0
+    for contract in missing_blocks:
+        # If we have a creation transaction hash, get its block number
+        if contract.get('creationTransaction'):
+            tx_hash = contract['creationTransaction']
+            try:
+                # Get transaction receipt to find the block number
+                receipt = make_rpc_call("zond_getTransactionReceipt", [tx_hash])
+                if receipt and receipt.get('blockNumber'):
+                    block_number = receipt['blockNumber']
+                    
+                    # Update the contract
+                    contracts_collection.update_one(
+                        {"address": contract['address']},
+                        {"$set": {"creationBlockNumber": block_number}}
+                    )
+                    
+                    logger.info(f"Updated creation block number for {contract['address']} to {block_number}")
+                    updated_count += 1
+                else:
+                    logger.warning(f"Could not find block number for transaction {tx_hash}")
+            except Exception as e:
+                logger.error(f"Error updating creation block for {contract['address']}: {str(e)}")
+    
+    logger.info(f"Updated creation block numbers for {updated_count} contracts.")
+
 def main():
     logger.info("Starting token reindexing...")
     
@@ -231,6 +310,9 @@ def main():
     all_count = contracts_collection.count_documents({})
     logger.info(f"Total contracts found: {all_count}")
     
+    # Update missing creation block numbers
+    update_missing_creation_blocks(contracts_collection)
+    
     token_contracts = list(contracts_collection.find({"isToken": True}))
     token_count = len(token_contracts)
     logger.info(f"\nFound {token_count} token contracts")
@@ -245,7 +327,20 @@ def main():
         logger.info(f"\nProcessing token {i}/{token_count}: {contract.get('name', 'Unknown')} ({contract_address})")
         
         # Get creation block number and last processed block
-        creation_block = int(contract.get('creationBlockNumber', '0x0'), 16)
+        creation_block_hex = contract.get('creationBlockNumber', '0x0')
+        # Handle empty or invalid creation block numbers
+        if not creation_block_hex or creation_block_hex == '':
+            creation_block_hex = '0x0'
+            # If we have a creation transaction, we could try to find the block number
+            if contract.get('creationTransaction'):
+                logger.info(f"Empty creation block number but has creation transaction. Consider reprocessing contracts.")
+        
+        try:
+            creation_block = int(creation_block_hex, 16)
+        except ValueError:
+            logger.warning(f"Invalid creationBlockNumber '{creation_block_hex}' for contract {contract_address}, using 0 instead")
+            creation_block = 0
+            
         last_processed = get_last_processed_block(token_balances_collection, contract_address)
         start_block = max(creation_block, last_processed + 1)
         

@@ -14,132 +14,273 @@ import (
 	"go.uber.org/zap"
 )
 
+// ProcessTransactions processes only transaction data without token logic
 func ProcessTransactions(blockData interface{}) {
 	for _, tx := range blockData.(models.ZondDatabaseBlock).Result.Transactions {
 		to, contractAddress, statusTx, isContract := processContracts(&tx)
 
 		processTransactionData(&tx, blockData.(models.ZondDatabaseBlock).Result.Timestamp, to, contractAddress, statusTx, isContract, blockData.(models.ZondDatabaseBlock).Result.Size)
 
-		// Process token transfers for both contract creation and interaction
-		targetAddress := to
-		if contractAddress != "" {
-			targetAddress = contractAddress
+		// Store contract addresses for later token processing
+		// instead of processing them inline
+		if contractAddress != "" || to != "" {
+			targetAddress := to
+			if contractAddress != "" {
+				targetAddress = contractAddress
+			}
+
+			// Only queue it if it's a non-empty address
+			if targetAddress != "" {
+				QueuePotentialTokenContract(targetAddress, &tx, blockData.(models.ZondDatabaseBlock).Result.Timestamp)
+			}
+		}
+	}
+}
+
+// QueuePotentialTokenContract stores a mapping of potential token contract addresses
+// to be processed later in a batch
+func QueuePotentialTokenContract(address string, tx *models.Transaction, blockTimestamp string) {
+	// Skip if the address is empty
+	if address == "" {
+		return
+	}
+
+	// Use the pending contracts collection to store addresses
+	collection := configs.GetCollection(configs.DB, "pending_token_contracts")
+	if collection == nil {
+		configs.Logger.Error("Failed to get pending_token_contracts collection")
+		return
+	}
+
+	ctx := context.Background()
+
+	// Create the document to insert
+	doc := bson.M{
+		"contractAddress": address,
+		"txHash":          tx.Hash,
+		"blockNumber":     tx.BlockNumber,
+		"blockTimestamp":  blockTimestamp,
+		"processed":       false,
+	}
+
+	// Use upsert to prevent duplicates
+	opts := options.Update().SetUpsert(true)
+	filter := bson.M{
+		"contractAddress": address,
+		"txHash":          tx.Hash,
+	}
+
+	_, err := collection.UpdateOne(ctx, filter, bson.M{"$set": doc}, opts)
+	if err != nil {
+		configs.Logger.Error("Failed to queue potential token contract",
+			zap.String("address", address),
+			zap.String("txHash", tx.Hash),
+			zap.Error(err))
+	} else {
+		configs.Logger.Debug("Queued potential token contract for later processing",
+			zap.String("address", address),
+			zap.String("txHash", tx.Hash),
+			zap.String("blockNumber", tx.BlockNumber))
+	}
+}
+
+// ProcessTokenTransfersFromTransactions processes token transfers for queued contracts
+// This should be called after transaction processing is complete
+func ProcessTokenTransfersFromTransactions() {
+	configs.Logger.Info("Starting batch processing of pending token contracts")
+
+	collection := configs.GetCollection(configs.DB, "pending_token_contracts")
+	ctx := context.Background()
+
+	// Find unprocessed contract addresses
+	filter := bson.M{"processed": false}
+	count, err := collection.CountDocuments(ctx, filter)
+	if err != nil {
+		configs.Logger.Error("Failed to count pending token contracts", zap.Error(err))
+		return
+	}
+
+	configs.Logger.Info("Found pending token contracts to process", zap.Int64("count", count))
+
+	if count == 0 {
+		configs.Logger.Info("No pending token contracts to process")
+		return
+	}
+
+	cursor, err := collection.Find(ctx, filter)
+	if err != nil {
+		configs.Logger.Error("Failed to query pending token contracts", zap.Error(err))
+		return
+	}
+	defer cursor.Close(ctx)
+
+	// Process each pending contract
+	processed := 0
+	for cursor.Next(ctx) {
+		var pending struct {
+			ContractAddress string `bson:"contractAddress"`
+			TxHash          string `bson:"txHash"`
+			BlockNumber     string `bson:"blockNumber"`
+			BlockTimestamp  string `bson:"blockTimestamp"`
 		}
 
-		if targetAddress != "" {
-			configs.Logger.Debug("Checking for token transfers",
-				zap.String("targetAddress", targetAddress),
-				zap.String("txHash", tx.Hash))
+		if err := cursor.Decode(&pending); err != nil {
+			configs.Logger.Error("Failed to decode pending token contract", zap.Error(err))
+			continue
+		}
 
-			// Check if this is a token contract
-			contract := GetContractByAddress(targetAddress)
-			if contract == nil {
-				configs.Logger.Debug("Contract not found in database",
-					zap.String("address", targetAddress))
-			} else if !contract.IsToken {
-				configs.Logger.Debug("Contract is not a token",
-					zap.String("address", targetAddress))
-			} else {
-				configs.Logger.Debug("Found token contract",
-					zap.String("address", targetAddress),
-					zap.String("name", contract.Name),
-					zap.String("symbol", contract.Symbol))
+		// Process the token contract
+		configs.Logger.Info("Processing token contract",
+			zap.String("address", pending.ContractAddress),
+			zap.String("txHash", pending.TxHash),
+			zap.String("blockNumber", pending.BlockNumber))
 
-				// First check direct transfer calls
-				from, recipient, amount := rpc.DecodeTransferEvent(tx.Data)
-				if from != "" && recipient != "" && amount != "" {
-					configs.Logger.Info("Found direct token transfer",
-						zap.String("contract", targetAddress),
-						zap.String("from", from),
-						zap.String("to", recipient),
-						zap.String("amount", amount))
+		processTokenContract(pending.ContractAddress, pending.TxHash, pending.BlockNumber, pending.BlockTimestamp)
+		processed++
 
-					// Store token transfer
-					transfer := models.TokenTransfer{
-						ContractAddress: targetAddress,
-						From:            from,
-						To:              recipient,
-						Amount:          amount,
-						BlockNumber:     tx.BlockNumber,
-						TxHash:          tx.Hash,
-						Timestamp:       blockData.(models.ZondDatabaseBlock).Result.Timestamp,
-						TokenSymbol:     contract.Symbol,
-						TokenDecimals:   contract.Decimals,
-						TokenName:       contract.Name,
-						TransferType:    "direct",
-					}
-					if err := StoreTokenTransfer(transfer); err != nil {
-						configs.Logger.Error("Failed to store token transfer",
-							zap.String("txHash", tx.Hash),
-							zap.Error(err))
-					}
+		// Mark as processed
+		updateFilter := bson.M{
+			"contractAddress": pending.ContractAddress,
+			"txHash":          pending.TxHash,
+		}
+		_, err := collection.UpdateOne(ctx, updateFilter, bson.M{"$set": bson.M{"processed": true}})
+		if err != nil {
+			configs.Logger.Error("Failed to mark token contract as processed",
+				zap.String("address", pending.ContractAddress),
+				zap.Error(err))
+		}
+	}
 
-					// Update token balances
-					if err := StoreTokenBalance(targetAddress, from, amount, tx.BlockNumber); err != nil {
-						configs.Logger.Error("Failed to store token balance for sender",
-							zap.String("contract", targetAddress),
-							zap.String("holder", from),
-							zap.Error(err))
-					}
-					if err := StoreTokenBalance(targetAddress, recipient, amount, tx.BlockNumber); err != nil {
-						configs.Logger.Error("Failed to store token balance for recipient",
-							zap.String("contract", targetAddress),
-							zap.String("holder", recipient),
-							zap.Error(err))
-					}
-				}
+	configs.Logger.Info("Completed batch processing of token contracts", zap.Int("processed", processed))
+}
 
-				// Then check transfer events in logs
-				receipt, err := rpc.GetTransactionReceipt(tx.Hash)
-				if err != nil {
-					configs.Logger.Error("Failed to get transaction receipt",
-						zap.String("hash", tx.Hash),
-						zap.Error(err))
-				} else {
-					transfers := rpc.ProcessTransferLogs(receipt)
-					for _, transferEvent := range transfers {
-						configs.Logger.Info("Found token transfer event",
-							zap.String("contract", targetAddress),
-							zap.String("from", transferEvent.From),
-							zap.String("to", transferEvent.To),
-							zap.String("amount", transferEvent.Amount))
+// processTokenContract processes a single token contract address
+func processTokenContract(targetAddress string, txHash string, blockNumber string, blockTimestamp string) {
+	configs.Logger.Debug("Checking for token transfers",
+		zap.String("targetAddress", targetAddress),
+		zap.String("txHash", txHash))
 
-						// Store token transfer
-						transfer := models.TokenTransfer{
-							ContractAddress: targetAddress,
-							From:            transferEvent.From,
-							To:              transferEvent.To,
-							Amount:          transferEvent.Amount,
-							BlockNumber:     tx.BlockNumber,
-							TxHash:          tx.Hash,
-							Timestamp:       blockData.(models.ZondDatabaseBlock).Result.Timestamp,
-							TokenSymbol:     contract.Symbol,
-							TokenDecimals:   contract.Decimals,
-							TokenName:       contract.Name,
-							TransferType:    "event",
-						}
-						if err := StoreTokenTransfer(transfer); err != nil {
-							configs.Logger.Error("Failed to store token transfer",
-								zap.String("txHash", tx.Hash),
-								zap.Error(err))
-						}
+	// Check if this is a token contract
+	contract := GetContractByAddress(targetAddress)
+	if contract == nil {
+		configs.Logger.Debug("Contract not found in database",
+			zap.String("address", targetAddress))
+		return
+	}
 
-						// Update token balances
-						if err := StoreTokenBalance(targetAddress, transferEvent.From, transferEvent.Amount, tx.BlockNumber); err != nil {
-							configs.Logger.Error("Failed to store token balance for sender",
-								zap.String("contract", targetAddress),
-								zap.String("holder", transferEvent.From),
-								zap.Error(err))
-						}
-						if err := StoreTokenBalance(targetAddress, transferEvent.To, transferEvent.Amount, tx.BlockNumber); err != nil {
-							configs.Logger.Error("Failed to store token balance for recipient",
-								zap.String("contract", targetAddress),
-								zap.String("holder", transferEvent.To),
-								zap.Error(err))
-						}
-					}
-				}
-			}
+	if !contract.IsToken {
+		configs.Logger.Debug("Contract is not a token",
+			zap.String("address", targetAddress))
+		return
+	}
+
+	configs.Logger.Debug("Found token contract",
+		zap.String("address", targetAddress),
+		zap.String("name", contract.Name),
+		zap.String("symbol", contract.Symbol))
+
+	// Get transaction details
+	txDetails, err := rpc.GetTxDetailsByHash(txHash)
+	if err != nil {
+		configs.Logger.Error("Failed to get transaction details",
+			zap.String("txHash", txHash),
+			zap.Error(err))
+		return
+	}
+
+	// First check direct transfer calls
+	from, recipient, amount := rpc.DecodeTransferEvent(txDetails.Input)
+	if from != "" && recipient != "" && amount != "" {
+		configs.Logger.Info("Found direct token transfer",
+			zap.String("contract", targetAddress),
+			zap.String("from", from),
+			zap.String("to", recipient),
+			zap.String("amount", amount))
+
+		// Store token transfer
+		transfer := models.TokenTransfer{
+			ContractAddress: targetAddress,
+			From:            from,
+			To:              recipient,
+			Amount:          amount,
+			BlockNumber:     blockNumber,
+			TxHash:          txHash,
+			Timestamp:       blockTimestamp,
+			TokenSymbol:     contract.Symbol,
+			TokenDecimals:   contract.Decimals,
+			TokenName:       contract.Name,
+			TransferType:    "direct",
+		}
+		if err := StoreTokenTransfer(transfer); err != nil {
+			configs.Logger.Error("Failed to store token transfer",
+				zap.String("txHash", txHash),
+				zap.Error(err))
+		}
+
+		// Update token balances
+		if err := StoreTokenBalance(targetAddress, from, amount, blockNumber); err != nil {
+			configs.Logger.Error("Failed to store token balance for sender",
+				zap.String("contract", targetAddress),
+				zap.String("holder", from),
+				zap.Error(err))
+		}
+		if err := StoreTokenBalance(targetAddress, recipient, amount, blockNumber); err != nil {
+			configs.Logger.Error("Failed to store token balance for recipient",
+				zap.String("contract", targetAddress),
+				zap.String("holder", recipient),
+				zap.Error(err))
+		}
+	}
+
+	// Then check transfer events in logs
+	receipt, err := rpc.GetTransactionReceipt(txHash)
+	if err != nil {
+		configs.Logger.Error("Failed to get transaction receipt",
+			zap.String("hash", txHash),
+			zap.Error(err))
+		return
+	}
+
+	transfers := rpc.ProcessTransferLogs(receipt)
+	for _, transferEvent := range transfers {
+		configs.Logger.Info("Found token transfer event",
+			zap.String("contract", targetAddress),
+			zap.String("from", transferEvent.From),
+			zap.String("to", transferEvent.To),
+			zap.String("amount", transferEvent.Amount))
+
+		// Store token transfer
+		transfer := models.TokenTransfer{
+			ContractAddress: targetAddress,
+			From:            transferEvent.From,
+			To:              transferEvent.To,
+			Amount:          transferEvent.Amount,
+			BlockNumber:     blockNumber,
+			TxHash:          txHash,
+			Timestamp:       blockTimestamp,
+			TokenSymbol:     contract.Symbol,
+			TokenDecimals:   contract.Decimals,
+			TokenName:       contract.Name,
+			TransferType:    "event",
+		}
+		if err := StoreTokenTransfer(transfer); err != nil {
+			configs.Logger.Error("Failed to store token transfer",
+				zap.String("txHash", txHash),
+				zap.Error(err))
+		}
+
+		// Update token balances
+		if err := StoreTokenBalance(targetAddress, transferEvent.From, transferEvent.Amount, blockNumber); err != nil {
+			configs.Logger.Error("Failed to store token balance for sender",
+				zap.String("contract", targetAddress),
+				zap.String("holder", transferEvent.From),
+				zap.Error(err))
+		}
+		if err := StoreTokenBalance(targetAddress, transferEvent.To, transferEvent.Amount, blockNumber); err != nil {
+			configs.Logger.Error("Failed to store token balance for recipient",
+				zap.String("contract", targetAddress),
+				zap.String("holder", transferEvent.To),
+				zap.Error(err))
 		}
 	}
 }
@@ -297,6 +438,49 @@ func TransactionByAddressCollection(timeStamp string, txType string, from string
 
 func UpsertTransactions(address string, value float64, isContract bool) (*mongo.UpdateResult, error) {
 	filter := bson.D{{Key: "id", Value: address}}
+
+	// If this is flagged as a contract, update with that information
+	if isContract {
+		update := bson.D{
+			{Key: "$set", Value: bson.D{
+				{Key: "id", Value: address},
+				{Key: "balance", Value: value},
+				{Key: "isContract", Value: true}, // Always set to true if we know it's a contract
+			}},
+		}
+		opts := options.Update().SetUpsert(true)
+		result, err := configs.AddressesCollections.UpdateOne(context.TODO(), filter, update, opts)
+		if err != nil {
+			configs.Logger.Warn("Failed to update address collection: ", zap.Error(err))
+		}
+		return result, err
+	}
+
+	// If not flagged as a contract, we need to check if it's already marked as a contract
+	// to avoid overwriting that information
+	var existingDoc struct {
+		IsContract bool `bson:"isContract"`
+	}
+
+	err := configs.AddressesCollections.FindOne(context.TODO(), filter).Decode(&existingDoc)
+	if err == nil && existingDoc.IsContract {
+		// It's already marked as a contract, so keep that information
+		update := bson.D{
+			{Key: "$set", Value: bson.D{
+				{Key: "id", Value: address},
+				{Key: "balance", Value: value},
+				// Don't update isContract field since we want to keep it as true
+			}},
+		}
+		opts := options.Update().SetUpsert(true)
+		result, err := configs.AddressesCollections.UpdateOne(context.TODO(), filter, update, opts)
+		if err != nil {
+			configs.Logger.Warn("Failed to update address collection: ", zap.Error(err))
+		}
+		return result, err
+	}
+
+	// If it's not in our database or not marked as a contract, proceed with the regular update
 	update := bson.D{
 		{Key: "$set", Value: bson.D{
 			{Key: "id", Value: address},
@@ -320,4 +504,47 @@ func GetContractByAddress(address string) *models.ContractInfo {
 		return nil
 	}
 	return &contract
+}
+
+// InitializePendingTokenContractsCollection ensures the pending token contracts collection is set up with proper indexes
+func InitializePendingTokenContractsCollection() error {
+	collection := configs.GetCollection(configs.DB, "pending_token_contracts")
+	ctx := context.Background()
+
+	configs.Logger.Info("Initializing pending_token_contracts collection and indexes")
+
+	// Create indexes for pending token contracts collection
+	indexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				{Key: "contractAddress", Value: 1},
+				{Key: "txHash", Value: 1},
+			},
+			Options: options.Index().SetName("contract_tx_idx").SetUnique(true),
+		},
+		{
+			Keys: bson.D{
+				{Key: "processed", Value: 1},
+			},
+			Options: options.Index().SetName("processed_idx"),
+		},
+	}
+
+	// First drop any existing indexes to avoid conflicts
+	_, err := collection.Indexes().DropAll(ctx)
+	if err != nil {
+		configs.Logger.Warn("Failed to drop existing indexes, attempting to continue",
+			zap.Error(err))
+	}
+
+	// Create the new indexes
+	_, err = collection.Indexes().CreateMany(ctx, indexes)
+	if err != nil {
+		configs.Logger.Error("Failed to create indexes for pending token contracts",
+			zap.Error(err))
+		return err
+	}
+
+	configs.Logger.Info("Successfully initialized pending_token_contracts collection and indexes")
+	return nil
 }

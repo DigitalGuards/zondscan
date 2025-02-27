@@ -9,6 +9,10 @@ import (
 	"go.uber.org/zap"
 )
 
+// IsCollectionsExist checks if MongoDB collections exist in the database.
+// This is primarily used during initialization to determine if we need to
+// bootstrap the database with initial collections.
+// Returns true if collections are found, false if the database is empty.
 func IsCollectionsExist() bool {
 	cNames := configs.GetListCollectionNames(configs.DB)
 
@@ -20,6 +24,9 @@ func IsCollectionsExist() bool {
 	return collectionsExist
 }
 
+// CountWallets returns the total number of non-contract wallet addresses in the database.
+// This function is used for analytics purposes and by the wallet count sync service.
+// Returns 0 if an error occurs during counting.
 func CountWallets() int64 {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

@@ -821,3 +821,54 @@ func ZondGetBlockLogs(blockNumber string, topics []string) (*models.ZondLogsResp
 
 	return &responseData, nil
 }
+
+// GetTxDetailsByHash retrieves transaction details by hash
+func GetTxDetailsByHash(txHash string) (*models.TransactionResult, error) {
+	zap.L().Info("Getting transaction details", zap.String("txHash", txHash))
+
+	// Validate transaction hash
+	if err := validation.ValidateHexString(txHash, validation.HashLength); err != nil {
+		return nil, fmt.Errorf("invalid transaction hash: %v", err)
+	}
+
+	group := models.JsonRPC{
+		Jsonrpc: "2.0",
+		Method:  "zond_getTransactionByHash",
+		Params:  []interface{}{txHash},
+		ID:      1,
+	}
+
+	b, err := json.Marshal(group)
+	if err != nil {
+		zap.L().Info("Failed JSON marshal", zap.Error(err))
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
+	if err != nil {
+		zap.L().Info("Failed to create request", zap.Error(err))
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := GetHTTPClient().Do(req)
+	if err != nil {
+		zap.L().Info("Failed to execute request", zap.Error(err))
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		zap.L().Info("Failed to read response body", zap.Error(err))
+		return nil, err
+	}
+
+	var tx models.TransactionResponse
+	if err := json.Unmarshal(body, &tx); err != nil {
+		zap.L().Info("Failed to unmarshal transaction", zap.Error(err))
+		return nil, err
+	}
+
+	return &tx.Result, nil
+}

@@ -117,6 +117,7 @@ func processContracts(tx *models.Transaction) (string, string, string, bool) {
 				ContractCode:        contractCode,
 				CreatorAddress:      tx.From,
 				CreationTransaction: tx.Hash,
+				CreationBlockNumber: tx.BlockNumber,
 				UpdatedAt:           time.Now().UTC().Format(time.RFC3339),
 			}
 
@@ -131,10 +132,88 @@ func processContracts(tx *models.Transaction) (string, string, string, bool) {
 	} else {
 		to = tx.To
 		statusTx = tx.Status
-		isContract = false
+
+		// Check if the destination address is a contract
+		isContract = IsAddressContract(to)
 	}
 
 	return to, contractAddress, statusTx, isContract
+}
+
+// IsAddressContract checks if an address is a contract by querying the contractCode collection
+// and falling back to RPC getCode call if not found
+func IsAddressContract(address string) bool {
+	// First check our database
+	contract := getContractFromDB(address)
+	if contract != nil {
+		return true
+	}
+
+	// If not in database, check via RPC
+	code, err := rpc.GetCode(address, "latest")
+	if err != nil {
+		configs.Logger.Error("Failed to get code for address",
+			zap.String("address", address),
+			zap.Error(err))
+		return false
+	}
+
+	// If code is not empty/0x, it's a contract
+	isContract := code != "" && code != "0x" && code != "0x0"
+
+	// If it's a contract, store it in our database
+	if isContract {
+		configs.Logger.Info("Detected existing contract",
+			zap.String("address", address))
+
+		// Get token information
+		name, symbol, decimals, isToken := rpc.GetTokenInfo(address)
+
+		// Get total supply if it's a token
+		var totalSupply string
+		if isToken {
+			totalSupply, err = rpc.GetTokenTotalSupply(address)
+			if err != nil {
+				configs.Logger.Error("Failed to get token total supply",
+					zap.String("address", address),
+					zap.Error(err))
+			}
+		}
+
+		// Store the contract
+		contract := models.ContractInfo{
+			Address:      address,
+			Status:       "0x1", // Assume successful
+			IsToken:      isToken,
+			Name:         name,
+			Symbol:       symbol,
+			Decimals:     decimals,
+			TotalSupply:  totalSupply,
+			ContractCode: code,
+			UpdatedAt:    time.Now().UTC().Format(time.RFC3339),
+		}
+
+		err = StoreContract(contract)
+		if err != nil {
+			configs.Logger.Error("Failed to store detected contract",
+				zap.String("address", address),
+				zap.Error(err))
+		}
+	}
+
+	return isContract
+}
+
+// getContractFromDB retrieves contract information from the contractCode collection
+// Local version to avoid naming conflicts
+func getContractFromDB(address string) *models.ContractInfo {
+	collection := configs.GetCollection(configs.DB, "contractCode")
+	var contract models.ContractInfo
+	err := collection.FindOne(context.Background(), bson.M{"address": address}).Decode(&contract)
+	if err != nil {
+		return nil
+	}
+	return &contract
 }
 
 // ReprocessIncompleteContracts finds and updates contracts with missing information

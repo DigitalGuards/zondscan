@@ -3,9 +3,7 @@ package db
 import (
 	"Zond2mongoDB/configs"
 	"Zond2mongoDB/models"
-	"Zond2mongoDB/utils"
 	"context"
-	"math/big"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -279,55 +277,48 @@ func Rollback(blockNumber string) error {
 	return nil
 }
 
-func updateAddressBalance(address string) {
+// GetLastKnownBlockNumberFromInitialSync retrieves the first block number that was processed
+// during the initial sync. Used for token transfer processing after initial sync.
+func GetLastKnownBlockNumberFromInitialSync() string {
+	// If we have a record of the first synced block, use that
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Get all transfers for this address
-	cursor, err := configs.TransferCollections.Find(ctx, bson.M{
-		"$or": []bson.M{
-			{"from": address},
-			{"to": address},
-		},
-	})
-	if err != nil {
-		configs.Logger.Warn("Failed to find transfers for address: ", zap.Error(err))
-		return
-	}
-	defer cursor.Close(ctx)
-
-	// Calculate new balance using big.Int for hex values
-	balance := new(big.Int)
-	for cursor.Next(ctx) {
-		var transfer models.Transfer
-		if err = cursor.Decode(&transfer); err != nil {
-			continue
-		}
-
-		value := utils.HexToInt(transfer.Value)
-		if transfer.From == address {
-			balance.Sub(balance, value)
-		}
-		if transfer.To == address {
-			balance.Add(balance, value)
-		}
+	var result struct {
+		BlockNumber string `bson:"block_number"`
 	}
 
-	// Convert balance to hex string
-	balanceHex := "0x" + balance.Text(16)
-	if balance.Sign() == 0 {
-		balanceHex = "0x0"
+	syncColl := configs.GetCollection(configs.DB, "sync_initial_state")
+	err := syncColl.FindOne(ctx, bson.M{
+		"_id": "initial_sync_start",
+	}).Decode(&result)
+
+	if err == nil && result.BlockNumber != "" {
+		configs.Logger.Info("Found initial sync start block",
+			zap.String("block", result.BlockNumber))
+		return result.BlockNumber
 	}
 
-	// Update address balance
-	opts := options.Update().SetUpsert(true)
-	_, err = configs.AddressesCollections.UpdateOne(
-		ctx,
-		bson.M{"id": address},
-		bson.M{"$set": bson.M{"balance": balanceHex}},
-		opts,
-	)
-	if err != nil {
-		configs.Logger.Warn("Failed to update address balance: ", zap.Error(err))
+	// If no record exists, find the oldest block in the DB
+	var block models.ZondDatabaseBlock
+	findOptions := options.FindOne().SetProjection(bson.M{"result.number": 1}).SetSort(bson.M{"result.number": 1})
+	err = configs.BlocksCollections.FindOne(ctx, bson.M{}, findOptions).Decode(&block)
+
+	if err == nil && block.Result.Number != "" {
+		// Store this for future reference
+		_, _ = syncColl.UpdateOne(
+			ctx,
+			bson.M{"_id": "initial_sync_start"},
+			bson.M{"$set": bson.M{"block_number": block.Result.Number}},
+			options.Update().SetUpsert(true),
+		)
+
+		configs.Logger.Info("Using oldest block in DB as initial sync start",
+			zap.String("block", block.Result.Number))
+		return block.Result.Number
 	}
+
+	// If all else fails, start from genesis
+	configs.Logger.Info("No initial sync start point found, starting from genesis")
+	return "0x0"
 }

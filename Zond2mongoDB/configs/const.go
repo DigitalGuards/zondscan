@@ -20,7 +20,6 @@ const (
 	ATTESTOR_COLLECTION                        = "attestor"
 	STAKE_COLLECTION                           = "stake"
 	VALIDATORS_COLLECTION                      = "validators"
-	BITFIELD_COLLECTION                        = "bitfield"
 	CONTRACT_CODE_COLLECTION                   = "contractCode"
 	AVERAGE_BLOCK_SIZE_COLLECTION              = "averageBlockSize"
 	TOTAL_CIRCULATING_QUANTA_COLLECTION        = "totalCirculatingQuanta"
@@ -46,7 +45,6 @@ var TransferCollections *mongo.Collection = GetCollection(DB, TRANSFER_COLLECTIO
 var AttestorCollections *mongo.Collection = GetCollection(DB, ATTESTOR_COLLECTION)
 var StakeCollections *mongo.Collection = GetCollection(DB, STAKE_COLLECTION)
 var ValidatorsCollections *mongo.Collection = GetCollection(DB, VALIDATORS_COLLECTION)
-var BitfieldCollections *mongo.Collection = GetCollection(DB, BITFIELD_COLLECTION)
 var ContractCodeCollection *mongo.Collection = GetCollection(DB, CONTRACT_CODE_COLLECTION)
 var AverageBlockSizeCollections *mongo.Collection = GetCollection(DB, AVERAGE_BLOCK_SIZE_COLLECTION)
 var TotalCirculatingQuantaCollections *mongo.Collection = GetCollection(DB, TOTAL_CIRCULATING_QUANTA_COLLECTION)

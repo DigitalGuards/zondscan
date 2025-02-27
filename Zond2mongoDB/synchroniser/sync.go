@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
 )
 
@@ -22,11 +23,6 @@ type Data struct {
 	blockData    []interface{}
 	blockNumbers []int
 }
-
-// Constants for retries and error handling
-const (
-// These are used in retry loops throughout the code
-)
 
 // batchSync handles syncing multiple blocks in parallel
 func batchSync(fromBlock string, toBlock string) string {
@@ -62,6 +58,8 @@ func batchSync(fromBlock string, toBlock string) string {
 
 	// Start producers in batches with retry logic
 	currentBlock := fromBlock
+	lastSuccessfulBatch := fromBlock
+
 	for utils.CompareHexNumbers(currentBlock, toBlock) < 0 {
 		endBlock := utils.AddHexNumbers(currentBlock, utils.IntToHex(batchSize))
 		if utils.CompareHexNumbers(endBlock, toBlock) > 0 {
@@ -87,6 +85,7 @@ func batchSync(fromBlock string, toBlock string) string {
 			configs.Logger.Info("Processing block range",
 				zap.String("from", currentBlock),
 				zap.String("to", endBlock))
+			lastSuccessfulBatch = endBlock
 			currentBlock = endBlock
 		} else {
 			configs.Logger.Error("Failed to process block range after retries",
@@ -101,30 +100,29 @@ func batchSync(fromBlock string, toBlock string) string {
 	close(producers)
 	wg.Wait()
 
-	// Now process token transfers for the entire range
-	configs.Logger.Info("Processing token transfers after batch sync",
-		zap.String("from_block", fromBlock),
-		zap.String("to_block", toBlock))
+	// After batch sync completes, verify what the actual last synced block is
+	lastKnownBlock := db.GetLastKnownBlockNumber()
+	configs.Logger.Info("batchSync completed",
+		zap.String("requested_to_block", toBlock),
+		zap.String("last_successful_batch", lastSuccessfulBatch),
+		zap.String("db_last_known_block", lastKnownBlock))
 
-	// Process a sample of blocks for token transfers
-	// Processing every block could be too intensive - so we'll do every 10th block
-	currentBlockForTokens := fromBlock
-	for utils.CompareHexNumbers(currentBlockForTokens, toBlock) < 0 {
-		processTokenTransfersForBlock(currentBlockForTokens)
+	// Token transfers will be processed after the initial sync completes
+	// to improve initial sync performance
 
-		// Skip ahead 10 blocks
-		for i := 0; i < 10 && utils.CompareHexNumbers(currentBlockForTokens, toBlock) < 0; i++ {
-			currentBlockForTokens = utils.AddHexNumbers(currentBlockForTokens, "0x1")
-		}
+	// Return the appropriate block number
+	if utils.CompareHexNumbers(lastKnownBlock, "0x0") > 0 {
+		// Return what's actually in the database if available
+		return lastKnownBlock
 	}
-
-	return toBlock
+	return lastSuccessfulBatch
 }
 
+// Sync starts the synchronization process
 func Sync() {
+	var err error
 	var nextBlock string
 	var maxHex string
-	var err error
 
 	// Retry getting initial sync points with exponential backoff
 	for retries := 0; retries < 5; retries++ {
@@ -145,6 +143,15 @@ func Sync() {
 			configs.Logger.Info("Continuing from last known block",
 				zap.String("block", nextBlock))
 		}
+
+		// Store the initial sync starting point for later token processing
+		if nextBlock == "0x0" {
+			// If starting from genesis, record block 1 as the start
+			storeInitialSyncStartBlock("0x1")
+		} else {
+			storeInitialSyncStartBlock(nextBlock)
+		}
+
 		nextBlock = utils.AddHexNumbers(nextBlock, "0x1")
 
 		// Get latest block from network
@@ -206,8 +213,98 @@ func Sync() {
 	configs.Logger.Info("Calculating daily transaction volume...")
 	db.GetDailyTransactionVolume()
 
+	// Check the actual last known block after sync to ensure we have the right value
+	lastSyncedBlock := db.GetLastKnownBlockNumber()
+	configs.Logger.Info("Last synced block according to database",
+		zap.String("block", lastSyncedBlock))
+
+	// Get the latest block again to ensure we're using the most current value
+	maxHex, err = rpc.GetLatestBlock()
+	if err != nil {
+		configs.Logger.Error("Failed to get latest block for token processing", zap.Error(err))
+		// Continue with the old value if we can't get a new one
+	} else {
+		configs.Logger.Info("Updated latest block from network for token processing",
+			zap.String("block", maxHex))
+	}
+
+	// Process token transfers for the entire range after the initial sync
+	// Use the initialSyncStart from when we began, but verify against the actual
+	// lastSyncedBlock to make sure we don't process more than what's synced
+	initialSyncStart := db.GetLastKnownBlockNumberFromInitialSync()
+	if initialSyncStart == "0x0" {
+		initialSyncStart = "0x1" // Start from block 1 if no initial sync start block is available
+	}
+
+	// Verify we aren't trying to process tokens beyond what's actually synced
+	if utils.CompareHexNumbers(lastSyncedBlock, "0x0") > 0 &&
+		utils.CompareHexNumbers(maxHex, lastSyncedBlock) > 0 {
+		maxHex = lastSyncedBlock
+		configs.Logger.Info("Limiting token processing to last synced block",
+			zap.String("lastSyncedBlock", lastSyncedBlock))
+	}
+
+	configs.Logger.Info("Processing token transfers for all synced blocks...",
+		zap.String("from_block", initialSyncStart),
+		zap.String("to_block", maxHex))
+
+	// Create a dedicated function to process tokens and call it directly
+	processTokensAfterInitialSync(initialSyncStart, maxHex)
+
+	// Start auxiliary services after initial sync
+	go func() {
+		// Start wallet count sync
+		configs.Logger.Info("Starting wallet count sync service...")
+		db.StartWalletCountSync()
+
+		// Start contract reprocessing job
+		configs.Logger.Info("Starting contract reprocessing service...")
+		db.StartContractReprocessingJob()
+	}()
+
 	configs.Logger.Info("Starting continuous block monitoring...")
 	singleBlockInsertion()
+}
+
+// processTokensAfterInitialSync handles token transfer processing after the initial block sync is complete
+func processTokensAfterInitialSync(initialSyncStart string, maxHex string) {
+	configs.Logger.Info("Beginning post-sync token transfer processing",
+		zap.String("from_block", initialSyncStart),
+		zap.String("to_block", maxHex))
+
+	// Process token transfers in larger batches for efficiency
+	tokenBatchSize := 100
+	currentBlockForTokens := initialSyncStart
+	totalProcessed := 0
+
+	for utils.CompareHexNumbers(currentBlockForTokens, maxHex) < 0 {
+		endBlockForTokens := utils.AddHexNumbers(currentBlockForTokens, utils.IntToHex(tokenBatchSize))
+		if utils.CompareHexNumbers(endBlockForTokens, maxHex) > 0 {
+			endBlockForTokens = maxHex
+		}
+
+		configs.Logger.Info("Processing token transfers batch",
+			zap.String("from", currentBlockForTokens),
+			zap.String("to", endBlockForTokens))
+
+		batchProcessed := 0
+		tempBlock := currentBlockForTokens
+		for utils.CompareHexNumbers(tempBlock, endBlockForTokens) < 0 {
+			processTokenTransfersForBlock(tempBlock)
+			tempBlock = utils.AddHexNumbers(tempBlock, "0x1")
+			batchProcessed++
+		}
+
+		currentBlockForTokens = endBlockForTokens
+		totalProcessed += batchProcessed
+
+		configs.Logger.Info("Completed token transfer batch",
+			zap.Int("blocks_processed", batchProcessed),
+			zap.Int("total_processed", totalProcessed))
+	}
+
+	configs.Logger.Info("Completed token transfer processing for all synced blocks",
+		zap.Int("total_blocks_processed", totalProcessed))
 }
 
 func consumer(ch <-chan (<-chan Data)) {
@@ -227,6 +324,11 @@ func consumer(ch <-chan (<-chan Data)) {
 						db.ProcessTransactions(data.blockData[x])
 					}
 					configs.Logger.Info("Processed transactions for blocks",
+						zap.Ints("block_numbers", data.blockNumbers))
+
+					// Process token transfers after transaction processing is complete
+					db.ProcessTokenTransfersFromTransactions()
+					configs.Logger.Info("Processed token transfers for blocks",
 						zap.Ints("block_numbers", data.blockNumbers))
 
 					// Store the last block number from this batch
@@ -281,27 +383,68 @@ func producer(start string, end string) <-chan Data {
 }
 
 func processInitialBlock() {
-	configs.Logger.Info("Processing initial block")
+	configs.Logger.Info("Processing genesis block")
 
-	// Initialize validators first
+	// Initialize collections that need special handling
+	configs.Logger.Info("Initializing token collections")
+
+	// Initialize token transfers collection
+	err := db.InitializeTokenTransfersCollection()
+	if err != nil {
+		configs.Logger.Error("Failed to initialize token transfers collection", zap.Error(err))
+		// Continue anyway - we'll log the error but try to proceed
+	} else {
+		configs.Logger.Info("Successfully initialized token transfers collection")
+	}
+
+	// Initialize token balances collection
+	err = db.InitializeTokenBalancesCollection()
+	if err != nil {
+		configs.Logger.Error("Failed to initialize token balances collection", zap.Error(err))
+		// Continue anyway - we'll log the error but try to proceed
+	} else {
+		configs.Logger.Info("Successfully initialized token balances collection")
+	}
+
+	// Initialize validators
 	configs.Logger.Info("Initializing validators")
-	err := syncValidators()
+	err = syncValidators()
 	if err != nil {
 		configs.Logger.Error("Failed to initialize validators", zap.Error(err))
 	} else {
 		configs.Logger.Info("Successfully initialized validators")
 	}
 
-	// Process genesis block
-	block, err := rpc.GetBlockByNumberMainnet("0x0")
+	// Get block 0
+	genesisBlock, err := rpc.GetBlockByNumberMainnet("0x0")
 	if err != nil {
-		configs.Logger.Error("Failed to get genesis block", zap.Error(err))
+		configs.Logger.Error("Failed to get genesis block",
+			zap.Error(err))
 		return
 	}
 
-	db.UpdateTransactionStatuses(block)
-	db.InsertBlockDocument(*block)
-	db.ProcessTransactions(*block)
+	// Update tx status in block 0
+	db.UpdateTransactionStatuses(genesisBlock)
+
+	// Insert block document
+	blocksCollection := configs.GetCollection(configs.DB, "blocks")
+	ctx := context.Background()
+	_, err = blocksCollection.InsertOne(ctx, genesisBlock)
+	if err != nil {
+		configs.Logger.Error("Failed to insert genesis block",
+			zap.Error(err))
+		return
+	}
+
+	// Process transactions
+	db.ProcessTransactions(*genesisBlock)
+
+	// Process token transfers for genesis block
+	db.ProcessTokenTransfersFromTransactions()
+
+	// Store last known block
+	db.StoreLastKnownBlockNumber("0x0")
+	configs.Logger.Info("Genesis block processed successfully")
 }
 
 func processSubsequentBlocks(currentBlock string) string {
@@ -390,6 +533,9 @@ func processBlock(block *models.ZondDatabaseBlock) error {
 	// Process the block
 	db.InsertBlockDocument(*block)
 	db.ProcessTransactions(*block)
+
+	// Process token transfers for the block
+	db.ProcessTokenTransfersFromTransactions()
 
 	return nil
 }
@@ -483,6 +629,11 @@ func processBlockPeriodically() {
 		return
 	}
 
+	// Log both states to help diagnose issues
+	configs.Logger.Info("Block sync status",
+		zap.String("lastProcessedBlock", lastProcessedBlock),
+		zap.String("latestNetworkBlock", latestBlock))
+
 	// Check if we're more than 50 blocks behind
 	lastProcessedBlockNum := utils.HexToInt(lastProcessedBlock).Int64()
 	latestBlockNum := utils.HexToInt(latestBlock).Int64()
@@ -495,6 +646,12 @@ func processBlockPeriodically() {
 		// Use batch sync for faster processing
 		nextBlock := utils.AddHexNumbers(lastProcessedBlock, "0x1")
 		batchSync(nextBlock, latestBlock)
+
+		// Update lastProcessedBlock to reflect what's actually been synced
+		// This is important for consistent state tracking
+		lastProcessedBlock = db.GetLastKnownBlockNumber()
+		configs.Logger.Info("After batch sync, last synced block is now",
+			zap.String("lastProcessedBlock", lastProcessedBlock))
 	} else if utils.CompareHexNumbers(latestBlock, lastProcessedBlock) > 0 {
 		// Process blocks one by one when fewer than 50 blocks behind
 		nextBlock := utils.AddHexNumbers(lastProcessedBlock, "0x1")
@@ -516,6 +673,11 @@ func processBlockPeriodically() {
 			// Move to next block
 			currentBlock = utils.AddHexNumbers(currentBlock, "0x1")
 		}
+
+		// Update lastProcessedBlock after individual processing
+		lastProcessedBlock = db.GetLastKnownBlockNumber()
+		configs.Logger.Info("After individual block processing, last synced block is now",
+			zap.String("lastProcessedBlock", lastProcessedBlock))
 	} else {
 		configs.Logger.Info("No new blocks to process",
 			zap.String("latest_db", lastProcessedBlock),
@@ -650,6 +812,9 @@ func processTokenTransfersForBlock(blockNumber string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	configs.Logger.Info("Starting token transfer processing for block",
+		zap.String("blockNumber", blockNumber))
+
 	filter := bson.M{"result.number": blockNumber}
 	var block models.ZondDatabaseBlock
 	err := configs.BlocksCollections.FindOne(ctx, filter).Decode(&block)
@@ -660,7 +825,15 @@ func processTokenTransfersForBlock(blockNumber string) {
 		return
 	}
 
+	configs.Logger.Info("Retrieved block for token transfer processing",
+		zap.String("blockNumber", blockNumber),
+		zap.String("blockHash", block.Result.Hash),
+		zap.String("timestamp", block.Result.Timestamp))
+
 	// Process token transfers
+	configs.Logger.Info("Calling ProcessBlockTokenTransfers",
+		zap.String("blockNumber", blockNumber))
+
 	err = db.ProcessBlockTokenTransfers(blockNumber, block.Result.Timestamp)
 	if err != nil {
 		configs.Logger.Error("Failed to process token transfers for block",
@@ -669,5 +842,29 @@ func processTokenTransfersForBlock(blockNumber string) {
 	} else {
 		configs.Logger.Info("Processed token transfers for block",
 			zap.String("blockNumber", blockNumber))
+	}
+}
+
+// storeInitialSyncStartBlock stores the block number where the initial sync started
+// This is used later for token transfer processing
+func storeInitialSyncStartBlock(blockNumber string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	syncColl := configs.GetCollection(configs.DB, "sync_initial_state")
+	_, err := syncColl.UpdateOne(
+		ctx,
+		bson.M{"_id": "initial_sync_start"},
+		bson.M{"$set": bson.M{"block_number": blockNumber}},
+		options.Update().SetUpsert(true),
+	)
+
+	if err != nil {
+		configs.Logger.Warn("Failed to store initial sync start block",
+			zap.String("block", blockNumber),
+			zap.Error(err))
+	} else {
+		configs.Logger.Info("Stored initial sync start block",
+			zap.String("block", blockNumber))
 	}
 }

@@ -15,50 +15,45 @@ import (
 
 // StoreTokenTransfer stores a token transfer event in the database
 func StoreTokenTransfer(transfer models.TokenTransfer) error {
-	collection := configs.GetCollection(configs.DB, "tokenTransfers")
+	// Get explicit reference to the tokenTransfers collection
+	collection := configs.GetTokenTransfersCollection()
 	ctx := context.Background()
 
-	// Create indexes if they don't exist
-	indexes := []mongo.IndexModel{
-		{
-			Keys: bson.D{
-				{Key: "contractAddress", Value: 1},
-				{Key: "blockNumber", Value: 1},
-			},
-		},
-		{
-			Keys: bson.D{
-				{Key: "from", Value: 1},
-				{Key: "blockNumber", Value: 1},
-			},
-		},
-		{
-			Keys: bson.D{
-				{Key: "to", Value: 1},
-				{Key: "blockNumber", Value: 1},
-			},
-		},
-		{
-			Keys:    bson.D{{Key: "txHash", Value: 1}},
-			Options: options.Index().SetUnique(true),
-		},
-	}
+	// Log the collection name
+	configs.Logger.Info("Using collection for token transfers",
+		zap.String("collection", "tokenTransfers"))
 
-	_, err := collection.Indexes().CreateMany(ctx, indexes)
-	if err != nil {
-		configs.Logger.Error("Failed to create indexes for token transfers",
-			zap.Error(err))
-	}
+	// Note: indexes are created once during initialization in InitializeTokenTransfersCollection()
+	// We don't create indexes here to avoid "IndexKeySpecsConflict" errors on high-frequency calls
 
 	// Store the transfer
-	_, err = collection.InsertOne(ctx, transfer)
+	configs.Logger.Info("Inserting token transfer document",
+		zap.String("token", transfer.TokenSymbol),
+		zap.String("from", transfer.From),
+		zap.String("to", transfer.To),
+		zap.String("txHash", transfer.TxHash))
+
+	// Additional validation and normalization before inserting
+	if transfer.From == "" {
+		transfer.From = "0x0" // Normalize empty from address to zero address
+	}
+
+	if transfer.To == "" {
+		transfer.To = "0x0" // Normalize empty to address to zero address
+	}
+
+	_, err := collection.InsertOne(ctx, transfer)
 	if err != nil {
 		configs.Logger.Error("Failed to store token transfer",
 			zap.String("txHash", transfer.TxHash),
+			zap.String("token", transfer.TokenSymbol),
 			zap.Error(err))
 		return err
 	}
 
+	configs.Logger.Info("Successfully stored token transfer in database",
+		zap.String("token", transfer.TokenSymbol),
+		zap.String("txHash", transfer.TxHash))
 	return nil
 }
 
@@ -149,6 +144,10 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 	// Get logs for the Transfer event signature
 	transferEventSignature := "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
+	configs.Logger.Info("Searching for token transfers",
+		zap.String("blockNumber", blockNumber),
+		zap.String("eventSignature", transferEventSignature))
+
 	response, err := rpc.ZondGetBlockLogs(blockNumber, []string{transferEventSignature})
 	if err != nil {
 		configs.Logger.Error("Failed to get logs for block",
@@ -158,25 +157,47 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 	}
 
 	if response == nil || len(response.Result) == 0 {
+		configs.Logger.Debug("No token transfer logs found in block",
+			zap.String("blockNumber", blockNumber))
 		return nil // No logs found
 	}
 
+	configs.Logger.Info("Found potential token transfer logs",
+		zap.String("blockNumber", blockNumber),
+		zap.Int("logCount", len(response.Result)))
+
 	// Process each log
+	tokenTransfersFound := 0
 	for _, log := range response.Result {
 		// Skip logs with insufficient topics
 		if len(log.Topics) < 3 {
+			configs.Logger.Debug("Skipping log with insufficient topics",
+				zap.String("txHash", log.TransactionHash),
+				zap.Int("topicCount", len(log.Topics)))
 			continue
 		}
 
 		// Extract contract address
 		contractAddress := log.Address
+		configs.Logger.Debug("Processing potential token transfer",
+			zap.String("contractAddress", contractAddress),
+			zap.String("txHash", log.TransactionHash))
 
 		// Check if this contract is already known to be a token
 		contract, err := GetContract(contractAddress)
 		if err != nil {
 			// Contract not found, check if it's a token
+			configs.Logger.Debug("Contract not in database, checking if it's a token",
+				zap.String("address", contractAddress))
 			name, symbol, decimals, isToken := rpc.GetTokenInfo(contractAddress)
+
 			if isToken {
+				configs.Logger.Info("Discovered new token contract",
+					zap.String("address", contractAddress),
+					zap.String("name", name),
+					zap.String("symbol", symbol),
+					zap.Uint8("decimals", decimals))
+
 				// Store new token contract
 				newContract := models.ContractInfo{
 					Address:   contractAddress,
@@ -198,16 +219,25 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 				contract = &newContract
 			} else {
 				// Not a token, skip
+				configs.Logger.Debug("Contract is not a token, skipping",
+					zap.String("address", contractAddress))
 				continue
 			}
 		} else if !contract.IsToken {
 			// Known contract but not a token, skip
+			configs.Logger.Debug("Known contract but not a token, skipping",
+				zap.String("address", contractAddress))
 			continue
 		}
 
 		// Extract from and to addresses
 		from := "0x" + rpc.TrimLeftZeros(log.Topics[1][26:])
 		to := "0x" + rpc.TrimLeftZeros(log.Topics[2][26:])
+
+		configs.Logger.Debug("Token transfer details",
+			zap.String("from", from),
+			zap.String("to", to),
+			zap.String("token", contract.Symbol))
 
 		// Extract amount
 		amount := log.Data
@@ -223,8 +253,27 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 
 		if exists {
 			// Skip duplicate transfers
+			configs.Logger.Debug("Skipping duplicate token transfer",
+				zap.String("txHash", log.TransactionHash))
 			continue
 		}
+
+		// Normalize addresses to ensure consistency
+		if from == "" {
+			from = "0x0"
+		}
+
+		if to == "" {
+			to = "0x0"
+		}
+
+		// Log token transfer identified
+		configs.Logger.Info("Identified token transfer",
+			zap.String("token", contract.Symbol),
+			zap.String("from", from),
+			zap.String("to", to),
+			zap.String("amount", amount),
+			zap.String("blockNumber", blockNumber))
 
 		// Create token transfer record
 		transfer := models.TokenTransfer{
@@ -248,23 +297,155 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 				zap.String("txHash", log.TransactionHash),
 				zap.Error(err))
 			continue
+		} else {
+			tokenTransfersFound++
+			configs.Logger.Info("Successfully stored token transfer",
+				zap.String("txHash", log.TransactionHash),
+				zap.String("token", contract.Symbol),
+				zap.String("from", from),
+				zap.String("to", to))
 		}
 
 		// Update token balances
+		configs.Logger.Info("Attempting to update token balances for transfer",
+			zap.String("txHash", log.TransactionHash),
+			zap.String("contractAddress", contractAddress),
+			zap.String("from", from),
+			zap.String("to", to),
+			zap.String("amount", amount))
+
 		err = StoreTokenBalance(contractAddress, from, amount, blockNumber)
 		if err != nil {
 			configs.Logger.Error("Failed to update sender token balance",
 				zap.String("address", from),
+				zap.String("contractAddress", contractAddress),
 				zap.Error(err))
+		} else {
+			configs.Logger.Info("Successfully updated sender token balance",
+				zap.String("address", from),
+				zap.String("contractAddress", contractAddress))
 		}
 
 		err = StoreTokenBalance(contractAddress, to, amount, blockNumber)
 		if err != nil {
 			configs.Logger.Error("Failed to update recipient token balance",
 				zap.String("address", to),
+				zap.String("contractAddress", contractAddress),
 				zap.Error(err))
+		} else {
+			configs.Logger.Info("Successfully updated recipient token balance",
+				zap.String("address", to),
+				zap.String("contractAddress", contractAddress))
 		}
 	}
 
+	configs.Logger.Info("Finished processing token transfers",
+		zap.String("blockNumber", blockNumber),
+		zap.Int("transfersProcessed", tokenTransfersFound))
+
+	return nil
+}
+
+// InitializeTokenTransfersCollection ensures the token transfers collection is set up with proper indexes
+func InitializeTokenTransfersCollection() error {
+	collection := configs.GetTokenTransfersCollection()
+	ctx := context.Background()
+
+	configs.Logger.Info("Initializing tokenTransfers collection and indexes")
+
+	// Create indexes for token transfers collection
+	indexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				{Key: "contractAddress", Value: 1},
+				{Key: "blockNumber", Value: 1},
+			},
+			Options: options.Index().SetName("contract_block_idx"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "from", Value: 1},
+				{Key: "blockNumber", Value: 1},
+			},
+			Options: options.Index().SetName("from_block_idx"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "to", Value: 1},
+				{Key: "blockNumber", Value: 1},
+			},
+			Options: options.Index().SetName("to_block_idx"),
+		},
+		{
+			Keys:    bson.D{{Key: "txHash", Value: 1}},
+			Options: options.Index().SetName("txHash_idx").SetUnique(true),
+		},
+	}
+
+	// First drop any existing indexes to avoid conflicts
+	_, err := collection.Indexes().DropAll(ctx)
+	if err != nil {
+		configs.Logger.Warn("Failed to drop existing indexes, attempting to continue",
+			zap.Error(err))
+	}
+
+	// Create the new indexes
+	_, err = collection.Indexes().CreateMany(ctx, indexes)
+	if err != nil {
+		configs.Logger.Error("Failed to create indexes for token transfers",
+			zap.Error(err))
+		return err
+	}
+
+	configs.Logger.Info("Successfully initialized tokenTransfers collection and indexes")
+	return nil
+}
+
+// InitializeTokenBalancesCollection ensures the token balances collection is set up with proper indexes
+func InitializeTokenBalancesCollection() error {
+	collection := configs.GetTokenBalancesCollection()
+	ctx := context.Background()
+
+	configs.Logger.Info("Initializing tokenBalances collection and indexes")
+
+	// Create indexes for token balances collection
+	indexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				{Key: "contractAddress", Value: 1},
+				{Key: "address", Value: 1},
+			},
+			Options: options.Index().SetName("contract_address_idx").SetUnique(true),
+		},
+		{
+			Keys: bson.D{
+				{Key: "address", Value: 1},
+			},
+			Options: options.Index().SetName("address_idx"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "contractAddress", Value: 1},
+			},
+			Options: options.Index().SetName("contract_idx"),
+		},
+	}
+
+	// First drop any existing indexes to avoid conflicts
+	_, err := collection.Indexes().DropAll(ctx)
+	if err != nil {
+		configs.Logger.Warn("Failed to drop existing indexes for token balances, attempting to continue",
+			zap.Error(err))
+	}
+
+	// Create the new indexes
+	_, err = collection.Indexes().CreateMany(ctx, indexes)
+	if err != nil {
+		configs.Logger.Error("Failed to create indexes for token balances",
+			zap.Error(err))
+		return err
+	}
+
+	configs.Logger.Info("Successfully initialized tokenBalances collection and indexes")
 	return nil
 }

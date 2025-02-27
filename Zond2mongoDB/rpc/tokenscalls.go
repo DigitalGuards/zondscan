@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"Zond2mongoDB/validation"
 
@@ -32,6 +33,18 @@ const TransferEventSignature = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a1
 
 // CallContractMethod makes a zond_call to a contract method and returns the result
 func CallContractMethod(contractAddress string, methodSig string) (string, error) {
+	zap.L().Debug("Calling contract method",
+		zap.String("contractAddress", contractAddress),
+		zap.String("methodSig", methodSig[:10]+"...")) // Log just the beginning of the signature for brevity
+
+	// Ensure contract address has correct format for Zond blockchain
+	// For Zond RPC calls, we need the correct prefix
+	if !strings.HasPrefix(contractAddress, "Z") && strings.HasPrefix(contractAddress, "0x") {
+		contractAddress = "Z" + strings.TrimPrefix(contractAddress, "0x")
+	} else if !strings.HasPrefix(contractAddress, "Z") && !strings.HasPrefix(contractAddress, "0x") {
+		contractAddress = "Z" + contractAddress
+	}
+
 	group := models.JsonRPC{
 		Jsonrpc: "2.0",
 		Method:  "zond_call",
@@ -47,25 +60,48 @@ func CallContractMethod(contractAddress string, methodSig string) (string, error
 
 	b, err := json.Marshal(group)
 	if err != nil {
+		zap.L().Error("Failed to marshal JSON for contract call",
+			zap.String("contractAddress", contractAddress),
+			zap.Error(err))
 		return "", fmt.Errorf("failed to marshal JSON: %v", err)
 	}
 
-	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer(b))
+	// Log the RPC endpoint
+	nodeUrl := os.Getenv("NODE_URL")
+	zap.L().Debug("Sending RPC request",
+		zap.String("url", nodeUrl),
+		zap.String("method", "zond_call"))
+
+	req, err := http.NewRequest("POST", nodeUrl, bytes.NewBuffer(b))
 	if err != nil {
+		zap.L().Error("Failed to create HTTP request for contract call",
+			zap.String("contractAddress", contractAddress),
+			zap.Error(err))
 		return "", fmt.Errorf("failed to create request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := GetHTTPClient().Do(req)
 	if err != nil {
+		zap.L().Error("Failed to execute HTTP request for contract call",
+			zap.String("contractAddress", contractAddress),
+			zap.Error(err))
 		return "", fmt.Errorf("failed to execute request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		zap.L().Error("Failed to read response body from contract call",
+			zap.String("contractAddress", contractAddress),
+			zap.Error(err))
 		return "", fmt.Errorf("failed to read response body: %v", err)
 	}
+
+	// Log full response for debugging
+	zap.L().Debug("Received contract call response",
+		zap.String("contractAddress", contractAddress),
+		zap.String("response", string(body)))
 
 	var result struct {
 		Jsonrpc string
@@ -77,38 +113,79 @@ func CallContractMethod(contractAddress string, methodSig string) (string, error
 		}
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
+		zap.L().Error("Failed to unmarshal response from contract call",
+			zap.String("contractAddress", contractAddress),
+			zap.Error(err))
 		return "", fmt.Errorf("failed to unmarshal response: %v", err)
 	}
 
 	if result.Error != nil {
+		zap.L().Error("RPC error in contract call",
+			zap.String("contractAddress", contractAddress),
+			zap.Int("errorCode", result.Error.Code),
+			zap.String("errorMessage", result.Error.Message))
 		return "", fmt.Errorf("RPC error: %v", result.Error.Message)
 	}
+
+	// Truncate the result for logging if it's too long
+	resultForLog := result.Result
+	if len(resultForLog) > 100 {
+		resultForLog = resultForLog[:100] + "..."
+	}
+	zap.L().Debug("Contract call successful",
+		zap.String("contractAddress", contractAddress),
+		zap.String("result", resultForLog))
 
 	return result.Result, nil
 }
 
-// GetTokenInfo attempts to get ERC20 token information for a contract
-func GetTokenInfo(contractAddress string) (name string, symbol string, decimals uint8, isToken bool) {
-	var err error
-	name, err = GetTokenName(contractAddress)
-	if err != nil {
-		zap.L().Debug("Failed to get token name", zap.Error(err))
-		return "", "", 0, false
-	}
+// GetTokenInfo attempts to determine if a contract is an ERC20 token and returns its details
+func GetTokenInfo(contractAddress string) (string, string, uint8, bool) {
+	zap.L().Info("Checking if contract is a token", zap.String("address", contractAddress))
 
-	symbol, err = GetTokenSymbol(contractAddress)
+	// First check if the contract has a valid 'name' method
+	name, err := GetTokenName(contractAddress)
 	if err != nil {
-		zap.L().Debug("Failed to get token symbol", zap.Error(err))
+		zap.L().Debug("Contract does not have a valid name method",
+			zap.String("address", contractAddress),
+			zap.Error(err))
 		return "", "", 0, false
 	}
+	zap.L().Info("Contract has a valid name",
+		zap.String("address", contractAddress),
+		zap.String("name", name))
 
-	decimals, err = GetTokenDecimals(contractAddress)
+	// Now check for symbol
+	symbol, err := GetTokenSymbol(contractAddress)
 	if err != nil {
-		zap.L().Debug("Failed to get token decimals", zap.Error(err))
+		zap.L().Debug("Contract does not have a valid symbol method",
+			zap.String("address", contractAddress),
+			zap.Error(err))
 		return "", "", 0, false
 	}
+	zap.L().Info("Contract has a valid symbol",
+		zap.String("address", contractAddress),
+		zap.String("symbol", symbol))
+
+	// Finally check for decimals
+	decimals, err := GetTokenDecimals(contractAddress)
+	if err != nil {
+		zap.L().Debug("Contract does not have a valid decimals method",
+			zap.String("address", contractAddress),
+			zap.Error(err))
+		return "", "", 0, false
+	}
+	zap.L().Info("Contract has valid decimals",
+		zap.String("address", contractAddress),
+		zap.Uint8("decimals", decimals))
 
 	// If we got here, this is likely a valid token
+	zap.L().Info("Detected valid ERC20 token",
+		zap.String("address", contractAddress),
+		zap.String("name", name),
+		zap.String("symbol", symbol),
+		zap.Uint8("decimals", decimals))
+
 	return name, symbol, decimals, true
 }
 
@@ -236,23 +313,109 @@ func GetTokenBalance(contractAddress string, holderAddress string) (string, erro
 	// balanceOf(address) function signature
 	methodID := "0x70a08231"
 
-	// Remove Z prefix and pad address to 32 bytes
-	address := strings.TrimPrefix(holderAddress, "Z")
-	for len(address) < 64 {
-		address = "0" + address
+	// Enhanced logging with full input addresses
+	zap.L().Debug("Getting token balance - raw input",
+		zap.String("contractAddress", contractAddress),
+		zap.String("holderAddress", holderAddress))
+
+	// Special handling for zero address (common in mint events)
+	// Handle multiple formats of zero address
+	if holderAddress == "0x0" ||
+		holderAddress == "0x0000000000000000000000000000000000000000" ||
+		holderAddress == "Z0" ||
+		holderAddress == "Z0000000000000000000000000000000000000000" ||
+		strings.ToLower(holderAddress) == "0x0000000000000000000000000000000000000000" {
+		zap.L().Info("Zero address detected, returning zero balance",
+			zap.String("contractAddress", contractAddress),
+			zap.String("holderAddress", holderAddress))
+		return "0", nil
+	}
+
+	// For Zond blockchain, ensure contract address uses Z prefix, not 0x
+	if strings.HasPrefix(contractAddress, "0x") {
+		contractAddress = "Z" + strings.TrimPrefix(contractAddress, "0x")
+	} else if !strings.HasPrefix(contractAddress, "Z") {
+		// Add Z prefix if missing
+		contractAddress = "Z" + contractAddress
+	}
+
+	// Ensure holder address uses Z prefix for Zond blockchain compatibility
+	originalHolderAddress := holderAddress // Keep original for logging
+
+	// 1. Extract the address without any prefix
+	var rawAddress string
+	if strings.HasPrefix(holderAddress, "0x") {
+		rawAddress = strings.TrimPrefix(holderAddress, "0x")
+	} else if strings.HasPrefix(holderAddress, "Z") {
+		rawAddress = strings.TrimPrefix(holderAddress, "Z")
+	} else {
+		rawAddress = holderAddress
+	}
+
+	// 2. Ensure the raw address is the correct length
+	if len(rawAddress) > 40 {
+		rawAddress = rawAddress[:40]
+	} else if len(rawAddress) < 40 {
+		// Pad with leading zeros to reach 40 characters
+		for len(rawAddress) < 40 {
+			rawAddress = "0" + rawAddress
+		}
+	}
+
+	// 3. Format for RPC call - for Zond, ensure it has Z prefix
+	holderAddress = "Z" + rawAddress
+
+	// Pad address to 32 bytes (64 hex chars) for ABI encoding
+	// First remove any prefix
+	paddedAddress := rawAddress
+	// Then pad to 64 chars total
+	for len(paddedAddress) < 64 {
+		paddedAddress = "0" + paddedAddress
 	}
 
 	// Combine method ID and padded address
-	data := methodID + address
+	data := methodID + paddedAddress
+	zap.L().Debug("Prepared contract call data",
+		zap.String("contractAddress", contractAddress),
+		zap.String("formattedAddress", holderAddress),
+		zap.String("data", data))
 
 	// Make the call
 	result, err := CallContractMethod(contractAddress, data)
 	if err != nil {
-		return "", fmt.Errorf("contract call failed: %v", err)
+		// Try up to 3 times with exponential backoff on failure
+		maxRetries := 2
+		for retry := 0; retry < maxRetries && err != nil; retry++ {
+			retryDelay := time.Duration(500*(retry+1)) * time.Millisecond
+
+			zap.L().Warn("Retrying token balance call after failure",
+				zap.String("contractAddress", contractAddress),
+				zap.String("holderAddress", holderAddress),
+				zap.Int("retry", retry+1),
+				zap.Duration("delay", retryDelay),
+				zap.Error(err))
+
+			time.Sleep(retryDelay)
+			result, err = CallContractMethod(contractAddress, data)
+		}
+
+		// If all retries failed
+		if err != nil {
+			zap.L().Error("Contract call for token balance failed after retries",
+				zap.String("contractAddress", contractAddress),
+				zap.String("holderAddress", originalHolderAddress),
+				zap.String("formattedAddress", holderAddress),
+				zap.String("paddedAddress", paddedAddress),
+				zap.Error(err))
+			return "", fmt.Errorf("contract call failed: %v", err)
+		}
 	}
 
 	// Parse result
 	if len(result) < 2 {
+		zap.L().Warn("Empty result from token balance call",
+			zap.String("contractAddress", contractAddress),
+			zap.String("holderAddress", originalHolderAddress))
 		return "0", nil
 	}
 
@@ -260,7 +423,13 @@ func GetTokenBalance(contractAddress string, holderAddress string) (string, erro
 	bigInt := new(big.Int)
 	bigInt.SetString(strings.TrimPrefix(result, "0x"), 16)
 
-	return bigInt.String(), nil
+	balance := bigInt.String()
+	zap.L().Info("Retrieved token balance",
+		zap.String("contractAddress", contractAddress),
+		zap.String("holderAddress", originalHolderAddress),
+		zap.String("balance", balance))
+
+	return balance, nil
 }
 
 // DecodeTransferEvent decodes token transfers from both:
@@ -419,7 +588,7 @@ func ParseTransferEvent(log models.Log) (string, string, *big.Int, error) {
 		if strings.HasPrefix(data, "0x") {
 			data = data[2:]
 		}
-		
+
 		// Set the value from hex string
 		if _, success := amount.SetString(data, 16); !success {
 			return "", "", nil, fmt.Errorf("failed to parse amount from data: %s", log.Data)

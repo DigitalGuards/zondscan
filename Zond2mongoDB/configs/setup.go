@@ -207,6 +207,69 @@ func initializeCollections(db *mongo.Database) {
 		Logger.Error("Failed to create index for token balances collection", zap.Error(err))
 	}
 
+	// Initialize pending token contracts collection with compound index
+	pendingTokenContractsCollection := db.Collection("pending_token_contracts")
+	_, err = pendingTokenContractsCollection.Indexes().CreateOne(
+		ctx,
+		mongo.IndexModel{
+			Keys: bson.D{
+				{Key: "contractAddress", Value: 1},
+				{Key: "txHash", Value: 1},
+			},
+			Options: options.Index().SetUnique(true),
+		},
+	)
+	if err != nil {
+		Logger.Error("Failed to create index for pending token contracts collection", zap.Error(err))
+	}
+
+	// Also add index on the processed field for efficient querying
+	_, err = pendingTokenContractsCollection.Indexes().CreateOne(
+		ctx,
+		mongo.IndexModel{
+			Keys:    bson.D{{Key: "processed", Value: 1}},
+			Options: options.Index().SetName("processed_idx"),
+		},
+	)
+	if err != nil {
+		Logger.Error("Failed to create processed index for pending token contracts collection", zap.Error(err))
+	}
+
+	// Initialize token transfers collection with indexes
+	tokenTransfersCollection := db.Collection("tokenTransfers")
+	_, err = tokenTransfersCollection.Indexes().CreateMany(
+		ctx,
+		[]mongo.IndexModel{
+			{
+				Keys: bson.D{
+					{Key: "contractAddress", Value: 1},
+					{Key: "blockNumber", Value: 1},
+				},
+			},
+			{
+				Keys: bson.D{
+					{Key: "from", Value: 1},
+					{Key: "blockNumber", Value: 1},
+				},
+			},
+			{
+				Keys: bson.D{
+					{Key: "to", Value: 1},
+					{Key: "blockNumber", Value: 1},
+				},
+			},
+			{
+				Keys:    bson.D{{Key: "txHash", Value: 1}},
+				Options: options.Index().SetUnique(true),
+			},
+		},
+	)
+	if err != nil {
+		Logger.Error("Failed to create indexes for token transfers collection", zap.Error(err))
+	} else {
+		Logger.Info("Token transfers collection initialized with indexes")
+	}
+
 	// Initialize CoinGecko collection with empty document
 	_, err = db.Collection("coingecko").UpdateOne(
 		ctx,
@@ -222,41 +285,21 @@ func initializeCollections(db *mongo.Database) {
 		Logger.Error("Failed to initialize CoinGecko collection", zap.Error(err))
 	}
 
-	// Initialize WalletCount collection
-	_, err = db.Collection("walletCount").UpdateOne(
-		ctx,
-		bson.M{},
-		bson.M{"$setOnInsert": bson.M{"count": int64(0)}},
-		options.Update().SetUpsert(true),
-	)
-	if err != nil {
-		Logger.Error("Failed to initialize WalletCount collection", zap.Error(err))
-	}
+	// Create and set up the rest of the collections
+	ensureCollection(db, "blocks", nil)
+	ensureCollection(db, "transfer", nil)
+	ensureCollection(db, "validators", nil)
+	ensureCollection(db, "contractCode", nil)
+	ensureCollection(db, "transactionByAddress", nil)
+	ensureCollection(db, "internalTransactionByAddress", nil)
+	ensureCollection(db, "contracts", nil)
+	ensureCollection(db, "addresses", nil)
+	ensureCollection(db, "walletCount", nil)
+	ensureCollection(db, "dailyTransactionsVolume", nil)
+	ensureCollection(db, "totalCirculatingSupply", nil)
+	ensureCollection(db, "sync_state", nil)
 
-	// Initialize DailyTransactionsVolume collection
-	_, err = db.Collection("dailyTransactionsVolume").UpdateOne(
-		ctx,
-		bson.M{},
-		bson.M{"$setOnInsert": bson.M{
-			"volume":    "0x0",
-			"timestamp": "0x0",
-		}},
-		options.Update().SetUpsert(true),
-	)
-	if err != nil {
-		Logger.Error("Failed to initialize DailyTransactionsVolume collection", zap.Error(err))
-	}
-
-	// Initialize TotalCirculatingSupply collection
-	_, err = db.Collection("totalCirculatingSupply").UpdateOne(
-		ctx,
-		bson.M{},
-		bson.M{"$setOnInsert": bson.M{"circulating": "0"}},
-		options.Update().SetUpsert(true),
-	)
-	if err != nil {
-		Logger.Error("Failed to initialize TotalCirculatingSupply collection", zap.Error(err))
-	}
+	Logger.Info("All collections initialized successfully")
 }
 
 // Client instance
@@ -281,6 +324,17 @@ func GetValidatorCollection() *mongo.Collection {
 // Getter for token balances collection
 func GetTokenBalancesCollection() *mongo.Collection {
 	return GetCollection(DB, "tokenBalances")
+}
+
+// GetTokenTransfersCollection returns the tokenTransfers collection
+func GetTokenTransfersCollection() *mongo.Collection {
+	// Use GetCollection with explicit collection name
+	coll := GetCollection(DB, "tokenTransfers")
+
+	// Log that we're getting a reference to the collection
+	Logger.Debug("Getting tokenTransfers collection reference")
+
+	return coll
 }
 
 func GetListCollectionNames(client *mongo.Client) []string {

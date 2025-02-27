@@ -2,7 +2,6 @@ package main
 
 import (
 	"Zond2mongoDB/configs"
-	"Zond2mongoDB/db"
 	"Zond2mongoDB/synchroniser"
 	"os"
 	"os/signal"
@@ -30,18 +29,10 @@ func main() {
 	configs.Logger.Info("MongoDB URL: " + os.Getenv("MONGOURI"))
 	configs.Logger.Info("Node URL: " + os.Getenv("NODE_URL"))
 
-	// Start wallet count sync
-	configs.Logger.Info("Starting wallet count sync service...")
-	db.StartWalletCountSync()
-
-	// Start pending transaction sync
+	// Start pending transaction sync (this is not started in sync.go)
 	configs.Logger.Info("Starting pending transaction sync service...")
 	synchroniser.StartPendingTransactionSync()
-
-	// Start contract reprocessing job
-	configs.Logger.Info("Starting contract reprocessing service...")
-	db.StartContractReprocessingJob()
-
-	// Start blockchain sync
+	// Sync will now handle starting wallet count and contract reprocessing
+	// services after initial sync is complete
 	synchroniser.Sync()
 }
