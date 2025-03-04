@@ -87,7 +87,7 @@ func QueuePotentialTokenContract(address string, tx *models.Transaction, blockTi
 // ProcessTokenTransfersFromTransactions processes token transfers for queued contracts
 // This should be called after transaction processing is complete
 func ProcessTokenTransfersFromTransactions() {
-	configs.Logger.Info("Starting batch processing of pending token contracts")
+	configs.Logger.Info("Processing of queued token contracts")
 
 	collection := configs.GetCollection(configs.DB, "pending_token_contracts")
 	ctx := context.Background()

@@ -38,3 +38,4 @@ nul
 .cursor/rules/commentrule.mdc
 Zond2mongoDB/logs/zond_sync.log
 zond-contract-example/
+backendAPI/.env

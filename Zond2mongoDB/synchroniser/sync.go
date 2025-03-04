@@ -537,6 +537,14 @@ func processBlock(block *models.ZondDatabaseBlock) error {
 	// Process token transfers for the block
 	db.ProcessTokenTransfersFromTransactions()
 
+	// Update any pending transactions that are now mined in this block
+	if err := UpdatePendingTransactionsInBlock(block); err != nil {
+		configs.Logger.Error("Failed to update pending transactions in block",
+			zap.String("block", block.Result.Number),
+			zap.Error(err))
+		// Don't return error to avoid blocking block processing
+	}
+
 	return nil
 }
 
@@ -708,6 +716,14 @@ func updateDataPeriodically() {
 	// Update transaction volume
 	configs.Logger.Info("Calculating daily transaction volume...")
 	db.GetDailyTransactionVolume()
+
+	// Update block size collection
+	configs.Logger.Info("Updating block sizes collection...")
+	if err := db.UpdateBlockSizeCollection(); err != nil {
+		configs.Logger.Error("Failed to update block sizes", zap.Error(err))
+	} else {
+		configs.Logger.Info("Successfully updated block sizes collection")
+	}
 }
 
 func singleBlockInsertion() {

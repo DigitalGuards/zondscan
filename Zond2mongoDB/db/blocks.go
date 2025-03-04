@@ -98,18 +98,107 @@ func GetLatestBlockHashHeaderFromDB(blockNumber string) string {
 func InsertBlockDocument(block models.ZondDatabaseBlock) {
 	hashField := block.Result.Hash
 	if len(hashField) > 0 {
+		// Check if block already exists by number
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		// Create a filter to find the block by its number
+		filter := bson.M{"result.number": block.Result.Number}
+
+		// Check if the block already exists
+		var existingBlock models.ZondDatabaseBlock
+		err := configs.BlocksCollections.FindOne(ctx, filter).Decode(&existingBlock)
+
+		if err == nil {
+			// Block already exists, just log
+			configs.Logger.Info("Block already exists, skipping insertion",
+				zap.String("blockNumber", block.Result.Number),
+				zap.String("hash", block.Result.Hash))
+			return
+		} else if err != mongo.ErrNoDocuments {
+			// Different error occurred
+			configs.Logger.Warn("Error checking for existing block",
+				zap.String("blockNumber", block.Result.Number),
+				zap.Error(err))
+		}
+
+		// Block doesn't exist, insert it
 		result, err := configs.BlocksCollections.InsertOne(context.TODO(), block)
 		if err != nil {
 			configs.Logger.Warn("Failed to insert in the blocks collection: ", zap.Error(err))
+		} else {
+			configs.Logger.Debug("Inserted block",
+				zap.String("blockNumber", block.Result.Number),
+				zap.Any("insertResult", result.InsertedID))
 		}
-		_ = result
 	}
 }
 
 func InsertManyBlockDocuments(blocks []interface{}) {
-	_, err := configs.BlocksCollections.InsertMany(context.TODO(), blocks)
-	if err != nil {
-		configs.Logger.Warn("Failed to insert many block documents", zap.Error(err))
+	if len(blocks) == 0 {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Create a slice for unique blocks
+	var uniqueBlocks []interface{}
+
+	// Track which block numbers we've already processed
+	processedBlockNumbers := make(map[string]bool)
+
+	// For each block in the input
+	for _, blockInterface := range blocks {
+		// Cast to the correct type
+		block, ok := blockInterface.(models.ZondDatabaseBlock)
+		if !ok {
+			configs.Logger.Warn("Failed to cast block to ZondDatabaseBlock, skipping")
+			continue
+		}
+
+		blockNumber := block.Result.Number
+
+		// Skip if we've already processed this block number in this batch
+		if _, exists := processedBlockNumbers[blockNumber]; exists {
+			configs.Logger.Info("Skipping duplicate block in batch",
+				zap.String("blockNumber", blockNumber))
+			continue
+		}
+
+		// Check if this block exists in the database
+		filter := bson.M{"result.number": blockNumber}
+		count, err := configs.BlocksCollections.CountDocuments(ctx, filter)
+
+		if err != nil {
+			configs.Logger.Warn("Error checking for existing block, will try to insert anyway",
+				zap.String("blockNumber", blockNumber),
+				zap.Error(err))
+		}
+
+		// If block doesn't exist in the database, add it to our unique blocks
+		if count == 0 {
+			uniqueBlocks = append(uniqueBlocks, blockInterface)
+			processedBlockNumbers[blockNumber] = true
+		} else {
+			configs.Logger.Info("Block already exists in DB, skipping insertion",
+				zap.String("blockNumber", blockNumber))
+		}
+	}
+
+	// Only insert if we have unique blocks
+	if len(uniqueBlocks) > 0 {
+		configs.Logger.Info("Inserting unique blocks",
+			zap.Int("originalCount", len(blocks)),
+			zap.Int("uniqueCount", len(uniqueBlocks)))
+
+		_, err := configs.BlocksCollections.InsertMany(ctx, uniqueBlocks)
+		if err != nil {
+			configs.Logger.Warn("Failed to insert many block documents", zap.Error(err))
+		}
+	} else {
+		configs.Logger.Info("No unique blocks to insert",
+			zap.Int("originalCount", len(blocks)))
 	}
 }
 
@@ -321,4 +410,75 @@ func GetLastKnownBlockNumberFromInitialSync() string {
 	// If all else fails, start from genesis
 	configs.Logger.Info("No initial sync start point found, starting from genesis")
 	return "0x0"
+}
+
+// UpdateBlockSizeCollection updates the averageBlockSize collection with size data
+// This should be called periodically to maintain up-to-date block size data
+func UpdateBlockSizeCollection() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Clean up existing data first
+	_, err := configs.AverageBlockSizeCollections.DeleteMany(ctx, bson.M{})
+	if err != nil {
+		configs.Logger.Error("Failed to clean up block size collection",
+			zap.Error(err))
+		return err
+	}
+
+	// Set up aggregation pipeline to compute block sizes
+	// We'll take all blocks, sort by timestamp, and include basic info and size
+	pipeline := []bson.M{
+		{
+			"$sort": bson.M{"result.timestamp": 1},
+		},
+		{
+			"$project": bson.M{
+				"blockNumber":      "$result.number",
+				"timestamp":        "$result.timestamp",
+				"size":             "$result.size",
+				"transactionCount": bson.M{"$size": "$result.transactions"},
+			},
+		},
+	}
+
+	// Execute the pipeline
+	cursor, err := configs.BlocksCollections.Aggregate(ctx, pipeline)
+	if err != nil {
+		configs.Logger.Error("Failed to aggregate block sizes",
+			zap.Error(err))
+		return err
+	}
+	defer cursor.Close(ctx)
+
+	// Process the results
+	var blockSizes []interface{}
+	for cursor.Next(ctx) {
+		var result bson.M
+		if err := cursor.Decode(&result); err != nil {
+			configs.Logger.Warn("Failed to decode block size",
+				zap.Error(err))
+			continue
+		}
+
+		// Add to our block sizes
+		blockSizes = append(blockSizes, result)
+	}
+
+	// Insert the processed block sizes
+	if len(blockSizes) > 0 {
+		_, err = configs.AverageBlockSizeCollections.InsertMany(ctx, blockSizes)
+		if err != nil {
+			configs.Logger.Error("Failed to insert block sizes",
+				zap.Error(err))
+			return err
+		}
+
+		configs.Logger.Info("Updated block size collection",
+			zap.Int("count", len(blockSizes)))
+	} else {
+		configs.Logger.Warn("No block sizes to update")
+	}
+
+	return nil
 }

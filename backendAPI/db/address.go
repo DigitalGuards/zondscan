@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -99,7 +100,7 @@ func ReturnRankAddress(address string) (int64, error) {
 	// Store address as-is without stripping prefixes
 	addressHex := address
 
-	query, err := hex.DecodeString(addressHex)
+	query, err := hex.DecodeString(strings.TrimPrefix(addressHex, "Z"))
 	if err != nil {
 		fmt.Println(err)
 	}

@@ -1,58 +1,14 @@
-'use client';
-
-import React, { Suspense } from "react";
-import axios from "axios";
+import React from "react";
 import { Metadata } from 'next';
-import config from '../../../config';
-import AddressView from "./address-view";
-import type { AddressData } from "./types";
+import AddressClient from "./address-client";
 import { decodeToHex, formatAddress } from '../../lib/helpers';
 
-const getData = async (address: string): Promise<AddressData | null> => {
-    try {
-        console.log('Fetching address data:', address);
-        const response = await axios.get(`${config.handlerUrl}/address/aggregate/${address}`);
-        console.log('Raw API response:', JSON.stringify(response.data, null, 2));
-
-        // Process transactions to ensure gas values are in hex format
-        if (response.data.transactions_by_address) {
-            response.data.transactions_by_address = response.data.transactions_by_address.map((tx: any) => ({
-                ...tx,
-                gasUsedStr: tx.gasUsedStr || (tx.gasUsed ? `0x${tx.gasUsed.toString(16)}` : '0x0'),
-                gasPriceStr: tx.gasPriceStr || (tx.gasPrice ? `0x${tx.gasPrice.toString(16)}` : '0x0')
-            }));
-        }
-
-        // Decode contract addresses if present
-        if (response.data.contract_code && response.data.contract_code.contractCode) {
-            const rawCreatorAddress = response.data.contract_code.contractCreatorAddress ? 
-                `0x${decodeToHex(response.data.contract_code.contractCreatorAddress)}` : '0x0';
-                
-            response.data.contract_code = {
-                ...response.data.contract_code,
-                decodedCreatorAddress: formatAddress(rawCreatorAddress),
-                decodedContractAddress: response.data.contract_code.contractAddress ? 
-                    `0x${decodeToHex(response.data.contract_code.contractAddress)}` : '0x0',
-                contractSize: response.data.contract_code.contractCode ? 
-                    Math.ceil(response.data.contract_code.contractCode.length * 3 / 4) : 0
-            };
-        }
-
-        console.log('Processed transactions:', JSON.stringify(response.data.transactions_by_address, null, 2));
-        return response.data;
-    } catch (error) {
-        console.error(`Error fetching data:`, error);
-        return null;
-    }
-};
-
 interface PageProps {
-    params: Promise<{ query: string }>;
+    params: { query: string };
 }
 
-export async function generateMetadata({ params }: { params: Promise<{ query: string }> }): Promise<Metadata> {
-    const resolvedParams = await params;
-    const address = resolvedParams.query;
+export async function generateMetadata({ params }: { params: { query: string } }): Promise<Metadata> {
+    const address = params.query;
     
     return {
         title: `Address ${address} | ZondScan`,
@@ -68,17 +24,12 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
 }
 
 export default async function Page({ params }: PageProps) {
-    const resolvedParams = await params;
-    const addressData = await getData(resolvedParams.query);
-
-    if (!addressData) {
-        return <div>Error loading address data</div>;
-    }
+    const address = params.query;
 
     return (
         <main>
-            <h1 className="sr-only">Address {resolvedParams.query}</h1>
-            <AddressView addressData={addressData} addressSegment={resolvedParams.query} />
+            <h1 className="sr-only">Address {address}</h1>
+            <AddressClient address={address} />
         </main>
     );
 }

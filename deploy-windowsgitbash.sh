@@ -129,7 +129,7 @@ setup_server() {
 
     # Create .env.development file
     print_status "Creating .env.development file..."
-    cat > .env.development << EOL
+    cat > .env << EOL
 GIN_MODE=release
 MONGOURI=mongodb://localhost:27017/qrldata-z?readPreference=primary
 HTTP_PORT=:8080
@@ -142,7 +142,7 @@ EOL
 
     # Start server with PM2, specifying the working directory and APP_ENV
     print_status "Starting server with PM2..."
-    APP_ENV=development pm2 start ./backendAPI.exe --name "handler" --cwd "$BASE_DIR/backendAPI" || print_error "Failed to start server"
+    pm2 start ./backendAPI.exe --name "handler" --cwd "$BASE_DIR/backendAPI" || print_error "Failed to start server"
 }
 
 # Setup frontend environment
@@ -188,7 +188,6 @@ MONGOURI=mongodb://localhost:27017
 NODE_URL=$NODE_URL
 BEACONCHAIN_API=http://REDACTED:3500
 EOL
-
     # Build synchronizer with explicit output name
     print_status "Building synchronizer..."
     go build -o zsyncer.exe main.go || print_error "Failed to build synchronizer"
@@ -222,15 +221,16 @@ main() {
     check_zond_node
 
     # Check if required ports are available
-    check_port 3000
-    check_port 8080
+    #check_port 3000
+    #check_port 8080
 
     # Clone and setup
     clone_repo
-    #setup_server
+    
     setup_synchronizer
     #setup_frontend
-    save_pm2
+    setup_server
+    #save_pm2
 
     print_status "Deployment complete! Services are starting up..."
     echo -e "\nAccess points:"
