@@ -49,4 +49,38 @@ type ContractInfo struct {
 	CreationTransaction string `bson:"creationTransaction" json:"creationTransaction"`
 	CreationBlockNumber string `bson:"creationBlockNumber" json:"creationBlockNumber"`
 	UpdatedAt           string `bson:"updatedAt" json:"updatedAt"`
+
+	// Factory-specific fields
+	CreatedByFactory bool   `bson:"createdByFactory,omitempty" json:"createdByFactory,omitempty"`
+	FactoryAddress   string `bson:"factoryAddress,omitempty" json:"factoryAddress,omitempty"`
+	TokenOwner       string `bson:"tokenOwner,omitempty" json:"tokenOwner,omitempty"`
+
+	// CustomERC20 properties
+	MaxSupply       string `bson:"maxSupply,omitempty" json:"maxSupply,omitempty"`
+	MaxWalletAmount string `bson:"maxWalletAmount,omitempty" json:"maxWalletAmount,omitempty"`
+	MaxTxLimit      string `bson:"maxTxLimit,omitempty" json:"maxTxLimit,omitempty"`
+}
+
+// LogsResponse represents the response from zond_getLogs
+type LogsResponse struct {
+	Jsonrpc string     `json:"jsonrpc"`
+	ID      int        `json:"id"`
+	Result  []LogEntry `json:"result"`
+	Error   *struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	} `json:"error,omitempty"`
+}
+
+// LogEntry represents a single log entry from zond_getLogs
+type LogEntry struct {
+	Address          string   `json:"address"`
+	Topics           []string `json:"topics"`
+	Data             string   `json:"data"`
+	BlockNumber      string   `json:"blockNumber"`
+	TransactionHash  string   `json:"transactionHash"`
+	TransactionIndex string   `json:"transactionIndex"`
+	BlockHash        string   `json:"blockHash"`
+	LogIndex         string   `json:"logIndex"`
+	Removed          bool     `json:"removed"`
 }

@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -94,6 +95,12 @@ func ProcessTokenTransfersFromTransactions() {
 
 	// Find unprocessed contract addresses
 	filter := bson.M{"processed": false}
+
+	// Diagnostic logging - add timestamp to help identify potential race conditions
+	queryStartTime := time.Now().UnixNano()
+	configs.Logger.Debug("Querying for unprocessed contracts",
+		zap.Int64("queryTimestamp", queryStartTime))
+
 	count, err := collection.CountDocuments(ctx, filter)
 	if err != nil {
 		configs.Logger.Error("Failed to count pending token contracts", zap.Error(err))
@@ -107,7 +114,10 @@ func ProcessTokenTransfersFromTransactions() {
 		return
 	}
 
-	cursor, err := collection.Find(ctx, filter)
+	// Add find options to help reduce race conditions by sorting consistently
+	findOptions := options.Find().SetSort(bson.D{{Key: "contractAddress", Value: 1}, {Key: "txHash", Value: 1}})
+
+	cursor, err := collection.Find(ctx, filter, findOptions)
 	if err != nil {
 		configs.Logger.Error("Failed to query pending token contracts", zap.Error(err))
 		return
@@ -133,7 +143,9 @@ func ProcessTokenTransfersFromTransactions() {
 		configs.Logger.Info("Processing token contract",
 			zap.String("address", pending.ContractAddress),
 			zap.String("txHash", pending.TxHash),
-			zap.String("blockNumber", pending.BlockNumber))
+			zap.String("blockNumber", pending.BlockNumber),
+			zap.Int64("processingTimestamp", time.Now().UnixNano()),
+			zap.Int64("queryTimestamp", queryStartTime))
 
 		processTokenContract(pending.ContractAddress, pending.TxHash, pending.BlockNumber, pending.BlockTimestamp)
 		processed++
@@ -143,11 +155,29 @@ func ProcessTokenTransfersFromTransactions() {
 			"contractAddress": pending.ContractAddress,
 			"txHash":          pending.TxHash,
 		}
-		_, err := collection.UpdateOne(ctx, updateFilter, bson.M{"$set": bson.M{"processed": true}})
+
+		// Use an additional filter to ensure we only update if it's still unprocessed
+		// This helps detect race conditions
+		updateFilter["processed"] = false
+
+		result, err := collection.UpdateOne(ctx, updateFilter, bson.M{"$set": bson.M{"processed": true}})
+
 		if err != nil {
 			configs.Logger.Error("Failed to mark token contract as processed",
 				zap.String("address", pending.ContractAddress),
+				zap.String("txHash", pending.TxHash),
 				zap.Error(err))
+		} else if result.ModifiedCount == 0 {
+			// This indicates a potential race condition - another process marked it as processed already
+			configs.Logger.Warn("Race condition detected: contract was already marked as processed by another process",
+				zap.String("address", pending.ContractAddress),
+				zap.String("txHash", pending.TxHash),
+				zap.Int64("processingTimestamp", time.Now().UnixNano()),
+				zap.Int64("queryTimestamp", queryStartTime))
+		} else {
+			configs.Logger.Debug("Successfully marked contract as processed",
+				zap.String("address", pending.ContractAddress),
+				zap.String("txHash", pending.TxHash))
 		}
 	}
 

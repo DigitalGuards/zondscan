@@ -28,6 +28,15 @@ const (
 	SIG_SUPPLY   = "0x18160ddd" // totalSupply()
 )
 
+// Custom token methods
+const (
+	SIG_MAX_SUPPLY      = "0x32668b54" // maxSupply()
+	SIG_MAX_TX_AMOUNT   = "0x94303c2d" // maxTxAmount()
+	SIG_MAX_WALLET_SIZE = "0x41d3014e" // maxWalletSize()
+	SIG_OWNER           = "0x8da5cb5b" // owner()
+)
+
+// Event signatures
 // Transfer event signature: keccak256("Transfer(address,address,uint256)")
 const TransferEventSignature = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
@@ -37,11 +46,8 @@ func CallContractMethod(contractAddress string, methodSig string) (string, error
 		zap.String("contractAddress", contractAddress),
 		zap.String("methodSig", methodSig[:10]+"...")) // Log just the beginning of the signature for brevity
 
-	// Ensure contract address has correct format for Zond blockchain
-	// For Zond RPC calls, we need the correct prefix
-	if !strings.HasPrefix(contractAddress, "Z") && strings.HasPrefix(contractAddress, "0x") {
-		contractAddress = "Z" + strings.TrimPrefix(contractAddress, "0x")
-	} else if !strings.HasPrefix(contractAddress, "Z") && !strings.HasPrefix(contractAddress, "0x") {
+	// Ensure contract address has Z prefix for Zond blockchain
+	if !strings.HasPrefix(contractAddress, "Z") {
 		contractAddress = "Z" + contractAddress
 	}
 
@@ -320,10 +326,11 @@ func GetTokenBalance(contractAddress string, holderAddress string) (string, erro
 
 	// Special handling for zero address (common in mint events)
 	// Handle multiple formats of zero address
-	if holderAddress == "0x0" ||
-		holderAddress == "0x0000000000000000000000000000000000000000" ||
-		holderAddress == "Z0" ||
+	if holderAddress == "Z0" ||
 		holderAddress == "Z0000000000000000000000000000000000000000" ||
+		holderAddress == "0x0" ||
+		holderAddress == "0x0000000000000000000000000000000000000000" ||
+		strings.ToLower(holderAddress) == "z0000000000000000000000000000000000000000" ||
 		strings.ToLower(holderAddress) == "0x0000000000000000000000000000000000000000" {
 		zap.L().Info("Zero address detected, returning zero balance",
 			zap.String("contractAddress", contractAddress),
@@ -331,44 +338,30 @@ func GetTokenBalance(contractAddress string, holderAddress string) (string, erro
 		return "0", nil
 	}
 
-	// For Zond blockchain, ensure contract address uses Z prefix, not 0x
-	if strings.HasPrefix(contractAddress, "0x") {
-		contractAddress = "Z" + strings.TrimPrefix(contractAddress, "0x")
-	} else if !strings.HasPrefix(contractAddress, "Z") {
-		// Add Z prefix if missing
-		contractAddress = "Z" + contractAddress
-	}
-
-	// Ensure holder address uses Z prefix for Zond blockchain compatibility
-	originalHolderAddress := holderAddress // Keep original for logging
-
-	// 1. Extract the address without any prefix
-	var rawAddress string
-	if strings.HasPrefix(holderAddress, "0x") {
-		rawAddress = strings.TrimPrefix(holderAddress, "0x")
-	} else if strings.HasPrefix(holderAddress, "Z") {
-		rawAddress = strings.TrimPrefix(holderAddress, "Z")
-	} else {
-		rawAddress = holderAddress
-	}
-
-	// 2. Ensure the raw address is the correct length
-	if len(rawAddress) > 40 {
-		rawAddress = rawAddress[:40]
-	} else if len(rawAddress) < 40 {
-		// Pad with leading zeros to reach 40 characters
-		for len(rawAddress) < 40 {
-			rawAddress = "0" + rawAddress
+	// Ensure contract address has Z prefix for Zond blockchain
+	if !strings.HasPrefix(contractAddress, "Z") {
+		if strings.HasPrefix(contractAddress, "0x") {
+			contractAddress = "Z" + strings.TrimPrefix(contractAddress, "0x")
+		} else {
+			contractAddress = "Z" + contractAddress
 		}
 	}
 
-	// 3. Format for RPC call - for Zond, ensure it has Z prefix
-	holderAddress = "Z" + rawAddress
+	// First, normalize the holder address
+	originalHolderAddress := holderAddress // Keep original for logging
+
+	// Convert 0x prefix to Z prefix if present
+	if strings.HasPrefix(holderAddress, "0x") {
+		holderAddress = "Z" + strings.TrimPrefix(holderAddress, "0x")
+	} else if !strings.HasPrefix(holderAddress, "Z") {
+		holderAddress = "Z" + holderAddress
+	}
+
+	// Extract the raw address (without prefix) for padding
+	rawAddress := strings.TrimPrefix(holderAddress, "Z")
 
 	// Pad address to 32 bytes (64 hex chars) for ABI encoding
-	// First remove any prefix
 	paddedAddress := rawAddress
-	// Then pad to 64 chars total
 	for len(paddedAddress) < 64 {
 		paddedAddress = "0" + paddedAddress
 	}
@@ -378,6 +371,8 @@ func GetTokenBalance(contractAddress string, holderAddress string) (string, erro
 	zap.L().Debug("Prepared contract call data",
 		zap.String("contractAddress", contractAddress),
 		zap.String("formattedAddress", holderAddress),
+		zap.String("rawAddress", rawAddress),
+		zap.String("paddedAddress", paddedAddress),
 		zap.String("data", data))
 
 	// Make the call
@@ -596,4 +591,52 @@ func ParseTransferEvent(log models.Log) (string, string, *big.Int, error) {
 	}
 
 	return from, to, amount, nil
+}
+
+// GetCustomTokenInfo attempts to read custom token properties
+func GetCustomTokenInfo(contractAddress string) (map[string]string, error) {
+	result := make(map[string]string)
+
+	// Try to get max supply
+	maxSupply, err := CallContractMethod(contractAddress, SIG_MAX_SUPPLY)
+	if err == nil && maxSupply != "" && maxSupply != "0x" {
+		// Convert hex to decimal
+		bigInt := new(big.Int)
+		if _, ok := bigInt.SetString(strings.TrimPrefix(maxSupply, "0x"), 16); ok {
+			result["maxSupply"] = bigInt.String()
+		}
+	}
+
+	// Try to get max tx amount
+	maxTxAmount, err := CallContractMethod(contractAddress, SIG_MAX_TX_AMOUNT)
+	if err == nil && maxTxAmount != "" && maxTxAmount != "0x" {
+		// Convert hex to decimal
+		bigInt := new(big.Int)
+		if _, ok := bigInt.SetString(strings.TrimPrefix(maxTxAmount, "0x"), 16); ok {
+			result["maxTxLimit"] = bigInt.String()
+		}
+	}
+
+	// Try to get max wallet size
+	maxWalletSize, err := CallContractMethod(contractAddress, SIG_MAX_WALLET_SIZE)
+	if err == nil && maxWalletSize != "" && maxWalletSize != "0x" {
+		// Convert hex to decimal
+		bigInt := new(big.Int)
+		if _, ok := bigInt.SetString(strings.TrimPrefix(maxWalletSize, "0x"), 16); ok {
+			result["maxWalletAmount"] = bigInt.String()
+		}
+	}
+
+	// Try to get owner
+	owner, err := CallContractMethod(contractAddress, SIG_OWNER)
+	if err == nil && owner != "" && owner != "0x" && len(owner) >= 42 {
+		// Extract address - typically format is 0x + 32 bytes (64 chars) with address in last 20 bytes
+		if len(owner) >= 66 {
+			// Extract the address from the last 40 characters (20 bytes)
+			addressHex := owner[len(owner)-40:]
+			result["tokenOwner"] = "Z" + addressHex
+		}
+	}
+
+	return result, nil
 }
