@@ -36,6 +36,7 @@ Zond2mongoDB/logs/reindex_contracts.log
 Zond2mongoDB/logs/reindex_tokens.log
 nul
 .cursor/rules/commentrule.mdc
-Zond2mongoDB/logs/zond_sync.log
-zond-contract-example/
+Zond2mongoDB/logs/*
 backendAPI/.env
+zond-contract-example/
+zond-contract-example*
