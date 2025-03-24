@@ -63,7 +63,7 @@ func ReturnAllInternalTransactionsByAddress(address string) ([]models.TraceResul
 
 	var transactions []models.TraceResult
 
-	decoded, err := hex.DecodeString(strings.TrimPrefix(address, "0x"))
+	decoded, err := hex.DecodeString(strings.TrimPrefix(address, "Z"))
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func ReturnAllInternalTransactionsByAddress(address string) ([]models.TraceResul
 
 		from := hex.EncodeToString([]byte(singleTransaction.From))
 
-		if from == strings.TrimPrefix(address, "0x") {
+		if from == strings.TrimPrefix(address, "Z") {
 			singleTransaction.InOut = 0
 			singleTransaction.Address = []byte(singleTransaction.To)
 		} else {
@@ -129,8 +129,8 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 	var transactions []models.TransactionByAddress
 
 	// Ensure address has 0x prefix
-	if !strings.HasPrefix(address, "0x") {
-		address = "0x" + address
+	if !strings.HasPrefix(address, "Z") {
+		address = "Z" + address
 	}
 
 	// Query for transactions where the address is either the sender or receiver
@@ -263,7 +263,7 @@ func ReturnTransactions(address string, page, limit int) ([]models.TransactionBy
 		opts.SetLimit(int64(limit))
 	}
 
-	decoded, err := hex.DecodeString(strings.TrimPrefix(address, "0x"))
+	decoded, err := hex.DecodeString(strings.TrimPrefix(address, "Z"))
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -303,8 +303,8 @@ func CountTransactions(address string) (int, error) {
 	defer cancel()
 
 	// Ensure address has 0x prefix
-	if !strings.HasPrefix(address, "0x") {
-		address = "0x" + address
+	if !strings.HasPrefix(address, "Z") {
+		address = "Z" + address
 	}
 
 	filter := primitive.D{{Key: "$or", Value: []primitive.D{

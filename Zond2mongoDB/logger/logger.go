@@ -17,25 +17,40 @@ func CustomLevelEncoder(level zapcore.Level, enc zapcore.PrimitiveArrayEncoder) 
 	enc.AppendString("[" + level.CapitalString() + "]")
 }
 
+// FileLogger creates a configured zap logger that writes to both a file and stdout
 func FileLogger(filename string) *zap.Logger {
-	path, err := os.Getwd()
-	if err != nil {
-		os.Exit(0)
+	// Create logs directory if it doesn't exist
+	logsDir := "logs"
+	if err := os.MkdirAll(logsDir, 0755); err != nil {
+		// If we can't create the logs directory, fall back to current directory
+		logsDir = "."
 	}
 
-	fullpath := filepath.Join(path, "/logs.log")
+	// Use the logs directory for the log file
+	fullpath := filepath.Join(logsDir, filename)
 
+	// Create a production config with our customizations
 	cfg := zap.NewProductionConfig()
-
 	cfg.Encoding = "console"
-	// Output to both file and stdout
 	cfg.OutputPaths = []string{fullpath, "stdout"}
 	cfg.ErrorOutputPaths = []string{fullpath, "stderr"}
 	cfg.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
 	cfg.EncoderConfig.EncodeTime = SyslogTimeEncoder
 	cfg.EncoderConfig.EncodeLevel = CustomLevelEncoder
 
-	logger, _ := cfg.Build()
+	// Build the logger
+	logger, err := cfg.Build()
+	if err != nil {
+		// If we can't build the logger, create a basic logger as fallback
+		fallbackLogger, _ := zap.NewProduction()
+		fallbackLogger.Error("Failed to build configured logger", zap.Error(err))
+		return fallbackLogger
+	}
+
+	// Log the logger initialization
+	logger.Info("Logger initialized",
+		zap.String("file", fullpath),
+		zap.String("level", cfg.Level.String()))
 
 	return logger
 }

@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"math/big"
 	"strings"
 )
@@ -55,4 +56,17 @@ func IntToHex(n int) string {
 		return "0x0"
 	}
 	return "0x" + new(big.Int).SetInt64(int64(n)).Text(16)
+}
+
+// HexToInt64 converts a hex string to an int64
+// Returns an error if the value exceeds int64 range
+func HexToInt64(hex string) (int64, error) {
+	bigInt := HexToInt(hex)
+
+	// Check if the value fits in an int64
+	if !bigInt.IsInt64() {
+		return 0, fmt.Errorf("hex value %s exceeds int64 range", hex)
+	}
+
+	return bigInt.Int64(), nil
 }

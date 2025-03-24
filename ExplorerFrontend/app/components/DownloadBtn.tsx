@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { formatTimestamp, normalizeHexString } from '../lib/helpers';
+import { formatTimestamp, normalizeHexString, formatAddress } from '../lib/helpers';
 import { MouseEvent } from 'react';
 import type { DownloadBtnProps, DownloadBtnInternalProps } from './types';
 
@@ -24,11 +24,15 @@ export function DownloadBtn({ data = [], fileName }: DownloadBtnProps): JSX.Elem
           convertedItem[key] = formatTimestamp(Number(value));
         } else if (key === 'Address' || key === 'TxHash') {
           if (typeof value === 'string') {
-            convertedItem[key] = "0x" + normalizeHexString(value);
+            convertedItem[key] = key === 'Address' ? 
+              formatAddress("0x" + normalizeHexString(value)) : 
+              "0x" + normalizeHexString(value);
           }
         } else if (key === 'From' || key === 'To') {
           if (typeof value === 'string') {
-            convertedItem[key] = value ? "0x" + normalizeHexString(value) : "No Address Found";
+            convertedItem[key] = value ? 
+              formatAddress("0x" + normalizeHexString(value)) : 
+              "No Address Found";
           }
         } else {
           convertedItem[key] = value;

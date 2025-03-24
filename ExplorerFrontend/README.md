@@ -119,14 +119,14 @@ The frontend uses two environment files:
 ### .env fields
 | VARIABLE | VALUE |
 | ------ | ------ |
-| DATABASE_URL | mongodb://localhost:27017/qrldata-b2h?readPreference=primary |
+| DATABASE_URL | mongodb://localhost:27017/qrldata-z?readPreference=primary |
 | NEXT_PUBLIC_DOMAIN_NAME | http://localhost:3000 (dev) OR http://your_domain_name.io (prod) |
 | NEXT_PUBLIC_HANDLER_URL | http://localhost:8080 (dev) OR http://your_domain_name.io:8443 (prod) |
 
 ### .env.local fields
 | VARIABLE | VALUE |
 | ------ | ------ |
-| DATABASE_URL | mongodb://localhost:27017/qrldata-b2h?readPreference=primary |
+| DATABASE_URL | mongodb://localhost:27017/qrldata-z?readPreference=primary |
 | DOMAIN_NAME | http://localhost:3000 (dev) OR http://your_domain_name.io (prod) |
 | HANDLER_URL | http://localhost:8080 (dev) OR http://your_domain_name.io:8443 (prod) |
 

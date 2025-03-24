@@ -49,11 +49,20 @@ func GetDailyTransactionVolume() {
 		}
 	}
 
+	// Convert hex volume to int64 for database storage
+	volumeInt, err := utils.HexToInt64(totalVolume)
+	if err != nil {
+		configs.Logger.Error("Failed to convert volume to int64",
+			zap.Error(err),
+			zap.String("hexVolume", totalVolume))
+		return
+	}
+
 	// Update volume in database
 	filter := bson.M{"type": "daily_volume"}
 	update := bson.M{
 		"$set": bson.M{
-			"volume":    totalVolume,
+			"volume":    volumeInt,
 			"timestamp": currentBlockTimestamp,
 		},
 	}
@@ -63,11 +72,11 @@ func GetDailyTransactionVolume() {
 	if err != nil {
 		configs.Logger.Error("Failed to update volume",
 			zap.Error(err),
-			zap.String("volume", totalVolume),
+			zap.Int64("volume", volumeInt),
 			zap.String("timestamp", currentBlockTimestamp))
 	} else {
 		configs.Logger.Info("Successfully updated volume",
-			zap.String("volume", totalVolume),
+			zap.Int64("volume", volumeInt),
 			zap.String("timestamp", currentBlockTimestamp))
 	}
 }

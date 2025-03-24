@@ -93,7 +93,7 @@ The API uses two environment files:
 | VARIABLE | VALUE |
 | ------ | ------ |
 | GIN_MODE | release |
-| MONGOURI | mongodb://localhost:27017/qrldata-b2h?readPreference=primary |
+| MONGOURI | mongodb://localhost:27017/qrldata-z?readPreference=primary |
 | HTTP_PORT | :8080 |
 | NODE_URL | http://localhost:8545 |
 

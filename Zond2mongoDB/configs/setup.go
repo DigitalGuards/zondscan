@@ -34,7 +34,7 @@ func ConnectDB() *mongo.Client {
 	fmt.Println("Connected to MongoDB")
 
 	// Initialize collections with validators
-	db := client.Database("qrldata-b2h")
+	db := client.Database("qrldata-z")
 
 	// Daily Transactions Volume
 	volumeValidator := bson.M{
@@ -108,6 +108,37 @@ func ConnectDB() *mongo.Client {
 	}
 	ensureCollection(db, "totalCirculatingSupply", circulatingValidator)
 
+	// Token Balances
+	tokenBalanceValidator := bson.M{
+		"$jsonSchema": bson.M{
+			"bsonType": "object",
+			"required": []string{"contractAddress", "holderAddress", "balance", "blockNumber", "updatedAt"},
+			"properties": bson.M{
+				"contractAddress": bson.M{
+					"bsonType":    "string",
+					"description": "must be a hex string and is required",
+				},
+				"holderAddress": bson.M{
+					"bsonType":    "string",
+					"description": "must be a hex string and is required",
+				},
+				"balance": bson.M{
+					"bsonType":    "string",
+					"description": "must be a hex string and is required",
+				},
+				"blockNumber": bson.M{
+					"bsonType":    "string",
+					"description": "must be a hex string and is required",
+				},
+				"updatedAt": bson.M{
+					"bsonType":    "string",
+					"description": "must be a string and is required",
+				},
+			},
+		},
+	}
+	ensureCollection(db, "tokenBalances", tokenBalanceValidator)
+
 	// Initialize collections
 	initializeCollections(db)
 
@@ -160,8 +191,87 @@ func ensureCollection(db *mongo.Database, name string, validator bson.M) {
 func initializeCollections(db *mongo.Database) {
 	ctx := context.Background()
 
+	// Initialize token balances collection with compound index
+	tokenBalancesCollection := db.Collection("tokenBalances")
+	_, err := tokenBalancesCollection.Indexes().CreateOne(
+		ctx,
+		mongo.IndexModel{
+			Keys: bson.D{
+				{Key: "contractAddress", Value: 1},
+				{Key: "holderAddress", Value: 1},
+			},
+			Options: options.Index().SetUnique(true),
+		},
+	)
+	if err != nil {
+		Logger.Error("Failed to create index for token balances collection", zap.Error(err))
+	}
+
+	// Initialize pending token contracts collection with compound index
+	pendingTokenContractsCollection := db.Collection("pending_token_contracts")
+	_, err = pendingTokenContractsCollection.Indexes().CreateOne(
+		ctx,
+		mongo.IndexModel{
+			Keys: bson.D{
+				{Key: "contractAddress", Value: 1},
+				{Key: "txHash", Value: 1},
+			},
+			Options: options.Index().SetUnique(true),
+		},
+	)
+	if err != nil {
+		Logger.Error("Failed to create index for pending token contracts collection", zap.Error(err))
+	}
+
+	// Also add index on the processed field for efficient querying
+	_, err = pendingTokenContractsCollection.Indexes().CreateOne(
+		ctx,
+		mongo.IndexModel{
+			Keys:    bson.D{{Key: "processed", Value: 1}},
+			Options: options.Index().SetName("processed_idx"),
+		},
+	)
+	if err != nil {
+		Logger.Error("Failed to create processed index for pending token contracts collection", zap.Error(err))
+	}
+
+	// Initialize token transfers collection with indexes
+	tokenTransfersCollection := db.Collection("tokenTransfers")
+	_, err = tokenTransfersCollection.Indexes().CreateMany(
+		ctx,
+		[]mongo.IndexModel{
+			{
+				Keys: bson.D{
+					{Key: "contractAddress", Value: 1},
+					{Key: "blockNumber", Value: 1},
+				},
+			},
+			{
+				Keys: bson.D{
+					{Key: "from", Value: 1},
+					{Key: "blockNumber", Value: 1},
+				},
+			},
+			{
+				Keys: bson.D{
+					{Key: "to", Value: 1},
+					{Key: "blockNumber", Value: 1},
+				},
+			},
+			{
+				Keys:    bson.D{{Key: "txHash", Value: 1}},
+				Options: options.Index().SetUnique(true),
+			},
+		},
+	)
+	if err != nil {
+		Logger.Error("Failed to create indexes for token transfers collection", zap.Error(err))
+	} else {
+		Logger.Info("Token transfers collection initialized with indexes")
+	}
+
 	// Initialize CoinGecko collection with empty document
-	_, err := db.Collection("coingecko").UpdateOne(
+	_, err = db.Collection("coingecko").UpdateOne(
 		ctx,
 		bson.M{},
 		bson.M{"$setOnInsert": bson.M{
@@ -175,41 +285,21 @@ func initializeCollections(db *mongo.Database) {
 		Logger.Error("Failed to initialize CoinGecko collection", zap.Error(err))
 	}
 
-	// Initialize WalletCount collection
-	_, err = db.Collection("walletCount").UpdateOne(
-		ctx,
-		bson.M{},
-		bson.M{"$setOnInsert": bson.M{"count": int64(0)}},
-		options.Update().SetUpsert(true),
-	)
-	if err != nil {
-		Logger.Error("Failed to initialize WalletCount collection", zap.Error(err))
-	}
+	// Create and set up the rest of the collections
+	ensureCollection(db, "blocks", nil)
+	ensureCollection(db, "transfer", nil)
+	ensureCollection(db, "validators", nil)
+	ensureCollection(db, "contractCode", nil)
+	ensureCollection(db, "transactionByAddress", nil)
+	ensureCollection(db, "internalTransactionByAddress", nil)
+	ensureCollection(db, "contracts", nil)
+	ensureCollection(db, "addresses", nil)
+	ensureCollection(db, "walletCount", nil)
+	ensureCollection(db, "dailyTransactionsVolume", nil)
+	ensureCollection(db, "totalCirculatingSupply", nil)
+	ensureCollection(db, "sync_state", nil)
 
-	// Initialize DailyTransactionsVolume collection
-	_, err = db.Collection("dailyTransactionsVolume").UpdateOne(
-		ctx,
-		bson.M{},
-		bson.M{"$setOnInsert": bson.M{
-			"volume":    "0x0",
-			"timestamp": "0x0",
-		}},
-		options.Update().SetUpsert(true),
-	)
-	if err != nil {
-		Logger.Error("Failed to initialize DailyTransactionsVolume collection", zap.Error(err))
-	}
-
-	// Initialize TotalCirculatingSupply collection
-	_, err = db.Collection("totalCirculatingSupply").UpdateOne(
-		ctx,
-		bson.M{},
-		bson.M{"$setOnInsert": bson.M{"circulating": "0"}},
-		options.Update().SetUpsert(true),
-	)
-	if err != nil {
-		Logger.Error("Failed to initialize TotalCirculatingSupply collection", zap.Error(err))
-	}
+	Logger.Info("All collections initialized successfully")
 }
 
 // Client instance
@@ -217,7 +307,7 @@ var DB *mongo.Client = ConnectDB()
 
 // Getting database collections
 func GetCollection(client *mongo.Client, collectionName string) *mongo.Collection {
-	collection := client.Database("qrldata-b2h").Collection(collectionName)
+	collection := client.Database("qrldata-z").Collection(collectionName)
 	return collection
 }
 
@@ -231,8 +321,24 @@ func GetValidatorCollection() *mongo.Collection {
 	return GetCollection(DB, VALIDATORS_COLLECTION)
 }
 
+// Getter for token balances collection
+func GetTokenBalancesCollection() *mongo.Collection {
+	return GetCollection(DB, "tokenBalances")
+}
+
+// GetTokenTransfersCollection returns the tokenTransfers collection
+func GetTokenTransfersCollection() *mongo.Collection {
+	// Use GetCollection with explicit collection name
+	coll := GetCollection(DB, "tokenTransfers")
+
+	// Log that we're getting a reference to the collection
+	Logger.Debug("Getting tokenTransfers collection reference")
+
+	return coll
+}
+
 func GetListCollectionNames(client *mongo.Client) []string {
-	result, err := client.Database("qrldata-b2h").ListCollectionNames(
+	result, err := client.Database("qrldata-z").ListCollectionNames(
 		context.TODO(),
 		bson.D{})
 

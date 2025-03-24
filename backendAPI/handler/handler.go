@@ -25,6 +25,8 @@ func RequestHandler() {
 	}))
 	log.Println("CORS configuration initialized successfully")
 
+	// Initialize MongoDB connection
+	// This will only connect once due to sync.Once in the ConnectDB function
 	configs.ConnectDB()
 
 	routes.UserRoute(router)

@@ -18,7 +18,7 @@ clean_pm2() {
     pm2 flush || print_status "No logs to flush"
 
     # Stop and delete only processes started by this deployment
-    for name in handler synchroniser frontend; do
+    for name in handler syncer frontend; do
         pm2 delete $name || print_status "No process named $name to delete"
     done
 
@@ -52,8 +52,8 @@ check_mongodb() {
 # Prompt for node selection
 select_node() {
     print_status "Select Zond node to use:"
-    PS3="Please choose the node (1-2): "
-    options=("Local node (127.0.0.1:8545)" "Remote node (REDACTED:8545)")
+    PS3="Please choose the node (1-4): "
+    options=("Local node (127.0.0.1:8545)" "BETANET Remote node (REDACTED:8545)" "DG TestnetV1 node (35.158.17.89:32837)" "Foundation testnetv1 (buildl.localbits.org:8545)")
     select opt in "${options[@]}"
     do
         case $opt in
@@ -61,8 +61,16 @@ select_node() {
                 NODE_URL="http://127.0.0.1:8545"
                 break
                 ;;
-            "Remote node (REDACTED:8545)")
+            "BETANET Remote node (REDACTED:8545)")
                 NODE_URL="http://REDACTED:8545"
+                break
+                ;;
+            "DG TestnetV1 node (35.158.17.89:32837)")
+                NODE_URL="http://35.158.17.89:32837"
+                break
+                ;;
+            "Foundation testnetv1 (buildl.localbits.org:8545)")
+                NODE_URL="http://buildl.localbits.org:8545"
                 break
                 ;;
             *) echo "Invalid option. Please try again.";;
@@ -114,7 +122,7 @@ clone_repo() {
 }
 
 # Setup server environment
-setup_server() {
+setup_backendapi() {
     print_status "Setting up server..."
     cd "$BASE_DIR/backendAPI" || print_error "Server directory not found"
 
@@ -122,7 +130,7 @@ setup_server() {
     print_status "Creating .env.development file..."
     cat > .env.development << EOL
 GIN_MODE=release
-MONGOURI=mongodb://localhost:27017/qrldata-b2h?readPreference=primary
+MONGOURI=mongodb://localhost:27017/qrldata-z?readPreference=primary
 HTTP_PORT=:8080
 NODE_URL=$NODE_URL
 EOL
@@ -143,14 +151,14 @@ setup_frontend() {
 
     # Create .env file
     cat > .env << EOL
-DATABASE_URL=mongodb://localhost:27017/qrldata-b2h?readPreference=primary
+DATABASE_URL=mongodb://localhost:27017/qrldata-z?readPreference=primary
 DOMAIN_NAME=http://localhost:3000
 HANDLER_URL=http://127.0.0.1:8080
 EOL
 
     # Create .env.local file
     cat > .env.local << EOL
-DATABASE_URL=mongodb://localhost:27017/qrldata-b2h?readPreference=primary
+DATABASE_URL=mongodb://localhost:27017/qrldata-z?readPreference=primary
 DOMAIN_NAME=http://localhost:3000
 HANDLER_URL=http://127.0.0.1:8080
 EOL
@@ -182,14 +190,14 @@ EOL
 
     # Build synchronizer
     print_status "Building synchronizer..."
-    go build -o syncer main.go || print_error "Failed to build synchronizer"
+    go build -o zsyncer main.go || print_error "Failed to build synchronizer"
 
     # Make the binary executable
-    chmod +x ./syncer
+    chmod +x ./zsyncer
 
     # Start synchronizer with PM2, explicitly setting environment variables
     print_status "Starting synchronizer with PM2..."
-     pm2 start ./syncer --name "synchroniser" --cwd "$BASE_DIR/Zond2mongoDB" || print_error "Failed to start synchronizer"
+     pm2 start ./zsyncer --name "syncer" --cwd "$BASE_DIR/Zond2mongoDB" || print_error "Failed to start synchronizer"
 }
 
 # Save PM2 processes
@@ -221,8 +229,8 @@ main() {
 
     # Clone and setup
     clone_repo
-    setup_server        # Start the server before building the frontend
-    setup_frontend
+    #setup_backendapi        # Start the server before building the frontend
+    #setup_frontend
     setup_synchronizer
     save_pm2
 

@@ -32,6 +32,38 @@ git clone https://github.com/DigitalGuards/zondexplorer.git
 #### Requirements
 - Install golang, mongodb/mongosh, pm2 packages - check their documentations
 
+## Getting Started
+
+### Deployment Scripts (Recommended Method)
+
+The easiest way to set up the QRL Explorer is by using the provided deployment scripts, which handle all configuration automatically:
+
+#### Windows (using Git Bash):
+```bash
+cd zondexplorer
+./deploy-windowsgitbash.sh
+```
+
+#### Linux/macOS:
+```bash
+cd zondexplorer
+./deploy.sh
+```
+
+These scripts will:
+1. Check for required dependencies (Node.js, npm, Go, MongoDB)
+2. Install PM2 if not present
+3. Clean up any existing PM2 processes and MongoDB data
+4. Prompt you to select a Zond node to connect to
+5. Set up and configure all three components with appropriate environment files
+6. Build and start all services using PM2
+
+The deployment scripts create all necessary environment files with correct configurations for each component.
+
+### Manual Setup (Alternative)
+
+If you prefer to set up components individually, follow the instructions below:
+
 ### ExplorerFrontend Setup
 Navigate to the frontend directory:
 
@@ -48,7 +80,7 @@ touch .env && touch .env.local
 
 | VARIABLE | VALUE |
 | ------ | ------ |
-| DATABASE_URL | mongodb://localhost:27017/qrldata-b2h?readPreference=primary |
+| DATABASE_URL | mongodb://localhost:27017/qrldata-z?readPreference=primary |
 | NEXT_PUBLIC_DOMAIN_NAME | http://localhost:3000 (dev) OR http://your_domain_name.io (prod) |
 | NEXT_PUBLIC_HANDLER_URL | http://localhost:8080 (dev) OR http://your_domain_name.io:8443 (prod) |
 
@@ -56,7 +88,7 @@ touch .env && touch .env.local
 
 | VARIABLE | VALUE |
 | ------ | ------ |
-| DATABASE_URL | mongodb://localhost:27017/qrldata-b2h?readPreference=primary |
+| DATABASE_URL | mongodb://localhost:27017/qrldata-z?readPreference=primary |
 | DOMAIN_NAME | http://localhost:3000 (dev) OR http://your_domain_name.io (prod) |
 | HANDLER_URL | http://localhost:8080 (dev) OR http://your_domain_name.io:8443 (prod) |
 
@@ -72,17 +104,19 @@ pm2 start npm --name "frontend" -- start
 Navigate to the backend directory and create environment files:
 ```
 cd ../backendAPI
-touch .env.development && touch .env.production
+touch .env
 ```
 
-#### .env.development fields 
+#### .env fields 
 
 | VARIABLE | VALUE |
 | ------ | ------ |
 | GIN_MODE | release |
-| MONGOURI | mongodb://localhost:27017/qrldata-b2h?readPreference=primary |
+| MONGOURI | mongodb://localhost:27017/qrldata-z?readPreference=primary |
 | HTTP_PORT | :8080 |
 | NODE_URL | http://localhost:8545 |
+
+**Note:** The backendAPI application specifically looks for a file named `.env` at runtime, not `.env.development` or `.env.production`.
 
 Build and start the backendAPI:
 ```bash

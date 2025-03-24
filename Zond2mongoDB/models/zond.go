@@ -134,6 +134,14 @@ type ZondResponse struct {
 	Result  string `json:"result"`
 }
 
+// ZondLogsResponse represents the response from zond_getLogs RPC call
+// It uses the Log struct defined in models/receipt.go
+type ZondLogsResponse struct {
+	Id      int    `json:"id"`
+	Jsonrpc string `json:"jsonrpc"`
+	Result  []Log  `json:"result"`
+}
+
 type Vote struct {
 	ID     primitive.ObjectID `bson:"_id,omitempty"`
 	Option string             `bson:"option"`
