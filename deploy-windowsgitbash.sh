@@ -247,7 +247,7 @@ main() {
     
     setup_synchronizer
     #setup_frontend
-    #setup_server
+    setup_server
     #save_pm2
 
     print_status "Deployment complete! Services are starting up..."
