@@ -482,3 +482,86 @@ func GetTransactionByHash(hash string) (*models.Transaction, error) {
 		BlockNumber: blockNum,
 	}, nil
 }
+
+func ReturnNonZeroTransactions(address string, page, limit int) ([]models.TransactionByAddress, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	var transactions []models.TransactionByAddress
+	defer cancel()
+
+	projection := primitive.D{
+		{Key: "inOut", Value: 1},
+		{Key: "txType", Value: 1},
+		{Key: "address", Value: 1},
+		{Key: "txHash", Value: 1},
+		{Key: "timeStamp", Value: 1},
+		{Key: "amount", Value: 1},
+		{Key: "from", Value: 1},
+		{Key: "to", Value: 1},
+		{Key: "blockNumber", Value: 1},
+	}
+
+	// Sort by timestamp, newest first
+	opts := options.Find().
+		SetProjection(projection).
+		SetSort(primitive.D{{Key: "timeStamp", Value: -1}})
+
+	// Format the address for query
+	formattedAddress := address
+	if !strings.HasPrefix(address, "Z") {
+		formattedAddress = "Z" + address
+	}
+
+	// Create a filter for both from and to with this address and non-zero amount
+	filter := bson.M{
+		"$and": []bson.M{
+			{
+				"$or": []bson.M{
+					{"from": formattedAddress},
+					{"to": formattedAddress},
+				},
+			},
+			{"amount": bson.M{"$gt": 0}}, // Only return transactions with amount > 0
+		},
+	}
+
+	// Apply pagination
+	if limit != 0 {
+		if page == 0 {
+			page = 1
+		}
+		opts.SetSkip(int64((page - 1) * limit))
+		opts.SetLimit(int64(limit))
+	}
+
+	// Execute the query
+	results, err := configs.TransactionByAddressCollection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer results.Close(ctx)
+
+	// Process the results
+	for results.Next(ctx) {
+		var singleTransaction models.TransactionByAddress
+		if err = results.Decode(&singleTransaction); err != nil {
+			return nil, err
+		}
+
+		// Set the inOut flag based on the address's relation to the transaction
+		if singleTransaction.From == formattedAddress {
+			singleTransaction.InOut = 0 // Outgoing
+			singleTransaction.Address = singleTransaction.To
+		} else {
+			singleTransaction.InOut = 1 // Incoming
+			singleTransaction.Address = singleTransaction.From
+		}
+		transactions = append(transactions, singleTransaction)
+	}
+
+	// Check for cursor errors
+	if err = results.Err(); err != nil {
+		return nil, err
+	}
+
+	return transactions, nil
+}

@@ -526,4 +526,39 @@ func UserRoute(router *gin.Engine) {
 			"block": block,
 		})
 	})
+
+	// Add a new endpoint to get limited non-zero transactions for an address
+	router.GET("/address/:address/transactions", func(c *gin.Context) {
+		address := c.Param("address")
+		page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "5")) // Default to 5
+
+		transactions, err := db.ReturnNonZeroTransactions(address, page, limit)
+		if err != nil {
+			log.Printf("Error fetching non-zero transactions: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to fetch transactions: %v", err),
+			})
+			return
+		}
+
+		// Count total non-zero transactions for this address (for pagination info)
+		total, err := db.CountTransactions(address)
+		if err != nil {
+			log.Printf("Error counting transactions: %v", err)
+			// Continue anyway, just won't have total count
+		}
+
+		// Return empty array instead of null if no transactions
+		if transactions == nil {
+			transactions = make([]models.TransactionByAddress, 0)
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"transactions": transactions,
+			"total":        total,
+			"page":         page,
+			"limit":        limit,
+		})
+	})
 }
