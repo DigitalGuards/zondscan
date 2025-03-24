@@ -399,8 +399,8 @@ func processTokensAfterInitialSync(initialSyncStart string, maxHex string) {
 		// Continue with regular token processing even if factory detection fails
 	}
 
-	// Process token transfers in larger batches for efficiency
-	tokenBatchSize := 20
+	// Process token transfers in larger batches
+	tokenBatchSize := 35
 	currentBlockForTokens := initialSyncStart
 	totalProcessed := 0
 

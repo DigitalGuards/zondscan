@@ -40,3 +40,4 @@ Zond2mongoDB/logs/*
 backendAPI/.env
 zond-contract-example/
 zond-contract-example*
+backendAPI/backendAPI.log

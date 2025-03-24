@@ -35,7 +35,7 @@ NODE_URL = os.getenv('NODE_URL', 'https://qrlwallet.com/api/zond-rpc/testnet')
 
 # Constants
 TRANSFER_EVENT_SIGNATURE = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
-BATCH_SIZE = 50  # Reduced from 100 to 50 for faster processing
+BATCH_SIZE = 50
 
 def make_rpc_call(method, params, max_retries=3, retry_delay=1):
     """Make an RPC call to the Zond node with retries."""

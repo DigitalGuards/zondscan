@@ -197,11 +197,7 @@ func StoreLastKnownBlockNumber(blockNumber string) error {
 			zap.Error(err))
 		return err
 	} else if existingDoc.BlockNumber != "" {
-		// Compare the existing block number with the new one
 		if utils.CompareHexNumbers(existingDoc.BlockNumber, blockNumber) >= 0 {
-			configs.Logger.Debug("Not updating sync state - existing block is higher or equal",
-				zap.String("existing", existingDoc.BlockNumber),
-				zap.String("new", blockNumber))
 			return nil
 		}
 	}
