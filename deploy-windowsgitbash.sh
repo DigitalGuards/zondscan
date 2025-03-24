@@ -168,8 +168,8 @@ main() {
     check_dependencies
 
     # Check if MongoDB and Zond node are running
-    check_mongodb
-    check_zond_node
+    #check_mongodb
+    #check_zond_node
 
     # Clone and setup
     clone_repo

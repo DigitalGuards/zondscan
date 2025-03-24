@@ -30,3 +30,5 @@ ExplorerFrontend/app/todo.md
 QRLtoMongoDB-PoS/syncer
 .windsurfrules
 todo.md
+Zond2mongoDB/logs/*
+backendAPI/.env
