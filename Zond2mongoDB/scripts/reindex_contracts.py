@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 # MongoDB connection
 MONGO_URI = os.getenv('MONGOURI', 'mongodb://localhost:27017')
-NODE_URL = os.getenv('NODE_URL', 'http://REDACTED:4545')
+NODE_URL = os.getenv('NODE_URL', 'https://qrlwallet.com/api/zond-rpc/testnet')
 
 def make_rpc_call(method, params):
     """Make an RPC call to the Zond node."""
@@ -144,7 +144,7 @@ def process_contract_creation(transfer_doc, contracts_collection):
         return False
         
     contract_address = receipt['contractAddress'].lower()  # Store as lowercase hex
-    creator_address = ("0x" + transfer_doc['from'].hex() if isinstance(transfer_doc['from'], bytes) else transfer_doc['from']).lower()
+    creator_address = ("Z" + transfer_doc['from'].hex() if isinstance(transfer_doc['from'], bytes) else transfer_doc['from']).lower()
     
     # Get contract code
     contract_code = get_contract_code(contract_address)
@@ -233,9 +233,9 @@ def main():
             
             # Convert bytes to hex strings if needed
             if isinstance(contract_address, bytes):
-                contract_address = "0x" + contract_address.hex()
+                contract_address = "Z" + contract_address.hex()
             if isinstance(creator_address, bytes):
-                creator_address = "0x" + creator_address.hex()
+                creator_address = "Z" + creator_address.hex()
                 
             contract_address = contract_address.lower()
             creator_address = creator_address.lower()

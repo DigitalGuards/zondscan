@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 # MongoDB connection
 MONGO_URI = os.getenv('MONGOURI', 'mongodb://localhost:27017')
-NODE_URL = os.getenv('NODE_URL', 'http://35.158.17.89:32837')
+NODE_URL = os.getenv('NODE_URL', 'https://qrlwallet.com/api/zond-rpc/testnet')
 
 # Constants
 TRANSFER_EVENT_SIGNATURE = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
