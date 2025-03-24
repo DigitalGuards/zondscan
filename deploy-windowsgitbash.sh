@@ -28,6 +28,21 @@ clean_pm2() {
     pm2 cleardump || print_status "No dump file to clear"
 }
 
+# Clean MongoDB database and log files
+clean_database_and_logs() {
+    print_status "Cleaning MongoDB database and log files..."
+    
+    # Drop the MongoDB database
+    mongosh --eval "db.getSiblingDB('qrldata-z').dropDatabase()" || print_status "Failed to drop database or database doesn't exist"
+    export BASE_DIR=$(pwd)
+    # Delete the log file if it exists
+    if [ -f "$BASE_DIR/Zond2mongoDB/logs/zond_sync.log" ]; then
+        rm "$BASE_DIR/Zond2mongoDB/logs/zond_sync.log" || print_status "Failed to delete log file"
+    else
+        print_status "Log file not found, skipping deletion"
+    fi
+}
+
 # Check for required tools
 check_dependencies() {
     print_status "Checking dependencies..."
@@ -55,7 +70,7 @@ check_mongodb() {
 select_node() {
     print_status "Select Zond node to use:"
     PS3="Please choose the node (1-4): "
-    options=("Local node (127.0.0.1:8545)" "BETANET Remote node (REDACTED:8545)" "DG TestnetV1 node (35.158.17.89:32837)" "Foundation testnetv1 (buidl.localbits.org:8545)")
+    options=("Local node (127.0.0.1:8545)" "BETANET Remote node (REDACTED:8545)" "DG TestnetV1 node (35.158.17.89:32776)" "Foundation testnetv1 (buidl.localbits.org:8545)")
     select opt in "${options[@]}"
     do
         case $opt in
@@ -67,8 +82,8 @@ select_node() {
                 NODE_URL="http://REDACTED:8545"
                 break
                 ;;
-            "DG TestnetV1 node (35.158.17.89:32837)")
-                NODE_URL="http://35.158.17.89:32837"
+            "DG TestnetV1 node (35.158.17.89:32776)")
+                NODE_URL="http://35.158.17.89:32776"
                 break
                 ;;
             "Foundation testnetv1 (buidl.localbits.org:8545)")
@@ -209,6 +224,9 @@ main() {
 
     # Clean PM2 logs and processes before starting
     clean_pm2
+    
+    # Clean database and log files
+    clean_database_and_logs
 
     # Check for required tools
     check_dependencies

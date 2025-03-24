@@ -32,6 +32,38 @@ git clone https://github.com/DigitalGuards/zondexplorer.git
 #### Requirements
 - Install golang, mongodb/mongosh, pm2 packages - check their documentations
 
+## Getting Started
+
+### Deployment Scripts (Recommended Method)
+
+The easiest way to set up the QRL Explorer is by using the provided deployment scripts, which handle all configuration automatically:
+
+#### Windows (using Git Bash):
+```bash
+cd zondexplorer
+./deploy-windowsgitbash.sh
+```
+
+#### Linux/macOS:
+```bash
+cd zondexplorer
+./deploy.sh
+```
+
+These scripts will:
+1. Check for required dependencies (Node.js, npm, Go, MongoDB)
+2. Install PM2 if not present
+3. Clean up any existing PM2 processes and MongoDB data
+4. Prompt you to select a Zond node to connect to
+5. Set up and configure all three components with appropriate environment files
+6. Build and start all services using PM2
+
+The deployment scripts create all necessary environment files with correct configurations for each component.
+
+### Manual Setup (Alternative)
+
+If you prefer to set up components individually, follow the instructions below:
+
 ### ExplorerFrontend Setup
 Navigate to the frontend directory:
 
@@ -72,10 +104,10 @@ pm2 start npm --name "frontend" -- start
 Navigate to the backend directory and create environment files:
 ```
 cd ../backendAPI
-touch .env.development && touch .env.production
+touch .env
 ```
 
-#### .env.development fields 
+#### .env fields 
 
 | VARIABLE | VALUE |
 | ------ | ------ |
@@ -83,6 +115,8 @@ touch .env.development && touch .env.production
 | MONGOURI | mongodb://localhost:27017/qrldata-z?readPreference=primary |
 | HTTP_PORT | :8080 |
 | NODE_URL | http://localhost:8545 |
+
+**Note:** The backendAPI application specifically looks for a file named `.env` at runtime, not `.env.development` or `.env.production`.
 
 Build and start the backendAPI:
 ```bash
