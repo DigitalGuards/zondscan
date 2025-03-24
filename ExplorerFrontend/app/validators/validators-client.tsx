@@ -3,13 +3,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import config from '../../config';
-import { toFixed, formatAmount, epochsToDays } from '../lib/helpers';
-import { getDilithiumAddressFromPK } from '@theqrl/wallet.js';
-
-// Convert base64 to hex string
-function base64ToHex(base64: string): string {
-  return Buffer.from(base64, 'base64').toString('hex');
-}
+import { toFixed, formatAmount, epochsToDays, formatAddress } from '../lib/helpers';
 
 interface Validator {
   address: string;
@@ -26,7 +20,29 @@ export default function ValidatorsWrapper() {
   const [totalStaked, setTotalStaked] = useState('0');
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
   const itemsPerPage = 10;
+
+  useEffect(() => {
+    // Handle window resize
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+    };
+
+    // Add event listener
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', handleResize);
+      // Initial width
+      setWindowWidth(window.innerWidth);
+    }
+
+    // Cleanup
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('resize', handleResize);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     async function fetchValidators() {
@@ -36,11 +52,22 @@ export default function ValidatorsWrapper() {
         
         // Process validators to decode addresses
         const processedValidators = validatorsData.map((validator: any) => {
-          const publicKey = Buffer.from(validator.address, 'base64');
-          const dilithiumAddress = getDilithiumAddressFromPK(publicKey);
+          // The address from the API is the validator's public key in hex format
+          // We need to convert it to a proper QRL address with Z prefix
+          let formattedAddress = validator.address;
+          
+          try {
+            // The public key is already in hex format, just add the Z prefix
+            formattedAddress = 'Z' + validator.address;
+          } catch (error) {
+            console.error('Error formatting validator address:', error);
+            // If conversion fails, use the original address
+            formattedAddress = validator.address;
+          }
+          
           return {
             ...validator,
-            address: '0x' + Buffer.from(dilithiumAddress).toString('hex')
+            address: formattedAddress
           };
         });
         
@@ -132,7 +159,7 @@ export default function ValidatorsWrapper() {
                 <tr key={index} className="hover:bg-[#2d2d2d]/30">
                   <td className="px-4 py-3 whitespace-nowrap text-sm">
                     <a href={`/address/${validator.address}`} className="text-[#ffa729] hover:underline font-mono">
-                      {window.innerWidth < 640 
+                      {windowWidth < 640 
                         ? `${validator.address.slice(0, 8)}...${validator.address.slice(-6)}`
                         : validator.address}
                     </a>

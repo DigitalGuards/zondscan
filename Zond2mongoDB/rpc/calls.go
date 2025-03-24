@@ -1,12 +1,12 @@
 package rpc
 
 import (
+	"Zond2mongoDB/configs"
 	"Zond2mongoDB/models"
 	"Zond2mongoDB/services"
 	"Zond2mongoDB/utils"
 	"Zond2mongoDB/validation"
 	"bytes"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,17 +20,6 @@ import (
 
 	"go.uber.org/zap"
 )
-
-// Global HTTP client with connection pooling and timeouts
-var httpClient = &http.Client{
-	Timeout: 30 * time.Second,
-	Transport: &http.Transport{
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 100,
-		IdleConnTimeout:     90 * time.Second,
-		DisableCompression:  true,
-	},
-}
 
 func GetLatestBlock() (string, error) {
 	var Zond models.RPC
@@ -58,7 +47,7 @@ func GetLatestBlock() (string, error) {
 		}
 		req.Header.Set("Content-Type", "application/json")
 
-		resp, err = httpClient.Do(req)
+		resp, err = GetHTTPClient().Do(req)
 		if err == nil && resp != nil {
 			break
 		}
@@ -131,8 +120,7 @@ func GetBlockByNumberMainnet(blockNumber string) (*models.ZondDatabaseBlock, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := GetHTTPClient().Do(req)
 	if err != nil {
 		zap.L().Info("Failed to get response from RPC call", zap.Error(err))
 		return nil, err
@@ -165,11 +153,11 @@ func GetBlockByNumberMainnet(blockNumber string) (*models.ZondDatabaseBlock, err
 			return nil, fmt.Errorf("invalid transaction hash: %v", err)
 		}
 		if tx.To != "" {
-			if err := validation.ValidateHexString(tx.To, validation.AddressLength); err != nil {
+			if err := validation.ValidateAddress(tx.To); err != nil {
 				return nil, fmt.Errorf("invalid to address: %v", err)
 			}
 		}
-		if err := validation.ValidateHexString(tx.From, validation.AddressLength); err != nil {
+		if err := validation.ValidateAddress(tx.From); err != nil {
 			return nil, fmt.Errorf("invalid from address: %v", err)
 		}
 	}
@@ -201,8 +189,7 @@ func GetContractAddress(txHash string) (string, string, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := GetHTTPClient().Do(req)
 	if err != nil {
 		zap.L().Info("Failed to execute request", zap.Error(err))
 		return "", "", err
@@ -224,7 +211,7 @@ func GetContractAddress(txHash string) (string, string, error) {
 
 	// Validate contract address if present
 	if ContractAddress.Result.ContractAddress != "" {
-		if err := validation.ValidateHexString(ContractAddress.Result.ContractAddress, validation.AddressLength); err != nil {
+		if err := validation.ValidateAddress(ContractAddress.Result.ContractAddress); err != nil {
 			return "", "", fmt.Errorf("invalid contract address in response: %v", err)
 		}
 	}
@@ -271,8 +258,7 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := GetHTTPClient().Do(req)
 	if err != nil {
 		zap.L().Error("Failed to execute request", zap.Error(err))
 		return "", "", "", "", 0, 0, nil, 0, 0, 0, "", 0
@@ -294,6 +280,7 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 	// Initialize default values for gas and gasUsed
 	gas = 0
 	gasUsed = 0
+	value = 0 // Initialize value to 0
 
 	// Validate and parse gas values
 	if tracerResponse.Result.Gas != "" {
@@ -316,6 +303,28 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 		}
 	}
 
+	// Parse the value field
+	if tracerResponse.Result.Value != "" {
+		if !validation.IsValidHexString(tracerResponse.Result.Value) {
+			zap.L().Error("Invalid value format", zap.String("value", tracerResponse.Result.Value))
+		} else {
+			// Convert hex value to big.Int
+			valueBigInt := new(big.Int)
+			valueBigInt.SetString(tracerResponse.Result.Value[2:], 16)
+
+			// Convert to float32 (with proper scaling)
+			divisor := new(big.Float).SetFloat64(float64(configs.QUANTA))
+			bigIntAsFloat := new(big.Float).SetInt(valueBigInt)
+			resultBigFloat := new(big.Float).Quo(bigIntAsFloat, divisor)
+			valueFloat64, _ := resultBigFloat.Float64()
+			value = float32(valueFloat64)
+
+			zap.L().Debug("Parsed transaction value",
+				zap.String("hex_value", tracerResponse.Result.Value),
+				zap.Float32("parsed_value", value))
+		}
+	}
+
 	// Check if we have valid call data
 	hasValidCallData := (len(tracerResponse.Result.Calls) > 0 &&
 		tracerResponse.Result.Calls[0].From != "" &&
@@ -325,24 +334,24 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 		tracerResponse.Result.Type == "CALL"
 
 	if !hasValidCallData {
-		return "", "", "", "", 0, 0, nil, 0, 0, gasUsed, "", 0
+		return "", "", "", "", 0, 0, nil, 0, 0, 0, "", 0
 	}
 
-	// Validate addresses
+	// Validate addresses and convert to Z format
 	if tracerResponse.Result.From != "" {
-		if err := validation.ValidateHexString(tracerResponse.Result.From, validation.AddressLength); err != nil {
+		if err := validation.ValidateAddress(tracerResponse.Result.From); err != nil {
 			zap.L().Error("Invalid from address", zap.Error(err))
-			return "", "", "", "", 0, 0, nil, 0, 0, 0, "", 0
+			// Continue processing despite error
 		}
-		from = tracerResponse.Result.From
+		from = validation.ConvertToZAddress(tracerResponse.Result.From)
 	}
 
 	if tracerResponse.Result.To != "" {
-		if err := validation.ValidateHexString(tracerResponse.Result.To, validation.AddressLength); err != nil {
+		if err := validation.ValidateAddress(tracerResponse.Result.To); err != nil {
 			zap.L().Error("Invalid to address", zap.Error(err))
-			return "", "", "", "", 0, 0, nil, 0, 0, 0, "", 0
+			// Continue processing despite error
 		}
-		to = tracerResponse.Result.To
+		to = validation.ConvertToZAddress(tracerResponse.Result.To)
 	}
 
 	// Validate and process output
@@ -352,23 +361,25 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 			zap.L().Error("Invalid output format", zap.String("output", tracerResponse.Result.Output))
 			output = 0
 		} else if tracerResponse.Result.Output != "0x" && len(tracerResponse.Result.Output) > 2 {
-			if parsed, err := strconv.ParseUint(tracerResponse.Result.Output[2:], 16, 64); err == nil {
-				output = parsed
-			} else {
-				zap.L().Warn("Failed to parse output value", zap.Error(err))
-				output = 0
-			}
-		}
-	}
+			// Remove "0x" prefix and leading zeros
+			hexStr := strings.TrimPrefix(tracerResponse.Result.Output, "0x")
+			hexStr = strings.TrimLeft(hexStr, "0")
 
-	// Validate and process value
-	if tracerResponse.Result.Value != "" {
-		if !validation.IsValidHexString(tracerResponse.Result.Value) {
-			zap.L().Error("Invalid value format", zap.String("value", tracerResponse.Result.Value))
-		} else {
-			bigInt := new(big.Int)
-			if _, ok := bigInt.SetString(tracerResponse.Result.Value[2:], 16); !ok {
-				zap.L().Warn("Failed to parse value")
+			// If it's an address (40 characters), just store 1 to indicate success
+			if len(tracerResponse.Result.Output) == 42 { // "0x" + 40 chars
+				output = 1
+			} else if hexStr == "" {
+				output = 0
+			} else {
+				// Try to parse as uint64 if it's a small enough number
+				if parsed, err := strconv.ParseUint(hexStr, 16, 64); err == nil {
+					output = parsed
+				} else {
+					// For larger numbers, just store 1 to indicate success
+					zap.L().Debug("Output value too large for uint64, storing 1",
+						zap.String("output", tracerResponse.Result.Output))
+					output = 1
+				}
 			}
 		}
 	}
@@ -400,8 +411,9 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 			// Extract and validate address
 			if len(data) >= 64 {
 				extractedAddr := "0x" + data[24:64]
-				if err := validation.ValidateHexString(extractedAddr, validation.AddressLength); err == nil {
-					addressFunctionidentifier = extractedAddr
+				if err := validation.ValidateAddress(extractedAddr); err == nil {
+					// Convert to Z format before returning
+					addressFunctionidentifier = validation.ConvertToZAddress(extractedAddr)
 				} else {
 					zap.L().Error("Invalid extracted address", zap.Error(err))
 				}
@@ -435,7 +447,7 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 		0, // input is not used in the current implementation
 		output,
 		traceAddress,
-		0, // value is not used in the current implementation
+		value, // Now using the parsed value instead of hardcoded 0
 		gas,
 		gasUsed,
 		addressFunctionidentifier,
@@ -444,7 +456,7 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 
 func GetBalance(address string) (string, error) {
 	// Validate input address format
-	if err := validation.ValidateHexString(address, validation.AddressLength); err != nil {
+	if err := validation.ValidateAddress(address); err != nil {
 		return "", fmt.Errorf("invalid address format: %v", err)
 	}
 
@@ -468,8 +480,7 @@ func GetBalance(address string) (string, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := GetHTTPClient().Do(req)
 	if err != nil {
 		zap.L().Info("Failed to execute request", zap.Error(err))
 		return "", err
@@ -508,9 +519,7 @@ func GetValidators() error {
 
 	// Base URL for the validators endpoint
 	baseURL := strings.TrimRight(beaconchainURL, "/") + "/zond/v1alpha1/validators"
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
+	client := GetHTTPClient()
 
 	// Get current epoch from latest block
 	latestBlock, err := GetLatestBlock()
@@ -578,16 +587,9 @@ func GetValidators() error {
 	return nil
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 func GetCode(address string, blockNrOrHash string) (string, error) {
 	// Validate address format
-	if err := validation.ValidateHexString(address, validation.AddressLength); err != nil {
+	if err := validation.ValidateAddress(address); err != nil {
 		return "", fmt.Errorf("invalid address format: %v", err)
 	}
 
@@ -611,8 +613,7 @@ func GetCode(address string, blockNrOrHash string) (string, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := GetHTTPClient().Do(req)
 	if err != nil {
 		zap.L().Info("Failed to execute request", zap.Error(err))
 		return "", err
@@ -642,7 +643,7 @@ func GetCode(address string, blockNrOrHash string) (string, error) {
 
 func ZondCall(contractAddress string) (*models.ZondResponse, error) {
 	// Validate contract address format
-	if err := validation.ValidateHexString(contractAddress, validation.AddressLength); err != nil {
+	if err := validation.ValidateAddress(contractAddress); err != nil {
 		return nil, fmt.Errorf("invalid contract address format: %v", err)
 	}
 
@@ -673,7 +674,7 @@ func ZondCall(contractAddress string) (*models.ZondResponse, error) {
 		return nil, err
 	}
 
-	resp, err := http.Post(os.Getenv("NODE_URL"), "application/json", bytes.NewBuffer(jsonPayload))
+	resp, err := GetHTTPClient().Post(os.Getenv("NODE_URL"), "application/json", bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		zap.L().Info("Failed to get a response from HTTP POST request", zap.Error(err))
 		return nil, err
@@ -701,268 +702,116 @@ func ZondCall(contractAddress string) (*models.ZondResponse, error) {
 	return &responseData, nil
 }
 
-func ZondGetLogs(contractAddress string) (*models.ZondResponse, error) {
-	// Validate contract address format
-	if err := validation.ValidateHexString(contractAddress, validation.AddressLength); err != nil {
-		return nil, fmt.Errorf("invalid contract address format: %v", err)
+// ZondGetBlockLogs retrieves logs for a specific block with optional topic filtering
+func ZondGetBlockLogs(blockNumber string, topics []string) (*models.ZondLogsResponse, error) {
+	// Validate block number format - Zond uses 0x prefix for block numbers
+	if len(blockNumber) == 0 || (!strings.HasPrefix(blockNumber, "0x") && blockNumber != "latest") {
+		return nil, fmt.Errorf("invalid block number format: %s", blockNumber)
 	}
 
-	payload := map[string]interface{}{
-		"jsonrpc": "2.0",
-		"method":  "zond_getLogs",
-		"params":  []string{contractAddress},
-		"id":      1,
+	filter := map[string]interface{}{
+		"fromBlock": blockNumber,
+		"toBlock":   blockNumber,
 	}
 
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		zap.L().Info("Failed JSON marshal", zap.Error(err))
-		return nil, err
-	}
-
-	resp, err := http.Post(os.Getenv("NODE_URL"), "application/json", bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		zap.L().Info("Failed to get a response from HTTP POST request", zap.Error(err))
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		zap.L().Info("Failed to read response body", zap.Error(err))
-		return nil, err
-	}
-
-	var responseData models.ZondResponse
-	err = json.Unmarshal(body, &responseData)
-	if err != nil {
-		zap.L().Info("Failed JSON unmarshal", zap.Error(err))
-		return nil, err
-	}
-
-	// Validate response data
-	if responseData.Result != "" && !validation.IsValidHexString(responseData.Result) {
-		return nil, fmt.Errorf("invalid response format: %s", responseData.Result)
-	}
-
-	return &responseData, nil
-}
-
-// Common ERC20 function signatures
-const (
-	SIG_NAME     = "0x06fdde03" // name()
-	SIG_SYMBOL   = "0x95d89b41" // symbol()
-	SIG_DECIMALS = "0x313ce567" // decimals()
-)
-
-// CallContractMethod makes a zond_call to a contract method and returns the result
-func CallContractMethod(contractAddress string, methodSig string) (string, error) {
-	// Validate contract address format
-	if err := validation.ValidateHexString(contractAddress, validation.AddressLength); err != nil {
-		return "", fmt.Errorf("invalid contract address format: %v", err)
-	}
-
-	// Validate method signature format
-	if !validation.IsValidHexString(methodSig) || len(methodSig) != 10 { // "0x" + 8 chars
-		return "", fmt.Errorf("invalid method signature format: %s", methodSig)
+	// Add topics if provided
+	if len(topics) > 0 {
+		filter["topics"] = topics
 	}
 
 	group := models.JsonRPC{
 		Jsonrpc: "2.0",
-		Method:  "zond_call",
-		Params: []interface{}{
-			map[string]string{
-				"to":   contractAddress,
-				"data": methodSig,
-			},
-			"latest",
-		},
-		ID: 1,
+		Method:  "zond_getLogs",
+		Params:  []interface{}{filter},
+		ID:      1,
 	}
 
 	b, err := json.Marshal(group)
 	if err != nil {
 		zap.L().Info("Failed JSON marshal", zap.Error(err))
-		return "", err
+		return nil, err
 	}
 
 	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
 	if err != nil {
 		zap.L().Info("Failed to create request", zap.Error(err))
-		return "", err
+		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := GetHTTPClient().Do(req)
 	if err != nil {
 		zap.L().Info("Failed to get response from RPC call", zap.Error(err))
-		return "", err
+		return nil, err
+	}
+	if resp == nil {
+		return nil, fmt.Errorf("received nil response")
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		zap.L().Info("Failed to read response body", zap.Error(err))
-		return "", err
+		return nil, err
 	}
 
-	var result struct {
-		Result string `json:"result"`
-	}
-	if err := json.Unmarshal(body, &result); err != nil {
+	var responseData models.ZondLogsResponse
+	err = json.Unmarshal([]byte(string(body)), &responseData)
+	if err != nil {
 		zap.L().Info("Failed to unmarshal response", zap.Error(err))
-		return "", err
+		return nil, err
 	}
 
-	return result.Result, nil
+	return &responseData, nil
 }
 
-// GetTokenInfo attempts to get ERC20 token information for a contract
-func GetTokenInfo(contractAddress string) (name string, symbol string, decimals uint8, isToken bool) {
-	zap.L().Info("Getting token info", zap.String("contract_address", contractAddress))
+// GetTxDetailsByHash retrieves transaction details by hash
+func GetTxDetailsByHash(txHash string) (*models.TransactionResult, error) {
+	zap.L().Info("Getting transaction details", zap.String("txHash", txHash))
 
-	// Track if we successfully got any token information
-	gotTokenInfo := false
+	// Validate transaction hash
+	if err := validation.ValidateHexString(txHash, validation.HashLength); err != nil {
+		return nil, fmt.Errorf("invalid transaction hash: %v", err)
+	}
 
-	name, err := GetTokenName(contractAddress)
+	group := models.JsonRPC{
+		Jsonrpc: "2.0",
+		Method:  "zond_getTransactionByHash",
+		Params:  []interface{}{txHash},
+		ID:      1,
+	}
+
+	b, err := json.Marshal(group)
 	if err != nil {
-		zap.L().Info("Failed to get token name",
-			zap.String("contract_address", contractAddress),
-			zap.Error(err))
-		name = ""
-	} else {
-		zap.L().Info("Got token name",
-			zap.String("contract_address", contractAddress),
-			zap.String("name", name))
-		gotTokenInfo = true
+		zap.L().Info("Failed JSON marshal", zap.Error(err))
+		return nil, err
 	}
 
-	symbol, err = GetTokenSymbol(contractAddress)
+	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
 	if err != nil {
-		zap.L().Info("Failed to get token symbol",
-			zap.String("contract_address", contractAddress),
-			zap.Error(err))
-		symbol = ""
-	} else {
-		zap.L().Info("Got token symbol",
-			zap.String("contract_address", contractAddress),
-			zap.String("symbol", symbol))
-		gotTokenInfo = true
+		zap.L().Info("Failed to create request", zap.Error(err))
+		return nil, err
 	}
+	req.Header.Set("Content-Type", "application/json")
 
-	decimals, err = GetTokenDecimals(contractAddress)
+	resp, err := GetHTTPClient().Do(req)
 	if err != nil {
-		zap.L().Info("Failed to get token decimals",
-			zap.String("contract_address", contractAddress),
-			zap.Error(err))
-		decimals = 0
-	} else {
-		zap.L().Info("Got token decimals",
-			zap.String("contract_address", contractAddress),
-			zap.Uint8("decimals", decimals))
-		gotTokenInfo = true
+		zap.L().Info("Failed to execute request", zap.Error(err))
+		return nil, err
 	}
+	defer resp.Body.Close()
 
-	// Only mark as token if we got at least some token information
-	if gotTokenInfo {
-		zap.L().Info("Successfully identified token",
-			zap.String("contract_address", contractAddress))
-		return name, symbol, decimals, true
-	}
-
-	zap.L().Info("Contract is not a token",
-		zap.String("contract_address", contractAddress))
-	return name, symbol, decimals, false
-}
-
-func GetTokenName(contractAddress string) (string, error) {
-	result, err := CallContractMethod(contractAddress, SIG_NAME)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		zap.L().Info("Failed to read response body", zap.Error(err))
+		return nil, err
 	}
 
-	// Check if result is long enough before slicing
-	if len(result) < 66 {
-		zap.L().Warn("Token name response too short",
-			zap.String("contract_address", contractAddress),
-			zap.String("result", result))
-		return "", fmt.Errorf("invalid token name response length")
+	var tx models.TransactionResponse
+	if err := json.Unmarshal(body, &tx); err != nil {
+		zap.L().Info("Failed to unmarshal transaction", zap.Error(err))
+		return nil, err
 	}
 
-	// Extract the dynamic part (skip function selector and offset)
-	nameHex := strings.TrimRight(result[66:], "0")
-	if nameHex == "" {
-		return "", nil
-	}
-
-	decoded, err := hex.DecodeString(nameHex)
-	if err != nil {
-		zap.L().Warn("Failed to decode token name",
-			zap.String("contract_address", contractAddress),
-			zap.Error(err))
-		return "", err
-	}
-
-	return string(decoded), nil
-}
-
-func GetTokenSymbol(contractAddress string) (string, error) {
-	result, err := CallContractMethod(contractAddress, SIG_SYMBOL)
-	if err != nil {
-		return "", err
-	}
-
-	// Check if result is long enough before slicing
-	if len(result) < 66 {
-		zap.L().Warn("Token symbol response too short",
-			zap.String("contract_address", contractAddress),
-			zap.String("result", result))
-		return "", fmt.Errorf("invalid token symbol response length")
-	}
-
-	// Extract the dynamic part (skip function selector and offset)
-	symbolHex := strings.TrimRight(result[66:], "0")
-	if symbolHex == "" {
-		return "", nil
-	}
-
-	decoded, err := hex.DecodeString(symbolHex)
-	if err != nil {
-		zap.L().Warn("Failed to decode token symbol",
-			zap.String("contract_address", contractAddress),
-			zap.Error(err))
-		return "", err
-	}
-
-	return string(decoded), nil
-}
-
-func GetTokenDecimals(contractAddress string) (uint8, error) {
-	result, err := CallContractMethod(contractAddress, SIG_DECIMALS)
-	if err != nil {
-		zap.L().Info("Failed to get token decimals",
-			zap.String("contract_address", contractAddress),
-			zap.Error(err))
-		return 0, err
-	}
-
-	// Validate response length
-	if len(result) < 2 {
-		zap.L().Warn("Token decimals response too short",
-			zap.String("contract_address", contractAddress),
-			zap.String("result", result))
-		return 0, fmt.Errorf("invalid token decimals response length")
-	}
-
-	val, err := strconv.ParseUint(result[2:], 16, 8)
-	if err != nil {
-		zap.L().Warn("Failed to parse token decimals",
-			zap.String("contract_address", contractAddress),
-			zap.String("result", result),
-			zap.Error(err))
-		return 0, err
-	}
-
-	return uint8(val), nil
+	return &tx.Result, nil
 }

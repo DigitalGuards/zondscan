@@ -7,6 +7,22 @@ function onlyNumbers(str: string): boolean {
   return /^[0-9]+$/.test(str);
 }
 
+// Validates if the input is a valid address (either 0x or Z prefixed)
+function isValidAddress(address: string): boolean {
+  // Check for Z-prefixed address (Z + 40 hex chars)
+  if (address.startsWith('Z') && address.length === 41) {
+    // Check if the rest of the string is valid hex
+    return /^Z[0-9a-fA-F]{40}$/.test(address);
+  }
+  
+  // Check for 0x-prefixed address (0x + 40 hex chars)
+  if (address.startsWith('0x') && address.length === 42) {
+    return /^0x[0-9a-fA-F]{40}$/.test(address);
+  }
+  
+  return false;
+}
+
 export default function SearchBar(): JSX.Element {
   const [searchValue, setSearchValue] = useState<string>('');
   const [error, setError] = useState<string>('');
@@ -23,7 +39,7 @@ export default function SearchBar(): JSX.Element {
       newPath = "/block/" + searchValue;
     } else if (searchValue.length === 66) {
       newPath = "/tx/" + searchValue;
-    } else if (searchValue.slice(0, 2) === "0x" && searchValue.length === 42) {
+    } else if (isValidAddress(searchValue)) {
       newPath = "/address/" + searchValue;
     } else {
       setError('Invalid input!');
@@ -57,7 +73,7 @@ export default function SearchBar(): JSX.Element {
           className="flex flex-col sm:flex-row gap-3 sm:gap-6">
           <input
             type="text"
-            placeholder="Search by Address / Txn Hash / Block.."
+            placeholder="Search by Address (0x/Z) / Txn Hash / Block.."
             className="flex-1 py-3 sm:py-4 px-4 sm:px-6 text-sm sm:text-base text-gray-300 
                      bg-[#1a1a1a] rounded-xl
                      border border-[#3d3d3d]

@@ -13,7 +13,7 @@ import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 import Link from "next/link";
 import config from '../../config';
-import { decodeToHex } from '../lib/helpers';
+import { decodeToHex, formatAddress } from '../lib/helpers';
 
 interface Transaction {
   id: number;
@@ -39,9 +39,9 @@ const Decoder = (params: DecoderParams): JSX.Element => {
 };
 
 const DecoderAddress = (params: DecoderParams): JSX.Element => {
-  const output = "0x" + decodeToHex(params.row.Address);
-  const url = `${config.siteUrl}/address/${output}`;
-  return <Link href={url}>{output}</Link>;
+  const rawAddress = "0x" + decodeToHex(params.row.Address);
+  const formattedAddress = formatAddress(rawAddress);
+  return <Link href={`${config.siteUrl}/address/${formattedAddress}`}>{formattedAddress}</Link>;
 };
 
 const ConvertTime = (params: GridValueGetterParams<Transaction>): string => {
