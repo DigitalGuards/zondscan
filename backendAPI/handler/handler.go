@@ -46,13 +46,8 @@ func monitorMiddleware() gin.HandlerFunc {
 func RequestHandler() {
 	log.Println("Initializing API server...")
 
-	// Set Gin mode based on environment
-	ginMode := os.Getenv("GIN_MODE")
-	if ginMode != "" {
-		gin.SetMode(ginMode)
-	} else {
-		gin.SetMode(gin.ReleaseMode) // Default to release mode
-	}
+	// Always use release mode as specified in README.md
+	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.New() // Use New() instead of Default() for custom middleware
 
