@@ -43,78 +43,10 @@ func ConnectDB() *mongo.Client {
 		// Initialize collections with validators and indexes
 		db := client.Database("qrldata-z")
 
-		// Create indexes
+		// Create indexes for collections we query
 		createIndexes(db)
 
-		// Daily Transactions Volume
-		volumeValidator := bson.M{
-			"$jsonSchema": bson.M{
-				"bsonType": "object",
-				"required": []string{"volume"},
-				"properties": bson.M{
-					"volume": bson.M{
-						"bsonType":    "long",
-						"description": "must be a long/int64 and is required",
-					},
-				},
-			},
-		}
-		ensureCollection(db, "dailyTransactionsVolume", volumeValidator)
-
-		// CoinGecko Data
-		coingeckoValidator := bson.M{
-			"$jsonSchema": bson.M{
-				"bsonType": "object",
-				"required": []string{"marketCapUSD", "priceUSD", "lastUpdated"},
-				"properties": bson.M{
-					"marketCapUSD": bson.M{
-						"bsonType":    "double",
-						"description": "must be a double and is required",
-					},
-					"priceUSD": bson.M{
-						"bsonType":    "double",
-						"description": "must be a double and is required",
-					},
-					"lastUpdated": bson.M{
-						"bsonType":    "date",
-						"description": "must be a date and is required",
-					},
-				},
-			},
-		}
-		ensureCollection(db, "coingecko", coingeckoValidator)
-
-		// Wallet Count
-		walletValidator := bson.M{
-			"$jsonSchema": bson.M{
-				"bsonType": "object",
-				"required": []string{"count"},
-				"properties": bson.M{
-					"count": bson.M{
-						"bsonType":    "long",
-						"description": "must be a long/int64 and is required",
-					},
-				},
-			},
-		}
-		ensureCollection(db, "walletCount", walletValidator)
-
-		// Total Circulating Supply
-		circulatingValidator := bson.M{
-			"$jsonSchema": bson.M{
-				"bsonType": "object",
-				"required": []string{"circulating"},
-				"properties": bson.M{
-					"circulating": bson.M{
-						"bsonType":    "string",
-						"description": "must be a string and is required",
-					},
-				},
-			},
-		}
-		ensureCollection(db, "totalCirculatingSupply", circulatingValidator)
-
-		// Initialize collections
+		// Initialize collections with fallback data if they don't exist yet
 		initializeCollections(db)
 
 		// Set the global DB variable
@@ -162,8 +94,8 @@ func createIndexes(db *mongo.Database) {
 
 	// Check and create indexes if needed
 	collections := map[string][]mongo.IndexModel{
-		"blocks":       blocksIndexes,
-		"transactions": transactionsIndexes,
+		"blocks":               blocksIndexes,
+		"transactionByAddress": transactionsIndexes,
 	}
 
 	for collName, indexes := range collections {
@@ -248,80 +180,22 @@ func indexExists(indexes []bson.M, indexName string) bool {
 	return false
 }
 
-func ensureCollection(db *mongo.Database, name string, validator bson.M) {
-	// First check if collection exists using the previously defined function
-	exists, err := collectionExists(db, name)
-	if err != nil {
-		log.Printf("Warning: Could not check if collection %s exists: %v", name, err)
-		return
-	}
-
-	if !exists {
-		// Collection doesn't exist, create it with validator
-		if validator != nil {
-			opts := options.CreateCollection().SetValidator(validator)
-			err = db.CreateCollection(context.Background(), name, opts)
-		} else {
-			err = db.CreateCollection(context.Background(), name, nil)
-		}
-
-		if err != nil {
-			log.Printf("Warning: Could not create collection %s: %v", name, err)
-		} else {
-			log.Printf("Created collection %s", name)
-		}
-		return
-	}
-
-	// Collection exists, update validator if one is provided
-	if validator != nil {
-		cmd := bson.D{
-			{Key: "collMod", Value: name},
-			{Key: "validator", Value: validator},
-			{Key: "validationLevel", Value: "strict"},
-		}
-
-		err := db.RunCommand(context.Background(), cmd).Err()
-		if err != nil {
-			log.Printf("Warning: Could not update validator for %s: %v", name, err)
-		} else {
-			log.Printf("Updated validator for collection %s", name)
-		}
-	} else {
-		log.Printf("Collection %s exists, no validator provided", name)
-	}
-}
-
+// Initialize collections with fallback data
 func initializeCollections(db *mongo.Database) {
 	ctx := context.Background()
 
-	// Initialize CoinGecko collection with empty document
-	_, err := db.Collection("coingecko").UpdateOne(
+	// Initialize WalletCount collection with fallback data
+	_, err := db.Collection("walletCount").UpdateOne(
 		ctx,
-		bson.M{},
-		bson.M{"$setOnInsert": bson.M{
-			"marketCapUSD": 0.0,
-			"priceUSD":     0.0,
-			"lastUpdated":  time.Now(),
-		}},
-		options.Update().SetUpsert(true),
-	)
-	if err != nil {
-		log.Printf("Failed to initialize CoinGecko collection: %v", err)
-	}
-
-	// Initialize WalletCount collection
-	_, err = db.Collection("walletCount").UpdateOne(
-		ctx,
-		bson.M{},
+		bson.M{"_id": "current_count"},
 		bson.M{"$setOnInsert": bson.M{"count": int64(0)}},
 		options.Update().SetUpsert(true),
 	)
 	if err != nil {
-		log.Printf("Failed to initialize WalletCount collection: %v", err)
+		log.Printf("Warning: Failed to initialize WalletCount collection: %v", err)
 	}
 
-	// Initialize DailyTransactionsVolume collection
+	// Initialize dailyTransactionsVolume collection with fallback data
 	_, err = db.Collection("dailyTransactionsVolume").UpdateOne(
 		ctx,
 		bson.M{},
@@ -329,10 +203,10 @@ func initializeCollections(db *mongo.Database) {
 		options.Update().SetUpsert(true),
 	)
 	if err != nil {
-		log.Printf("Failed to initialize DailyTransactionsVolume collection: %v", err)
+		log.Printf("Warning: Failed to initialize dailyTransactionsVolume collection: %v", err)
 	}
 
-	// Initialize TotalCirculatingSupply collection
+	// Initialize totalCirculatingSupply collection with fallback data
 	_, err = db.Collection("totalCirculatingSupply").UpdateOne(
 		ctx,
 		bson.M{},
@@ -340,7 +214,22 @@ func initializeCollections(db *mongo.Database) {
 		options.Update().SetUpsert(true),
 	)
 	if err != nil {
-		log.Printf("Failed to initialize TotalCirculatingSupply collection: %v", err)
+		log.Printf("Warning: Failed to initialize totalCirculatingSupply collection: %v", err)
+	}
+
+	// Initialize CoinGecko collection with fallback data
+	_, err = db.Collection("coingecko").UpdateOne(
+		ctx,
+		bson.M{},
+		bson.M{"$setOnInsert": bson.M{
+			"marketCapUSD": 1000000000000000000.0,
+			"priceUSD":     1000.0,
+			"lastUpdated":  time.Now(),
+		}},
+		options.Update().SetUpsert(true),
+	)
+	if err != nil {
+		log.Printf("Warning: Failed to initialize CoinGecko collection: %v", err)
 	}
 }
 

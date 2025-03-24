@@ -104,7 +104,7 @@ func UserRoute(router *gin.Engine) {
 		// Get circulating supply with default value
 		circulating := db.ReturnTotalCirculatingSupply()
 		if circulating == "" {
-			circulating = "0" // Default value when no data is available
+			circulating = "65000000" // Default value when no data is available
 		}
 
 		// Get daily transaction volume with default value
