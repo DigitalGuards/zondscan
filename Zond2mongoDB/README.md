@@ -6,6 +6,16 @@ Proof of stake blockchain synchronizer that efficiently transfers QRL blockchain
 
 This is the Golang implementation of the QRL blockchain synchronizer to MongoDB. It serves as a critical component in the QRL Explorer ecosystem by continuously syncing blockchain data from a Zond node to MongoDB for efficient querying and data access.
 
+## Recent Updates
+
+### Transaction Fee Calculation
+- Fixed transaction fee calculation to properly store paid fees in both the `transfer` and `transactionByAddress` collections
+- Implemented fallback mechanisms when gas usage data is missing:
+  1. First tries to get gas usage from transaction receipt
+  2. Falls back to gas limit if receipt isn't available
+  3. Ensures fees are never zero for successful transactions
+- Improves accuracy of transaction cost data in the explorer
+
 ## Project Structure
 
 ```

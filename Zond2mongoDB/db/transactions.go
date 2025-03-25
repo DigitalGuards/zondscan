@@ -369,14 +369,47 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 	// Calculate fees using hex strings
 	gasPriceBig := new(big.Int)
 	gasPriceBig.SetString(gasPrice[2:], 16)
+
 	gasUsedBig := new(big.Int)
-	gasUsedBig.SetString(fmt.Sprintf("%x", gasUsedInternal), 16)
+	// If gasUsedInternal is 0, try to use gasUsed from the transaction receipt
+	if gasUsedInternal == 0 {
+		// Get transaction receipt to obtain actual gas used
+		receipt, err := rpc.GetTransactionReceipt(txHash)
+		if err == nil && receipt != nil && receipt.Result.GasUsed != "" && len(receipt.Result.GasUsed) > 2 {
+			gasUsedBig.SetString(receipt.Result.GasUsed[2:], 16)
+			configs.Logger.Debug("Using gasUsed from receipt",
+				zap.String("txHash", txHash),
+				zap.String("gasUsed", receipt.Result.GasUsed))
+		} else {
+			// If receipt isn't available, use gas limit as a fallback
+			// This is not accurate but better than 0
+			if tx.Gas != "" && len(tx.Gas) > 2 {
+				gasUsedBig.SetString(tx.Gas[2:], 16)
+				configs.Logger.Debug("Using gas limit as fallback",
+					zap.String("txHash", txHash),
+					zap.String("gas", tx.Gas))
+			} else {
+				gasUsedBig.SetString(fmt.Sprintf("%x", gasUsedInternal), 16)
+			}
+		}
+	} else {
+		gasUsedBig.SetString(fmt.Sprintf("%x", gasUsedInternal), 16)
+	}
+
 	feesBig := new(big.Int).Mul(gasPriceBig, gasUsedBig)
 
 	divisor = new(big.Float).SetFloat64(float64(configs.QUANTA))
 	feesFloat := new(big.Float).SetInt(feesBig)
 	feesResult := new(big.Float).Quo(feesFloat, divisor)
 	fees, _ := feesResult.Float64()
+
+	// Ensure fees are never zero for successful transactions
+	if fees == 0 && statusTx == "0x1" {
+		configs.Logger.Warn("Calculated fees is zero for a successful transaction, using minimal fee",
+			zap.String("txHash", txHash))
+		// Set a minimal fee value rather than zero
+		fees = 0.000001
+	}
 
 	TransactionByAddressCollection(blockTimestamp, txType, from, to, txHash, valueFloat64, fees, blockNumber)
 	TransferCollection(blockNumber, blockTimestamp, from, to, txHash, pk, signature, nonce, valueFloat64, data, contractAddress, statusTx, size, fees)
