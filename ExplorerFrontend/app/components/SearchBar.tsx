@@ -73,7 +73,7 @@ export default function SearchBar(): JSX.Element {
           className="flex flex-col sm:flex-row gap-3 sm:gap-6">
           <input
             type="text"
-            placeholder="Search by Address (0x/Z) / Txn Hash / Block.."
+            placeholder="Search by Address (Zxx) / Txn Hash / Block.."
             className="flex-1 py-3 sm:py-4 px-4 sm:px-6 text-sm sm:text-base text-gray-300 
                      bg-[#1a1a1a] rounded-xl
                      border border-[#3d3d3d]

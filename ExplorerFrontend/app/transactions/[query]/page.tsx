@@ -7,11 +7,18 @@ import config from '../../../config';
 
 async function getTransactions(page: string): Promise<TransactionsResponse> {
   try {
-    const response = await fetch(`${config.handlerUrl}/txs?page=${page}`, {
+    console.log(`Fetching transactions for page ${page}`);
+    
+    const pageNum = parseInt(page, 10) || 1;
+    
+    const timestamp = Date.now();
+    const response = await fetch(`${config.handlerUrl}/txs?page=${pageNum}&_t=${timestamp}`, {
       method: 'GET',
       headers: {
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache'
       },
+      cache: 'no-store',
       next: {
         revalidate: 0
       }
@@ -24,7 +31,10 @@ async function getTransactions(page: string): Promise<TransactionsResponse> {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    return response.json();
+    const data = await response.json();
+    console.log(`Received ${data.txs?.length || 0} transactions. Total reported: ${data.total || 0}`);
+    
+    return data;
   } catch (error) {
     console.error('Error fetching transactions:', error);
     throw error;
