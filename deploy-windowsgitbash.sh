@@ -30,16 +30,23 @@ clean_pm2() {
 
 # Clean MongoDB database and log files
 clean_database_and_logs() {
-    print_status "Cleaning MongoDB database and log files..."
+    print_status "Do you want to clean MongoDB database and log files? (y/n)"
+    read -p "Enter choice: " DELETE_DB_LOGS
     
-    # Drop the MongoDB database
-    mongosh --eval "db.getSiblingDB('qrldata-z').dropDatabase()" || print_status "Failed to drop database or database doesn't exist"
-    export BASE_DIR=$(pwd)
-    # Delete the log file if it exists
-    if [ -f "$BASE_DIR/Zond2mongoDB/logs/zond_sync.log" ]; then
-        rm "$BASE_DIR/Zond2mongoDB/logs/zond_sync.log" || print_status "Failed to delete log file"
+    if [[ $DELETE_DB_LOGS =~ ^[Yy]$ ]]; then
+        print_status "Cleaning MongoDB database and log files..."
+        
+        # Drop the MongoDB database
+        mongosh --eval "db.getSiblingDB('qrldata-z').dropDatabase()" || print_status "Failed to drop database or database doesn't exist"
+        export BASE_DIR=$(pwd)
+        # Delete the log file if it exists
+        if [ -f "$BASE_DIR/Zond2mongoDB/logs/zond_sync.log" ]; then
+            rm "$BASE_DIR/Zond2mongoDB/logs/zond_sync.log" || print_status "Failed to delete log file"
+        else
+            print_status "Log file not found, skipping deletion"
+        fi
     else
-        print_status "Log file not found, skipping deletion"
+        print_status "Skipping database and log files cleanup"
     fi
 }
 
