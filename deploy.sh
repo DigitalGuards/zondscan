@@ -229,9 +229,10 @@ main() {
 
     # Clone and setup
     clone_repo
-    #setup_backendapi        # Start the server before building the frontend
     #setup_frontend
     setup_synchronizer
+    sleep 10
+    setup_backendapi
     save_pm2
 
     print_status "Deployment complete! Services are starting up..."
