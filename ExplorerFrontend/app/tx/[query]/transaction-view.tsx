@@ -73,6 +73,12 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
 
   // Calculate paid fees from gas values
   const calculatePaidFees = () => {
+    // Use PaidFees if available
+    if (typeof transaction.PaidFees === 'number') {
+      return transaction.PaidFees.toFixed(18);
+    }
+    
+    // Fallback to manual calculation only if PaidFees is not available
     if (!transaction.gasUsed || !transaction.gasPrice) return '0';
     
     try {

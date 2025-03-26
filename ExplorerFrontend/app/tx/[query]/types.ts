@@ -10,6 +10,7 @@ export interface TransactionDetails {
   gasPrice?: string;
   nonce?: number;
   latestBlock?: number;
+  PaidFees?: number;
 }
 
 // Helper function to calculate confirmations

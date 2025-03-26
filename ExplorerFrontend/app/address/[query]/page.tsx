@@ -1,14 +1,15 @@
 import React from "react";
 import { Metadata } from 'next';
 import AddressClient from "./address-client";
-import { decodeToHex, formatAddress } from '../../lib/helpers';
 
 interface PageProps {
-    params: { query: string };
+    params: Promise<{ query: string }>;
+    searchParams?: Promise<Record<string, string | string[]>>;
 }
 
-export async function generateMetadata({ params }: { params: { query: string } }): Promise<Metadata> {
-    const address = params.query;
+export async function generateMetadata({ params }: { params: Promise<{ query: string }> }): Promise<Metadata> {
+    const resolvedParams = await params;
+    const address = resolvedParams.query;
     
     return {
         title: `Address ${address} | ZondScan`,
@@ -24,7 +25,8 @@ export async function generateMetadata({ params }: { params: { query: string } }
 }
 
 export default async function Page({ params }: PageProps) {
-    const address = params.query;
+    const resolvedParams = await params;
+    const address = resolvedParams.query;
 
     return (
         <main>

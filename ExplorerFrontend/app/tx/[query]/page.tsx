@@ -1,7 +1,6 @@
 import { notFound } from 'next/navigation';
 import TransactionView from './transaction-view';
 import type { TransactionDetails } from './types';
-import { decodeBase64ToHexadecimal } from '../../lib/server-helpers';
 import config from '../../../config';
 
 interface PageProps {
@@ -65,7 +64,8 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
     gasUsed: ensureHexString(txData.GasUsed),
     gasPrice: ensureHexString(txData.GasPrice),
     nonce: txData.Nonce ? parseInt(txData.Nonce, 16) : 0,
-    latestBlock: data.latestBlock
+    latestBlock: data.latestBlock,
+    PaidFees: txData.PaidFees ? Number(txData.PaidFees) : undefined
   };
 
   console.log('Processed transaction:', JSON.stringify(transaction, null, 2));

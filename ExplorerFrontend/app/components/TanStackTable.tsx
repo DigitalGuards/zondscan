@@ -79,12 +79,12 @@ const renderTableBody = <T extends Transaction | InternalTransaction>(
 };
 
 const calculateFees = (tx: Transaction): number => {
-  // First check if PaidFees is available (decimal format)
+  // Use PaidFees if available (decimal format)
   if (typeof tx.PaidFees === 'number') {
     return tx.PaidFees;
   }
   
-  // Calculate from gas values (numeric format)
+  // Fallback to manual calculation only if PaidFees is not available
   if (typeof tx.gasUsed !== 'number' || typeof tx.gasPrice !== 'number') return 0;
   
   try {
