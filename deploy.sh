@@ -65,8 +65,8 @@ select_node() {
                 NODE_URL="http://REDACTED:8545"
                 break
                 ;;
-            "DG TestnetV1 node (35.158.17.89:32837)")
-                NODE_URL="http://35.158.17.89:32837"
+            "DG TestnetV1 node (35.158.17.89:32776)")
+                NODE_URL="http://35.158.17.89:32776"
                 break
                 ;;
             "Foundation testnetv1 (buildl.localbits.org:8545)")
@@ -128,7 +128,7 @@ setup_backendapi() {
 
     # Create .env.development file
     print_status "Creating .env.development file..."
-    cat > .env.development << EOL
+    cat > .env << EOL
 GIN_MODE=release
 MONGOURI=mongodb://localhost:27017/qrldata-z?readPreference=primary
 HTTP_PORT=:8080
@@ -141,7 +141,7 @@ EOL
 
     # Start server with PM2, specifying the working directory and APP_ENV
     print_status "Starting server with PM2..."
-    APP_ENV=development pm2 start ./backendAPI --name "handler" --cwd "$BASE_DIR/backendAPI" || print_error "Failed to start server"
+    pm2 start ./backendAPI --name "handler" --cwd "$BASE_DIR/backendAPI" || print_error "Failed to start server"
 }
 
 # Setup frontend environment
