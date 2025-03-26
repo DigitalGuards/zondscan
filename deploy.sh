@@ -231,7 +231,12 @@ main() {
     clone_repo
     #setup_frontend
     setup_synchronizer
-    sleep 10
+    echo "Waiting for synchronizer to initialize..."
+    for i in {10..1}; do
+        echo -ne "\rStarting backend in $i seconds..."
+        sleep 1
+    done
+    echo -e "\rSynchronizer initialized, starting backend..."
     setup_backendapi
     save_pm2
 
