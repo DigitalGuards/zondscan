@@ -400,7 +400,7 @@ func processTokensAfterInitialSync(initialSyncStart string, maxHex string) {
 	}
 
 	// Process token transfers in larger batches
-	tokenBatchSize := 35
+	tokenBatchSize := 10
 	currentBlockForTokens := initialSyncStart
 	totalProcessed := 0
 
