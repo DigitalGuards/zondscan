@@ -1,6 +1,8 @@
 import { Suspense } from 'react';
 import ContractsWrapper from './contracts-wrapper';
 import config from '../../config.js';
+import { sharedMetadata } from '../lib/seo/metaData';
+import { Metadata } from 'next';
 
 interface ContractResponse {
   response: any[];
@@ -31,9 +33,25 @@ async function getContracts(page: number = 0, limit: number = 10): Promise<Contr
   }
 }
 
-export const metadata = {
+export const metadata: Metadata = {
+  ...sharedMetadata,
   title: 'Smart Contracts | QRL Explorer',
   description: 'View all smart contracts deployed on the QRL network',
+  alternates: {
+    ...sharedMetadata.alternates,
+    canonical: 'https://zondscan.com/smart-contracts',
+  },
+  openGraph: {
+    ...sharedMetadata.openGraph,
+    title: 'Smart Contracts | QRL Explorer',
+    description: 'View all smart contracts deployed on the QRL network',
+    url: 'https://zondscan.com/smart-contracts',
+  },
+  twitter: {
+    ...sharedMetadata.twitter,
+    title: 'Smart Contracts | QRL Explorer',
+    description: 'View all smart contracts deployed on the QRL network',
+  },
 };
 
 export default async function ContractsPage() {

@@ -6,6 +6,7 @@ import { formatNumber, formatNumberWithCommas, toFixed } from "./lib/helpers";
 import config from "../config.js"
 import SearchBar from "./components/SearchBar"
 import Charts from "./components/Charts"
+import SeoTextSection, { SeoTextItem } from "./components/SeoTextSection";
 
 interface StatsData {
   value: string;
@@ -26,7 +27,7 @@ interface DashboardData {
   dataInitialized: boolean;
 }
 
-export default function HomeClient() {
+export default function HomeClient({ pageTitle }: { pageTitle: string }) {
   const [data, setData] = React.useState<DashboardData>({
     walletCount: { value: "0", isLoading: true, error: false },
     volume: { value: "0", isLoading: true, error: false },
@@ -248,10 +249,10 @@ export default function HomeClient() {
                 {item.icon}
               </div>
             </div>
-            <h4 className="text-base sm:text-3xl font-bold mb-1 sm:mb-3 text-[#ffa729] 
+            <p className="text-base sm:text-3xl font-bold mb-1 sm:mb-3 text-[#ffa729] 
                         group-hover:scale-110 transition-transform duration-300 break-words">
               {item.data}
-            </h4>
+            </p>
             <p className="text-[10px] sm:text-sm text-gray-300 font-medium">
               {item.title}
             </p>
@@ -261,6 +262,20 @@ export default function HomeClient() {
     </div>
   );
 
+  const seoTextItems = [
+    {
+      title: "What is ZondScan?",
+      text: "ZondScan is an independent blockchain explorer built for the QRL Zond network — a next-generation, EVM-compatible blockchain secured by quantum-resistant cryptography. It offers real-time insights into blocks, transactions, smart contracts, and validators, all on a fast and secure proof-of-stake (PoS) consensus mechanism."
+    },
+    {
+      title: "What is QRL Zond?",
+      text: "QRL Zond is a quantum-secure, EVM-compatible blockchain designed by the Quantum Resistant Ledger (QRL) project. It’s built for the future of Web3 and decentralized applications (dApps) by combining the flexibility of Ethereum tooling with the security of post-quantum cryptography. Unlike most blockchains that rely on cryptographic methods vulnerable to future quantum attacks, QRL Zond implements XMSS (Extended Merkle Signature Scheme) at its core, offering forward secrecy against both classical and quantum threats. It’s also compatible with the Ethereum Virtual Machine (EVM), allowing developers to deploy smart contracts using existing Ethereum tools, libraries, and wallets. QRL Zond brings together the best of both worlds — developer familiarity and unmatched security — in one seamless network."
+    },
+    {
+      title: "Why Quantum Resistance Matters",
+      text: "With quantum computing advancing rapidly, many traditional blockchains face a critical threat: their cryptographic algorithms could be broken by future quantum machines. This would make digital signatures, and therefore entire blockchains, insecure and vulnerable. QRL Zond is built to solve this problem from the ground up. By using post-quantum cryptography, such as XMSS, it ensures that data, assets, and user identities remain protected even against quantum-level threats. For users, this means long-term data integrity, secure smart contract execution, and resilient digital ownership. For developers and enterprises, it’s a future-proof foundation that eliminates concerns about cryptographic obsolescence. Quantum resistance isn’t just a nice-to-have—it’s a necessity for the next era of blockchain technology."
+    }
+  ];
   return (
     <div className="relative">
       {/* Video Background */}
@@ -282,6 +297,7 @@ export default function HomeClient() {
       <div className="relative z-10 px-4 lg:px-8 pt-6.81 lg:pt-8">
         {/* Search Bar */}
         <div className="max-w-4xl mx-auto mt-4">
+          <h1 className="text-base sm:text-xl font-bold mb-2 sm:mb-4 text-[#ffa729]">{pageTitle}</h1>
           <div className="mb-4 sm:mb-10">
             <SearchBar />
           </div>
@@ -319,9 +335,14 @@ export default function HomeClient() {
               <div className="max-w-6xl mx-auto">
                 <Charts />
               </div>
+              
             </div>
           </div>
         </div>
+        <div className="mr-40 ml-40">
+        <SeoTextSection items={seoTextItems} />
+        </div>
+        
       </div>
     </div>
   );

@@ -28,11 +28,12 @@ const smartContracts = [
   // NFTs section commented out until implementation
   // { name: 'NFTs', description: 'View QRL NFTs', href: '/nfts', imgSrc: TokenIcon },
 ]
-
+const insights = [
+  { name: 'Richlist', description: 'Top QRL holders', href: '/richlist', imgSrc: RichIcon },
+]
 const tools = [
   { name: 'Balance Checker', description: 'Check Account balance', href: '/checker', imgSrc: LookUpIcon },
   { name: 'Unit Converter', description: 'Convert QRL currencies', href: '/converter', imgSrc: TokenIcon },
-  { name: 'Richlist', description: 'Top QRL holders', href: '/richlist', imgSrc: RichIcon },
 ]
 
 const ValidatorIcon = () => (
@@ -242,7 +243,47 @@ export default function Sidebar() {
                 </>
               )}
             </Disclosure>
-
+            <Disclosure as="div" defaultOpen>
+              {({ open }) => (
+                <>
+                  <Disclosure.Button className="flex w-full items-center justify-between rounded-lg 
+                                           bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
+                                           px-4 py-2.5 text-left text-sm font-medium 
+                                           text-gray-300 hover:bg-[#3d3d3d] transition-colors
+                                           shadow-md">
+                    <span className="text-base">Insights</span>
+                    <ChevronDownIcon
+                      className={classNames(open ? 'rotate-180' : '', 'h-5 w-5 text-[#ffa729] transition-transform duration-200')}
+                    />
+                  </Disclosure.Button>
+                  <Disclosure.Panel className="mt-2 space-y-1">
+                    {insights.map((item) => (
+                      <button
+                        key={item.name}
+                        onClick={() => navigateTo(item.href)}
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-gray-300 
+                               hover:bg-[#2d2d2d] rounded-md transition-all duration-200
+                               hover:text-[#ffa729] group whitespace-nowrap"
+                      >
+                        <div className="w-5 h-5 relative">
+                          <Image
+                            src={item.imgSrc}
+                            alt={item.name}
+                            fill
+                            sizes="20px"
+                            style={{ objectFit: 'contain' }}
+                            className={item.name === 'Richlist' ? 'transition-[filter]' : `[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(105%)] 
+                                   group-hover:[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(125%)] 
+                                   transition-[filter]`}
+                          />
+                        </div>
+                        <span className="truncate">{item.name}</span>
+                      </button>
+                    ))}
+                  </Disclosure.Panel>
+                </>
+              )}
+            </Disclosure>
             <Disclosure as="div" defaultOpen>
               {({ open }) => (
                 <>
