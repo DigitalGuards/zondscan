@@ -19,7 +19,7 @@ export default function Charts() {
       }}>
         <CardContent>
           <Typography 
-            variant="h6" 
+            variant="h3" 
             gutterBottom 
             sx={{ 
               color: '#ffa729',

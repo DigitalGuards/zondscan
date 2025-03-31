@@ -1,10 +1,29 @@
 import { Suspense } from 'react';
 import ValidatorsWrapper from './validators-client';
+import { Metadata } from 'next';
+import { sharedMetadata } from '../lib/seo/metaData';
 
-export const metadata = {
+
+export const metadata: Metadata = {
+  ...sharedMetadata,
   title: 'Validators | QRL Explorer',
-  description: 'View active validators, their ages, uptime, and staking information on the QRL network',
+  description:
+    'View active validators, their ages, uptime, and staking information on the QRL network',
+  openGraph: {
+    ...sharedMetadata.openGraph,
+    title: 'Validators | QRL Explorer',
+    description:
+      'View active validators, their ages, uptime, and staking information on the QRL network',
+    url: 'https://zondscan.com/richlist',
+  },
+  twitter: {
+    ...sharedMetadata.twitter,
+    title: 'Validators | QRL Explorer',
+    description:
+      'View active validators, their ages, uptime, and staking information on the QRL network',
+  },
 };
+
 
 export default async function ValidatorsPage() {
   return (

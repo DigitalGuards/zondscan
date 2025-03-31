@@ -3,6 +3,30 @@
 import React from 'react'
 import { Disclosure } from '@headlessui/react'
 import { ChevronDownIcon } from '@heroicons/react/20/solid'
+import { Metadata } from 'next';
+import { sharedMetadata } from '../lib/seo/metaData';
+
+export const metadata: Metadata = {
+  ...sharedMetadata,
+  title: 'FAQ | QRL Explorer',
+  description: 'Find answers to frequently asked questions about QRL, blockchain, smart contracts, and more.',
+  alternates: {
+    ...sharedMetadata.alternates,
+    canonical: 'https://zondscan.com/faq',
+  },
+  openGraph: {
+    ...sharedMetadata.openGraph,
+    title: 'FAQ | QRL Explorer',
+    description: 'Find answers to frequently asked questions about QRL, blockchain, smart contracts, and more.',
+    url: 'https://zondscan.com/faq',
+  },
+  twitter: {
+    ...sharedMetadata.twitter,
+    title: 'FAQ | QRL Explorer',
+    description: 'Find answers to frequently asked questions about QRL, blockchain, smart contracts, and more.',
+  },
+};
+
 
 // FAQ data structure
 const faqs = [

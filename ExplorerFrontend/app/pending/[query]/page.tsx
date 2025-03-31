@@ -4,6 +4,7 @@ import PendingList from './PendingList';
 import axios from 'axios';
 import config from '../../../config';
 import { PendingTransaction } from '../tx/types';
+import { sharedMetadata } from '../../lib/seo/metaData';
 
 interface PaginatedResponse {
   transactions: PendingTransaction[];
@@ -38,16 +39,31 @@ async function fetchInitialData(page: number): Promise<PaginatedResponse> {
 export async function generateMetadata({ params }: { params: Promise<{ query: string }> }): Promise<Metadata> {
   const resolvedParams = await params;
   const pageNumber = resolvedParams.query || '1';
+  const canonicalUrl = `https://zondscan.com/pending`;
   
   return {
+    ...sharedMetadata,
     title: `Pending Transactions - Page ${pageNumber} | ZondScan`,
-    description: `View all pending transactions waiting to be included in the next block on the Zond blockchain network. Page ${pageNumber} of the mempool transactions list.`,
+    description:
+      `View all pending transactions waiting to be included in the next block on the Zond blockchain network. Page ${pageNumber} of the mempool transactions list.`,
+    alternates: {
+      ...sharedMetadata.alternates,
+      canonical: canonicalUrl,
+    },
     openGraph: {
+      ...sharedMetadata.openGraph,
       title: `Pending Transactions - Page ${pageNumber} | ZondScan`,
-      description: `View all pending transactions waiting to be included in the next block on the Zond blockchain network. Page ${pageNumber} of the mempool transactions list.`,
-      url: `https://zondscan.com/pending/${pageNumber}`,
+      description:
+        `View all pending transactions waiting to be included in the next block on the Zond blockchain network. Page ${pageNumber} of the mempool transactions list.`,
+      url: canonicalUrl,
       siteName: 'ZondScan',
       type: 'website',
+    },
+    twitter: {
+      ...sharedMetadata.twitter,
+      title: `Pending Transactions - Page ${pageNumber} | ZondScan`,
+      description:
+        `View all pending transactions waiting to be included in the next block on the Zond blockchain network. Page ${pageNumber} of the mempool transactions list.`,
     },
   };
 }

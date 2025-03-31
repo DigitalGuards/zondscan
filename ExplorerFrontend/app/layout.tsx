@@ -2,82 +2,35 @@ import './globals.css'
 import Sidebar from "./components/Sidebar"
 import Script from 'next/script'
 import Providers from './providers'
+import { Metadata } from 'next';
+import { sharedMetadata } from './lib/seo/metaData';
+import Footer from './components/Footer';
+
+export const metadata: Metadata = {
+  ...sharedMetadata,
+  title: 'ZondScan | QRL Zond EVM Blockchain Explorer (Quantum-Safe)',
+  description:
+    'ZondScan is an explorer for QRL Zond – the first EVM-compatible blockchain secured with post-quantum cryptography. Track real-time transactions, smart contracts, and validator activity on a next-gen proof-of-stake network.',
+  openGraph: {
+    ...sharedMetadata.openGraph,
+    title: 'ZondScan | QRL Zond EVM Blockchain Explorer (Quantum-Safe)',
+    description:
+      'Discover QRL Zond with ZondScan – the secure, quantum-resistant, and EVM-compatible explorer for smart contracts, blocks, and transactions. Built for the future of decentralized apps.',
+    url: 'https://zondscan.com',
+  },
+  twitter: {
+    ...sharedMetadata.twitter,
+    title: 'ZondScan | QRL Zond EVM Blockchain Explorer (Quantum-Safe)',
+    description:
+      'Explore QRL Zond with ZondScan – the first post-quantum EVM-compatible blockchain. View live data on smart contracts, PoS validators, and secure Web3 apps.',
+  },
+  
+  
+};
+
 
 export const viewport = {
   themeColor: '#1a1a1a',
-}
-
-export const metadata = {
-  metadataBase: new URL('https://zondscan.com'),
-  title: 'QRL Zond Explorer',
-  description: 'QRL Zond Web3 EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network',
-  keywords: 'QRL, Proof of Stake, ZOND, blockchain explorer, Web3, EVM, quantum resistant, cryptocurrency, blockchain, smart contracts, validators, transactions, blocks',
-  alternates: {
-    canonical: 'https://zondscan.com',
-    languages: {
-      'en-US': 'https://zondscan.com',
-    },
-    domains: [
-      {
-        domain: 'https://xmsscan.com',
-        defaultLocale: 'en-US'
-      },
-      {
-        domain: 'https://qrlvm.com',
-        defaultLocale: 'en-US'
-      }
-    ]
-  },
-  icons: {
-    icon: [
-      { url: '/favis/favicon.ico' },
-      { url: '/favis/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
-      { url: '/favis/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
-      { url: '/favis/favicon-48x48.png', sizes: '48x48', type: 'image/png' },
-    ],
-    apple: [
-      { url: '/favis/apple-touch-icon.png' },
-    ],
-    other: [
-      {
-        rel: 'mask-icon',
-        url: '/favis/safari-pinned-tab.svg',
-      },
-    ],
-  },
-  
-  openGraph: {
-    title: 'QRL Zond Explorer',
-    description: 'QRL Zond Web3/EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network',
-    type: 'website',
-    locale: 'en_US',
-    url: 'https://zondscan.com',
-    siteName: 'QRL Zond Explorer',
-    images: [
-      {
-        url: '/QRL.png',
-        width: 512,
-        height: 512,
-        alt: 'QRL Logo',
-      },
-    ],
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'QRL Zond Explorer',
-    description: 'QRL Zond Web3/EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network',
-    images: ['/QRL.png'],
-    creator: '@QRLedger',
-    site: '@QRLedger',
-  },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-    },
-  },
 }
 
 interface RootLayoutProps {
@@ -172,9 +125,11 @@ export default function RootLayout({ children }: RootLayoutProps) {
             <main className="flex-1 lg:ml-64 min-h-screen relative transition-all duration-300 mt-[72px] lg:mt-4">
               <div className="relative">
                 {children}
+                <Footer />
               </div>
             </main>
           </div>
+          
         </Providers>
       </body>
     </html>

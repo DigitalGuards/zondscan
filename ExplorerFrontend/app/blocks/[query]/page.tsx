@@ -3,6 +3,7 @@ import { Metadata } from 'next';
 import BlocksClient from './blocks-client';
 import type { BlocksResponse } from './types';
 import config from '../../../config';
+import { sharedMetadata } from '../../lib/seo/metaData';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,16 +37,28 @@ interface PageProps {
 export async function generateMetadata({ params }: { params: Promise<{ query: string }> }): Promise<Metadata> {
   const resolvedParams = await params;
   const pageNumber = resolvedParams.query || '1';
+  const canonicalUrl = `https://zondscan.com/blocks`;
   
   return {
+    ...sharedMetadata,
     title: `Latest Synced Blocks - Page ${pageNumber} | ZondScan`,
     description: `View the most recently synced blocks on the Zond blockchain network. Page ${pageNumber} of the blocks list.`,
+    alternates: {
+      ...sharedMetadata.alternates,
+      canonical: canonicalUrl,
+    },
     openGraph: {
+      ...sharedMetadata.openGraph,
       title: `Latest Synced Blocks - Page ${pageNumber} | ZondScan`,
       description: `View the most recently synced blocks on the Zond blockchain network. Page ${pageNumber} of the blocks list.`,
       url: `https://zondscan.com/blocks/${pageNumber}`,
       siteName: 'ZondScan',
       type: 'website',
+    },
+    twitter: {
+      ...sharedMetadata.twitter,
+      title: `Latest Synced Blocks - Page ${pageNumber} | ZondScan`,
+      description: `View the most recently synced blocks on the Zond blockchain network. Page ${pageNumber} of the blocks list.`,
     },
   };
 }
@@ -59,7 +72,6 @@ export default async function BlocksPage({ params }: PageProps): Promise<JSX.Ele
 
     return (
       <main>
-        <h1 className="sr-only">Blocks - Page {pageNumber}</h1>
         <BlocksClient 
           initialData={data}
           initialPage={pageNumber} 
