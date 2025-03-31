@@ -8,7 +8,6 @@ import (
 	"Zond2mongoDB/utils"
 	"context"
 	"fmt"
-	"math/big"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -391,49 +390,94 @@ func processTokensAfterInitialSync(initialSyncStart string, maxHex string) {
 		zap.String("from_block", initialSyncStart),
 		zap.String("to_block", maxHex))
 
-	// First, detect factory-created tokens across the entire range
-	configs.Logger.Info("Starting factory-created token detection")
-	if err := db.DetectFactoryCreatedTokens(initialSyncStart, maxHex); err != nil {
-		configs.Logger.Error("Error while detecting factory-created tokens",
-			zap.Error(err))
-		// Continue with regular token processing even if factory detection fails
+	// Get blocks with transactions only
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Query for blocks that have at least one transaction
+	filter := bson.M{
+		"result.number": bson.M{
+			"$gte": initialSyncStart,
+			"$lte": maxHex,
+		},
+		"result.transactions.0": bson.M{"$exists": true}, // At least one transaction
 	}
 
-	// Process token transfers in larger batches
-	tokenBatchSize := 10
-	currentBlockForTokens := initialSyncStart
-	totalProcessed := 0
+	// Only retrieve block numbers to keep memory usage low
+	projection := bson.M{"result.number": 1, "_id": 0}
 
-	for utils.CompareHexNumbers(currentBlockForTokens, maxHex) < 0 {
-		endBlockForTokens := utils.AddHexNumbers(currentBlockForTokens, utils.IntToHex(tokenBatchSize))
-		if utils.CompareHexNumbers(endBlockForTokens, maxHex) > 0 {
-			endBlockForTokens = maxHex
+	cursor, err := configs.BlocksCollections.Find(ctx, filter, options.Find().SetProjection(projection))
+	if err != nil {
+		configs.Logger.Error("Failed to query blocks with transactions",
+			zap.Error(err))
+		return
+	}
+	defer cursor.Close(ctx)
+
+	var blocksWithTxs []string
+
+	// Extract block numbers with transactions
+	for cursor.Next(ctx) {
+		var block struct {
+			Result struct {
+				Number string `bson:"number"`
+			} `bson:"result"`
 		}
+
+		if err := cursor.Decode(&block); err != nil {
+			configs.Logger.Error("Failed to decode block",
+				zap.Error(err))
+			continue
+		}
+
+		blocksWithTxs = append(blocksWithTxs, block.Result.Number)
+	}
+
+	if len(blocksWithTxs) == 0 {
+		configs.Logger.Info("No blocks with transactions found in range")
+		return
+	}
+
+	configs.Logger.Info("Found blocks with transactions to process",
+		zap.Int("count", len(blocksWithTxs)))
+
+	// Process token transfers for blocks with transactions in batches
+	tokenBatchSize := 10
+	totalProcessed := 0
+	batchCounter := 0
+
+	for i := 0; i < len(blocksWithTxs); i += tokenBatchSize {
+		// Calculate end index for current batch
+		end := i + tokenBatchSize
+		if end > len(blocksWithTxs) {
+			end = len(blocksWithTxs)
+		}
+
+		batchBlocks := blocksWithTxs[i:end]
+		batchSize := len(batchBlocks)
 
 		configs.Logger.Info("Processing token transfers batch",
-			zap.String("from", currentBlockForTokens),
-			zap.String("to", endBlockForTokens))
+			zap.Int("batch", batchCounter),
+			zap.Int("size", batchSize))
 
-		batchProcessed := 0
-		tempBlock := currentBlockForTokens
-		for utils.CompareHexNumbers(tempBlock, endBlockForTokens) < 0 {
-			processTokenTransfersForBlock(tempBlock)
-			tempBlock = utils.AddHexNumbers(tempBlock, "0x1")
-			batchProcessed++
+		// Process each block in the batch
+		for _, blockNumber := range batchBlocks {
+			processTokenTransfersForBlock(blockNumber)
+			totalProcessed++
 		}
 
-		currentBlockForTokens = endBlockForTokens
-		totalProcessed += batchProcessed
-
 		configs.Logger.Info("Completed token transfer batch",
-			zap.Int("blocks_processed", batchProcessed),
+			zap.Int("batch", batchCounter),
+			zap.Int("blocks_processed", batchSize),
 			zap.Int("total_processed", totalProcessed))
+
+		batchCounter++
 
 		// Add a small delay between batches to prevent overwhelming the node
 		time.Sleep(86 * time.Millisecond)
 	}
 
-	configs.Logger.Info("Completed token transfer processing for all synced blocks",
+	configs.Logger.Info("Completed token transfer processing for all blocks with transactions",
 		zap.Int("total_blocks_processed", totalProcessed))
 }
 
@@ -891,7 +935,7 @@ func singleBlockInsertion() {
 
 	// Create a wait group to keep the main goroutine alive
 	var wg sync.WaitGroup
-	wg.Add(4) // Increased from 3 to 4 for the new factory token detection task
+	wg.Add(3)
 
 	// Define an initialization flag
 	var initialized int32
@@ -953,24 +997,6 @@ func singleBlockInsertion() {
 		}
 	}()
 
-	// Start periodic factory token detection task (every 4 hours)
-	go func() {
-		defer wg.Done()
-		configs.Logger.Info("Starting periodic task",
-			zap.String("task", "factory_token_detection"),
-			zap.Duration("interval", time.Hour*4))
-
-		ticker := time.NewTicker(time.Hour * 4)
-		defer ticker.Stop()
-
-		// Run immediately on start
-		detectFactoryTokensPeriodically()
-
-		for range ticker.C {
-			detectFactoryTokensPeriodically()
-		}
-	}()
-
 	// Keep the main goroutine alive
 	wg.Wait()
 }
@@ -1019,6 +1045,13 @@ func processTokenTransfersForBlock(blockNumber string) {
 		zap.String("blockHash", block.Result.Hash),
 		zap.String("timestamp", block.Result.Timestamp))
 
+	// Skip token transfer processing if block has no transactions
+	if len(block.Result.Transactions) == 0 {
+		configs.Logger.Debug("Skipping token transfer processing for empty block",
+			zap.String("blockNumber", blockNumber))
+		return
+	}
+
 	// Process token transfers
 	configs.Logger.Info("Calling ProcessBlockTokenTransfers",
 		zap.String("blockNumber", blockNumber))
@@ -1041,52 +1074,6 @@ func storeInitialSyncStartBlock(blockNumber string) {
 	if err != nil {
 		configs.Logger.Error("Failed to store initial sync start block",
 			zap.String("block", blockNumber),
-			zap.Error(err))
-	}
-}
-
-// detectFactoryTokensPeriodically periodically scans for factory-created tokens
-func detectFactoryTokensPeriodically() {
-	configs.Logger.Info("Starting periodic factory token detection")
-
-	// Get the last synced block but don't use it for now
-	// We're focusing on a time range from the latest block instead
-	_ = db.GetLastKnownBlockNumber()
-
-	// Get the block from 24 hours ago as our starting point
-	// This allows us to catch recent factory tokens without rescanning the entire chain
-	latestBlock, err := rpc.GetLatestBlock()
-	if err != nil {
-		configs.Logger.Error("Failed to get latest block for factory token detection",
-			zap.Error(err))
-		return
-	}
-
-	// Calculate block number from ~24 hours ago (assuming ~12 second block time)
-	// 24 hours = 86400 seconds / 12 seconds per block = ~7200 blocks
-	blockTime := 12 // seconds
-	lookbackBlocks := (24 * 60 * 60) / blockTime
-
-	// Convert to hex and subtract
-	latestBlockInt := utils.HexToInt(latestBlock)
-	lookbackBlocksInt := big.NewInt(int64(lookbackBlocks))
-	fromBlockInt := new(big.Int).Sub(latestBlockInt, lookbackBlocksInt)
-
-	// Don't go below 0
-	if fromBlockInt.Sign() < 0 {
-		fromBlockInt = big.NewInt(0)
-	}
-
-	// Convert big.Int to hex string
-	fromBlock := "0x" + fromBlockInt.Text(16)
-
-	configs.Logger.Info("Detecting factory tokens in recent blocks",
-		zap.String("fromBlock", fromBlock),
-		zap.String("toBlock", latestBlock))
-
-	// Call the detection function
-	if err := db.DetectFactoryCreatedTokens(fromBlock, latestBlock); err != nil {
-		configs.Logger.Error("Failed to detect factory-created tokens",
 			zap.Error(err))
 	}
 }

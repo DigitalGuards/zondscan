@@ -49,12 +49,6 @@ type ContractInfo struct {
 	CreationTransaction string `bson:"creationTransaction" json:"creationTransaction"`
 	CreationBlockNumber string `bson:"creationBlockNumber" json:"creationBlockNumber"`
 	UpdatedAt           string `bson:"updatedAt" json:"updatedAt"`
-
-	// Factory-specific fields
-	CreatedByFactory bool   `bson:"createdByFactory,omitempty" json:"createdByFactory,omitempty"`
-	FactoryAddress   string `bson:"factoryAddress,omitempty" json:"factoryAddress,omitempty"`
-	TokenOwner       string `bson:"tokenOwner,omitempty" json:"tokenOwner,omitempty"`
-
 	// CustomERC20 properties
 	MaxSupply       string `bson:"maxSupply,omitempty" json:"maxSupply,omitempty"`
 	MaxWalletAmount string `bson:"maxWalletAmount,omitempty" json:"maxWalletAmount,omitempty"`

@@ -12,7 +12,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// Factory contract event signatures
 const (
 	// ERC20 factory events
 	TokenDeployedEventSignature1 = "0xf1a761556f754e3f6ffaff60863242d8680a8e7b2362e5100c1744144498c60f" // TokenDeployed(address,address)

@@ -578,13 +578,7 @@ func ParseTransferEvent(log models.Log) (string, string, *big.Int, error) {
 	// Parse amount from data field
 	amount := new(big.Int)
 	if len(log.Data) > 2 {
-		// Remove 0x prefix if present
 		data := log.Data
-		if strings.HasPrefix(data, "0x") {
-			data = data[2:]
-		}
-
-		// Set the value from hex string
 		if _, success := amount.SetString(data, 16); !success {
 			return "", "", nil, fmt.Errorf("failed to parse amount from data: %s", log.Data)
 		}
