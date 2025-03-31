@@ -10,12 +10,11 @@ import config from '../../config.js';
 
 interface ContractData {
   _id: string;  // MongoDB ObjectId
-  contractCreatorAddress: string;
-  contractAddress: string;
-  //contractCode: string;
-  tokenName?: string;
-  tokenSymbol?: string;
-  tokenDecimals?: number;
+  creatorAddress: string;     // Changed from contractCreatorAddress
+  address: string;            // Changed from contractAddress
+  name?: string;              // Changed from tokenName
+  symbol?: string;            // Changed from tokenSymbol
+  decimals?: number;          // Changed from tokenDecimals
   isToken: boolean;
 }
 
@@ -95,27 +94,27 @@ function CustomTable({ data }: { data: ContractData[] }) {
             <div className="space-y-2">
               <div>
                 <span className="text-[#ffa729] text-sm">Contract Address:</span>
-                <Link href={`/address/${row.contractAddress}`} className="ml-2 text-white hover:text-[#ffa729] text-sm break-all">
-                  {truncateMiddle(row.contractAddress)}
+                <Link href={`/address/${row.address}`} className="ml-2 text-white hover:text-[#ffa729] text-sm break-all">
+                  {truncateMiddle(row.address)}
                 </Link>
               </div>
               <div>
                 <span className="text-[#ffa729] text-sm">Creator:</span>
-                <Link href={`/address/${row.contractCreatorAddress}`} className="ml-2 text-white hover:text-[#ffa729] text-sm break-all">
-                  {truncateMiddle(row.contractCreatorAddress)}
+                <Link href={`/address/${row.creatorAddress}`} className="ml-2 text-white hover:text-[#ffa729] text-sm break-all">
+                  {truncateMiddle(row.creatorAddress)}
                 </Link>
               </div>
               <div>
                 <span className="text-[#ffa729] text-sm">Token Name:</span>
-                <span className="ml-2 text-white text-sm break-all">{row.tokenName}</span>
+                <span className="ml-2 text-white text-sm break-all">{row.name}</span>
               </div>
               <div>
                 <span className="text-[#ffa729] text-sm">Token Symbol:</span>
-                <span className="ml-2 text-white text-sm break-all">{row.tokenSymbol}</span>
+                <span className="ml-2 text-white text-sm break-all">{row.symbol}</span>
               </div>
               <div>
                 <span className="text-[#ffa729] text-sm">Token Decimals:</span>
-                <span className="ml-2 text-white text-sm break-all">{row.tokenDecimals}</span>
+                <span className="ml-2 text-white text-sm break-all">{row.decimals}</span>
               </div>
               <div>
                 <span className="text-[#ffa729] text-sm">Is Token:</span>
@@ -145,18 +144,18 @@ function CustomTable({ data }: { data: ContractData[] }) {
           {rows.map((row) => (
             <tr key={row.key} className="border-b border-[#3d3d3d] hover:bg-[rgba(255,167,41,0.05)] transition-colors">
               <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap">
-                <Link href={`/address/${row.contractAddress}`} className="text-[#ffa729] hover:text-[#ffb954] transition-colors">
-                  {truncateMiddle(row.contractAddress, 8, 8)}
+                <Link href={`/address/${row.address}`} className="text-[#ffa729] hover:text-[#ffb954] transition-colors">
+                  {truncateMiddle(row.address, 8, 8)}
                 </Link>
               </td>
               <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap">
-                <Link href={`/address/${row.contractCreatorAddress}`} className="text-[#ffa729] hover:text-[#ffb954] transition-colors">
-                  {truncateMiddle(row.contractCreatorAddress, 8, 8)}
+                <Link href={`/address/${row.creatorAddress}`} className="text-[#ffa729] hover:text-[#ffb954] transition-colors">
+                  {truncateMiddle(row.creatorAddress, 8, 8)}
                 </Link>
               </td>
-              <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{row.tokenName}</td>
-              <td className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{row.tokenSymbol}</td>
-              <td className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{row.tokenDecimals}</td>
+              <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{row.name}</td>
+              <td className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{row.symbol}</td>
+              <td className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{row.decimals}</td>
               <td className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{row.isToken ? 'Yes' : 'No'}</td>
             </tr>
           ))}
@@ -181,7 +180,7 @@ function SearchInput({ value, onChange }: { value: string; onChange: (value: str
         className="block w-full p-4 pl-10 text-sm text-white border border-[#3d3d3d] rounded-lg 
                   bg-[#2d2d2d] hover:border-[#4d4d4d] focus:ring-1 focus:ring-[#ffa729] focus:border-[#ffa729] 
                   placeholder-gray-400 outline-none transition-colors"
-        placeholder="Search by contract address (with 0x) or token name"
+        placeholder="Search by contract address or token name"
       />
     </div>
   );
@@ -210,6 +209,7 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
       
       console.log('API response:', response.data);
       if (response.data?.response) {
+        // Store the raw response data - will be properly transformed in the useMemo
         setContracts(response.data.response);
         setTotal(response.data.total || 0);
       }
@@ -242,11 +242,11 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
       console.log('Raw item before transform:', item);
       const transformed = {
         _id: item._id || `contract-${index}`,
-        contractCreatorAddress: item.contractCreatorAddress,
-        contractAddress: item.contractAddress,
-        tokenName: item.tokenName || '',
-        tokenSymbol: item.tokenSymbol || '',
-        tokenDecimals: item.tokenDecimals,
+        creatorAddress: item.creatorAddress || '',
+        address: item.address || '',
+        name: item.name || '',
+        symbol: item.symbol || '',
+        decimals: item.decimals,
         isToken: item.isToken || false
       };
       console.log('Transformed item:', transformed);

@@ -16,7 +16,23 @@ async function getContracts(page: number = 0, limit: number = 10): Promise<Contr
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch contracts: ${response.status}`);
+      console.error(`Failed to fetch contracts: ${response.status} ${response.statusText}`);
+      return {
+        response: [],
+        total: 0
+      };
+    }
+
+    // Check content type to ensure we're getting JSON
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      console.error(`Expected JSON but got ${contentType}`);
+      const text = await response.text();
+      console.error(`Response body: ${text.substring(0, 200)}...`);
+      return {
+        response: [],
+        total: 0
+      };
     }
 
     const data = await response.json();
