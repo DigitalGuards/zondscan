@@ -5,7 +5,6 @@ import (
 	"backendAPI/models"
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -17,28 +16,22 @@ func ReturnContracts(page int64, limit int64, search string) ([]models.ContractI
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Create a type to handle raw BSON data from MongoDB
-	type RawContractInfo struct {
-		ContractCreatorAddress string `bson:"contractCreatorAddress"`
-		ContractAddress        string `bson:"contractAddress"`
-		ContractCode           string `bson:"contractCode"`
-		TokenName              string `bson:"tokenName,omitempty"`
-		TokenSymbol            string `bson:"tokenSymbol,omitempty"`
-		TokenDecimals          uint8  `bson:"tokenDecimals,omitempty"`
-		IsToken                bool   `bson:"isToken"`
-	}
-	var rawContracts []RawContractInfo
+	// Use the main model directly, it now has correct BSON tags
+	var contracts []models.ContractInfo
 
-	// Base filter for contracts
-	filter := bson.D{} // All documents in ContractInfo collection are contracts
+	// Base filter
+	filter := bson.D{}
 
-	// Add search if provided
+	// Add search if provided, using correct field names
 	if search != "" {
-		// Search is already in hex format with 0x prefix
+		// Zond addresses start with 'Z'. Search assumes the provided string is the correct format.
 		filter = bson.D{
 			{Key: "$or", Value: bson.A{
-				bson.D{{Key: "contractAddress", Value: search}},
-				bson.D{{Key: "contractCreatorAddress", Value: search}},
+				bson.D{{Key: "address", Value: search}},        // Use correct field name
+				bson.D{{Key: "creatorAddress", Value: search}}, // Use correct field name
+				// Add other searchable fields if needed (e.g., name, symbol for tokens)
+				// bson.D{{Key: "name", Value: primitive.Regex{Pattern: search, Options: "i"}}}, // Case-insensitive search for name
+				// bson.D{{Key: "symbol", Value: primitive.Regex{Pattern: search, Options: "i"}}}, // Case-insensitive search for symbol
 			}},
 		}
 	}
@@ -62,22 +55,16 @@ func ReturnContracts(page int64, limit int64, search string) ([]models.ContractI
 	}
 	defer cursor.Close(ctx)
 
-	if err := cursor.All(ctx, &rawContracts); err != nil {
+	// Decode directly into the slice of models.ContractInfo
+	if err := cursor.All(ctx, &contracts); err != nil {
 		return nil, 0, err
 	}
 
-	// Convert raw contracts to the response format - direct assignment since formats match
-	contracts := make([]models.ContractInfo, len(rawContracts))
-	for i, raw := range rawContracts {
-		contracts[i] = models.ContractInfo{
-			ContractCreatorAddress: raw.ContractCreatorAddress,
-			ContractAddress:        raw.ContractAddress,
-			ContractCode:           raw.ContractCode,
-			TokenName:              raw.TokenName,
-			TokenSymbol:            raw.TokenSymbol,
-			TokenDecimals:          raw.TokenDecimals,
-			IsToken:                raw.IsToken,
-		}
+	// No need for manual mapping anymore
+
+	// Return empty slice instead of nil if no contracts found
+	if contracts == nil {
+		contracts = make([]models.ContractInfo, 0)
 	}
 
 	return contracts, total, nil
@@ -89,21 +76,34 @@ func ReturnContractCode(query string) (models.ContractInfo, error) {
 
 	var result models.ContractInfo
 
-	// Ensure address has 0x prefix
-	if !strings.HasPrefix(query, "0x") {
-		query = "0x" + query
-	}
+	// No need to manipulate the query string, assume it's the correct Zond format (starts with 'Z')
+	// The query could be either a contract address or a creator address.
 
-	// Just look up in MongoDB - we already have contracts indexed
-	filter := bson.M{"contractAddress": query}
+	// First, try searching by 'address' field
+	filter := bson.M{"address": query}
 	err := configs.ContractInfoCollection.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			fmt.Printf("No contract found in DB for %s\n", query)
+			// If not found by address, try searching by 'creatorAddress'
+			fmt.Printf("No contract found by address %s, trying creatorAddress...\n", query)
+			filter = bson.M{"creatorAddress": query}
+			err = configs.ContractInfoCollection.FindOne(ctx, filter).Decode(&result)
+			if err == mongo.ErrNoDocuments {
+				// Not found by either field
+				fmt.Printf("No contract found by creatorAddress either for %s\n", query)
+				return result, err // Return original ErrNoDocuments from the second attempt
+			} else if err != nil {
+				// Error during the second search attempt
+				fmt.Printf("Error querying contract by creatorAddress %s: %v\n", query, err)
+				return result, err
+			}
+			// Found by creatorAddress on the second attempt
 		} else {
-			fmt.Printf("Error querying contract %s: %v\n", query, err)
+			// Error during the first search attempt (by address)
+			fmt.Printf("Error querying contract by address %s: %v\n", query, err)
+			return result, err
 		}
-		return result, err
+		// If we reach here, it means we found the contract (either by address or creatorAddress)
 	}
 
 	// Log successful contract lookup

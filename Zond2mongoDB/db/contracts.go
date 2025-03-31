@@ -5,31 +5,102 @@ import (
 	"Zond2mongoDB/models"
 	"Zond2mongoDB/rpc"
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
 )
 
-// StoreContract stores contract information in the database
+// StoreContract stores or merges contract information in the database
 func StoreContract(contract models.ContractInfo) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	opts := options.Update().SetUpsert(true)
+	collection := configs.GetContractsCollection()
 	filter := bson.M{"address": contract.Address}
-	update := bson.M{"$set": contract}
 
-	_, err := configs.GetContractsCollection().UpdateOne(ctx, filter, update, opts)
-	if err != nil {
-		configs.Logger.Error("Failed to store contract",
+	// Attempt to find existing contract document
+	var existingContract models.ContractInfo
+	err := collection.FindOne(ctx, filter).Decode(&existingContract)
+
+	updateData := contract
+
+	if err == nil {
+		// Existing contract found, merge new data into it
+		configs.Logger.Debug("Found existing contract, merging data", zap.String("address", contract.Address))
+		merged := existingContract
+
+		// Merge fields from the new 'contract' object, only if the new value is non-empty/non-zero
+		// and the existing value *is* empty/zero. This prioritizes data from the creation tx.
+		if merged.CreatorAddress == "" && contract.CreatorAddress != "" {
+			merged.CreatorAddress = contract.CreatorAddress
+		}
+		if merged.CreationTransaction == "" && contract.CreationTransaction != "" {
+			merged.CreationTransaction = contract.CreationTransaction
+		}
+		if merged.CreationBlockNumber == "" && contract.CreationBlockNumber != "" {
+			merged.CreationBlockNumber = contract.CreationBlockNumber
+		}
+		if merged.ContractCode == "" && contract.ContractCode != "" && contract.ContractCode != "0x" {
+			merged.ContractCode = contract.ContractCode
+		}
+		if merged.Status == "" && contract.Status != "" {
+			merged.Status = contract.Status
+		} else if contract.Status != "" && merged.Status != contract.Status {
+			merged.Status = contract.Status
+		}
+
+		// For token info, update if the new info seems more complete or explicitly provided
+		merged.IsToken = contract.IsToken
+		if contract.IsToken {
+			if merged.Name == "" && contract.Name != "" {
+				merged.Name = contract.Name
+			}
+			if merged.Symbol == "" && contract.Symbol != "" {
+				merged.Symbol = contract.Symbol
+			}
+			if merged.Decimals == 0 && contract.Decimals != 0 {
+				merged.Decimals = contract.Decimals
+			}
+			if merged.TotalSupply == "" && contract.TotalSupply != "" {
+				merged.TotalSupply = contract.TotalSupply
+			}
+		} else {
+			// If it's not a token according to new info, clear token fields
+			merged.Name = ""
+			merged.Symbol = ""
+			merged.Decimals = 0
+			merged.TotalSupply = ""
+		}
+
+		// Always update the timestamp
+		merged.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+
+		updateData = merged
+
+	} else if !errors.Is(err, mongo.ErrNoDocuments) {
+		configs.Logger.Error("Failed to check for existing contract",
 			zap.String("address", contract.Address),
 			zap.Error(err))
 		return err
 	}
 
+	opts := options.Update().SetUpsert(true)
+	update := bson.M{"$set": updateData}
+
+	_, err = collection.UpdateOne(ctx, filter, update, opts)
+	if err != nil {
+		configs.Logger.Error("Failed to store/merge contract",
+			zap.String("address", contract.Address),
+			zap.Error(err))
+		return err
+	}
+
+	configs.Logger.Info("Successfully stored/merged contract", zap.String("address", updateData.Address))
 	return nil
 }
 
