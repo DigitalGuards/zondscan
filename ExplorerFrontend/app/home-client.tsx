@@ -287,7 +287,7 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }) {
           playsInline
           style={videoStyle}
         >
-          <source src="/qrl-video-dark.mp4" type="video/mp4" />
+          <source src="/tree3.mp4" type="video/mp4" />
           Your browser does not support the video tag.
         </video>
         <div style={overlayStyle}></div>
