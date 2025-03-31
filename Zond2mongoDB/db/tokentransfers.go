@@ -198,15 +198,43 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 					zap.String("symbol", symbol),
 					zap.Uint8("decimals", decimals))
 
-				// Store new token contract
+				// Store new token contract with creation information
 				newContract := models.ContractInfo{
-					Address:   contractAddress,
-					Status:    "success",
-					IsToken:   true,
-					Name:      name,
-					Symbol:    symbol,
-					Decimals:  decimals,
-					UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+					Address:             contractAddress,
+					Status:              "success",
+					IsToken:             true,
+					Name:                name,
+					Symbol:              symbol,
+					Decimals:            decimals,
+					CreationBlockNumber: blockNumber,         // Set the block where we found the token
+					CreationTransaction: log.TransactionHash, // Set the transaction that contained the transfer
+					CreatorAddress:      "",                  // We don't know the creator from just the transfer
+					UpdatedAt:           time.Now().UTC().Format(time.RFC3339),
+				}
+
+				// Try to get transaction details to find the creator
+				txDetails, txErr := rpc.GetTxDetailsByHash(log.TransactionHash)
+				if txErr == nil && txDetails != nil {
+					configs.Logger.Debug("Retrieved transaction details for token creator identification",
+						zap.String("txHash", log.TransactionHash))
+					newContract.CreatorAddress = txDetails.From
+				} else {
+					configs.Logger.Debug("Failed to get transaction details for token discovery",
+						zap.String("txHash", log.TransactionHash),
+						zap.Error(txErr))
+				}
+
+				// Try to get the token's total supply
+				totalSupply, supplyErr := rpc.GetTokenTotalSupply(contractAddress)
+				if supplyErr == nil {
+					configs.Logger.Debug("Retrieved token total supply",
+						zap.String("address", contractAddress),
+						zap.String("totalSupply", totalSupply))
+					newContract.TotalSupply = totalSupply
+				} else {
+					configs.Logger.Debug("Failed to get token total supply",
+						zap.String("address", contractAddress),
+						zap.Error(supplyErr))
 				}
 
 				err = StoreContract(newContract)
