@@ -225,7 +225,7 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }) {
 
   const StatCard = ({ item }: { item: any }) => (
     <div className={`relative overflow-hidden rounded-2xl 
-                   bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
+                   bg-gradient-to-br from-[#2d2d2d]/80 to-[#1f1f1f]/80
                    border border-[#3d3d3d] shadow-xl
                    hover:border-[#ffa729] transition-all duration-300
                    group ${!data.dataInitialized ? 'opacity-50' : ''}`}>
@@ -269,11 +269,11 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }) {
     },
     {
       title: "What is QRL Zond?",
-      text: "QRL Zond is a quantum-secure, EVM-compatible blockchain designed by the Quantum Resistant Ledger (QRL) project. It’s built for the future of Web3 and decentralized applications (dApps) by combining the flexibility of Ethereum tooling with the security of post-quantum cryptography. Unlike most blockchains that rely on cryptographic methods vulnerable to future quantum attacks, QRL Zond implements XMSS (Extended Merkle Signature Scheme) at its core, offering forward secrecy against both classical and quantum threats. It’s also compatible with the Ethereum Virtual Machine (EVM), allowing developers to deploy smart contracts using existing Ethereum tools, libraries, and wallets. QRL Zond brings together the best of both worlds — developer familiarity and unmatched security — in one seamless network."
+      text: "QRL Zond is a quantum-secure, EVM-compatible blockchain designed by the Quantum Resistant Ledger (QRL) project. It's built for the future of Web3 and decentralized applications (dApps) by combining the flexibility of Ethereum tooling with the security of post-quantum cryptography. Unlike most blockchains that rely on cryptographic methods vulnerable to future quantum attacks, QRL Zond implements XMSS (Extended Merkle Signature Scheme) at its core, offering forward secrecy against both classical and quantum threats. It's also compatible with the Ethereum Virtual Machine (EVM), allowing developers to deploy smart contracts using existing Ethereum tools, libraries, and wallets. QRL Zond brings together the best of both worlds — developer familiarity and unmatched security — in one seamless network."
     },
     {
       title: "Why Quantum Resistance Matters",
-      text: "With quantum computing advancing rapidly, many traditional blockchains face a critical threat: their cryptographic algorithms could be broken by future quantum machines. This would make digital signatures, and therefore entire blockchains, insecure and vulnerable. QRL Zond is built to solve this problem from the ground up. By using post-quantum cryptography, such as XMSS, it ensures that data, assets, and user identities remain protected even against quantum-level threats. For users, this means long-term data integrity, secure smart contract execution, and resilient digital ownership. For developers and enterprises, it’s a future-proof foundation that eliminates concerns about cryptographic obsolescence. Quantum resistance isn’t just a nice-to-have—it’s a necessity for the next era of blockchain technology."
+      text: "With quantum computing advancing rapidly, many traditional blockchains face a critical threat: their cryptographic algorithms could be broken by future quantum machines. This would make digital signatures, and therefore entire blockchains, insecure and vulnerable. QRL Zond is built to solve this problem from the ground up. By using post-quantum cryptography, such as XMSS, it ensures that data, assets, and user identities remain protected even against quantum-level threats. For users, this means long-term data integrity, secure smart contract execution, and resilient digital ownership. For developers and enterprises, it's a future-proof foundation that eliminates concerns about cryptographic obsolescence. Quantum resistance isn't just a nice-to-have—it's a necessity for the next era of blockchain technology."
     }
   ];
   return (
