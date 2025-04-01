@@ -195,17 +195,18 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 			// Prepare contract info based on RPC result
 			contractUpdate := models.ContractInfo{
 				Address:   contractAddress,
+				Status:    "0x1", // Assume successful
 				IsToken:   true,
 				Name:      name,
 				Symbol:    symbol,
 				Decimals:  decimals,
 				UpdatedAt: time.Now().UTC().Format(time.RFC3339),
-				// Set creation information from the log/block we found it in if not already present
-				CreationBlockNumber: blockNumber,
-				CreationTransaction: log.TransactionHash,
+				// Add creation information if this is a new token discovery
+				CreationBlockNumber: blockNumber,         // Set the block where we found the token
+				CreationTransaction: log.TransactionHash, // Set the transaction that contained the transfer
 			}
 
-			// Try to get transaction details to find the creator if not already set
+			// Try to get transaction details to find the creator
 			txDetails, txErr := rpc.GetTxDetailsByHash(log.TransactionHash)
 			if txErr == nil && txDetails != nil {
 				configs.Logger.Debug("Retrieved transaction details for token creator identification",
@@ -217,7 +218,8 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 					zap.Error(txErr))
 			}
 
-			// If we have existing contract data, preserve the creation information
+			// If we have existing contract data, preserve the existing creation information
+			// as it might be more accurate than what we just discovered
 			if err == nil && existingContract != nil {
 				// Preserve creation information if present
 				if existingContract.CreatorAddress != "" {
