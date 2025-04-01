@@ -27,8 +27,9 @@ func ReturnSingleAddress(query string) (models.Address, error) {
 	var result models.Address
 	defer cancel()
 
-	// Store address as-is without stripping prefixes
-	addressHex := query
+	// Normalize address by converting to lowercase
+	// This ensures case-insensitive lookup and storage
+	addressHex := strings.ToLower(query)
 
 	// Try to find existing address
 	filter := bson.D{{Key: "id", Value: addressHex}}
@@ -36,14 +37,14 @@ func ReturnSingleAddress(query string) (models.Address, error) {
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			// Address not found, create new one
-			balance, errMsg := GetBalance(query)
+			balance, errMsg := GetBalance(query) // Use original query for RPC call
 			if errMsg != "" {
 				return result, fmt.Errorf("error getting balance: %s", errMsg)
 			}
 
 			result = models.Address{
 				ObjectId: primitive.NewObjectID(),
-				ID:       addressHex,
+				ID:       addressHex, // Store normalized address
 				Balance:  balance,
 				Nonce:    0, // Default nonce for new address
 			}
@@ -97,8 +98,8 @@ func ReturnRankAddress(address string) (int64, error) {
 	var addresses []models.Address
 	defer cancel()
 
-	// Store address as-is without stripping prefixes
-	addressHex := address
+	// Normalize address by converting to lowercase
+	addressHex := strings.ToLower(address)
 
 	query, err := hex.DecodeString(strings.TrimPrefix(addressHex, "Z"))
 	if err != nil {

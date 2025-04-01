@@ -3,9 +3,11 @@ package db
 import (
 	"backendAPI/configs"
 	"backendAPI/models"
+	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -63,60 +65,96 @@ func ReturnAllInternalTransactionsByAddress(address string) ([]models.TraceResul
 
 	var transactions []models.TraceResult
 
-	decoded, err := hex.DecodeString(strings.TrimPrefix(address, "Z"))
-	if err != nil {
-		return nil, err
+	// Format the address for query
+	formattedAddress := address
+	if !strings.HasPrefix(formattedAddress, "Z") {
+		formattedAddress = "Z" + formattedAddress
 	}
 
-	filter := primitive.D{{Key: "$or", Value: []primitive.D{
-		{{Key: "from", Value: decoded}},
-		{{Key: "to", Value: decoded}},
-	}}}
+	// For internal transactions, we need to strip the Z prefix
+	addressWithoutPrefix := strings.TrimPrefix(formattedAddress, "Z")
 
-	projection := primitive.D{
-		{Key: "type", Value: 1},
-		{Key: "callType", Value: 1},
-		{Key: "hash", Value: 1},
-		{Key: "from", Value: 1},
-		{Key: "to", Value: 1},
-		{Key: "input", Value: 1},
-		{Key: "output", Value: 1},
-		{Key: "traceAddress", Value: 1},
-		{Key: "value", Value: 1},
-		{Key: "gas", Value: 1},
-		{Key: "gasUsed", Value: 1},
-		{Key: "addressFunctionIdentifier", Value: 1},
-		{Key: "amountFunctionIdentifier", Value: 1},
-		{Key: "blockTimestamp", Value: 1},
+	// Try different case variants of the address
+	addressVariants := []string{
+		addressWithoutPrefix,
+		strings.ToLower(addressWithoutPrefix),
+		strings.ToUpper(addressWithoutPrefix),
 	}
 
-	opts := options.Find().
-		SetProjection(projection).
-		SetSort(primitive.D{{Key: "blockTimestamp", Value: -1}})
-
-	results, err := configs.InternalTransactionByAddressCollection.Find(ctx, filter, opts)
-	if err != nil {
-		return nil, err
-	}
-	defer results.Close(ctx)
-
-	for results.Next(ctx) {
-		var singleTransaction models.TraceResult
-		if err := results.Decode(&singleTransaction); err != nil {
-			continue
+	for _, addrVariant := range addressVariants {
+		decoded, err := hex.DecodeString(addrVariant)
+		if err != nil {
+			continue // Skip invalid variants
 		}
 
-		from := hex.EncodeToString([]byte(singleTransaction.From))
+		filter := primitive.D{{Key: "$or", Value: []primitive.D{
+			{{Key: "from", Value: decoded}},
+			{{Key: "to", Value: decoded}},
+		}}}
 
-		if from == strings.TrimPrefix(address, "Z") {
-			singleTransaction.InOut = 0
-			singleTransaction.Address = []byte(singleTransaction.To)
-		} else {
-			singleTransaction.InOut = 1
-			singleTransaction.Address = []byte(singleTransaction.From)
+		projection := primitive.D{
+			{Key: "type", Value: 1},
+			{Key: "callType", Value: 1},
+			{Key: "hash", Value: 1},
+			{Key: "from", Value: 1},
+			{Key: "to", Value: 1},
+			{Key: "input", Value: 1},
+			{Key: "output", Value: 1},
+			{Key: "traceAddress", Value: 1},
+			{Key: "value", Value: 1},
+			{Key: "gas", Value: 1},
+			{Key: "gasUsed", Value: 1},
+			{Key: "addressFunctionIdentifier", Value: 1},
+			{Key: "amountFunctionIdentifier", Value: 1},
+			{Key: "blockTimestamp", Value: 1},
 		}
 
-		transactions = append(transactions, singleTransaction)
+		opts := options.Find().
+			SetProjection(projection).
+			SetSort(primitive.D{{Key: "blockTimestamp", Value: -1}})
+
+		results, err := configs.InternalTransactionByAddressCollection.Find(ctx, filter, opts)
+		if err != nil {
+			continue // Try next variant
+		}
+
+		for results.Next(ctx) {
+			var singleTransaction models.TraceResult
+			if err := results.Decode(&singleTransaction); err != nil {
+				continue
+			}
+
+			from := hex.EncodeToString([]byte(singleTransaction.From))
+
+			// Determine transaction direction based on matching from/to
+			if strings.EqualFold(from, addressWithoutPrefix) {
+				singleTransaction.InOut = 0 // Outgoing
+				singleTransaction.Address = []byte(singleTransaction.To)
+			} else {
+				singleTransaction.InOut = 1 // Incoming
+				singleTransaction.Address = []byte(singleTransaction.From)
+			}
+
+			// Check if this transaction is already in our list (to avoid duplicates)
+			isDuplicate := false
+			for _, tx := range transactions {
+				// Use bytes.Equal to compare byte slices properly
+				if bytes.Equal(tx.Hash, singleTransaction.Hash) {
+					isDuplicate = true
+					break
+				}
+			}
+
+			if !isDuplicate {
+				transactions = append(transactions, singleTransaction)
+			}
+		}
+		results.Close(ctx)
+
+		// If we found transactions, no need to try other case variants
+		if len(transactions) > 0 {
+			break
+		}
 	}
 
 	return transactions, nil
@@ -128,15 +166,21 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 
 	var transactions []models.TransactionByAddress
 
-	// Ensure address has 0x prefix
-	if !strings.HasPrefix(address, "Z") {
-		address = "Z" + address
+	// Ensure address has Z prefix
+	formattedAddress := address
+	if !strings.HasPrefix(formattedAddress, "Z") {
+		formattedAddress = "Z" + formattedAddress
 	}
+
+	// Use regex with case insensitivity for address matching
+	// This will find addresses regardless of case
+	fromRegex := primitive.Regex{Pattern: "^" + regexp.QuoteMeta(formattedAddress) + "$", Options: "i"}
+	toRegex := primitive.Regex{Pattern: "^" + regexp.QuoteMeta(formattedAddress) + "$", Options: "i"}
 
 	// Query for transactions where the address is either the sender or receiver
 	filter := primitive.D{{Key: "$or", Value: []primitive.D{
-		{{Key: "from", Value: address}},
-		{{Key: "to", Value: address}},
+		{{Key: "from", Value: fromRegex}},
+		{{Key: "to", Value: toRegex}},
 	}}}
 
 	projection := primitive.D{
@@ -169,7 +213,8 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 			continue
 		}
 
-		if singleTransaction.From == address {
+		// Use case-insensitive comparison for determining transaction direction
+		if strings.EqualFold(singleTransaction.From, formattedAddress) {
 			singleTransaction.InOut = 0 // Outgoing
 			singleTransaction.Address = singleTransaction.To
 		} else {
@@ -181,9 +226,9 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 	}
 
 	if len(transactions) == 0 {
-		fmt.Printf("No transactions found for address: %s\n", address)
+		fmt.Printf("No transactions found for address: %s\n", formattedAddress)
 	} else {
-		fmt.Printf("Found %d transactions for address: %s\n", len(transactions), address)
+		fmt.Printf("Found %d transactions for address: %s\n", len(transactions), formattedAddress)
 	}
 
 	return transactions, nil
@@ -302,14 +347,19 @@ func CountTransactions(address string) (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Ensure address has 0x prefix
-	if !strings.HasPrefix(address, "Z") {
-		address = "Z" + address
+	// Ensure address has Z prefix
+	formattedAddress := address
+	if !strings.HasPrefix(formattedAddress, "Z") {
+		formattedAddress = "Z" + formattedAddress
 	}
 
+	// Use regex with case insensitivity for address matching
+	fromRegex := primitive.Regex{Pattern: "^" + regexp.QuoteMeta(formattedAddress) + "$", Options: "i"}
+	toRegex := primitive.Regex{Pattern: "^" + regexp.QuoteMeta(formattedAddress) + "$", Options: "i"}
+
 	filter := primitive.D{{Key: "$or", Value: []primitive.D{
-		{{Key: "from", Value: address}},
-		{{Key: "to", Value: address}},
+		{{Key: "from", Value: fromRegex}},
+		{{Key: "to", Value: toRegex}},
 	}}}
 
 	count, err := configs.TransactionByAddressCollection.CountDocuments(ctx, filter)
@@ -507,17 +557,21 @@ func ReturnNonZeroTransactions(address string, page, limit int) ([]models.Transa
 
 	// Format the address for query
 	formattedAddress := address
-	if !strings.HasPrefix(address, "Z") {
-		formattedAddress = "Z" + address
+	if !strings.HasPrefix(formattedAddress, "Z") {
+		formattedAddress = "Z" + formattedAddress
 	}
+
+	// Use regex with case insensitivity for address matching
+	fromRegex := primitive.Regex{Pattern: "^" + regexp.QuoteMeta(formattedAddress) + "$", Options: "i"}
+	toRegex := primitive.Regex{Pattern: "^" + regexp.QuoteMeta(formattedAddress) + "$", Options: "i"}
 
 	// Create a filter for both from and to with this address and non-zero amount
 	filter := bson.M{
 		"$and": []bson.M{
 			{
 				"$or": []bson.M{
-					{"from": formattedAddress},
-					{"to": formattedAddress},
+					{"from": fromRegex},
+					{"to": toRegex},
 				},
 			},
 			{"amount": bson.M{"$gt": 0}}, // Only return transactions with amount > 0
@@ -548,7 +602,7 @@ func ReturnNonZeroTransactions(address string, page, limit int) ([]models.Transa
 		}
 
 		// Set the inOut flag based on the address's relation to the transaction
-		if singleTransaction.From == formattedAddress {
+		if strings.EqualFold(singleTransaction.From, formattedAddress) {
 			singleTransaction.InOut = 0 // Outgoing
 			singleTransaction.Address = singleTransaction.To
 		} else {
