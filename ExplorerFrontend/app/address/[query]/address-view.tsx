@@ -133,11 +133,11 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                         <div className="text-xs md:text-sm text-gray-400 mb-1">Creator Address</div>
                                         <div className="flex items-center space-x-2">
                                             <AddressDisplay 
-                                                address={contractData.contractCreatorAddress || 'Unknown'} 
+                                                address={contractData.creatorAddress || 'Unknown'} 
                                                 type="Creator"
                                             />
-                                            {contractData.contractCreatorAddress && (
-                                                <CopyAddressButton address={contractData.contractCreatorAddress} />
+                                            {contractData.creatorAddress && (
+                                                <CopyAddressButton address={contractData.creatorAddress} />
                                             )}
                                         </div>
                                     </div>
@@ -149,7 +149,7 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                             <div>
                                                 <div className="text-xs md:text-sm text-gray-400 mb-1">Token Name</div>
                                                 <div className="text-xs md:text-sm text-gray-300">
-                                                    {contractData.tokenName || 'Unknown'}
+                                                    {contractData.name || 'Unknown'}
                                                 </div>
                                             </div>
 
@@ -157,7 +157,7 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                             <div>
                                                 <div className="text-xs md:text-sm text-gray-400 mb-1">Token Symbol</div>
                                                 <div className="text-xs md:text-sm text-gray-300">
-                                                    {contractData.tokenSymbol || 'Unknown'}
+                                                    {contractData.symbol || 'Unknown'}
                                                 </div>
                                             </div>
 
@@ -165,7 +165,7 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                             <div>
                                                 <div className="text-xs md:text-sm text-gray-400 mb-1">Token Decimals</div>
                                                 <div className="text-xs md:text-sm text-gray-300">
-                                                    {contractData.tokenDecimals || '0'}
+                                                    {contractData.decimals || '0'}
                                                 </div>
                                             </div>
                                         </>

@@ -4,6 +4,7 @@ import (
 	"backendAPI/configs"
 	"backendAPI/models"
 	"context"
+	"log"
 	"strings"
 	"time"
 
@@ -32,9 +33,6 @@ func ReturnContracts(page int64, limit int64, search string) ([]models.ContractI
 			{Key: "$or", Value: bson.A{
 				bson.D{{Key: "address", Value: normalizedSearch}},        // Match contract address
 				bson.D{{Key: "creatorAddress", Value: normalizedSearch}}, // Match creator address
-				// Add other searchable fields if needed (e.g., name, symbol for tokens)
-				// bson.D{{Key: "name", Value: primitive.Regex{Pattern: search, Options: "i"}}}, // Case-insensitive search for name
-				// bson.D{{Key: "symbol", Value: primitive.Regex{Pattern: search, Options: "i"}}}, // Case-insensitive search for symbol
 			}},
 		}
 	}
@@ -77,8 +75,15 @@ func ReturnContractCode(address string) (models.ContractInfo, error) {
 
 	var result models.ContractInfo
 
-	// Normalize address by converting to lowercase
-	normalizedAddress := strings.ToLower(address)
+	// Normalize address while preserving the Z prefix
+	normalizedAddress := address
+	if strings.HasPrefix(address, "Z") {
+		// Keep the Z prefix and normalize the rest
+		normalizedAddress = "Z" + strings.ToLower(address[1:])
+	} else {
+		// Add Z prefix if missing and normalize
+		normalizedAddress = "Z" + strings.ToLower(strings.TrimPrefix(address, "Z"))
+	}
 
 	// Query for contract code using the normalized address
 	filter := bson.D{{Key: "address", Value: normalizedAddress}}
@@ -86,6 +91,8 @@ func ReturnContractCode(address string) (models.ContractInfo, error) {
 
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
+			// Log that we couldn't find the contract
+			log.Printf("No contract found for address: %s (normalized: %s)", address, normalizedAddress)
 			// Return empty contract code with expected structure
 			return models.ContractInfo{
 				ContractAddress:        "",

@@ -1,15 +1,15 @@
 import type { Transaction, InternalTransaction } from '../../components/types';
 
 interface ContractData {
-  contractCreatorAddress: string;
-  contractAddress: string;
+  creatorAddress: string;
+  address: string;
   contractCode: string;
   creationTransaction: string;
   isToken: boolean;
   status: string;
-  tokenDecimals: number;
-  tokenName: string;
-  tokenSymbol: string;
+  decimals: number;
+  name: string;
+  symbol: string;
   updatedAt: string;
 }
 

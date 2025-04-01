@@ -251,7 +251,10 @@ func IsAddressContract(address string) bool {
 			}
 		}
 
-		// Store the contract
+		// First try to get existing contract from both collections to preserve creation data
+		existingContract, err := GetContract(address)
+
+		// Create base contract info
 		contract := models.ContractInfo{
 			Address:      address,
 			Status:       "0x1", // Assume successful
@@ -262,6 +265,20 @@ func IsAddressContract(address string) bool {
 			TotalSupply:  totalSupply,
 			ContractCode: code,
 			UpdatedAt:    time.Now().UTC().Format(time.RFC3339),
+		}
+
+		// If we have existing contract data, preserve the creation information
+		if err == nil && existingContract != nil {
+			// Preserve creation information if present
+			if existingContract.CreatorAddress != "" {
+				contract.CreatorAddress = existingContract.CreatorAddress
+			}
+			if existingContract.CreationTransaction != "" {
+				contract.CreationTransaction = existingContract.CreationTransaction
+			}
+			if existingContract.CreationBlockNumber != "" {
+				contract.CreationBlockNumber = existingContract.CreationBlockNumber
+			}
 		}
 
 		err = StoreContract(contract)
@@ -278,9 +295,17 @@ func IsAddressContract(address string) bool {
 // getContractFromDB retrieves contract information from the contractCode collection
 // Local version to avoid naming conflicts
 func getContractFromDB(address string) *models.ContractInfo {
+	// First check in the main contracts collection
+	mainContract, err := GetContract(address)
+	if err == nil && mainContract != nil {
+		// If found in main collection, return it
+		return mainContract
+	}
+
+	// If not found in main collection, check the contractCode collection
 	collection := configs.GetCollection(configs.DB, "contractCode")
 	var contract models.ContractInfo
-	err := collection.FindOne(context.Background(), bson.M{"address": address}).Decode(&contract)
+	err = collection.FindOne(context.Background(), bson.M{"address": address}).Decode(&contract)
 	if err != nil {
 		return nil
 	}
@@ -315,6 +340,11 @@ func ReprocessIncompleteContracts() error {
 			configs.Logger.Error("Failed to decode contract", zap.Error(err))
 			continue
 		}
+
+		// Store original creation information to ensure it's not lost
+		creatorAddress := contract.CreatorAddress
+		creationTransaction := contract.CreationTransaction
+		creationBlockNumber := contract.CreationBlockNumber
 
 		// Get contract code if missing
 		if contract.ContractCode == "" {
@@ -357,6 +387,18 @@ func ReprocessIncompleteContracts() error {
 			} else {
 				contract.TotalSupply = totalSupply
 			}
+		}
+
+		// Restore original creation information to ensure it's not lost
+		// Only restore if the original had values and current values are empty
+		if creatorAddress != "" && contract.CreatorAddress == "" {
+			contract.CreatorAddress = creatorAddress
+		}
+		if creationTransaction != "" && contract.CreationTransaction == "" {
+			contract.CreationTransaction = creationTransaction
+		}
+		if creationBlockNumber != "" && contract.CreationBlockNumber == "" {
+			contract.CreationBlockNumber = creationBlockNumber
 		}
 
 		contract.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
