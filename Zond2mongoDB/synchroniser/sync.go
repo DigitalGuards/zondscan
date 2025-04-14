@@ -8,6 +8,7 @@ import (
 	"Zond2mongoDB/utils"
 	"context"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -31,7 +32,12 @@ const (
 
 	// LargeSyncThreshold is the number of blocks that triggers using the larger batch size
 	LargeSyncThreshold = 1000 // 0x3e8 in hex
+
+	MaxProducerConcurrency = 8 // Limit concurrent block fetching goroutines
 )
+
+// Semaphore to limit concurrent producer goroutines
+var producerSem chan struct{}
 
 type Data struct {
 	blockData    []interface{}
@@ -68,6 +74,9 @@ func batchSync(fromBlock string, toBlock string) string {
 	}
 
 	wg := sync.WaitGroup{}
+
+	// Initialize the producer semaphore
+	producerSem = make(chan struct{}, MaxProducerConcurrency)
 
 	// Create buffered channel for producers
 	producers := make(chan (<-chan Data), 32)
@@ -291,6 +300,9 @@ func Sync() {
 	configs.Logger.Info("Starting sync from block number", zap.String("block", nextBlock))
 	wg := sync.WaitGroup{}
 	configs.Logger.Info("Latest block from network", zap.String("block", maxHex))
+
+	// Initialize the producer semaphore
+	producerSem = make(chan struct{}, MaxProducerConcurrency)
 
 	// Create a buffered channel of read only channels, with length 32.
 	producers := make(chan (<-chan Data), 32)
@@ -543,7 +555,13 @@ func producer(start string, end string) <-chan Data {
 
 	// Start the goroutine that produces data.
 	go func(ch chan<- Data) {
-		defer close(ch)
+		// Acquire a token from the producer semaphore
+		producerSem <- struct{}{}
+		// Ensure the token is released when this goroutine finishes
+		defer func() {
+			<-producerSem
+			close(ch) // Close the channel when done producing
+		}()
 
 		// Produce data.
 		currentBlock := start
@@ -555,6 +573,8 @@ func producer(start string, end string) <-chan Data {
 				currentBlock = utils.AddHexNumbers(currentBlock, "0x1")
 				continue
 			}
+			// Add a small delay between RPC calls to prevent overwhelming the node
+			time.Sleep(time.Duration(50+rand.Intn(26)) * time.Millisecond)
 
 			data, err := rpc.GetBlockByNumberMainnet(currentBlock)
 			if err != nil {
