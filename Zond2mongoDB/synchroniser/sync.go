@@ -31,13 +31,7 @@ const (
 
 	// LargeSyncThreshold is the number of blocks that triggers using the larger batch size
 	LargeSyncThreshold = 1000 // 0x3e8 in hex
-
-	MaxConsumerConcurrency = 3 // Limit concurrent batch processing (Ensure this value is used or remove the semaphore)
-	MaxProducerConcurrency = 3 // Limit concurrent block fetching goroutines
 )
-
-// Semaphore to limit concurrent producer goroutines
-var producerSem chan struct{}
 
 type Data struct {
 	blockData    []interface{}
@@ -74,9 +68,6 @@ func batchSync(fromBlock string, toBlock string) string {
 	}
 
 	wg := sync.WaitGroup{}
-
-	// Initialize the producer semaphore
-	producerSem = make(chan struct{}, MaxProducerConcurrency)
 
 	// Create buffered channel for producers
 	producers := make(chan (<-chan Data), 32)
@@ -301,9 +292,6 @@ func Sync() {
 	wg := sync.WaitGroup{}
 	configs.Logger.Info("Latest block from network", zap.String("block", maxHex))
 
-	// Initialize the producer semaphore
-	producerSem = make(chan struct{}, MaxProducerConcurrency)
-
 	// Create a buffered channel of read only channels, with length 32.
 	producers := make(chan (<-chan Data), 32)
 	configs.Logger.Info("Initialized producer channels")
@@ -454,7 +442,7 @@ func processTokensAfterInitialSync(initialSyncStart string, maxHex string) {
 		zap.Int("count", len(blocksWithTxs)))
 
 	// Process token transfers for blocks with transactions in batches
-	tokenBatchSize := 1
+	tokenBatchSize := 10
 	totalProcessed := 0
 	batchCounter := 0
 
@@ -497,35 +485,18 @@ func consumer(ch <-chan (<-chan Data)) {
 	var wg sync.WaitGroup
 	var syncMutex sync.Mutex // Add mutex for synchronizing block updates
 
-	// Create a semaphore to limit concurrent processing goroutines
-	sem := make(chan struct{}, MaxConsumerConcurrency)
+	// Track the highest block number processed
+	var highestProcessedBlock int = 0
 
 	for producer := range ch {
-		// Acquire a token from the semaphore
-		sem <- struct{}{}
-
 		wg.Add(1)
 		go func(p <-chan Data) {
-			// Ensure the token is released when this goroutine finishes
-			defer func() {
-				<-sem
-				wg.Done()
-			}()
-
+			defer wg.Done()
 			for data := range p {
 				// Only process if there's data to process
 				if len(data.blockData) > 0 {
-					// Attempt to insert the block batch
-					err := db.InsertManyBlockDocuments(data.blockData)
-					if err != nil {
-						configs.Logger.Error("Failed to insert block batch, skipping state update for this batch",
-							zap.Error(err),
-							zap.Ints("block_numbers", data.blockNumbers))
-						continue // Skip the rest of the processing for this failed batch
-					}
-
-					// Insertion successful, log and proceed
-					configs.Logger.Info("Successfully inserted block batch",
+					db.InsertManyBlockDocuments(data.blockData)
+					configs.Logger.Info("Inserted block batch",
 						zap.Int("count", len(data.blockData)))
 
 					for x := 0; x < len(data.blockNumbers); x++ {
@@ -534,18 +505,33 @@ func consumer(ch <-chan (<-chan Data)) {
 					configs.Logger.Info("Processed transactions for blocks",
 						zap.Ints("block_numbers", data.blockNumbers))
 
-					// Store the last block number from this *successful* batch
+					// Store the last block number from this batch
 					if len(data.blockNumbers) > 0 {
 						syncMutex.Lock() // Lock before updating sync state
-						lastBlockHex := utils.IntToHex(data.blockNumbers[len(data.blockNumbers)-1])
-						db.StoreLastKnownBlockNumber(lastBlockHex)
+						lastBlock := utils.IntToHex(data.blockNumbers[len(data.blockNumbers)-1])
+						db.StoreLastKnownBlockNumber(lastBlock)
 						syncMutex.Unlock() // Unlock after updating
+					}
+
+					// Track the highest block number processed
+					for _, blockNum := range data.blockNumbers {
+						if blockNum > highestProcessedBlock {
+							highestProcessedBlock = blockNum
+						}
 					}
 				}
 			}
 		}(producer)
 	}
 	wg.Wait()
+
+	// After all batches are processed, update the sync state with the highest block number
+	if highestProcessedBlock > 0 {
+		highestBlockHex := utils.IntToHex(highestProcessedBlock)
+		configs.Logger.Info("Updating sync state with highest processed block after batch processing",
+			zap.String("block", highestBlockHex))
+		forceUpdateSyncState(highestBlockHex)
+	}
 }
 
 func producer(start string, end string) <-chan Data {
@@ -557,13 +543,7 @@ func producer(start string, end string) <-chan Data {
 
 	// Start the goroutine that produces data.
 	go func(ch chan<- Data) {
-		// Acquire a token from the producer semaphore
-		producerSem <- struct{}{}
-		// Ensure the token is released when this goroutine finishes
-		defer func() {
-			<-producerSem
-			close(ch) // Close the channel when done producing
-		}()
+		defer close(ch)
 
 		// Produce data.
 		currentBlock := start
@@ -576,16 +556,11 @@ func producer(start string, end string) <-chan Data {
 				continue
 			}
 
-			// Add a small delay between RPC calls to prevent rate limiting
-			time.Sleep(50 * time.Millisecond)
-
 			data, err := rpc.GetBlockByNumberMainnet(currentBlock)
 			if err != nil {
 				configs.Logger.Error("Failed to get block data",
 					zap.String("block", currentBlock),
 					zap.Error(err))
-				// Consider retrying or handling differently? For now, continue.
-				currentBlock = utils.AddHexNumbers(currentBlock, "0x1") // Ensure progress even on error
 				continue
 			}
 
@@ -711,17 +686,7 @@ func processSubsequentBlocks(currentBlock string) string {
 	}
 
 	// Process the block
-	err = db.InsertBlockDocument(*blockData)
-	if err != nil {
-		// Log the error and DO NOT update state or return next block
-		configs.Logger.Error("Failed to insert block document during subsequent processing",
-			zap.String("block", currentBlock),
-			zap.Error(err))
-		// Returning the *current* block number effectively forces a retry on the next cycle
-		return currentBlock
-	}
-
-	// Insertion was successful, proceed with transaction processing
+	db.InsertBlockDocument(*blockData)
 	db.ProcessTransactions(*blockData)
 
 	// Update any pending transactions that are now mined in this block
@@ -736,7 +701,7 @@ func processSubsequentBlocks(currentBlock string) string {
 		zap.String("block", currentBlock),
 		zap.String("hash", blockData.Result.Hash))
 
-	// Update sync state *only after successful insertion and processing*
+	// Update sync state after successful processing
 	db.StoreLastKnownBlockNumber(currentBlock)
 
 	// Return next block number

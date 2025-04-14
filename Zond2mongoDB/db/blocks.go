@@ -338,66 +338,82 @@ func BlockExists(blockNumber string) bool {
 }
 
 // InsertBlockDocument inserts a single block document into the database
-// It returns an error if the insertion fails for reasons other than a duplicate key.
-func InsertBlockDocument(block models.ZondDatabaseBlock) error {
-	// Check if block already exists before attempting insert
-	if BlockExists(block.Result.Number) {
-		configs.Logger.Info("Block already exists, skipping insert", zap.String("blockNumber", block.Result.Number))
-		return nil // Not an error if it already exists
+// Checks if the block already exists before inserting
+func InsertBlockDocument(block models.ZondDatabaseBlock) {
+	hashField := block.Result.Hash
+	if len(hashField) == 0 {
+		configs.Logger.Warn("Block has no hash, skipping insertion",
+			zap.String("blockNumber", block.Result.Number))
+		return
 	}
 
-	collection := configs.BlocksCollections
+	// Check if block already exists by number
+	if BlockExists(block.Result.Number) {
+		configs.Logger.Info("Block already exists, skipping insertion",
+			zap.String("blockNumber", block.Result.Number),
+			zap.String("hash", block.Result.Hash))
+		return
+	}
+
+	// Block doesn't exist, insert it
 	ctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
 	defer cancel()
 
-	_, err := collection.InsertOne(ctx, block)
+	result, err := configs.BlocksCollections.InsertOne(ctx, block)
 	if err != nil {
-		// Check for duplicate key error specifically
-		if mongo.IsDuplicateKeyError(err) {
-			configs.Logger.Info("Attempted to insert duplicate block (race condition likely), ignoring error", zap.String("blockNumber", block.Result.Number))
-			return nil // Treat duplicate key as non-fatal for this function's purpose
-		} else {
-			configs.Logger.Warn("Failed to insert block document", zap.String("blockNumber", block.Result.Number), zap.Error(err))
-			return err // Return other errors
-		}
+		configs.Logger.Warn("Failed to insert block",
+			zap.String("blockNumber", block.Result.Number),
+			zap.Error(err))
 	} else {
-		configs.Logger.Info("Successfully inserted single block", zap.String("blockNumber", block.Result.Number))
+		configs.Logger.Debug("Inserted block",
+			zap.String("blockNumber", block.Result.Number),
+			zap.Any("insertResult", result.InsertedID))
 	}
-	return nil // Return nil on success
 }
 
 // InsertManyBlockDocuments inserts multiple block documents into the database
 // Filters out blocks that already exist before inserting
-func InsertManyBlockDocuments(blocks []interface{}) error {
+func InsertManyBlockDocuments(blocks []interface{}) {
+	if len(blocks) == 0 {
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Prevent duplicate insertions if the same batch is somehow processed twice
-	// Use a map to track block numbers already processed in this specific batch
-	processedBlockNumbers := make(map[string]bool)
+	// Create a slice for unique blocks
 	var uniqueBlocks []interface{}
 
-	for _, blockData := range blocks {
-		block, ok := blockData.(models.ZondDatabaseBlock)
+	// Track which block numbers we've already processed
+	processedBlockNumbers := make(map[string]bool)
+
+	// For each block in the input
+	for _, blockInterface := range blocks {
+		// Cast to the correct type
+		block, ok := blockInterface.(models.ZondDatabaseBlock)
 		if !ok {
-			// Handle type assertion failure if necessary
-			configs.Logger.Error("Failed type assertion for block data")
+			configs.Logger.Warn("Failed to cast block to ZondDatabaseBlock, skipping")
 			continue
 		}
 
 		blockNumber := block.Result.Number
-		if processedBlockNumbers[blockNumber] {
-			configs.Logger.Debug("Skipping duplicate block within batch", zap.String("blockNumber", blockNumber))
+
+		// Skip if we've already processed this block number in this batch
+		if _, exists := processedBlockNumbers[blockNumber]; exists {
+			configs.Logger.Info("Skipping duplicate block in batch",
+				zap.String("blockNumber", blockNumber))
 			continue
 		}
 
-		// Additionally check if the block already exists in the database
+		// Check if this block exists in the database
 		if BlockExists(blockNumber) {
-			configs.Logger.Debug("Block already exists in database, skipping insertion", zap.String("blockNumber", blockNumber))
+			configs.Logger.Info("Block already exists in DB, skipping insertion",
+				zap.String("blockNumber", blockNumber))
 			continue
 		}
 
-		uniqueBlocks = append(uniqueBlocks, blockData)
+		// Block is unique, add it to our list
+		uniqueBlocks = append(uniqueBlocks, blockInterface)
 		processedBlockNumbers[blockNumber] = true
 	}
 
@@ -410,13 +426,11 @@ func InsertManyBlockDocuments(blocks []interface{}) error {
 		_, err := configs.BlocksCollections.InsertMany(ctx, uniqueBlocks)
 		if err != nil {
 			configs.Logger.Warn("Failed to insert many block documents", zap.Error(err))
-			return err // Return the error
 		}
 	} else {
 		configs.Logger.Info("No unique blocks to insert",
 			zap.Int("originalCount", len(blocks)))
 	}
-	return nil // Return nil on success
 }
 
 // Rollback removes all blocks after the given block number and updates the sync state
