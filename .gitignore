@@ -22,6 +22,7 @@ yarn-error.log*
 nginx.conf
 backendAPI/backendAPI
 Zond2mongoDB/syncer
+Zond2mongoDB/zsyncer
 Zond2mongoDB/synchroniser/main
 check-tx.txt
 check-mongodb.txt
@@ -41,3 +42,5 @@ backendAPI/.env
 zond-contract-example/
 zond-contract-example*
 backendAPI/backendAPI.log
+*.cert
+*.key

@@ -34,6 +34,7 @@ check_dependencies() {
     command -v npm >/dev/null 2>&1 || { print_error "npm is required but not installed."; }
     command -v go >/dev/null 2>&1 || { print_error "Go is required but not installed."; }
     command -v mongod >/dev/null 2>&1 || { print_error "MongoDB is required but not installed."; }
+    command -v nginx >/dev/null 2>&1 || { print_error "Nginx is required but not installed."; }
 
     # Install PM2 if not present
     if ! command -v pm2 >/dev/null 2>&1; then
@@ -137,6 +138,118 @@ EOL
     pm2 start ./backendAPI --name "handler" --cwd "$BASE_DIR/backendAPI" || print_error "Failed to start server"
 }
 
+# Setup nginx configuration
+setup_nginx() {
+    print_status "Setting up Nginx configuration..."
+
+    read -p "Enter your domain name (e.g., zondscan.com): " DOMAIN_NAME
+    read -p "Enter SSL certificate path (or press Enter to skip SSL setup): " SSL_CERT
+
+    if [ -z "$SSL_CERT" ]; then
+        print_status "Skipping SSL setup. Creating HTTP-only configuration..."
+
+        cat > /etc/nginx/sites-available/$DOMAIN_NAME << EOL
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $DOMAIN_NAME www.$DOMAIN_NAME;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOL
+    else
+        read -p "Enter SSL certificate key path: " SSL_KEY
+
+        cat > /etc/nginx/sites-available/$DOMAIN_NAME << EOL
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $DOMAIN_NAME www.$DOMAIN_NAME;
+    return 301 https://\$server_name\$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name $DOMAIN_NAME www.$DOMAIN_NAME;
+
+    ssl_certificate $SSL_CERT;
+    ssl_certificate_key $SSL_KEY;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384';
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOL
+    fi
+
+    # Enable the site
+    ln -sf /etc/nginx/sites-available/$DOMAIN_NAME /etc/nginx/sites-enabled/$DOMAIN_NAME
+
+    # Enable gzip compression in main nginx.conf if not already enabled
+    if ! grep -q "gzip_vary on" /etc/nginx/nginx.conf; then
+        print_status "Enabling gzip compression..."
+        sed -i 's/# gzip_vary on;/gzip_vary on;/g' /etc/nginx/nginx.conf
+        sed -i 's/# gzip_proxied any;/gzip_proxied any;/g' /etc/nginx/nginx.conf
+        sed -i 's/# gzip_comp_level 6;/gzip_comp_level 6;/g' /etc/nginx/nginx.conf
+        sed -i 's/# gzip_buffers 16 8k;/gzip_buffers 16 8k;/g' /etc/nginx/nginx.conf
+        sed -i 's/# gzip_http_version 1.1;/gzip_http_version 1.1;/g' /etc/nginx/nginx.conf
+        sed -i 's/# gzip_types text\/plain text\/css application\/json application\/javascript text\/xml application\/xml application\/xml+rss text\/javascript;/gzip_types text\/plain text\/css application\/json application\/javascript text\/xml application\/xml application\/xml+rss text\/javascript;/g' /etc/nginx/nginx.conf
+    fi
+
+    # Test and reload nginx
+    nginx -t || print_error "Nginx configuration test failed"
+    systemctl reload nginx || print_error "Failed to reload Nginx"
+
+    print_status "Nginx configured successfully for $DOMAIN_NAME"
+}
+
 # Setup frontend environment
 setup_frontend() {
     print_status "Setting up frontend..."
@@ -164,9 +277,13 @@ EOL
     print_status "Updating browserslist database..."
     npx browserslist@latest --update-db || print_error "Failed to update browserslist"
 
-    # Start frontend in development mode with PM2
-    print_status "Starting frontend in development mode..."
-    cd "$BASE_DIR/ExplorerFrontend" && pm2 start "npm run dev" --name "frontend" || print_error "Failed to start frontend"
+    # Build production frontend
+    print_status "Building production frontend..."
+    npm run build || print_error "Failed to build frontend"
+
+    # Start frontend in production mode with PM2
+    print_status "Starting frontend in production mode..."
+    cd "$BASE_DIR/ExplorerFrontend" && pm2 start "npm start" --name "frontend" || print_error "Failed to start frontend"
 }
 
 # Setup blockchain synchronizer
@@ -222,7 +339,14 @@ main() {
 
     # Clone and setup
     clone_repo
-    #setup_frontend
+
+    # Ask if user wants to setup nginx
+    read -p "Do you want to setup Nginx reverse proxy? (y/n): " SETUP_NGINX
+    if [[ $SETUP_NGINX =~ ^[Yy]$ ]]; then
+        setup_nginx
+    fi
+
+    setup_frontend
     setup_synchronizer
     echo "Waiting for synchronizer to initialize..."
     for i in {10..1}; do
@@ -240,6 +364,10 @@ main() {
     echo -e "\nMake sure you have:"
     echo "1. MongoDB running on localhost:27017"
     echo "2. Zond node accessible at $NODE_URL"
+    if [[ $SETUP_NGINX =~ ^[Yy]$ ]]; then
+        echo "3. Nginx is configured and running"
+        echo "4. DNS is pointing to this server"
+    fi
     echo -e "\nTo monitor services:"
     echo "pm2 status"
     echo -e "\nTo view logs:"
