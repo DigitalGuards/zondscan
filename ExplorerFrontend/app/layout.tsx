@@ -8,24 +8,24 @@ import Footer from './components/Footer';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'ZondScan | QRL Zond EVM Blockchain Explorer (Quantum-Safe)',
+  title: 'ZondScan | QRL Zond Blockchain Explorer',
   description:
-    'ZondScan is an explorer for QRL Zond – the first EVM-compatible blockchain secured with post-quantum cryptography. Track real-time transactions, smart contracts, and validator activity on a next-gen proof-of-stake network.',
+    'Blockchain explorer for QRL Zond, an EVM-compatible blockchain secured with post-quantum cryptography. Track transactions, smart contracts, blocks, and validators.',
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'ZondScan | QRL Zond EVM Blockchain Explorer (Quantum-Safe)',
+    title: 'ZondScan | QRL Zond Blockchain Explorer',
     description:
-      'Discover QRL Zond with ZondScan – the secure, quantum-resistant, and EVM-compatible explorer for smart contracts, blocks, and transactions. Built for the future of decentralized apps.',
+      'Blockchain explorer for QRL Zond. Track smart contracts, blocks, and transactions on a quantum-resistant EVM-compatible chain.',
     url: 'https://zondscan.com',
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'ZondScan | QRL Zond EVM Blockchain Explorer (Quantum-Safe)',
+    title: 'ZondScan | QRL Zond Blockchain Explorer',
     description:
-      'Explore QRL Zond with ZondScan – the first post-quantum EVM-compatible blockchain. View live data on smart contracts, PoS validators, and secure Web3 apps.',
+      'Blockchain explorer for QRL Zond. Track transactions, blocks, smart contracts, and validators on a post-quantum EVM chain.',
   },
-  
-  
+
+
 };
 
 

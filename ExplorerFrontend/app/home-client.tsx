@@ -300,7 +300,7 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }) {
       {/* Main Content */}
       <div className="relative z-10 px-4 lg:px-8 pt-6.81 lg:pt-8">
         {/* Search Bar */}
-        <div className="max-w-4xl mx-auto mt-4">
+        <div className="max-w-6xl mx-auto mt-4">
           <h1 className="text-base sm:text-xl font-bold mb-2 sm:mb-4 text-[#ffa729]">{pageTitle}</h1>
           <div className="mb-4 sm:mb-10">
             <SearchBar />
@@ -343,7 +343,7 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }) {
             </div>
           </div>
         </div>
-        <div className="max-w-7xl mx-auto px-4">
+        <div className="max-w-6xl mx-auto px-4">
         <SeoTextSection items={seoTextItems} />
         </div>
         
