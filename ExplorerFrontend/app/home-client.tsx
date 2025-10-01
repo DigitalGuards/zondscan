@@ -265,15 +265,19 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }) {
   const seoTextItems = [
     {
       title: "What is ZondScan?",
-      text: "ZondScan is an independent blockchain explorer built for the QRL Zond network — a next-generation, EVM-compatible blockchain secured by quantum-resistant cryptography. It offers real-time insights into blocks, transactions, smart contracts, and validators, all on a fast and secure proof-of-stake (PoS) consensus mechanism."
+      text: "ZondScan is an independent blockchain explorer for QRL Zond, a next-generation EVM-compatible blockchain secured by quantum-resistant cryptography. Track blocks, transactions, smart contracts, and validators in real-time on a fast proof-of-stake network."
     },
     {
       title: "What is QRL Zond?",
-      text: "QRL Zond is a quantum-secure, EVM-compatible blockchain designed by the Quantum Resistant Ledger (QRL) project. It's built for the future of Web3 and decentralized applications (dApps) by combining the flexibility of Ethereum tooling with the security of post-quantum cryptography. Unlike most blockchains that rely on cryptographic methods vulnerable to future quantum attacks, QRL Zond implements XMSS (Extended Merkle Signature Scheme) at its core, offering forward secrecy against both classical and quantum threats. It's also compatible with the Ethereum Virtual Machine (EVM), allowing developers to deploy smart contracts using existing Ethereum tools, libraries, and wallets. QRL Zond brings together the best of both worlds — developer familiarity and unmatched security — in one seamless network."
+      text: "QRL Zond is an EVM-compatible blockchain built by the Quantum Resistant Ledger project with post-quantum cryptography at its core. Most blockchains use cryptographic algorithms vulnerable to future quantum computers. QRL Zond uses SPHINCS+ instead, a NIST-standardized signature scheme that provides security against both current and quantum-era threats. Since it's EVM-compatible, developers can deploy smart contracts using familiar Ethereum tools, libraries, and wallets. You get Ethereum compatibility plus quantum-resistant security."
     },
     {
       title: "Why Quantum Resistance Matters",
-      text: "With quantum computing advancing rapidly, many traditional blockchains face a critical threat: their cryptographic algorithms could be broken by future quantum machines. This would make digital signatures, and therefore entire blockchains, insecure and vulnerable. QRL Zond is built to solve this problem from the ground up. By using post-quantum cryptography, such as XMSS, it ensures that data, assets, and user identities remain protected even against quantum-level threats. For users, this means long-term data integrity, secure smart contract execution, and resilient digital ownership. For developers and enterprises, it's a future-proof foundation that eliminates concerns about cryptographic obsolescence. Quantum resistance isn't just a nice-to-have—it's a necessity for the next era of blockchain technology."
+      text: "Quantum computers will eventually break the cryptographic signatures that protect most blockchains today. When that happens, digital assets and identities on those chains become vulnerable. QRL Zond solves this with post-quantum cryptography like SPHINCS+, ensuring your assets, contracts, and identity stay secure even when quantum computers arrive. It's not future-proofing, it's building for the inevitable."
+    },
+    {
+      title: "Why SPHINCS+?",
+      text: "QRL Zond uses SPHINCS+, a stateless hash-based signature scheme recently standardized by NIST. Unlike stateful schemes that require tracking signature usage, SPHINCS+ eliminates state-management risks entirely. This makes development simpler and removes a major security headache for developers and enterprises. The tradeoff is slightly larger signatures and more computation, but that's manageable compared to the systemic risks of state tracking."
     }
   ];
   return (
@@ -339,7 +343,7 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }) {
             </div>
           </div>
         </div>
-        <div className="mr-40 ml-40">
+        <div className="max-w-7xl mx-auto px-4">
         <SeoTextSection items={seoTextItems} />
         </div>
         
