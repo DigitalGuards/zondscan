@@ -76,8 +76,8 @@ check_mongodb() {
 # Prompt for node selection
 select_node() {
     print_status "Select Zond node to use:"
-    PS3="Please choose the node (1-4): "
-    options=("Local node (127.0.0.1:8545)" "BETANET Remote node (REDACTED:8545)" "DG TestnetV1 node (35.158.17.89:32776)" "Foundation testnetv1 (buidl.localbits.org:8545)")
+    PS3="Please choose the node (1-2): "
+    options=("Local node (127.0.0.1:8545)" "Testnet Remote node (REDACTED:8545)")
     select opt in "${options[@]}"
     do
         case $opt in
@@ -85,7 +85,7 @@ select_node() {
                 NODE_URL="http://127.0.0.1:8545"
                 break
                 ;;
-            "Remote node (REDACTED:8545)")
+            "Testnet Remote node (REDACTED:8545)")
                 NODE_URL="http://REDACTED:8545"
                 break
                 ;;
@@ -245,7 +245,7 @@ main() {
     clone_repo
     
     setup_synchronizer
-    #setup_frontend
+    setup_frontend
     setup_server
     #save_pm2
 
