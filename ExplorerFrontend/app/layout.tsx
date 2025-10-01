@@ -47,7 +47,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
               "@context": "https://schema.org",
               "@type": "WebApplication",
               "name": "QRL Zond Explorer",
-              "description": "QRL Zond Web3 EVM Compatible Blockchain Explorer - Explore transactions, blocks, smart contracts, and validators on the Quantum Resistant Ledger Proof-of-Stake network",
+              "description": "Blockchain explorer for QRL Zond. Track transactions, blocks, smart contracts, and validators on the quantum-resistant proof-of-stake network.",
               "url": "https://zondscan.com",
               "applicationCategory": "Blockchain Explorer",
               "operatingSystem": "All",
@@ -86,7 +86,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
                 {
                   "@type": "WebPage",
                   "name": "Smart Contracts",
-                  "description": "Explore QRL contracts",
+                  "description": "View QRL smart contracts",
                   "url": "https://zondscan.com/contracts"
                 },
                 {

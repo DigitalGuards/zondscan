@@ -12,7 +12,7 @@ const faqs = [
   },
   {
     question: "What makes QRL Zond quantum resistant?",
-    answer: "QRL Zond uses both Dilithium (a Lattice-based digital signature scheme) and XMSS (eXtended Merkle Signature Scheme), which are post-quantum secure digital signature schemes. Unlike traditional blockchains that use ECDSA (which will be broken by quantum computers), these signature schemes are designed to be resistant to quantum attacks. The threat isn't about SHA-256 hashing - it's about the signature scheme ECDSA, which will be broken much earlier and would allow forging of transactions."
+    answer: "QRL Zond uses SPHINCS+, a NIST-standardized stateless hash-based signature scheme. Traditional blockchains use ECDSA signatures, which quantum computers will break. SPHINCS+ is designed to withstand quantum attacks. The vulnerability isn't SHA-256 hashing, it's the ECDSA signature scheme that protects transactions. When quantum computers break ECDSA, attackers can forge transactions. SPHINCS+ prevents this."
   },
   {
     question: "How can I use Zondscan to track transactions?",
@@ -28,7 +28,7 @@ const faqs = [
   },
   {
     question: "What are the differences between QRL Zond and Ethereum?",
-    answer: "While QRL Zond is based on Ethereum, there are key differences:\n\n1. Quantum-resistant signatures using XMSS instead of ECDSA\n2. Modified transaction format to accommodate quantum-resistant signatures\n3. Adjusted gas calculations for quantum-resistant operations\n4. Maintained EVM compatibility for smart contracts\n\nDespite these differences, most Ethereum tools and development practices remain applicable."
+    answer: "QRL Zond is based on Ethereum with key changes:\n\n1. Uses SPHINCS+ signatures instead of ECDSA\n2. Modified transaction format for quantum-resistant signatures\n3. Adjusted gas calculations for quantum-resistant operations\n4. Full EVM compatibility for smart contracts\n\nMost Ethereum tools and development practices work the same."
   },
   {
     question: "Who created Zondscan?",

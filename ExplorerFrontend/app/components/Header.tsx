@@ -24,7 +24,7 @@ import QRLFavicon from '../../public/favicon.ico'
 const blockchain = [
   { name: 'View Transactions', description: 'Here you can view all the Transactions', href: '/transactions/1', icon: SquaresPlusIcon, imgSrc: PartnerHandshakeIcon },
   { name: 'View Blocks', description: 'Here you can view all the Blocks', href: '/blocks/1', imgSrc: BlockchainIcon },
-  { name: 'View Contracts', description: 'Explore all QRL contracts', href: '/contracts', imgSrc: ContractIcon },
+  { name: 'View Contracts', description: 'View all QRL contracts', href: '/contracts', imgSrc: ContractIcon },
 ]
 
 const tools = [
