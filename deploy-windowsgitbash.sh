@@ -89,14 +89,6 @@ select_node() {
                 NODE_URL="http://REDACTED:8545"
                 break
                 ;;
-            "DG TestnetV1 node (35.158.17.89:32776)")
-                NODE_URL="http://35.158.17.89:32776"
-                break
-                ;;
-            "Foundation testnetv1 (buidl.localbits.org:8545)")
-                NODE_URL="http://buidl.localbits.org:8545"
-                break
-                ;;
             *) echo "Invalid option. Please try again.";;
         esac
     done
