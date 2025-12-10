@@ -1,7 +1,31 @@
-import * as XLSX from 'xlsx';
 import { formatTimestamp, normalizeHexString, formatAddress } from '../lib/helpers';
 import { MouseEvent } from 'react';
 import type { DownloadBtnProps, DownloadBtnInternalProps } from './types';
+
+function escapeCSV(value: string | number): string {
+  const str = String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function downloadCSV(data: Record<string, string | number>[], fileName: string): void {
+  if (data.length === 0) return;
+
+  const headers = Object.keys(data[0]);
+  const csvRows = [
+    headers.map(escapeCSV).join(','),
+    ...data.map(row => headers.map(h => escapeCSV(row[h] ?? '')).join(','))
+  ];
+
+  const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
 
 export function DownloadBtn({ data = [], fileName }: DownloadBtnProps): JSX.Element {
   const handleDownload = (e: MouseEvent<HTMLButtonElement>): void => {
@@ -14,7 +38,7 @@ export function DownloadBtn({ data = [], fileName }: DownloadBtnProps): JSX.Elem
         if (key === 'ID') {
           continue;
         }
-        
+
         const value = item[key];
         if (value === undefined) continue;
 
@@ -24,14 +48,14 @@ export function DownloadBtn({ data = [], fileName }: DownloadBtnProps): JSX.Elem
           convertedItem[key] = formatTimestamp(Number(value));
         } else if (key === 'Address' || key === 'TxHash') {
           if (typeof value === 'string') {
-            convertedItem[key] = key === 'Address' ? 
-              formatAddress("0x" + normalizeHexString(value)) : 
+            convertedItem[key] = key === 'Address' ?
+              formatAddress("0x" + normalizeHexString(value)) :
               "0x" + normalizeHexString(value);
           }
         } else if (key === 'From' || key === 'To') {
           if (typeof value === 'string') {
-            convertedItem[key] = value ? 
-              formatAddress("0x" + normalizeHexString(value)) : 
+            convertedItem[key] = value ?
+              formatAddress("0x" + normalizeHexString(value)) :
               "No Address Found";
           }
         } else {
@@ -40,11 +64,8 @@ export function DownloadBtn({ data = [], fileName }: DownloadBtnProps): JSX.Elem
       }
       return convertedItem;
     });
-            
-    const worksheet = XLSX.utils.json_to_sheet(convertedData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
-    XLSX.writeFile(workbook, fileName ? `${fileName}.xlsx` : "data.xlsx");
+
+    downloadCSV(convertedData, fileName ? `${fileName}.csv` : "data.csv");
   };
 
   return (
@@ -73,7 +94,7 @@ export function DownloadBtnInternal({ data = [], fileName }: DownloadBtnInternal
         if (skipKeys.has(key)) {
           continue;
         }
-        
+
         const value = item[key];
         if (value === undefined) continue;
 
@@ -98,11 +119,8 @@ export function DownloadBtnInternal({ data = [], fileName }: DownloadBtnInternal
       }
       return convertedItem;
     });
-            
-    const worksheet = XLSX.utils.json_to_sheet(convertedData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
-    XLSX.writeFile(workbook, fileName ? `${fileName}.xlsx` : "data.xlsx");
+
+    downloadCSV(convertedData, fileName ? `${fileName}.csv` : "data.csv");
   };
 
   return (
