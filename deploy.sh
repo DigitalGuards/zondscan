@@ -26,6 +26,28 @@ clean_pm2() {
     pm2 cleardump || print_status "No dump file to clear"
 }
 
+# Clean MongoDB database and log files
+clean_database_and_logs() {
+    print_status "Do you want to clean MongoDB database and log files? (y/n)"
+    read -p "Enter choice: " DELETE_DB_LOGS
+
+    if [[ $DELETE_DB_LOGS =~ ^[Yy]$ ]]; then
+        print_status "Cleaning MongoDB database and log files..."
+
+        # Drop the MongoDB database
+        mongosh --eval "db.getSiblingDB('qrldata-z').dropDatabase()" || print_status "Failed to drop database or database doesn't exist"
+
+        # Delete the log file if it exists
+        if [ -f "$BASE_DIR/Zond2mongoDB/logs/zond_sync.log" ]; then
+            rm "$BASE_DIR/Zond2mongoDB/logs/zond_sync.log" || print_status "Failed to delete log file"
+        else
+            print_status "Log file not found, skipping deletion"
+        fi
+    else
+        print_status "Skipping database and log files cleanup"
+    fi
+}
+
 # Check for required tools
 check_dependencies() {
     print_status "Checking dependencies..."
@@ -43,12 +65,6 @@ check_dependencies() {
     fi
 }
 
-# Check if MongoDB is running
-check_mongodb() {
-    if ! nc -z localhost 27017; then
-        print_error "MongoDB is not running on localhost:27017. Or nc is not installed..."
-    fi
-}
 
 # Prompt for node selection
 # Prompt for node selection
@@ -120,14 +136,18 @@ setup_backendapi() {
     print_status "Setting up server..."
     cd "$BASE_DIR/backendAPI" || print_error "Server directory not found"
 
-    # Create .env.development file
-    print_status "Creating .env.development file..."
-    cat > .env << EOL
+    # Create .env file only if it doesn't exist
+    if [ -f ".env" ]; then
+        print_status ".env file already exists, skipping creation"
+    else
+        print_status "Creating .env file..."
+        cat > .env << EOL
 GIN_MODE=release
 MONGOURI=mongodb://localhost:27017/qrldata-z?readPreference=primary
 HTTP_PORT=:8080
 NODE_URL=$NODE_URL
 EOL
+    fi
 
     # Build the server
     print_status "Building server..."
@@ -255,19 +275,42 @@ setup_frontend() {
     print_status "Setting up frontend..."
     cd "$BASE_DIR/ExplorerFrontend" || print_error "Frontend directory not found"
 
-    # Create .env file
-    cat > .env << EOL
-DATABASE_URL=mongodb://localhost:27017/qrldata-z?readPreference=primary
-DOMAIN_NAME=http://localhost:3000
-HANDLER_URL=http://127.0.0.1:8080
-EOL
+    # Determine the public URL for client-side API calls
+    if [ -n "$DOMAIN_NAME" ]; then
+        if [ -n "$SSL_CERT" ]; then
+            PUBLIC_URL="https://$DOMAIN_NAME"
+        else
+            PUBLIC_URL="http://$DOMAIN_NAME"
+        fi
+    else
+        PUBLIC_URL="http://localhost:3000"
+    fi
 
-    # Create .env.local file
-    cat > .env.local << EOL
+    # Create .env file only if it doesn't exist
+    if [ -f ".env" ]; then
+        print_status ".env file already exists, skipping creation"
+    else
+        print_status "Creating .env file..."
+        cat > .env << EOL
 DATABASE_URL=mongodb://localhost:27017/qrldata-z?readPreference=primary
-DOMAIN_NAME=http://localhost:3000
+DOMAIN_NAME=$PUBLIC_URL
 HANDLER_URL=http://127.0.0.1:8080
+NEXT_PUBLIC_HANDLER_URL=$PUBLIC_URL/api
 EOL
+    fi
+
+    # Create .env.local file only if it doesn't exist
+    if [ -f ".env.local" ]; then
+        print_status ".env.local file already exists, skipping creation"
+    else
+        print_status "Creating .env.local file..."
+        cat > .env.local << EOL
+DATABASE_URL=mongodb://localhost:27017/qrldata-z?readPreference=primary
+DOMAIN_NAME=$PUBLIC_URL
+HANDLER_URL=http://127.0.0.1:8080
+NEXT_PUBLIC_HANDLER_URL=$PUBLIC_URL/api
+EOL
+    fi
 
     # Install dependencies
     print_status "Installing frontend dependencies..."
@@ -291,12 +334,17 @@ setup_synchronizer() {
     print_status "Setting up blockchain synchronizer..."
     cd "$BASE_DIR/Zond2mongoDB" || print_error "Synchronizer directory not found"
 
-    # Create .env file
-    cat > .env << EOL
+    # Create .env file only if it doesn't exist
+    if [ -f ".env" ]; then
+        print_status ".env file already exists, skipping creation"
+    else
+        print_status "Creating .env file..."
+        cat > .env << EOL
 MONGOURI=mongodb://localhost:27017
 NODE_URL=$NODE_URL
 BEACONCHAIN_API=http://REDACTED:3500
 EOL
+    fi
 
     # Build synchronizer
     print_status "Building synchronizer..."
@@ -320,8 +368,14 @@ save_pm2() {
 main() {
     print_status "Starting QRL Explorer deployment..."
 
+    # Set BASE_DIR early for use by cleanup functions
+    export BASE_DIR=$(pwd)
+
     # Clean PM2 logs and processes before starting
     clean_pm2
+
+    # Clean database and log files
+    clean_database_and_logs
 
     # Check for required tools
     check_dependencies
@@ -330,7 +384,7 @@ main() {
     select_node
 
     # Check if MongoDB and Zond node are running
-    check_mongodb
+    # check_mongodb
     check_zond_node
 
     # Check if required ports are available
