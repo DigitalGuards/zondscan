@@ -13,18 +13,16 @@ interface BlockCardProps {
 }
 
 const BlockCard: React.FC<BlockCardProps> = ({ blockData }) => {
-  // Format date in a consistent way that matches server-side rendering
+  // Format date using UTC to avoid hydration mismatch
   const formatDate = (timestamp: number) => {
     const date = new Date(timestamp * 1000);
-    return new Intl.DateTimeFormat('en-US', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
-    }).format(date);
+    const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+    const day = date.getUTCDate().toString().padStart(2, '0');
+    const year = date.getUTCFullYear();
+    const hours = date.getUTCHours().toString().padStart(2, '0');
+    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+    const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+    return `${month}/${day}/${year}, ${hours}:${minutes}:${seconds}`;
   };
 
   // Truncate hash to show first 6 and last 4 characters

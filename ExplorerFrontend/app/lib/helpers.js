@@ -167,14 +167,16 @@ export function epochToISO(timestamp) {
 export function formatTimestamp(timestamp) {
   if (!timestamp) return '';
   const date = new Date(timestamp * 1000);
-  return date.toLocaleString('en-US', {
-    day: 'numeric',
-    month: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    second: 'numeric'
-  });
+  // Use UTC to avoid hydration mismatch between server and client
+  const day = date.getUTCDate();
+  const month = date.getUTCMonth() + 1;
+  const year = date.getUTCFullYear();
+  const hours = date.getUTCHours();
+  const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+  const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const hour12 = hours % 12 || 12;
+  return `${month}/${day}/${year}, ${hour12}:${minutes}:${seconds} ${ampm} UTC`;
 }
 
 export function formatNumber(value) {

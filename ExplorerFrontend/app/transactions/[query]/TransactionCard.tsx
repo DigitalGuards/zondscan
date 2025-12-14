@@ -10,14 +10,15 @@ export default function TransactionCard({ transaction }: TransactionCardProps): 
   const router = useRouter();
   const isSending = transaction.InOut === 0;
 
-  const date = new Date(transaction.TimeStamp * 1000).toLocaleString('en-GB', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  });
+  // Use UTC to avoid hydration mismatch
+  const dateObj = new Date(transaction.TimeStamp * 1000);
+  const day = dateObj.getUTCDate().toString().padStart(2, '0');
+  const month = (dateObj.getUTCMonth() + 1).toString().padStart(2, '0');
+  const year = dateObj.getUTCFullYear();
+  const hours = dateObj.getUTCHours().toString().padStart(2, '0');
+  const minutes = dateObj.getUTCMinutes().toString().padStart(2, '0');
+  const seconds = dateObj.getUTCSeconds().toString().padStart(2, '0');
+  const date = `${day}/${month}/${year}, ${hours}:${minutes}:${seconds}`;
 
   const txHash = transaction.TxHash;
   const [formattedAmount, unit] = formatAmount(transaction.Amount);

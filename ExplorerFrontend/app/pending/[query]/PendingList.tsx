@@ -33,16 +33,18 @@ interface TransactionCardProps {
 }
 
 const TransactionCard: React.FC<TransactionCardProps> = ({ transaction }) => {
-  const date = transaction.createdAt 
-    ? new Date(transaction.createdAt * 1000).toLocaleString('en-GB', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      })
-    : 'Pending';
+  // Use UTC to avoid hydration mismatch
+  const formatDateUTC = (timestamp: number) => {
+    const d = new Date(timestamp * 1000);
+    const day = d.getUTCDate().toString().padStart(2, '0');
+    const month = (d.getUTCMonth() + 1).toString().padStart(2, '0');
+    const year = d.getUTCFullYear();
+    const hours = d.getUTCHours().toString().padStart(2, '0');
+    const minutes = d.getUTCMinutes().toString().padStart(2, '0');
+    const seconds = d.getUTCSeconds().toString().padStart(2, '0');
+    return `${day}/${month}/${year}, ${hours}:${minutes}:${seconds}`;
+  };
+  const date = transaction.createdAt ? formatDateUTC(transaction.createdAt) : 'Pending';
 
   return (
     <div className="bg-gradient-to-r from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] rounded-xl p-6 shadow-lg hover:border-[#ffa729] transition-colors">

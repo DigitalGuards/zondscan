@@ -107,13 +107,14 @@ export default function Sidebar() {
           </button>
           <div className="flex flex-col items-center">
             <div className="relative w-12 h-10">
-              <Image 
-                src="/ZondScan_Logo_Z.gif" 
+              <Image
+                src="/ZondScan_Logo_Z.gif"
                 alt="Zond Logo"
                 fill
                 sizes="48px"
                 style={{ objectFit: 'contain' }}
                 loading="eager"
+                unoptimized
                 className="hover:scale-110 transition-transform duration-300"
               />
             </div>
@@ -142,13 +143,14 @@ export default function Sidebar() {
         <div className="p-4">
           <Link href="/" className="flex flex-col items-center mb-6 px-1 group" onClick={() => setIsOpen(false)}>
             <div className="w-32 h-24 relative">
-              <Image 
-                src="/ZondScan_Logo_Z.gif" 
-                alt="Zond Logo" 
+              <Image
+                src="/ZondScan_Logo_Z.gif"
+                alt="Zond Logo"
                 fill
                 sizes="128px"
                 style={{ objectFit: 'contain' }}
                 loading="eager"
+                unoptimized
                 className="group-hover:scale-110 transition-transform duration-300"
               />
             </div>

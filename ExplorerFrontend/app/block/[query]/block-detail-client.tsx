@@ -44,20 +44,29 @@ interface BlockDetailClientProps {
 // Helper function to format hex values
 const formatHexValue = (hex: string | null | undefined): string => {
   if (!hex) return '0';
-  const num = typeof hex === 'string' && hex.startsWith('0x') ? 
-    parseInt(hex, 16) : 
+  const num = typeof hex === 'string' && hex.startsWith('0x') ?
+    parseInt(hex, 16) :
     parseInt(hex);
-  return isNaN(num) ? '0' : num.toLocaleString();
+  if (isNaN(num)) return '0';
+  // Format with commas manually to avoid hydration mismatch
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 };
 
-// Helper function to format timestamp
+// Helper function to format timestamp using UTC to avoid hydration mismatch
 const formatTimestamp = (timestamp: string | null | undefined): string => {
   if (!timestamp) return 'N/A';
-  const timestampNum = typeof timestamp === 'string' && timestamp.startsWith('0x') ? 
-    parseInt(timestamp, 16) : 
+  const timestampNum = typeof timestamp === 'string' && timestamp.startsWith('0x') ?
+    parseInt(timestamp, 16) :
     parseInt(timestamp);
   if (isNaN(timestampNum)) return 'N/A';
-  return new Date(timestampNum * 1000).toLocaleString();
+  const date = new Date(timestampNum * 1000);
+  const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+  const day = date.getUTCDate().toString().padStart(2, '0');
+  const year = date.getUTCFullYear();
+  const hours = date.getUTCHours().toString().padStart(2, '0');
+  const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+  const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+  return `${month}/${day}/${year}, ${hours}:${minutes}:${seconds} UTC`;
 };
 
 export default function BlockDetailClient({ blockNumber }: BlockDetailClientProps) {

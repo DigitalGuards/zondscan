@@ -47,15 +47,14 @@ const DecoderAddress = (params: DecoderParams): JSX.Element => {
 const ConvertTime = (params: GridValueGetterParams<Transaction>): string => {
   const timestamp = params.row.TimeStamp;
   const date = new Date(timestamp * 1000);
-  
-  return date.toLocaleString('en-GB', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  });
+  // Use UTC to avoid hydration mismatch
+  const day = date.getUTCDate().toString().padStart(2, '0');
+  const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+  const year = date.getUTCFullYear();
+  const hours = date.getUTCHours().toString().padStart(2, '0');
+  const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+  const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+  return `${day}/${month}/${year}, ${hours}:${minutes}:${seconds}`;
 };
 
 const Divide = (params: GridValueGetterParams<Transaction>): number => {

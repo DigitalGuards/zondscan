@@ -10,17 +10,17 @@ import CopyAddressButton from '../../components/CopyAddressButton';
 const formatTimestamp = (timestamp: number): string => {
   if (!timestamp) return 'Unknown';
   const date = new Date(timestamp * 1000);
-  if (date.getFullYear() === 1970) return 'Pending';
-  
-  return new Intl.DateTimeFormat('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    timeZoneName: 'short'
-  }).format(date);
+  if (date.getUTCFullYear() === 1970) return 'Pending';
+
+  // Use UTC to avoid hydration mismatch
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const month = months[date.getUTCMonth()];
+  const day = date.getUTCDate();
+  const year = date.getUTCFullYear();
+  const hours = date.getUTCHours().toString().padStart(2, '0');
+  const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+  const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+  return `${month} ${day}, ${year}, ${hours}:${minutes}:${seconds} UTC`;
 };
 
 const AddressDisplay = ({ address, isMobile }: { address: string, isMobile: boolean }) => {

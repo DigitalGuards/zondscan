@@ -1,12 +1,22 @@
 'use client';
 
 import * as React from 'react';
+import dynamic from 'next/dynamic';
 import axios from "axios";
 import { formatNumber, formatNumberWithCommas, toFixed } from "./lib/helpers";
 import config from "../config.js"
 import SearchBar from "./components/SearchBar"
-import Charts from "./components/Charts"
 import SeoTextSection, { SeoTextItem } from "./components/SeoTextSection";
+
+// Lazy load Charts component since it's below the fold and includes heavy TradingView widget
+const Charts = dynamic(() => import("./components/Charts"), {
+  loading: () => (
+    <div className="h-[400px] bg-[#1f1f1f] rounded-2xl border border-[#3d3d3d] animate-pulse flex items-center justify-center">
+      <span className="text-gray-500">Loading chart...</span>
+    </div>
+  ),
+  ssr: false // TradingView requires browser APIs
+});
 
 interface StatsData {
   value: string;
@@ -289,6 +299,7 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }) {
           loop
           muted
           playsInline
+          preload="metadata"
           style={videoStyle}
         >
           <source src="/tree3.mp4" type="video/mp4" />
