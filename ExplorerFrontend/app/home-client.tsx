@@ -254,8 +254,8 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }) {
           </div>
         ) : (
           <>
-            <div className="flex justify-center">
-              <div className="h-4 w-4 sm:h-6 sm:w-6 mb-1 sm:mb-2 text-[#ffa729]">
+            <div className="flex justify-center items-center mb-1 sm:mb-2">
+              <div className="h-4 w-4 sm:h-6 sm:w-6 text-[#ffa729] [&>svg]:h-full [&>svg]:w-full">
                 {item.icon}
               </div>
             </div>
