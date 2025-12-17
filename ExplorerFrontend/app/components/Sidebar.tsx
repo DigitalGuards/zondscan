@@ -96,10 +96,10 @@ export default function Sidebar() {
       <div className={`lg:hidden fixed top-0 left-0 right-0 z-50 bg-[#1a1a1a] transition-transform duration-300 ${
         isVisible ? 'translate-y-0' : '-translate-y-full'
       }`}>
-        <div className="flex items-center justify-between px-4 py-2 border-b border-[#2d2d2d]">
+        <div className="flex items-center justify-center px-4 py-2 border-b border-[#2d2d2d] relative">
           <button
             onClick={() => setIsOpen(!isOpen)}
-            className="p-2 rounded-lg bg-[#2d2d2d] text-gray-300 hover:bg-[#3d3d3d] transition-colors"
+            className="absolute left-4 p-2 rounded-lg bg-[#2d2d2d] text-gray-300 hover:bg-[#3d3d3d] transition-colors"
             aria-label="Toggle menu"
           >
             {isOpen ? (
@@ -108,23 +108,20 @@ export default function Sidebar() {
               <Bars3Icon className="h-6 w-6" />
             )}
           </button>
-          <div className="flex flex-col items-center">
-            <div className="relative w-12 h-10">
+          <Link href="/" onClick={() => setIsOpen(false)}>
+            <div className="relative w-14 h-12">
               <Image
                 src="/ZondScan_Logo_Z.gif"
                 alt="Zond Logo"
                 fill
-                sizes="48px"
+                sizes="56px"
                 style={{ objectFit: 'contain' }}
                 loading="eager"
                 unoptimized
                 className="hover:scale-110 transition-transform duration-300"
               />
             </div>
-            <div className="flex flex-col items-center">
-              <span className="text-sm font-semibold text-gray-300">ZondScan</span>
-            </div>
-          </div>
+          </Link>
         </div>
       </div>
 
