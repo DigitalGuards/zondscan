@@ -46,13 +46,19 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Clean install dependencies
-echo -e "${YELLOW}Clean installing dependencies...${NC}"
-rm -rf node_modules package-lock.json
-npm install
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Error: npm install failed${NC}"
-    exit 1
+# Clean install dependencies (optional)
+read -p "Do you want to clean install dependencies? (y/n): " clean_install
+if [[ "$clean_install" =~ ^[Yy]$ ]]; then
+    echo -e "${YELLOW}Clean installing dependencies...${NC}"
+    rm -rf node_modules package-lock.json
+    npm install
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}Error: npm install failed${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}Dependencies installed successfully${NC}"
+else
+    echo -e "${YELLOW}Skipping clean install of dependencies${NC}"
 fi
 
 # Build the frontend
