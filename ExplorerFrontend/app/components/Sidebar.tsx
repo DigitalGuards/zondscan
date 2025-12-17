@@ -68,13 +68,16 @@ export default function Sidebar() {
   React.useEffect(() => {
     const handleScroll = () => {
       const currentScrollY = window.scrollY;
-      
-      if (currentScrollY > lastScrollY) {
+
+      // Always show header when at the top of the page
+      if (currentScrollY < 10) {
+        setIsVisible(true);
+      } else if (currentScrollY > lastScrollY) {
         setIsVisible(false); // Scrolling down
       } else {
         setIsVisible(true);  // Scrolling up
       }
-      
+
       setLastScrollY(currentScrollY);
     };
 
