@@ -13,8 +13,7 @@ export default function Footer() {
         <div className="flex-1">
           <h2 className="text-xl font-bold text-[#ffa729] mb-4">ZondScan</h2>
           <p className="text-sm leading-relaxed">
-            ZondScan is your gateway to the QRL Zond network — a secure, quantum-resistant,
-            EVM-compatible blockchain. Explore blocks, transactions, smart contracts, and more with a developer-first interface.
+            ZondScan is your gateway to the QRL Zond network. Explore blocks, transactions, smart contracts, and more.
           </p>
         </div>
 

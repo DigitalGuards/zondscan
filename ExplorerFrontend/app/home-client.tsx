@@ -275,19 +275,19 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }) {
   const seoTextItems = [
     {
       title: "What is ZondScan?",
-      text: "ZondScan is an independent blockchain explorer for QRL Zond, a next-generation EVM-compatible blockchain secured by quantum-resistant cryptography. Track blocks, transactions, smart contracts, and validators in real-time on a fast proof-of-stake network."
+      text: "ZondScan is an independent blockchain explorer for QRL Zond, an EVM compatible blockchain secured by quantum resistant cryptography. Track blocks, transactions, smart contracts, and validators on a fast proof of stake network."
     },
     {
       title: "What is QRL Zond?",
-      text: "QRL Zond is an EVM-compatible blockchain built by the Quantum Resistant Ledger project with post-quantum cryptography at its core. Most blockchains use cryptographic algorithms vulnerable to future quantum computers. QRL Zond uses SPHINCS+ instead, a NIST-standardized signature scheme that provides security against both current and quantum-era threats. Since it's EVM-compatible, developers can deploy smart contracts using familiar Ethereum tools, libraries, and wallets. You get Ethereum compatibility plus quantum-resistant security."
+      text: "QRL Zond is an EVM compatible blockchain built by the Quantum Resistant Ledger project with post quantum cryptography at its core. Most blockchains use cryptographic algorithms vulnerable to future quantum computers. QRL Zond uses SPHINCS+ instead, a NIST standardized signature scheme that provides security against both current and quantum era threats. Since it's EVM compatible, developers can deploy smart contracts using familiar Ethereum tools, libraries, and wallets. You get Ethereum compatibility plus quantum resistant security."
     },
     {
       title: "Why Quantum Resistance Matters",
-      text: "Quantum computers will eventually break the cryptographic signatures that protect most blockchains today. When that happens, digital assets and identities on those chains become vulnerable. QRL Zond solves this with post-quantum cryptography like SPHINCS+, ensuring your assets, contracts, and identity stay secure even when quantum computers arrive. It's not future-proofing, it's building for the inevitable."
+      text: "Quantum computers will eventually break the cryptographic signatures that protect most blockchains today. When that happens, digital assets and identities on those chains become vulnerable. QRL Zond solves this with post quantum cryptography like SPHINCS+, ensuring your assets, contracts, and identity stay secure even when quantum computers arrive."
     },
     {
       title: "Why SPHINCS+?",
-      text: "QRL Zond uses SPHINCS+, a stateless hash-based signature scheme recently standardized by NIST. Unlike stateful schemes that require tracking signature usage, SPHINCS+ eliminates state-management risks entirely. This makes development simpler and removes a major security headache for developers and enterprises. The tradeoff is slightly larger signatures and more computation, but that's manageable compared to the systemic risks of state tracking."
+      text: "QRL Zond uses SPHINCS+, a stateless hash based signature scheme recently standardized by NIST. Unlike stateful schemes that require tracking signature usage, SPHINCS+ eliminates state management risks entirely. This makes development simpler and removes a major security headache for developers and enterprises. The tradeoff is slightly larger signatures and more computation, but that's manageable compared to the systemic risks of state tracking."
     }
   ];
   return (
