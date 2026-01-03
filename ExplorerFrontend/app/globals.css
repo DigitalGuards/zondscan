@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    @apply bg-white text-black dark:bg-primary-dark dark:text-text-dark;
+    @apply bg-background text-text-primary;
   }
 }
 
@@ -14,72 +14,125 @@
 }
 
 @layer components {
+  /* Card components */
   .card {
-    @apply bg-white dark:bg-secondary-dark 
-           border border-gray-200 dark:border-secondary-dark 
-           rounded-lg shadow-lg p-6;
+    @apply bg-card-gradient rounded-xl border border-border shadow-card;
   }
 
+  .card-simple {
+    @apply bg-background-secondary rounded-xl border border-border;
+  }
+
+  /* Stats card used on home page */
+  .stats-card {
+    @apply bg-card-gradient rounded-xl border border-border p-4 md:p-6
+           hover:border-accent/50 transition-all duration-300;
+  }
+
+  /* Navigation link */
   .nav-link {
-    @apply text-gray-700 dark:text-text-dark 
-           hover:text-gray-900 dark:hover:text-text-darkSecondary;
+    @apply text-gray-300 hover:text-accent transition-colors;
   }
 
-  .button {
-    @apply bg-blue-500 dark:bg-secondary-dark
-           text-white dark:text-text-dark
-           hover:bg-blue-600 dark:hover:border-accent
-           px-4 py-2 rounded-lg
-           border border-transparent dark:border-secondary-dark
-           transition-colors duration-200;
+  /* Primary button */
+  .btn-primary {
+    @apply bg-accent text-white px-4 py-2 rounded-lg
+           hover:bg-accent-dark transition-colors;
   }
 
+  /* Secondary/outline button */
+  .btn-secondary {
+    @apply bg-card-gradient text-white px-4 py-2 rounded-lg
+           border border-border hover:border-accent
+           disabled:opacity-50 disabled:hover:border-border
+           transition-all duration-300;
+  }
+
+  /* Form input */
   .input {
-    @apply bg-white dark:bg-secondary-dark
-           text-black dark:text-text-dark
-           border border-gray-300 dark:border-secondary-dark
-           rounded-lg px-4 py-2
-           focus:ring-2 focus:ring-blue-500 dark:focus:ring-accent
-           focus:border-transparent;
+    @apply bg-background-secondary text-text-primary
+           border border-border rounded-lg px-4 py-2
+           hover:border-border-hover
+           focus:ring-1 focus:ring-accent focus:border-accent
+           placeholder-gray-500 outline-none transition-colors;
   }
 
+  /* Table styles */
+  .table-header {
+    @apply px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm
+           font-medium text-accent;
+  }
+
+  .table-cell {
+    @apply px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300;
+  }
+
+  .table-row {
+    @apply border-b border-border hover:bg-accent/5 transition-colors;
+  }
+
+  /* Link styles */
+  .link-accent {
+    @apply text-accent hover:text-accent-hover transition-colors;
+  }
+
+  /* Page container */
+  .page-container {
+    @apply w-full min-h-screen;
+  }
+
+  .page-content {
+    @apply max-w-[1200px] mx-auto px-4;
+  }
+
+  /* Section header */
+  .section-title {
+    @apply text-xl md:text-2xl font-bold text-accent;
+  }
+
+  /* Flex containers (legacy support) */
   .flex-container {
-    @apply flex flex-row text-center w-full max-w-full 
-           dark:bg-secondary-dark rounded-lg shadow-lg;
+    @apply flex flex-row text-center w-full max-w-full
+           bg-background-secondary rounded-lg shadow-lg;
   }
 
   .flex-item-left {
-    @apply flex flex-col p-4 flex-[25%] 
-           dark:bg-secondary-dark rounded-lg;
+    @apply flex flex-col p-4 flex-[25%]
+           bg-background-secondary rounded-lg;
   }
 
   .flex-item-center {
-    @apply p-4 flex-[50%] overflow-hidden 
-           dark:bg-secondary-dark rounded-lg;
+    @apply p-4 flex-[50%] overflow-hidden
+           bg-background-secondary rounded-lg;
   }
 
   .flex-item-right {
-    @apply p-4 flex-[25%] 
-           dark:bg-secondary-dark rounded-lg;
+    @apply p-4 flex-[25%]
+           bg-background-secondary rounded-lg;
+  }
+
+  /* Skeleton loading animation */
+  .skeleton {
+    @apply bg-gray-700 animate-pulse rounded;
   }
 }
 
 /* Custom scrollbar for dark mode */
 @layer utilities {
   .scrollbar-dark {
-    scrollbar-color: theme('colors.secondary.dark') theme('colors.primary.dark');
+    scrollbar-color: #2d2d2d #1a1a1a;
   }
-  
+
   .scrollbar-dark::-webkit-scrollbar {
     @apply w-3;
   }
-  
+
   .scrollbar-dark::-webkit-scrollbar-track {
-    @apply bg-primary-dark;
+    @apply bg-background;
   }
-  
+
   .scrollbar-dark::-webkit-scrollbar-thumb {
-    @apply bg-secondary-dark rounded-md border-2 border-primary-dark;
+    @apply bg-background-secondary rounded-md border-2 border-background;
   }
 }
 
@@ -111,20 +164,14 @@
   background: #3d3d3d;
 }
 
-/* Hide scrollbar for Chrome, Safari and Opera when not hovering */
+/* Hide scrollbar utilities */
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
 
-/* Hide scrollbar for Firefox */
 .hide-scrollbar {
+  -ms-overflow-style: none;
   scrollbar-width: none;
-}
-
-/* Hide scrollbar for IE, Edge and Firefox */
-.hide-scrollbar {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
 }
 
 /* Responsive Design */

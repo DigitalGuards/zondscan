@@ -6,10 +6,10 @@ interface PaginationProps {
   paginate: (pageNumber: number) => void;
 }
 
-export default function Pagination({ 
-  postsPerPage, 
-  totalPosts, 
-  paginate 
+export default function Pagination({
+  postsPerPage,
+  totalPosts,
+  paginate
 }: PaginationProps): JSX.Element {
   const pageNumbers: number[] = [];
 
@@ -22,14 +22,17 @@ export default function Pagination({
   };
 
   return (
-    <nav>
-      <ul className="pagination">
+    <nav aria-label="Pagination">
+      <ul className="flex flex-wrap items-center gap-1">
         {pageNumbers.map((number) => (
-          <li key={number} className="page-item">
-            <Link 
-              onClick={() => handleClick(number)} 
+          <li key={number}>
+            <Link
+              onClick={() => handleClick(number)}
               href={`#${number}`}
-              className="page-link"
+              className="inline-flex items-center justify-center min-w-[36px] h-9 px-3
+                         text-sm font-medium text-gray-300
+                         bg-background-secondary border border-border rounded
+                         hover:bg-border hover:text-white transition-colors"
             >
               {number}
             </Link>

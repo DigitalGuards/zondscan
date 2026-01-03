@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import CopyAddressButton from "../../components/CopyAddressButton";
 import QRCodeButton from "../../components/QRCodeButton";
 import TanStackTable from "../../components/TanStackTable";
@@ -14,11 +14,11 @@ interface AddressViewProps {
     addressSegment: string;
 }
 
-const AddressDisplay = ({ address, type }: { address: string, type: string }) => {
+const AddressDisplay = ({ address }: { address: string }): JSX.Element => {
     const [isMobile, setIsMobile] = useState(false);
 
     useEffect(() => {
-        const checkScreenSize = () => {
+        const checkScreenSize = (): void => {
             setIsMobile(window.innerWidth < 768);
         };
         
@@ -76,7 +76,7 @@ export default function AddressView({ addressData, addressSegment }: AddressView
     } else {
         addressType = "Address";
         addressIcon = (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 md:h-6 md:w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 md:h-6 md:w-6 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
         );
@@ -85,8 +85,8 @@ export default function AddressView({ addressData, addressSegment }: AddressView
     return (
         <div className="py-3 md:py-6 lg:py-8 px-3 md:px-6 lg:px-8 max-w-[900px] mx-auto">
             <div className="relative overflow-hidden rounded-xl md:rounded-2xl 
-                        bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
-                        border border-[#3d3d3d] shadow-lg md:shadow-xl mb-4 md:mb-6 lg:mb-8">
+                        bg-card-gradient
+                        border border-border shadow-lg md:shadow-xl mb-4 md:mb-6 lg:mb-8">
                 <div className="p-3 md:p-6 lg:p-8">
                     {/* Header */}
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-4 md:mb-6 lg:mb-8 pb-3 md:pb-4 lg:pb-6 border-b border-gray-700">
@@ -98,7 +98,7 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                     <div className="text-xs md:text-sm font-medium text-gray-400">{addressType}</div>
                                 </div>
                                 <div className="flex flex-col lg:flex-row lg:items-center mt-1 gap-2">
-                                    <AddressDisplay address={addressSegment} type={addressType} />
+                                    <AddressDisplay address={addressSegment} />
                                     {addressSegment && (
                                         <div className="flex items-center gap-2 mb-2 lg:mb-0 lg:ml-4">
                                             <CopyAddressButton address={addressSegment} />
@@ -108,8 +108,8 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                 </div>
                             </div>
                         </div>
-                        <div className="px-2 md:px-3 lg:px-4 py-1 md:py-1.5 lg:py-2 rounded-lg md:rounded-xl bg-[#3d3d3d] bg-opacity-20 self-start lg:self-center">
-                            <span className="text-xs md:text-sm font-medium text-[#ffa729]">Rank #{rank}</span>
+                        <div className="px-2 md:px-3 lg:px-4 py-1 md:py-1.5 lg:py-2 rounded-lg md:rounded-xl bg-border bg-opacity-20 self-start lg:self-center">
+                            <span className="text-xs md:text-sm font-medium text-accent">Rank #{rank}</span>
                         </div>
                     </div>
 
@@ -122,8 +122,8 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                     {/* Contract Information */}
                     {contractData && contractData.contractCode && (
                         <div className="mt-4 md:mt-6">
-                            <div className="rounded-xl bg-[#2d2d2d] border border-[#3d3d3d] p-3 md:p-4 lg:p-6 space-y-3 md:space-y-4">
-                                <h3 className="text-base md:text-lg font-semibold text-[#ffa729]">
+                            <div className="card-simple p-3 md:p-4 lg:p-6 space-y-3 md:space-y-4">
+                                <h3 className="text-base md:text-lg font-semibold text-accent">
                                     {contractData.isToken ? 'Token Contract' : 'Contract'} Information
                                 </h3>
                                 
@@ -132,9 +132,8 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                     <div>
                                         <div className="text-xs md:text-sm text-gray-400 mb-1">Creator Address</div>
                                         <div className="flex items-center space-x-2">
-                                            <AddressDisplay 
-                                                address={contractData.creatorAddress || 'Unknown'} 
-                                                type="Creator"
+                                            <AddressDisplay
+                                                address={contractData.creatorAddress || 'Unknown'}
                                             />
                                             {contractData.creatorAddress && (
                                                 <CopyAddressButton address={contractData.creatorAddress} />
@@ -184,7 +183,7 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                     <div>
                                         <div className="text-xs md:text-sm text-gray-400 mb-1">Creation Transaction</div>
                                         <div className="flex items-center space-x-2">
-                                            <Link href={`/tx/${contractData.creationTransaction}`} className="text-xs md:text-sm text-[#ffa729] hover:text-[#ffb952]">
+                                            <Link href={`/tx/${contractData.creationTransaction}`} className="text-xs md:text-sm text-accent hover:text-accent-hover">
                                                 {contractData.creationTransaction}
                                             </Link>
                                             <CopyAddressButton address={contractData.creationTransaction} />
@@ -207,8 +206,8 @@ export default function AddressView({ addressData, addressSegment }: AddressView
 
             {/* Transactions Section */}
             <div className="space-y-3 md:space-y-4">
-                <h2 className="text-base md:text-lg lg:text-xl font-semibold text-[#ffa729]">Transactions</h2>
-                <div className="overflow-hidden rounded-xl border border-[#3d3d3d]">
+                <h2 className="text-base md:text-lg lg:text-xl font-semibold text-accent">Transactions</h2>
+                <div className="overflow-hidden rounded-xl border border-border">
                     {addressData.transactions_by_address && addressData.transactions_by_address.length > 0 ? (
                         <TanStackTable 
                             transactions={addressData.transactions_by_address} 

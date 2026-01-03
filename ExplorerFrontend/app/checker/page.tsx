@@ -1,5 +1,5 @@
 import CheckerClient from './checker-client';
-import { Metadata } from 'next';
+import type { Metadata } from 'next';
 import { sharedMetadata } from '../lib/seo/metaData';
 
 
@@ -24,6 +24,6 @@ export const metadata: Metadata = {
 };
 
 
-export default function BalanceChecker() {
+export default function BalanceChecker(): JSX.Element {
   return <CheckerClient />;
 }

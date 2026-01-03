@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import ContractsWrapper from './contracts-wrapper';
 import config from '../../config.js';
 import { sharedMetadata } from '../lib/seo/metaData';
-import { Metadata } from 'next';
+import type { Metadata } from 'next';
 
 interface ContractResponse {
   response: any[];
@@ -70,7 +70,7 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function ContractsPage() {
+export default async function ContractsPage(): Promise<JSX.Element> {
   const { response: initialData, total } = await getContracts();
 
   return (

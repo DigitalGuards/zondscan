@@ -80,12 +80,19 @@ func UserRoute(router *gin.Engine) {
 			return
 		}
 
-		// If transaction is mined, delete it from pending collection
+		// If transaction is mined, delete it from pending collection and redirect to mined tx
 		if transaction.Status == "mined" {
 			if err := db.DeleteMinedTransaction(hash); err != nil {
 				// Log error but don't fail the request
 				log.Printf("Error deleting mined transaction %s: %v\n", hash, err)
 			}
+			// Don't return the pending transaction - let frontend fetch from /tx endpoint
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "Transaction has been mined",
+				"status":  "mined",
+				"details": "This transaction has been confirmed. Please view it as a confirmed transaction.",
+			})
+			return
 		}
 
 		c.JSON(http.StatusOK, gin.H{"transaction": transaction})

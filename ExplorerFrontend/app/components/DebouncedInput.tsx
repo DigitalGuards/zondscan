@@ -1,4 +1,5 @@
-import { useEffect, useState, ChangeEvent, InputHTMLAttributes } from "react";
+import { useEffect, useState } from "react";
+import type { ChangeEvent, InputHTMLAttributes } from "react";
 
 interface DebouncedInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
   value: string;

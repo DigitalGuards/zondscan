@@ -1,6 +1,6 @@
 import config from "../../config";
 import RichlistClient from "./richlist-client";
-import { Metadata } from 'next';
+import type { Metadata } from 'next';
 import { sharedMetadata } from '../lib/seo/metaData';
 
 
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
 };
 
 
-export default async function RichlistPage() {
+export default async function RichlistPage(): Promise<JSX.Element> {
   const response = await fetch(config.handlerUrl + "/richlist", {
     cache: 'no-store'
   });

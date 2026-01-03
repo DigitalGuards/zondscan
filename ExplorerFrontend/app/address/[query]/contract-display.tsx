@@ -1,5 +1,4 @@
 import React from 'react';
-import Link from 'next/link';
 import { decodeToHex, formatAddress } from '../../lib/helpers';
 import CopyAddressButton from '../../components/CopyAddressButton';
 
@@ -11,11 +10,10 @@ interface ContractDisplayProps {
   };
 }
 
-export default function ContractDisplay({ contractCode }: ContractDisplayProps) {
+export default function ContractDisplay({ contractCode }: ContractDisplayProps): JSX.Element {
   // Decode base64 contract addresses to hex
   const rawCreatorAddress = `0x${decodeToHex(contractCode.contractCreatorAddress)}`;
   const creatorAddress = formatAddress(rawCreatorAddress);
-  const contractAddress = `0x${decodeToHex(contractCode.contractAddress)}`;
   
   return (
     <div className="rounded-xl bg-[#2d2d2d] border border-[#3d3d3d] p-4 md:p-6 space-y-4">

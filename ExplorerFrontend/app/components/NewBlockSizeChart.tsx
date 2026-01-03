@@ -1,12 +1,11 @@
-import React, { useRef, useState, useMemo } from 'react';
-import { BlockSizeChart } from '.';
+import React, { useState } from 'react';
 import axios from "axios";
 import config from '../../config.js';
 import BrushChart from './BlockSizeChart';
 import Typography from '@mui/material/Typography';
 import Divider from '@mui/material/Divider';
 
-const NewBlockSizeChart = () => {
+const NewBlockSizeChart = (): JSX.Element => {
     const [loading, setLoading] = useState(true);
     const [blocks, setBlocks] = useState([]);
 

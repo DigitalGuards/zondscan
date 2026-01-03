@@ -3,9 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
 import axios from 'axios';
-import { decodeToHex } from '../lib/helpers';
 import config from '../../config.js';
 
 interface ContractData {
@@ -31,20 +29,15 @@ const truncateMiddle = (str: string, startChars = 6, endChars = 6): string => {
   return `${str.slice(0, startChars)}...${str.slice(-endChars)}`;
 };
 
-const decodeField = (value: string): string => {
-  if (!value) return '';
-  return value;
-};
-
-function Pagination({ 
-  currentPage, 
-  totalPages, 
-  onPageChange 
-}: { 
-  currentPage: number; 
-  totalPages: number; 
+function Pagination({
+  currentPage,
+  totalPages,
+  onPageChange
+}: {
+  currentPage: number;
+  totalPages: number;
   onPageChange: (page: number) => void;
-}) {
+}): JSX.Element {
   return (
     <div className="flex justify-center gap-4 mt-6">
       <button
@@ -68,12 +61,11 @@ function Pagination({
   );
 }
 
-function CustomTable({ data }: { data: ContractData[] }) {
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+function CustomTable({ data }: { data: ContractData[] }): JSX.Element {
   const [windowWidth, setWindowWidth] = React.useState(typeof window !== 'undefined' ? window.innerWidth : 0);
 
   React.useEffect(() => {
-    const handleResize = () => setWindowWidth(window.innerWidth);
+    const handleResize = (): void => setWindowWidth(window.innerWidth);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -165,7 +157,7 @@ function CustomTable({ data }: { data: ContractData[] }) {
   );
 }
 
-function SearchInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+function SearchInput({ value, onChange }: { value: string; onChange: (value: string) => void }): JSX.Element {
   return (
     <div className="relative mb-6">
       <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
@@ -186,7 +178,7 @@ function SearchInput({ value, onChange }: { value: string; onChange: (value: str
   );
 }
 
-export default function ContractsClient({ initialData, totalContracts }: ContractsClientProps) {
+export default function ContractsClient({ initialData, totalContracts }: ContractsClientProps): JSX.Element {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [currentPage, setCurrentPage] = React.useState(0);
   const [contracts, setContracts] = React.useState<ContractData[]>(initialData);

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import config from '../../config';
-import { toFixed, formatAmount, epochsToDays, formatAddress } from '../lib/helpers';
+import { formatAmount, epochsToDays } from '../lib/helpers';
 
 interface Validator {
   address: string;
@@ -13,7 +13,7 @@ interface Validator {
   isActive: boolean;
 }
 
-export default function ValidatorsWrapper() {
+export default function ValidatorsWrapper(): JSX.Element {
   const [validators, setValidators] = useState<Validator[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +25,7 @@ export default function ValidatorsWrapper() {
 
   useEffect(() => {
     // Handle window resize
-    const handleResize = () => {
+    const handleResize = (): void => {
       setWindowWidth(window.innerWidth);
     };
 
@@ -45,7 +45,7 @@ export default function ValidatorsWrapper() {
   }, []);
 
   useEffect(() => {
-    async function fetchValidators() {
+    async function fetchValidators(): Promise<void> {
       try {
         const response = await axios.get(`${config.handlerUrl}/validators`);
         const validatorsData = response.data.validators || [];
@@ -100,7 +100,7 @@ export default function ValidatorsWrapper() {
   const endIndex = startIndex + itemsPerPage;
   const currentValidators = filteredValidators.slice(startIndex, endIndex);
 
-  const goToPage = (page: number) => {
+  const goToPage = (page: number): void => {
     setCurrentPage(page);
   };
 

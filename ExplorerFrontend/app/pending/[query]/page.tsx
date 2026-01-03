@@ -1,9 +1,8 @@
-import React from 'react';
-import { Metadata } from 'next';
+import type { Metadata } from 'next';
 import PendingList from './PendingList';
 import axios from 'axios';
 import config from '../../../config';
-import { PendingTransaction } from '../tx/types';
+import type { PendingTransaction } from '../tx/types';
 import { sharedMetadata } from '../../lib/seo/metaData';
 
 interface PaginatedResponse {
@@ -72,7 +71,7 @@ interface PageProps {
   params: Promise<{ query: string }>;
 }
 
-export default async function PendingPage({ params }: PageProps) {
+export default async function PendingPage({ params }: PageProps): Promise<JSX.Element> {
   const { query } = await params;
   const currentPage = parseInt(query, 10) || 1;
   const initialData = await fetchInitialData(currentPage);

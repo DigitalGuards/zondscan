@@ -1,13 +1,15 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 export default function AddressLayout({
   children,
 }: {
-  children: React.ReactNode;
-}) {
+  children: ReactNode;
+}): JSX.Element {
   return (
-    <div className="w-full min-h-screen">
-      <div className="max-w-[1200px] mx-auto px-4">
+    <div className="page-container">
+      <div className="page-content">
         {children}
       </div>
     </div>

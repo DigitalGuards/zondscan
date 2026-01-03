@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
-import { Metadata } from 'next';
+import type { Metadata } from 'next';
 import TransactionsClient from './transactions-client';
 import type { TransactionsResponse } from './types';
 import config from '../../../config';

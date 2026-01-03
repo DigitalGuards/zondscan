@@ -1,16 +1,17 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
+import type { MouseEvent } from "react";
 
 interface Props {
-    hash: string;
-    size?: "small" | "normal";
+  hash: string;
+  size?: "small" | "normal";
 }
 
-export default function CopyHashButton({ hash, size = "normal" }: Props) {
-    const [copySuccess, setCopySuccess] = useState('');
+export default function CopyHashButton({ hash, size = "normal" }: Props): JSX.Element {
+  const [copySuccess, setCopySuccess] = useState('');
 
-    const copyToClipboard = (e: React.MouseEvent) => {
+  const copyToClipboard = (e: MouseEvent): void => {
         e.stopPropagation(); // Prevent card click when copying
         navigator.clipboard.writeText(hash)
             .then(() => {
@@ -24,16 +25,15 @@ export default function CopyHashButton({ hash, size = "normal" }: Props) {
 
     if (size === "small") {
         return (
-            <button 
+            <button
                 onClick={copyToClipboard}
                 className="inline-flex items-center p-1 rounded-md
-                          bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
-                          border border-[#3d3d3d] hover:border-[#ffa729]
+                          bg-card-gradient border border-border hover:border-accent
                           transition-all duration-300 group"
             >
                 <svg
                     xmlns="http://www.w3.org/2000/svg"
-                    className="h-3 w-3 text-[#ffa729]"
+                    className="h-3 w-3 text-accent"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -59,16 +59,15 @@ export default function CopyHashButton({ hash, size = "normal" }: Props) {
     }
 
     return (
-        <button 
+        <button
             onClick={copyToClipboard}
             className="inline-flex items-center px-3 py-1.5 rounded-lg
-                      bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
-                      border border-[#3d3d3d] hover:border-[#ffa729]
+                      bg-card-gradient border border-border hover:border-accent
                       transition-all duration-300 group"
         >
             <svg
                 xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4 mr-1.5 text-[#ffa729]"
+                className="h-4 w-4 mr-1.5 text-accent"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -89,7 +88,7 @@ export default function CopyHashButton({ hash, size = "normal" }: Props) {
                     />
                 )}
             </svg>
-            <span className="text-sm text-gray-300 group-hover:text-[#ffa729] transition-colors">
+            <span className="text-sm text-gray-300 group-hover:text-accent transition-colors">
                 {copySuccess ? 'Copied!' : 'Copy'}
             </span>
         </button>

@@ -1,5 +1,5 @@
 import { formatTimestamp, normalizeHexString, formatAddress } from '../lib/helpers';
-import { MouseEvent } from 'react';
+import type { MouseEvent } from 'react';
 import type { DownloadBtnProps, DownloadBtnInternalProps } from './types';
 
 function escapeCSV(value: string | number): string {

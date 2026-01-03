@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { normalizeHexString, formatAmount, truncateHash } from "../../lib/helpers";
+import { formatAmount, truncateHash } from "../../lib/helpers";
 import { SendIcon, ReceiveIcon } from './TransactionIcons';
 import CopyHashButton from "../../components/CopyHashButton";
 import type { TransactionCardProps } from './types';

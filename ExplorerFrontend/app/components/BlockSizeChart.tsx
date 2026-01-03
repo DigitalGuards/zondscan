@@ -1,16 +1,16 @@
 import React, { useRef, useState, useMemo } from 'react';
 import { scaleTime, scaleLinear } from '@visx/scale';
 import { Brush } from '@visx/brush';
-import { Bounds } from '@visx/brush/lib/types';
-import BaseBrush, { BaseBrushState, UpdateBrush } from '@visx/brush/lib/BaseBrush';
+import type { Bounds } from '@visx/brush/lib/types';
+import type BaseBrush from '@visx/brush/lib/BaseBrush';
+import type { BaseBrushState, UpdateBrush } from '@visx/brush/lib/BaseBrush';
 import { PatternLines } from '@visx/pattern';
 import { Group } from '@visx/group';
 import { LinearGradient } from '@visx/gradient';
 import { max, extent } from '@visx/vendor/d3-array';
-import { BrushHandleRenderProps } from '@visx/brush/lib/BrushHandle';
-import AreaChart, { Block } from './AreaChart';
-import axios from "axios";
-import config from '../../config.js';
+import type { BrushHandleRenderProps } from '@visx/brush/lib/BrushHandle';
+import AreaChart from './AreaChart';
+import type { Block } from './AreaChart';
 
 export interface blocks {
   result: {
@@ -33,8 +33,8 @@ const selectedBrushStyle = {
 };
 
 // accessors
-const getDate = (d: blocks) => new Date(parseInt(d.result.timestamp.slice(2), 16) * 1000);
-const getStockValue = (d: blocks) => d.result.size;
+const getDate = (d: blocks): Date => new Date(parseInt(d.result.timestamp.slice(2), 16) * 1000);
+const getStockValue = (d: blocks): number => d.result.size;
 
 export type BrushProps = {
   width: number;
@@ -55,12 +55,12 @@ function BrushChart({
     bottom: 20,
     right: 20,
   },
-}: BrushProps) {
+}: BrushProps): JSX.Element {
   const brushRef = useRef<BaseBrush | null>(null);
   const [filteredStock, setFilteredStock] = useState(blocks);
 
 
-  const onBrushChange = (domain: Bounds | null) => {
+  const onBrushChange = (domain: Bounds | null): void => {
     if (!domain) return;
     const { x0, x1, y0, y1 } = domain;
     const stockCopy = blocks.filter((s) => {
@@ -147,14 +147,14 @@ function BrushChart({
   // }
   
   // event handlers
-  const handleClearClick = () => {
+  const handleClearClick = (): void => {
     if (brushRef?.current) {
       setFilteredStock(blocks);
       brushRef.current.reset();
     }
   };
 
-  const handleResetClick = () => {
+  const handleResetClick = (): void => {
     if (brushRef?.current) {
       const updater: UpdateBrush = (prevBrush) => {
         const newExtent = brushRef.current!.getExtent(
@@ -235,7 +235,7 @@ function BrushChart({
   );
 }
 // We need to manually offset the handles for them to be rendered at the right position
-function BrushHandle({ x, height, isBrushActive }: BrushHandleRenderProps) {
+function BrushHandle({ x, height, isBrushActive }: BrushHandleRenderProps): JSX.Element | null {
   const pathWidth = 8;
   const pathHeight = 15;
   if (!isBrushActive) {

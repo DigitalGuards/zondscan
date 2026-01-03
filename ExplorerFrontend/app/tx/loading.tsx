@@ -1,4 +1,4 @@
-export default function Loading() {
+export default function Loading(): JSX.Element {
   return (
     <div className="p-4 max-w-3xl mx-auto">
       <div className="bg-[#2d2d2d] shadow rounded-lg p-6">

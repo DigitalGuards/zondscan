@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, FormEvent, ChangeEvent } from 'react';
+import { useState } from 'react';
+import type { FormEvent, ChangeEvent } from 'react';
 import axios, { AxiosError } from 'axios';
 import config from '../../config';
 import { toFixed } from '../lib/helpers';
@@ -60,15 +61,15 @@ export default function BalanceCheckTool(): JSX.Element {
     return (
         <div className="max-w-[1200px] mx-auto p-8">
             <div className="flex flex-col items-center justify-center">
-                <h2 className="text-2xl font-bold mb-8 text-[#ffa729]">Account Balance Checker</h2>
-                <div className="w-full max-w-md bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] p-8 rounded-lg border border-[#3d3d3d] shadow-xl">
+                <h2 className="text-2xl font-bold mb-8 text-accent">Account Balance Checker</h2>
+                <div className="w-full max-w-md bg-card-gradient p-8 rounded-lg border border-border shadow-xl">
                     <form 
                         className="flex flex-col items-center space-y-6" 
                         onSubmit={handleSubmit}
                     >
                         <div className="relative w-full">
-                            <input 
-                                className="w-full px-4 py-3 bg-[#1a1b1e] text-white rounded-lg border border-[#3d3d3d] focus:outline-none focus:border-[#ffa729] transition-all duration-300 pl-10"
+                            <input
+                                className="w-full px-4 py-3 bg-background text-white rounded-lg border border-border focus:outline-none focus:border-accent transition-all duration-300 pl-10"
                                 type="text" 
                                 value={address} 
                                 onChange={handleAddressChange} 
@@ -76,7 +77,7 @@ export default function BalanceCheckTool(): JSX.Element {
                                 required 
                             />
                             <svg
-                                className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-[#ffa729]"
+                                className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-accent"
                                 fill="none"
                                 stroke="currentColor"
                                 viewBox="0 0 24 24"
@@ -98,22 +99,22 @@ export default function BalanceCheckTool(): JSX.Element {
                         </div>
 
                         {balance !== null && !error && (
-                            <div className="w-full p-4 bg-[#1a1b1e] rounded-lg border border-[#3d3d3d]">
+                            <div className="w-full p-4 bg-background rounded-lg border border-border">
                                 <div className="text-sm text-gray-400">Balance</div>
-                                <div className="text-xl font-bold text-[#ffa729]">{balance}</div>
+                                <div className="text-xl font-bold text-accent">{balance}</div>
                             </div>
                         )}
 
                         {error && (
-                            <div className="w-full p-4 bg-[#1a1b1e] rounded-lg border border-red-500/50">
+                            <div className="w-full p-4 bg-background rounded-lg border border-red-500/50">
                                 <div className="text-sm text-red-400">{error}</div>
                             </div>
                         )}
 
-                        <button 
-                            type="submit" 
+                        <button
+                            type="submit"
                             disabled={isLoading}
-                            className="w-full px-6 py-3 bg-gradient-to-r from-[#ffa729] to-[#ffb954] text-white font-bold rounded-lg hover:from-[#ffb954] hover:to-[#ffa729] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+                            className="w-full px-6 py-3 bg-gradient-to-r from-accent to-accent-hover text-white font-bold rounded-lg hover:from-accent-hover hover:to-accent transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
                         >
                             {isLoading ? (
                                 <div className="flex items-center justify-center">

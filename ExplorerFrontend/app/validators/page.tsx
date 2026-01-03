@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import ValidatorsWrapper from './validators-client';
-import { Metadata } from 'next';
+import type { Metadata } from 'next';
 import { sharedMetadata } from '../lib/seo/metaData';
 
 
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
 };
 
 
-export default async function ValidatorsPage() {
+export default async function ValidatorsPage(): Promise<JSX.Element> {
   return (
     <main>
       <h1 className="sr-only">QRL Zond Network Validators</h1>

@@ -98,12 +98,13 @@ export default async function TransactionPage({ params }: PageProps): Promise<JS
       );
     }
 
-    // Check if transaction is in mempool
+    // Check if transaction is in mempool (only show pending if status is actually "pending")
     const pendingResponse = await fetch(`${config.handlerUrl}/pending-transaction/${txHash}`);
     if (pendingResponse.ok && pendingResponse.status === 200) {
       const pendingData = await pendingResponse.json();
-      if (pendingData?.transaction) {
-        // If found in mempool, show pending message with link
+      // Only show pending view if transaction exists AND status is "pending" (not "mined")
+      if (pendingData?.transaction && pendingData.transaction.status === 'pending') {
+        // If found in mempool with pending status, show pending message with link
         return (
           <div className="container mx-auto px-4">
             <div className="bg-yellow-900/20 border border-yellow-500/50 rounded-xl p-6 shadow-lg mt-6">
@@ -111,7 +112,7 @@ export default async function TransactionPage({ params }: PageProps): Promise<JS
               <p className="text-gray-300 mb-4">
                 This transaction is still pending and has not been mined yet.
               </p>
-              <a 
+              <a
                 href={`/pending/tx/${txHash}`}
                 className="inline-block bg-yellow-500/20 text-yellow-500 px-4 py-2 rounded-lg hover:bg-yellow-500/30 transition-colors"
               >

@@ -1,7 +1,6 @@
-import React from 'react';
 import axios from 'axios';
 import config from '../../../../config';
-import { PendingTransaction } from '../types';
+import type { PendingTransaction } from '../types';
 import PendingTransactionView from './pending-transaction-view';
 
 interface PageProps {
@@ -75,7 +74,7 @@ async function getTransactionStatus(hash: string): Promise<{
   }
 }
 
-export default async function PendingTransactionPage({ params }: PageProps) {
+export default async function PendingTransactionPage({ params }: PageProps): Promise<JSX.Element> {
   try {
     const resolvedParams = await params;
     const hash = resolvedParams.hash;
@@ -95,7 +94,7 @@ export default async function PendingTransactionPage({ params }: PageProps) {
       );
     }
 
-    const { status, transaction, blockNumber } = await getTransactionStatus(hash);
+    const { status, transaction } = await getTransactionStatus(hash);
 
     // If transaction is mined, use window.location for client-side redirect
     if (status === 'mined' && transaction) {

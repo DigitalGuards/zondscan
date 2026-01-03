@@ -2,7 +2,7 @@
 
 import React, { useEffect } from 'react';
 import TransactionsList from './TransactionsList';
-import { Transaction } from './types';
+import type { Transaction } from './types';
 import config from '../../../config';
 
 interface TransactionsResponse {
@@ -16,7 +16,7 @@ interface TransactionsClientProps {
   pageNumber: string;
 }
 
-export default function TransactionsClient({ initialData, pageNumber }: TransactionsClientProps) {
+export default function TransactionsClient({ initialData, pageNumber }: TransactionsClientProps): JSX.Element {
   const [data, setData] = React.useState<TransactionsResponse>(initialData);
   const [error, setError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState<boolean>(false);
@@ -28,7 +28,7 @@ export default function TransactionsClient({ initialData, pageNumber }: Transact
   }, [initialData, pageNumber]);
 
   // Optional: Function to manually refetch data
-  const refetchData = async () => {
+  const refetchData = async (): Promise<void> => {
     try {
       setIsLoading(true);
       const pageNum = parseInt(pageNumber, 10) || 1;

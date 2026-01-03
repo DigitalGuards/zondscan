@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback, useEffect, ChangeEvent, FormEvent } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 
 function onlyNumbers(str: string): boolean {
@@ -63,8 +64,8 @@ export default function SearchBar(): JSX.Element {
 
   return (
     <div className="relative w-full">
-      <div className="relative bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-2xl p-3 sm:p-6 
-                    shadow-xl border border-[#3d3d3d] hover:border-[#4d4d4d] transition-colors">
+      <div className="relative bg-card-gradient rounded-2xl p-3 sm:p-6
+                    shadow-xl border border-border hover:border-border-hover transition-colors">
         <form
           onSubmit={(e: FormEvent<HTMLFormElement>) => {
             e.preventDefault();
@@ -74,22 +75,22 @@ export default function SearchBar(): JSX.Element {
           <input
             type="text"
             placeholder="Search by Address (Zxx) / Txn Hash / Block.."
-            className="flex-1 py-3 sm:py-4 px-4 sm:px-6 text-sm sm:text-base text-gray-300 
-                     bg-[#1a1a1a] rounded-xl
-                     border border-[#3d3d3d]
+            className="flex-1 py-3 sm:py-4 px-4 sm:px-6 text-sm sm:text-base text-gray-300
+                     bg-background rounded-xl
+                     border border-border
                      outline-none shadow-lg
-                     focus:ring-2 focus:ring-[#ffa729] focus:border-transparent
+                     focus:ring-2 focus:ring-accent focus:border-transparent
                      placeholder-gray-500 transition-all duration-300
-                     hover:border-[#4d4d4d]"
+                     hover:border-border-hover"
             value={searchValue}
             onChange={handleInputChange}
           />
           <button
             type="submit"
-            className="px-8 sm:px-10 py-3 sm:py-4 bg-[#ffa729] text-white text-sm sm:text-base
+            className="px-8 sm:px-10 py-3 sm:py-4 bg-accent text-white text-sm sm:text-base
                      rounded-xl shadow-lg font-medium whitespace-nowrap
-                     hover:bg-[#ff9709] hover:shadow-2xl hover:scale-105 
-                     active:scale-95 transition-all duration-300 
+                     hover:bg-accent-dark hover:shadow-2xl hover:scale-105
+                     active:scale-95 transition-all duration-300
                      sm:w-auto w-full"
           >
             Search
@@ -97,7 +98,7 @@ export default function SearchBar(): JSX.Element {
         </form>
         {error && (
           <div className="mt-3 sm:mt-4">
-            <div className="p-3 sm:p-4 mb-3 sm:mb-4 text-xs sm:text-sm text-red-400 rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-red-400 shadow-lg" role="alert">
+            <div className="p-3 sm:p-4 mb-3 sm:mb-4 text-xs sm:text-sm text-red-400 rounded-xl bg-card-gradient border border-red-400 shadow-lg" role="alert">
               <span className="font-medium">{error}</span>
             </div>
           </div>

@@ -1,6 +1,5 @@
 'use client';
 
-import React from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 
 interface QRCodeModalProps {
@@ -9,7 +8,7 @@ interface QRCodeModalProps {
   onClose: () => void;
 }
 
-export default function QRCodeModal({ address, isOpen, onClose }: QRCodeModalProps) {
+export default function QRCodeModal({ address, isOpen, onClose }: QRCodeModalProps): JSX.Element | null {
   if (!isOpen) return null;
   
   // Generate the full zondscan URL
@@ -27,7 +26,7 @@ export default function QRCodeModal({ address, isOpen, onClose }: QRCodeModalPro
       />
       
       {/* Modal */}
-      <div className="relative bg-gradient-to-r from-[#2d2d2d] to-[#1f1f1f] rounded-xl p-6 max-w-[340px] w-full mx-4 shadow-2xl border border-[#3d3d3d]">
+      <div className="relative bg-card-gradient rounded-xl p-6 max-w-[340px] w-full mx-4 shadow-2xl border border-border">
         <button
           onClick={onClose}
           className="absolute top-2 right-2 text-gray-400 hover:text-white"
@@ -38,7 +37,7 @@ export default function QRCodeModal({ address, isOpen, onClose }: QRCodeModalPro
         </button>
         
         <div className="text-center">
-          <h3 className="text-lg font-medium text-[#ffa729] mb-4">Scan Address</h3>
+          <h3 className="text-lg font-medium text-accent mb-4">Scan Address</h3>
           <div className="bg-white p-4 rounded-lg inline-block mb-4">
             <QRCodeSVG
               value={zondscanUrl}
@@ -51,7 +50,7 @@ export default function QRCodeModal({ address, isOpen, onClose }: QRCodeModalPro
             <span className="inline-block">{displayAddress}</span>
             <button 
               onClick={() => navigator.clipboard.writeText(address)}
-              className="ml-2 text-[#ffa729] hover:text-[#ffb952] transition-colors"
+              className="ml-2 text-accent hover:text-accent-hover transition-colors"
               title="Copy full address"
             >
               <svg className="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">

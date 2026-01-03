@@ -3,10 +3,10 @@
 import * as React from 'react';
 import dynamic from 'next/dynamic';
 import axios from "axios";
-import { formatNumber, formatNumberWithCommas, toFixed } from "./lib/helpers";
+import { formatNumberWithCommas, toFixed } from "./lib/helpers";
 import config from "../config.js"
 import SearchBar from "./components/SearchBar"
-import SeoTextSection, { SeoTextItem } from "./components/SeoTextSection";
+import SeoTextSection from "./components/SeoTextSection";
 
 // Lazy load Charts component since it's below the fold and includes heavy TradingView widget
 const Charts = dynamic(() => import("./components/Charts"), {
@@ -37,7 +37,7 @@ interface DashboardData {
   dataInitialized: boolean;
 }
 
-export default function HomeClient({ pageTitle }: { pageTitle: string }) {
+export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.Element {
   const [data, setData] = React.useState<DashboardData>({
     walletCount: { value: "0", isLoading: true, error: false },
     volume: { value: "0", isLoading: true, error: false },
@@ -52,7 +52,7 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }) {
   });
 
   React.useEffect(() => {
-    async function fetchData() {
+    async function fetchData(): Promise<void> {
       try {
         if (config.handlerUrl) {
           const [overviewResponse, latestBlockResponse, txsResponse] = await Promise.allSettled([
@@ -233,7 +233,15 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }) {
     zIndex: -1,
   };
 
-  const StatCard = ({ item }: { item: any }) => (
+  interface StatItem {
+    data: string;
+    title: string;
+    loading: boolean;
+    error: boolean;
+    icon: React.ReactNode;
+  }
+
+  const StatCard = ({ item }: { item: StatItem }): JSX.Element => (
     <div className={`relative overflow-hidden rounded-2xl 
                    bg-gradient-to-br from-[#2d2d2d]/80 to-[#1f1f1f]/80
                    border border-[#3d3d3d] shadow-xl

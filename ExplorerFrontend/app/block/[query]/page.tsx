@@ -1,4 +1,4 @@
-import { Metadata } from 'next';
+import type { Metadata } from 'next';
 import BlockDetailClient from './block-detail-client';
 import { sharedMetadata } from '../../lib/seo/metaData';
 
@@ -35,7 +35,7 @@ interface PageProps {
   params: Promise<{ query: string }>;
 }
 
-export default async function Page({ params }: PageProps) {
+export default async function Page({ params }: PageProps): Promise<JSX.Element> {
   const resolvedParams = await params;
   const blockNumber = resolvedParams.query;
 
