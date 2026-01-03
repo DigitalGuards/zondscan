@@ -9,6 +9,8 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
+	"sort"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -34,6 +36,14 @@ const (
 	LargeSyncThreshold = 1000 // 0x3e8 in hex
 
 	MaxProducerConcurrency = 8 // Limit concurrent block fetching goroutines
+
+	// Default RPC delay settings (can be overridden via environment)
+	DefaultRPCDelayMs    = 50
+	DefaultRPCDelayJitter = 26
+
+	// Gap detection constants
+	MaxGapDetectionBlocks = 1000 // Maximum blocks to check for gaps
+	GapRetryAttempts      = 3    // Number of retry attempts for filling gaps
 )
 
 // Semaphore to limit concurrent producer goroutines
@@ -42,6 +52,216 @@ var producerSem chan struct{}
 type Data struct {
 	blockData    []interface{}
 	blockNumbers []int
+}
+
+// FailedBlock tracks blocks that failed to sync with retry information
+type FailedBlock struct {
+	BlockNumber string
+	Attempts    int
+	LastError   error
+	LastAttempt time.Time
+}
+
+// SyncConfig holds configurable sync settings
+type SyncConfig struct {
+	RPCDelayMs    int
+	RPCDelayJitter int
+}
+
+// failedBlocks tracks blocks that failed during sync for later retry
+var failedBlocks sync.Map
+
+// getSyncConfig returns the sync configuration from environment or defaults
+func getSyncConfig() SyncConfig {
+	config := SyncConfig{
+		RPCDelayMs:    DefaultRPCDelayMs,
+		RPCDelayJitter: DefaultRPCDelayJitter,
+	}
+
+	if delay := os.Getenv("RPC_DELAY_MS"); delay != "" {
+		if val, err := strconv.Atoi(delay); err == nil && val >= 0 {
+			config.RPCDelayMs = val
+		}
+	}
+
+	if jitter := os.Getenv("RPC_DELAY_JITTER_MS"); jitter != "" {
+		if val, err := strconv.Atoi(jitter); err == nil && val >= 0 {
+			config.RPCDelayJitter = val
+		}
+	}
+
+	return config
+}
+
+// getRPCDelay returns the configured delay duration with jitter
+func getRPCDelay() time.Duration {
+	config := getSyncConfig()
+	if config.RPCDelayJitter > 0 {
+		return time.Duration(config.RPCDelayMs+rand.Intn(config.RPCDelayJitter)) * time.Millisecond
+	}
+	return time.Duration(config.RPCDelayMs) * time.Millisecond
+}
+
+// trackFailedBlock records a failed block for later retry
+func trackFailedBlock(blockNumber string, err error) {
+	existing, loaded := failedBlocks.Load(blockNumber)
+	if loaded {
+		failed := existing.(*FailedBlock)
+		failed.Attempts++
+		failed.LastError = err
+		failed.LastAttempt = time.Now()
+	} else {
+		failedBlocks.Store(blockNumber, &FailedBlock{
+			BlockNumber: blockNumber,
+			Attempts:    1,
+			LastError:   err,
+			LastAttempt: time.Now(),
+		})
+	}
+	configs.Logger.Warn("Tracked failed block for retry",
+		zap.String("block", blockNumber),
+		zap.Error(err))
+}
+
+// clearFailedBlock removes a block from the failed tracking after successful sync
+func clearFailedBlock(blockNumber string) {
+	failedBlocks.Delete(blockNumber)
+}
+
+// detectGaps finds missing blocks in the database within a range
+func detectGaps(fromBlock, toBlock string) []string {
+	configs.Logger.Info("Detecting gaps in block range",
+		zap.String("from", fromBlock),
+		zap.String("to", toBlock))
+
+	fromNum := utils.HexToInt(fromBlock).Int64()
+	toNum := utils.HexToInt(toBlock).Int64()
+
+	// Limit the range to prevent memory issues
+	if toNum-fromNum > MaxGapDetectionBlocks {
+		fromNum = toNum - MaxGapDetectionBlocks
+		fromBlock = utils.IntToHex(int(fromNum))
+		configs.Logger.Info("Limiting gap detection range",
+			zap.String("adjusted_from", fromBlock))
+	}
+
+	// Get all existing block numbers in the range
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	filter := bson.M{
+		"result.number": bson.M{
+			"$gte": fromBlock,
+			"$lte": toBlock,
+		},
+	}
+
+	projection := bson.M{"result.number": 1, "_id": 0}
+	cursor, err := configs.BlocksCollections.Find(ctx, filter, options.Find().SetProjection(projection))
+	if err != nil {
+		configs.Logger.Error("Failed to query blocks for gap detection", zap.Error(err))
+		return nil
+	}
+	defer cursor.Close(ctx)
+
+	existingBlocks := make(map[int64]bool)
+	for cursor.Next(ctx) {
+		var block struct {
+			Result struct {
+				Number string `bson:"number"`
+			} `bson:"result"`
+		}
+		if err := cursor.Decode(&block); err != nil {
+			continue
+		}
+		blockNum := utils.HexToInt(block.Result.Number).Int64()
+		existingBlocks[blockNum] = true
+	}
+
+	// Find missing blocks
+	var gaps []string
+	for i := fromNum; i <= toNum; i++ {
+		if !existingBlocks[i] {
+			gaps = append(gaps, utils.IntToHex(int(i)))
+		}
+	}
+
+	if len(gaps) > 0 {
+		configs.Logger.Warn("Found block gaps",
+			zap.Int("gap_count", len(gaps)),
+			zap.String("from", fromBlock),
+			zap.String("to", toBlock))
+	}
+
+	return gaps
+}
+
+// fillGaps attempts to sync missing blocks
+func fillGaps(gaps []string) int {
+	if len(gaps) == 0 {
+		return 0
+	}
+
+	configs.Logger.Info("Attempting to fill block gaps",
+		zap.Int("gap_count", len(gaps)))
+
+	filled := 0
+	for _, blockNum := range gaps {
+		// Check if we've already tried this block too many times
+		if existing, ok := failedBlocks.Load(blockNum); ok {
+			failed := existing.(*FailedBlock)
+			if failed.Attempts >= GapRetryAttempts {
+				configs.Logger.Warn("Skipping block after max retry attempts",
+					zap.String("block", blockNum),
+					zap.Int("attempts", failed.Attempts))
+				continue
+			}
+		}
+
+		// Add RPC delay to prevent overwhelming the node
+		time.Sleep(getRPCDelay())
+
+		// Fetch and insert the block
+		data, err := rpc.GetBlockByNumberMainnet(blockNum)
+		if err != nil {
+			trackFailedBlock(blockNum, err)
+			configs.Logger.Error("Failed to fetch block for gap fill",
+				zap.String("block", blockNum),
+				zap.Error(err))
+			continue
+		}
+
+		if data == nil || data.Result.ParentHash == "" {
+			trackFailedBlock(blockNum, fmt.Errorf("invalid block data"))
+			configs.Logger.Error("Invalid block data for gap fill",
+				zap.String("block", blockNum))
+			continue
+		}
+
+		// Insert the block
+		db.UpdateTransactionStatuses(data)
+		db.InsertBlockDocument(*data)
+		db.ProcessTransactions(*data)
+
+		// Update pending transactions
+		if err := UpdatePendingTransactionsInBlock(data); err != nil {
+			configs.Logger.Error("Failed to update pending transactions during gap fill",
+				zap.String("block", blockNum),
+				zap.Error(err))
+		}
+
+		clearFailedBlock(blockNum)
+		filled++
+
+		configs.Logger.Info("Filled block gap",
+			zap.String("block", blockNum))
+	}
+
+	configs.Logger.Info("Gap fill completed",
+		zap.Int("filled", filled),
+		zap.Int("total_gaps", len(gaps)))
+
+	return filled
 }
 
 // batchSync handles syncing multiple blocks in parallel
@@ -167,6 +387,26 @@ func batchSync(fromBlock string, toBlock string) string {
 			zap.String("highest_processed_block", highestBlock))
 		forceUpdateSyncState(highestBlock)
 		lastKnownBlock = highestBlock
+	}
+
+	// Detect and fill any gaps that occurred during batch sync
+	configs.Logger.Info("Running gap detection after batch sync")
+	gaps := detectGaps(fromBlock, toBlock)
+	if len(gaps) > 0 {
+		configs.Logger.Warn("Found gaps in batch sync, attempting to fill",
+			zap.Int("gap_count", len(gaps)))
+		filled := fillGaps(gaps)
+		if filled > 0 {
+			configs.Logger.Info("Filled gaps during batch sync",
+				zap.Int("filled", filled),
+				zap.Int("remaining", len(gaps)-filled))
+			// Update sync state after filling gaps
+			newHighest := findHighestProcessedBlock()
+			if utils.CompareHexNumbers(newHighest, lastKnownBlock) > 0 {
+				forceUpdateSyncState(newHighest)
+				lastKnownBlock = newHighest
+			}
+		}
 	}
 
 	if utils.CompareHexNumbers(lastKnownBlock, "0x0") > 0 {
@@ -495,10 +735,14 @@ func processTokensAfterInitialSync(initialSyncStart string, maxHex string) {
 
 func consumer(ch <-chan (<-chan Data)) {
 	var wg sync.WaitGroup
-	var syncMutex sync.Mutex // Add mutex for synchronizing block updates
+	var syncMutex sync.Mutex // Mutex for synchronizing block updates
 
-	// Track the highest block number processed
-	var highestProcessedBlock int = 0
+	// Track the highest block number processed using atomic operations to prevent race conditions
+	var highestProcessedBlock int64 = 0
+
+	// Track all processed blocks for gap detection
+	var processedBlocksMutex sync.Mutex
+	processedBlocks := make([]int, 0)
 
 	for producer := range ch {
 		wg.Add(1)
@@ -517,18 +761,30 @@ func consumer(ch <-chan (<-chan Data)) {
 					configs.Logger.Info("Processed transactions for blocks",
 						zap.Ints("block_numbers", data.blockNumbers))
 
+					// Track processed blocks for gap detection (thread-safe)
+					processedBlocksMutex.Lock()
+					processedBlocks = append(processedBlocks, data.blockNumbers...)
+					processedBlocksMutex.Unlock()
+
 					// Store the last block number from this batch
 					if len(data.blockNumbers) > 0 {
-						syncMutex.Lock() // Lock before updating sync state
+						syncMutex.Lock()
 						lastBlock := utils.IntToHex(data.blockNumbers[len(data.blockNumbers)-1])
 						db.StoreLastKnownBlockNumber(lastBlock)
-						syncMutex.Unlock() // Unlock after updating
+						syncMutex.Unlock()
 					}
 
-					// Track the highest block number processed
+					// Track the highest block number processed using atomic compare-and-swap
 					for _, blockNum := range data.blockNumbers {
-						if blockNum > highestProcessedBlock {
-							highestProcessedBlock = blockNum
+						blockNum64 := int64(blockNum)
+						for {
+							current := atomic.LoadInt64(&highestProcessedBlock)
+							if blockNum64 <= current {
+								break
+							}
+							if atomic.CompareAndSwapInt64(&highestProcessedBlock, current, blockNum64) {
+								break
+							}
 						}
 					}
 				}
@@ -538,11 +794,31 @@ func consumer(ch <-chan (<-chan Data)) {
 	wg.Wait()
 
 	// After all batches are processed, update the sync state with the highest block number
-	if highestProcessedBlock > 0 {
-		highestBlockHex := utils.IntToHex(highestProcessedBlock)
+	highest := atomic.LoadInt64(&highestProcessedBlock)
+	if highest > 0 {
+		highestBlockHex := utils.IntToHex(int(highest))
 		configs.Logger.Info("Updating sync state with highest processed block after batch processing",
 			zap.String("block", highestBlockHex))
 		forceUpdateSyncState(highestBlockHex)
+
+		// Check for gaps in the processed blocks
+		processedBlocksMutex.Lock()
+		if len(processedBlocks) > 1 {
+			sort.Ints(processedBlocks)
+			minBlock := processedBlocks[0]
+			maxBlock := processedBlocks[len(processedBlocks)-1]
+
+			// If we processed fewer blocks than the range suggests, there might be gaps
+			expectedCount := maxBlock - minBlock + 1
+			if len(processedBlocks) < expectedCount {
+				configs.Logger.Warn("Potential gaps detected during batch processing",
+					zap.Int("expected_blocks", expectedCount),
+					zap.Int("processed_blocks", len(processedBlocks)),
+					zap.Int("min_block", minBlock),
+					zap.Int("max_block", maxBlock))
+			}
+		}
+		processedBlocksMutex.Unlock()
 	}
 }
 
@@ -573,22 +849,56 @@ func producer(start string, end string) <-chan Data {
 				currentBlock = utils.AddHexNumbers(currentBlock, "0x1")
 				continue
 			}
-			// Add a small delay between RPC calls to prevent overwhelming the node
-			time.Sleep(time.Duration(50+rand.Intn(26)) * time.Millisecond)
 
-			data, err := rpc.GetBlockByNumberMainnet(currentBlock)
+			// Add configurable delay between RPC calls to prevent overwhelming the node
+			time.Sleep(getRPCDelay())
+
+			// Try to fetch block with retry logic
+			var data *models.ZondDatabaseBlock
+			var err error
+			maxRetries := 3
+
+			for attempt := 1; attempt <= maxRetries; attempt++ {
+				data, err = rpc.GetBlockByNumberMainnet(currentBlock)
+				if err == nil && data != nil && data.Result.ParentHash != "" {
+					break // Success
+				}
+
+				if attempt < maxRetries {
+					backoffDelay := time.Duration(attempt*100) * time.Millisecond
+					configs.Logger.Warn("Block fetch failed, retrying",
+						zap.String("block", currentBlock),
+						zap.Int("attempt", attempt),
+						zap.Duration("backoff", backoffDelay),
+						zap.Error(err))
+					time.Sleep(backoffDelay)
+				}
+			}
+
 			if err != nil {
-				configs.Logger.Error("Failed to get block data",
+				trackFailedBlock(currentBlock, err)
+				configs.Logger.Error("Failed to get block data after retries",
 					zap.String("block", currentBlock),
+					zap.Int("max_retries", maxRetries),
 					zap.Error(err))
+				currentBlock = utils.AddHexNumbers(currentBlock, "0x1")
 				continue
 			}
 
-			if data != nil && data.Result.ParentHash != "" {
-				db.UpdateTransactionStatuses(data)
-				blockData = append(blockData, *data)
-				blockNumbers = append(blockNumbers, int(utils.HexToInt(currentBlock).Int64()))
+			if data == nil || data.Result.ParentHash == "" {
+				trackFailedBlock(currentBlock, fmt.Errorf("invalid block data: nil or missing parent hash"))
+				configs.Logger.Error("Invalid block data received",
+					zap.String("block", currentBlock))
+				currentBlock = utils.AddHexNumbers(currentBlock, "0x1")
+				continue
 			}
+
+			// Success - clear any previous failure tracking
+			clearFailedBlock(currentBlock)
+
+			db.UpdateTransactionStatuses(data)
+			blockData = append(blockData, *data)
+			blockNumbers = append(blockNumbers, int(utils.HexToInt(currentBlock).Int64()))
 			currentBlock = utils.AddHexNumbers(currentBlock, "0x1")
 		}
 		if len(blockData) > 0 {
@@ -661,19 +971,43 @@ func processInitialBlock() {
 }
 
 func processSubsequentBlocks(currentBlock string) string {
-	// Get the block data from the node
-	blockData, err := rpc.GetBlockByNumberMainnet(currentBlock)
+	// Get the block data from the node with retry logic
+	var blockData *models.ZondDatabaseBlock
+	var err error
+	maxRetries := 3
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		blockData, err = rpc.GetBlockByNumberMainnet(currentBlock)
+		if err == nil && blockData != nil && blockData.Result.ParentHash != "" {
+			break // Success
+		}
+
+		if attempt < maxRetries {
+			backoffDelay := time.Duration(attempt*500) * time.Millisecond
+			configs.Logger.Warn("Block fetch failed in processSubsequentBlocks, retrying",
+				zap.String("block", currentBlock),
+				zap.Int("attempt", attempt),
+				zap.Duration("backoff", backoffDelay),
+				zap.Error(err))
+			time.Sleep(backoffDelay)
+		}
+	}
+
 	if err != nil {
-		configs.Logger.Error("Failed to get block data",
+		configs.Logger.Error("Failed to get block data after retries",
 			zap.String("block", currentBlock),
+			zap.Int("max_retries", maxRetries),
 			zap.Error(err))
-		panic(err) // Force retry
+		trackFailedBlock(currentBlock, err)
+		// Return empty string to signal failure - caller should handle retry
+		return ""
 	}
 
 	if blockData == nil || blockData.Result.ParentHash == "" {
-		configs.Logger.Error("Invalid block data received",
+		configs.Logger.Error("Invalid block data received after retries",
 			zap.String("block", currentBlock))
-		panic(fmt.Errorf("invalid block data for block %s", currentBlock))
+		trackFailedBlock(currentBlock, fmt.Errorf("invalid block data: nil or missing parent hash"))
+		return ""
 	}
 
 	// Get the parent block's hash from our DB
@@ -880,6 +1214,8 @@ func processBlockPeriodically() {
 
 		// Process blocks one by one
 		currentBlock := nextBlock
+		failedBlocksInRun := make([]string, 0)
+
 		for utils.CompareHexNumbers(currentBlock, latestBlock) <= 0 {
 			// Check if this block has already been processed
 			blockExists := db.BlockExists(currentBlock)
@@ -892,13 +1228,34 @@ func processBlockPeriodically() {
 
 			configs.Logger.Info("Processing block", zap.String("blockNumber", currentBlock))
 
-			// Process the block
-			processSubsequentBlocks(currentBlock)
+			// Process the block and check for failure
+			result := processSubsequentBlocks(currentBlock)
+			if result == "" {
+				// Block processing failed - track for later retry
+				configs.Logger.Warn("Block processing failed, will retry later",
+					zap.String("blockNumber", currentBlock))
+				failedBlocksInRun = append(failedBlocksInRun, currentBlock)
+				currentBlock = utils.AddHexNumbers(currentBlock, "0x1")
+				continue
+			}
+
+			// Clear any previous failure tracking on success
+			clearFailedBlock(currentBlock)
 
 			processTokenTransfersForBlock(currentBlock)
 
 			// Move to next block
 			currentBlock = utils.AddHexNumbers(currentBlock, "0x1")
+		}
+
+		// Attempt to fill any failed blocks from this run
+		if len(failedBlocksInRun) > 0 {
+			configs.Logger.Info("Attempting to fill failed blocks from this run",
+				zap.Int("count", len(failedBlocksInRun)))
+			filled := fillGaps(failedBlocksInRun)
+			configs.Logger.Info("Filled failed blocks",
+				zap.Int("filled", filled),
+				zap.Int("remaining", len(failedBlocksInRun)-filled))
 		}
 
 		// Process all token transfers in batch after all blocks are processed
@@ -955,7 +1312,7 @@ func singleBlockInsertion() {
 
 	// Create a wait group to keep the main goroutine alive
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(4) // Added gap detection task
 
 	// Define an initialization flag
 	var initialized int32
@@ -1017,8 +1374,70 @@ func singleBlockInsertion() {
 		}
 	}()
 
+	// Start periodic gap detection task (every 5 minutes)
+	go func() {
+		defer wg.Done()
+		configs.Logger.Info("Starting periodic task",
+			zap.String("task", "gap_detection"),
+			zap.Duration("interval", time.Minute*5))
+
+		ticker := time.NewTicker(time.Minute * 5)
+		defer ticker.Stop()
+
+		// Wait 1 minute before first run to let initial sync settle
+		time.Sleep(time.Minute)
+
+		for range ticker.C {
+			detectAndFillGapsPeriodically()
+		}
+	}()
+
 	// Keep the main goroutine alive
 	wg.Wait()
+}
+
+// detectAndFillGapsPeriodically runs gap detection and attempts to fill any gaps found
+func detectAndFillGapsPeriodically() {
+	configs.Logger.Info("Running periodic gap detection")
+
+	// Get the current sync range
+	lastKnown := db.GetLastKnownBlockNumber()
+	if lastKnown == "0x0" {
+		configs.Logger.Debug("No blocks synced yet, skipping gap detection")
+		return
+	}
+
+	// Check the last MaxGapDetectionBlocks blocks for gaps
+	lastKnownNum := utils.HexToInt(lastKnown).Int64()
+	fromNum := lastKnownNum - MaxGapDetectionBlocks
+	if fromNum < 1 {
+		fromNum = 1
+	}
+
+	fromBlock := utils.IntToHex(int(fromNum))
+	gaps := detectGaps(fromBlock, lastKnown)
+
+	if len(gaps) == 0 {
+		configs.Logger.Info("No gaps detected in block range",
+			zap.String("from", fromBlock),
+			zap.String("to", lastKnown))
+		return
+	}
+
+	configs.Logger.Warn("Gaps detected, attempting to fill",
+		zap.Int("gap_count", len(gaps)))
+
+	filled := fillGaps(gaps)
+	if filled > 0 {
+		configs.Logger.Info("Periodic gap fill completed",
+			zap.Int("filled", filled),
+			zap.Int("remaining", len(gaps)-filled))
+
+		// Process token transfers for filled gaps
+		for _, gap := range gaps[:filled] {
+			processTokenTransfersForBlock(gap)
+		}
+	}
 }
 
 func syncValidators() error {
