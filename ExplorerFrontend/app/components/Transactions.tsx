@@ -8,7 +8,6 @@ import {
 } from '@mui/x-data-grid';
 import type {
   GridColDef,
-  GridValueGetterParams,
   GridRenderCellParams
 } from '@mui/x-data-grid';
 import Typography from '@mui/material/Typography';
@@ -46,8 +45,8 @@ const DecoderAddress = (params: DecoderParams): JSX.Element => {
   return <Link href={`${config.siteUrl}/address/${formattedAddress}`}>{formattedAddress}</Link>;
 };
 
-const ConvertTime = (params: GridValueGetterParams<Transaction>): string => {
-  const timestamp = params.row.TimeStamp;
+const ConvertTime = (value: any, row: Transaction): string => {
+  const timestamp = row.TimeStamp;
   const date = new Date(timestamp * 1000);
   // Use UTC to avoid hydration mismatch
   const day = date.getUTCDate().toString().padStart(2, '0');
@@ -59,8 +58,8 @@ const ConvertTime = (params: GridValueGetterParams<Transaction>): string => {
   return `${day}/${month}/${year}, ${hours}:${minutes}:${seconds}`;
 };
 
-const Divide = (params: GridValueGetterParams<Transaction>): number => {
-  return params.row.Amount / 1000000000;
+const Divide = (value: any, row: Transaction): number => {
+  return row.Amount / 1000000000;
 };
 
 export default function Transactions(): JSX.Element {
@@ -93,7 +92,7 @@ export default function Transactions(): JSX.Element {
       field: 'Address',
       headerName: 'Address',
       flex: 1,
-      valueGetter: (params: GridValueGetterParams<Transaction>) => params.row.Address,
+      valueGetter: (_value: any, row: Transaction) => row.Address,
       renderCell: (params: GridRenderCellParams<Transaction>) => (
         <Link href={`${config.siteUrl}/address/${params.row.Address}`}>
           {params.row.Address}
@@ -121,7 +120,7 @@ export default function Transactions(): JSX.Element {
       field: 'TxHash',
       headerName: 'Transaction hash',
       flex: 1,
-      valueGetter: (params: GridValueGetterParams<Transaction>) => params.row.TxHash,
+      valueGetter: (_value: any, row: Transaction) => row.TxHash,
       renderCell: (params: GridRenderCellParams<Transaction>) => (
         <Link href={`${config.siteUrl}/tx/${params.row.TxHash}`}>
           {params.row.TxHash}
