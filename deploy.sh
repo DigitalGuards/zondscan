@@ -335,7 +335,7 @@ EOL
 
     # Update browserslist database
     print_status "Updating browserslist database..."
-    npx browserslist@latest --update-db || print_error "Failed to update browserslist"
+    npx update-browserslist-db@latest || print_error "Failed to update browserslist"
 
     # Build production frontend
     print_status "Building production frontend..."

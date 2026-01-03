@@ -202,7 +202,7 @@ EOL
 
     # Update browserslist database
     print_status "Updating browserslist database..."
-    npx browserslist@latest --update-db || print_error "Failed to update browserslist"
+    npx update-browserslist-db@latest || print_error "Failed to update browserslist"
 
     # Start frontend in development mode with PM2 using bash
     print_status "Starting frontend in development mode..."
