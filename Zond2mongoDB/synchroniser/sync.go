@@ -102,6 +102,25 @@ func getRPCDelay() time.Duration {
 	return time.Duration(config.RPCDelayMs) * time.Millisecond
 }
 
+// getRPCDelayForBulkSync returns a reduced delay for bulk sync operations
+// When syncing many blocks, we want to go faster but still avoid overwhelming the node
+func getRPCDelayForBulkSync() time.Duration {
+	config := getSyncConfig()
+	// Use 1/10th of the normal delay for bulk sync
+	reducedDelay := config.RPCDelayMs / 10
+	if reducedDelay < 5 {
+		reducedDelay = 5 // Minimum 5ms to avoid completely overwhelming the node
+	}
+	if config.RPCDelayJitter > 0 {
+		jitter := config.RPCDelayJitter / 10
+		if jitter < 2 {
+			jitter = 2
+		}
+		return time.Duration(reducedDelay+rand.Intn(jitter)) * time.Millisecond
+	}
+	return time.Duration(reducedDelay) * time.Millisecond
+}
+
 // trackFailedBlock records a failed block for later retry
 func trackFailedBlock(blockNumber string, err error) {
 	existing, loaded := failedBlocks.Load(blockNumber)
@@ -850,8 +869,8 @@ func producer(start string, end string) <-chan Data {
 				continue
 			}
 
-			// Add configurable delay between RPC calls to prevent overwhelming the node
-			time.Sleep(getRPCDelay())
+			// Add reduced delay for bulk sync operations (5-7ms instead of 50-76ms)
+			time.Sleep(getRPCDelayForBulkSync())
 
 			// Try to fetch block with retry logic
 			var data *models.ZondDatabaseBlock
