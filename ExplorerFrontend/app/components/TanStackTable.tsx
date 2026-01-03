@@ -14,7 +14,8 @@ import type {
   Table,
   HeaderGroup,
   Header,
-  Cell
+  Cell,
+  ColumnDef
 } from "@tanstack/react-table";
 import { formatAmount, formatTimestamp, normalizeHexString, formatAddress } from "../lib/helpers";
 import DebouncedInput from "./DebouncedInput";
@@ -30,6 +31,10 @@ const truncateMiddle = (str: string, startChars = 8, endChars = 8): string => {
 // Moved outside component to avoid recreating on each render
 const IN_OUT_MAP = ["Out", "In"] as const;
 const TX_TYPE_MAP = ["Coinbase", "Attest", "Transfer", "Stake"] as const;
+
+// Create column helpers outside component to avoid type inference issues
+const columnHelper = createColumnHelper<Transaction & { formattedAmount: string; formattedFees: string }>();
+const internalColumnHelper = createColumnHelper<InternalTransaction & { formattedValue: string }>();
 
 interface TableProps {
   transactions: Transaction[];
@@ -139,9 +144,6 @@ export default function TanStackTable({ transactions, internalt }: TableProps): 
       formattedValue: `${value} ${valueUnit}`
     };
   }), [internalt]);
-
-  const columnHelper = createColumnHelper<Transaction & { formattedAmount: string; formattedFees: string }>();
-  const internalColumnHelper = createColumnHelper<InternalTransaction & { formattedValue: string }>();
 
   const transactionColumns = useMemo(() => [
     columnHelper.accessor(() => "", {
@@ -286,6 +288,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps): 
 
   const transactionTable = useReactTable({
     data: formattedTransactions,
+    // @ts-expect-error - ColumnDef types conflict with index signature in Transaction type
     columns: transactionColumns,
     state: {
       globalFilter,
@@ -298,6 +301,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps): 
 
   const internalTransactionTable = useReactTable({
     data: formattedInternalTransactions,
+    // @ts-expect-error - ColumnDef types conflict with index signature in InternalTransaction type
     columns: internalTransactionColumns,
     state: {
       globalFilter,
