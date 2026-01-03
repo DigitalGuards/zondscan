@@ -111,13 +111,13 @@ type JsonRPC struct {
 
 type GetBalance struct {
 	JsonRPC string `json:"jsonrpc"`
-	ID      uint32 `json:"id"`
+	ID      int64  `json:"id"`
 	Result  string `json:"result"`
 }
 
 type GetCode struct {
 	JsonRPC string `json:"jsonrpc"`
-	ID      uint32 `json:"id"`
+	ID      int64  `json:"id"`
 	Result  string `json:"result"`
 }
 
