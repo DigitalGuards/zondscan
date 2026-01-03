@@ -164,7 +164,7 @@ setup_server() {
     cat > .env << EOL
 GIN_MODE=release
 MONGOURI=mongodb://localhost:27017/qrldata-z?readPreference=primary
-HTTP_PORT=:8080
+HTTP_PORT=:8081
 NODE_URL=$NODE_URL
 EOL
 
@@ -186,14 +186,14 @@ setup_frontend() {
     cat > .env << EOL
 DATABASE_URL=mongodb://localhost:27017/qrldata-z?readPreference=primary
 DOMAIN_NAME=http://localhost:3000
-HANDLER_URL=http://127.0.0.1:8080
+HANDLER_URL=http://127.0.0.1:8081
 EOL
 
     # Create .env.local file
     cat > .env.local << EOL
 DATABASE_URL=mongodb://localhost:27017/qrldata-z?readPreference=primary
 DOMAIN_NAME=http://localhost:3000
-HANDLER_URL=http://127.0.0.1:8080
+HANDLER_URL=http://127.0.0.1:8081
 EOL
 
     # Install dependencies
@@ -257,7 +257,7 @@ main() {
 
     # Check if required ports are available
     #check_port 3000
-    #check_port 8080
+    #check_port 8081
 
     # Clone and setup
     clone_repo
@@ -270,7 +270,7 @@ main() {
     print_status "Deployment complete! Services are starting up..."
     echo -e "\nAccess points:"
     echo "- Frontend: http://localhost:3000"
-    echo "- Server API: http://localhost:8080"
+    echo "- Server API: http://localhost:8081"
     echo -e "\nMake sure you have:"
     echo "1. MongoDB running on localhost:27017"
     echo "2. Zond node accessible at $NODE_URL"
