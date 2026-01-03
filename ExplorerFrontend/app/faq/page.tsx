@@ -1,4 +1,4 @@
-import { Metadata } from 'next';
+import type { Metadata } from 'next';
 import { sharedMetadata } from '../lib/seo/metaData';
 import FAQClient from './faq-client';
 
@@ -23,6 +23,6 @@ export const metadata: Metadata = {
   },
 };
 
-export default function FAQPage() {
+export default function FAQPage(): JSX.Element {
   return <FAQClient />;
 }

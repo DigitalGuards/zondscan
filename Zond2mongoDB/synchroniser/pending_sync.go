@@ -115,41 +115,16 @@ func syncMempool() error {
 	now := time.Now()
 	count := 0
 
-	// Process pending transactions
-	if pendingResp.Result.Pending != nil {
-		for from, txMap := range pendingResp.Result.Pending {
-			for nonce, tx := range txMap {
-				tx.Status = "pending"
-				tx.LastSeen = now
-				tx.From = from
-				tx.Nonce = nonce
-				if err := db.UpsertPendingTransaction(&tx); err != nil {
-					configs.Logger.Error("Failed to upsert pending transaction",
-						zap.String("hash", tx.Hash),
-						zap.Error(err))
-				} else {
-					count++
-				}
-			}
-		}
-	}
-
-	// Process queued transactions
-	if pendingResp.Result.Queued != nil {
-		for from, txMap := range pendingResp.Result.Queued {
-			for nonce, tx := range txMap {
-				tx.Status = "pending"
-				tx.LastSeen = now
-				tx.From = from
-				tx.Nonce = nonce
-				if err := db.UpsertPendingTransaction(&tx); err != nil {
-					configs.Logger.Error("Failed to upsert queued transaction",
-						zap.String("hash", tx.Hash),
-						zap.Error(err))
-				} else {
-					count++
-				}
-			}
+	// Process pending transactions (zond_pendingTransactions returns a simple array)
+	for _, tx := range pendingResp.Result {
+		tx.Status = "pending"
+		tx.LastSeen = now
+		if err := db.UpsertPendingTransaction(&tx); err != nil {
+			configs.Logger.Error("Failed to upsert pending transaction",
+				zap.String("hash", tx.Hash),
+				zap.Error(err))
+		} else {
+			count++
 		}
 	}
 

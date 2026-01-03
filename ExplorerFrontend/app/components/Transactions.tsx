@@ -2,12 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import axios from "axios";
-import { 
-  DataGrid, 
-  GridToolbar, 
-  GridColDef, 
+import {
+  DataGrid,
+  GridToolbar,
+} from '@mui/x-data-grid';
+import type {
+  GridColDef,
   GridValueGetterParams,
-  GridRenderCellParams 
+  GridRenderCellParams
 } from '@mui/x-data-grid';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';

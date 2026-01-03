@@ -11,7 +11,8 @@ import TableRow from '@mui/material/TableRow';
 import Link from "next/link";
 import Image from 'next/image';
 import { decodeToHex } from '../lib/helpers';
-import { Transaction, TransactionType } from './types';
+import type { Transaction } from './types';
+import { TransactionType } from './types';
 
 interface TransactionsDisplayProps {
   posts: Transaction[];

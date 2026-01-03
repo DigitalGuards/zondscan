@@ -1,11 +1,10 @@
-import React from 'react';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 import TradingViewWidget from './TradingViewWidget';
 
-export default function Charts() {
+export default function Charts(): JSX.Element {
   return (
     <Box sx={{ width: '100%', mb: 4 }}>
       <Card sx={{

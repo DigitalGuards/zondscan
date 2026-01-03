@@ -3,14 +3,14 @@
 import React, { useState } from 'react';
 import { toFixed } from '../lib/helpers';
 
-function Converter() {
+function Converter(): JSX.Element {
   const [quanta, setQuanta] = useState("");
   const [shor, setShor] = useState("");
   const [error, setError] = useState("");
 
   const DECIMALS = 1e18; // QRL heeft 18 decimalen zoals Ethereum
 
-  const handleChangeShors = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChangeShors = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const value = e.target.value;
     if (isNaN(Number(value))) {
       setError("Invalid Input: Enter a number");
@@ -21,7 +21,7 @@ function Converter() {
     }
   };
 
-  const handleChangeQuanta = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChangeQuanta = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const value = e.target.value;
     if (isNaN(Number(value))) {
       setError("Invalid Input: Enter a number");

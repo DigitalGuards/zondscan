@@ -8,7 +8,8 @@ import {
   getFilteredRowModel,
   getCoreRowModel,
   getPaginationRowModel,
-  ColumnDef,
+} from "@tanstack/react-table";
+import type {
   Row,
   Table,
   HeaderGroup,
@@ -19,12 +20,16 @@ import { formatAmount, formatTimestamp, normalizeHexString, formatAddress } from
 import DebouncedInput from "./DebouncedInput";
 import { DownloadBtn, DownloadBtnInternal } from "./DownloadBtn";
 import Link from "next/link";
-import { Transaction, InternalTransaction } from "./types";
+import type { Transaction, InternalTransaction } from "./types";
 
 const truncateMiddle = (str: string, startChars = 8, endChars = 8): string => {
   if (str.length <= startChars + endChars) return str;
   return `${str.slice(0, startChars)}...${str.slice(-endChars)}`;
 };
+
+// Moved outside component to avoid recreating on each render
+const IN_OUT_MAP = ["Out", "In"] as const;
+const TX_TYPE_MAP = ["Coinbase", "Attest", "Transfer", "Stake"] as const;
 
 interface TableProps {
   transactions: Transaction[];
@@ -35,7 +40,7 @@ type TableInstance<T> = Table<T>;
 
 const renderTableHeader = <T extends Transaction | InternalTransaction>(
   table: TableInstance<T>
-) => {
+): JSX.Element[] => {
   return table.getHeaderGroups().map((headerGroup: HeaderGroup<T>) => (
     <tr key={headerGroup.id} className="border-b border-[#3d3d3d]">
       {headerGroup.headers.map((header: Header<T, unknown>) => (
@@ -57,7 +62,7 @@ const renderTableHeader = <T extends Transaction | InternalTransaction>(
 
 const renderTableBody = <T extends Transaction | InternalTransaction>(
   table: TableInstance<T>
-) => {
+): JSX.Element[] => {
   return table.getRowModel().rows.map((row: Row<T>) => (
     <tr
       key={row.id}
@@ -100,7 +105,7 @@ const calculateFees = (tx: Transaction): number => {
   }
 };
 
-export default function TanStackTable({ transactions, internalt }: TableProps) {
+export default function TanStackTable({ transactions, internalt }: TableProps): JSX.Element | null {
   const [mounted, setMounted] = useState(false);
   const [windowWidth, setWindowWidth] = useState(0);
   const [globalFilter, setGlobalFilter] = useState("");
@@ -109,7 +114,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
   useEffect(() => {
     setMounted(true);
     setWindowWidth(window.innerWidth);
-    const handleResize = () => setWindowWidth(window.innerWidth);
+    const handleResize = (): void => setWindowWidth(window.innerWidth);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -135,10 +140,8 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
     };
   }), [internalt]);
 
-  const columnHelper = createColumnHelper<any>();
-  const internalColumnHelper = createColumnHelper<any>();
-  const inOutMap = ["Out", "In"];
-  const txTypeMap = ["Coinbase", "Attest", "Transfer", "Stake"];
+  const columnHelper = createColumnHelper<Transaction & { formattedAmount: string; formattedFees: string }>();
+  const internalColumnHelper = createColumnHelper<InternalTransaction & { formattedValue: string }>();
 
   const transactionColumns = useMemo(() => [
     columnHelper.accessor(() => "", {
@@ -147,11 +150,11 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
       header: "Number",
     }),
     columnHelper.accessor("InOut", {
-      cell: (info) => <span>{inOutMap[info.getValue()]}</span>,
+      cell: (info) => <span>{IN_OUT_MAP[info.getValue()]}</span>,
       header: "In/Out",
     }),
     columnHelper.accessor("TxType", {
-      cell: (info) => <span>{txTypeMap[info.getValue()]}</span>,
+      cell: (info) => <span>{TX_TYPE_MAP[info.getValue()]}</span>,
       header: "Transaction Type",
     }),
     columnHelper.accessor((row) => ({ from: row.From, to: row.To }), {
@@ -208,7 +211,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
       cell: (info) => <span>{info.getValue()}</span>,
       header: "Paid Fees",
     }),
-  ], [transactions.length]);
+  ], [transactions.length, columnHelper]);
 
   const internalTransactionColumns = useMemo(() => [
     internalColumnHelper.accessor(() => "", {
@@ -279,7 +282,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
       cell: (info) => <span>{info.getValue() === 1 ? "Success" : "Failure"}</span>,
       header: "Status",
     }),
-  ], [internalt.length]);
+  ], [internalt.length, internalColumnHelper]);
 
   const transactionTable = useReactTable({
     data: formattedTransactions,
@@ -305,7 +308,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
     getPaginationRowModel: getPaginationRowModel(),
   });
 
-  const renderTransactionCard = (row: Row<any>) => {
+  const renderTransactionCard = (row: Row<Transaction & { formattedAmount: string; formattedFees: string }>): JSX.Element => {
     const data = row.original;
 
     return (
@@ -314,10 +317,10 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
           <div className="flex justify-between items-start">
             <div className="space-y-1">
               <div className="text-xs text-gray-400">Transaction Type</div>
-              <div className="text-sm text-white">{txTypeMap[data.TxType]}</div>
+              <div className="text-sm text-white">{TX_TYPE_MAP[data.TxType]}</div>
             </div>
             <div className="px-2 py-1 rounded bg-[#3d3d3d] bg-opacity-40">
-              <span className="text-xs text-[#ffa729]">{inOutMap[data.InOut]}</span>
+              <span className="text-xs text-[#ffa729]">{IN_OUT_MAP[data.InOut]}</span>
             </div>
           </div>
 
@@ -375,7 +378,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps) {
     );
   };
 
-  const renderInternalTransactionCard = (row: Row<any>) => {
+  const renderInternalTransactionCard = (row: Row<InternalTransaction & { formattedValue: string }>): JSX.Element => {
     const data = row.original;
 
     return (

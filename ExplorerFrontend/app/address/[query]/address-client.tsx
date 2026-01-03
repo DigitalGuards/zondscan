@@ -11,13 +11,13 @@ interface AddressClientProps {
     address: string;
 }
 
-export default function AddressClient({ address }: AddressClientProps) {
+export default function AddressClient({ address }: AddressClientProps): JSX.Element {
     const [addressData, setAddressData] = useState<AddressData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        const fetchData = async () => {
+        const fetchData = async (): Promise<void> => {
             try {
                 setIsLoading(true);
                 console.log('Fetching address data:', address);

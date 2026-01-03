@@ -2,7 +2,7 @@ import './globals.css'
 import Sidebar from "./components/Sidebar"
 import Script from 'next/script'
 import Providers from './providers'
-import { Metadata } from 'next';
+import type { Metadata } from 'next';
 import { sharedMetadata } from './lib/seo/metaData';
 import Footer from './components/Footer';
 
@@ -37,7 +37,7 @@ interface RootLayoutProps {
   children: React.ReactNode
 }
 
-export default function RootLayout({ children }: RootLayoutProps) {
+export default function RootLayout({ children }: RootLayoutProps): JSX.Element {
   return (
     <html lang="en" className="dark">
       <head>

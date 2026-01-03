@@ -1,15 +1,15 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 
 interface Props {
-    address: string;
+  address: string;
 }
 
-export default function CopyAddressButton({ address }: Props) {
-    const [copySuccess, setCopySuccess] = useState('');
+export default function CopyAddressButton({ address }: Props): JSX.Element {
+  const [copySuccess, setCopySuccess] = useState('');
 
-    const copyToClipboard = () => {
+  const copyToClipboard = (): void => {
         navigator.clipboard.writeText(address)
             .then(() => {
                 setCopySuccess('Copied!');
@@ -22,16 +22,15 @@ export default function CopyAddressButton({ address }: Props) {
 
     return (
         <div className="inline-block">
-            <button 
+            <button
                 onClick={copyToClipboard}
                 className="inline-flex items-center px-3 py-1.5 rounded-lg
-                          bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
-                          border border-[#3d3d3d] hover:border-[#ffa729]
+                          bg-card-gradient border border-border hover:border-accent
                           transition-all duration-300 group"
             >
                 <svg
                     xmlns="http://www.w3.org/2000/svg"
-                    className="h-4 w-4 mr-1.5 text-[#ffa729]"
+                    className="h-4 w-4 mr-1.5 text-accent"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -52,7 +51,7 @@ export default function CopyAddressButton({ address }: Props) {
                         />
                     )}
                 </svg>
-                <span className="text-sm text-gray-300 group-hover:text-[#ffa729] transition-colors">
+                <span className="text-sm text-gray-300 group-hover:text-accent transition-colors">
                     {copySuccess ? 'Copied!' : 'Copy'}
                 </span>
             </button>

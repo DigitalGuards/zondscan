@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import type { TransactionDetails } from './types';
 import { getConfirmations, getTransactionStatus } from './types';
-import { formatAmount, formatGas, formatNumberWithCommas } from '../../lib/helpers';
+import { formatAmount } from '../../lib/helpers';
 import CopyHashButton from '../../components/CopyHashButton';
 import CopyAddressButton from '../../components/CopyAddressButton';
 
@@ -23,7 +23,7 @@ const formatTimestamp = (timestamp: number): string => {
   return `${month} ${day}, ${year}, ${hours}:${minutes}:${seconds} UTC`;
 };
 
-const AddressDisplay = ({ address, isMobile }: { address: string, isMobile: boolean }) => {
+const AddressDisplay = ({ address, isMobile }: { address: string, isMobile: boolean }): JSX.Element => {
   const displayAddress = isMobile ? `${address.slice(0, 8)}...${address.slice(-6)}` : address;
   
   return (
@@ -50,7 +50,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    const checkScreenSize = () => {
+    const checkScreenSize = (): void => {
       setIsMobile(window.innerWidth < 768);
     };
     
@@ -72,7 +72,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
   const [formattedValue, unit] = formatAmount(transaction.value);
 
   // Calculate paid fees from gas values
-  const calculatePaidFees = () => {
+  const calculatePaidFees = (): string => {
     // Use PaidFees if available
     if (typeof transaction.PaidFees === 'number') {
       return transaction.PaidFees.toFixed(18);

@@ -40,11 +40,11 @@ const faqs = [
   }
 ]
 
-function classNames(...classes: string[]) {
+function classNames(...classes: string[]): string {
   return classes.filter(Boolean).join(' ')
 }
 
-export default function FAQClient() {
+export default function FAQClient(): JSX.Element {
   return (
     <div className="min-h-screen bg-[#1a1a1a] text-gray-300 p-4 md:p-8">
       <div className="max-w-3xl mx-auto">

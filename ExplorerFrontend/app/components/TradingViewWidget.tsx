@@ -6,11 +6,11 @@ declare global {
   }
 }
 
-export default function TradingViewWidget() {
+export default function TradingViewWidget(): JSX.Element {
   const container = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const createWidget = () => {
+    const createWidget = (): void => {
       if (window.TradingView && container.current) {
         new window.TradingView.widget({
           container_id: 'tradingview_qrl',

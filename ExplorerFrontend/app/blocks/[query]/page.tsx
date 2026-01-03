@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { Metadata } from 'next';
+import type { Metadata } from 'next';
 import BlocksClient from './blocks-client';
 import type { BlocksResponse } from './types';
 import config from '../../../config';

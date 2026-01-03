@@ -12,7 +12,7 @@ interface ContractsWrapperProps {
   totalContracts: number;
 }
 
-export default function ContractsWrapper({ initialData, totalContracts }: ContractsWrapperProps) {
+export default function ContractsWrapper({ initialData, totalContracts }: ContractsWrapperProps): JSX.Element {
   return (
     <Suspense fallback={<div>Loading...</div>}>
       <ContractsClient initialData={initialData} totalContracts={totalContracts} />

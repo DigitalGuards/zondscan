@@ -1,7 +1,8 @@
-import React from 'react';
+import type { ReactNode } from 'react';
 import { Group } from '@visx/group';
 import { AreaClosed } from '@visx/shape';
-import { AxisLeft, AxisBottom, AxisScale } from '@visx/axis';
+import { AxisLeft, AxisBottom } from '@visx/axis';
+import type { AxisScale } from '@visx/axis';
 import { LinearGradient } from '@visx/gradient';
 import { curveMonotoneX } from '@visx/curve';
 
@@ -29,8 +30,8 @@ const axisLeftTickLabelProps = {
 };
 
 // accessors
-const getDate = (d: Block) => new Date(parseInt(d.result.timestamp.slice(2), 16) * 1000);
-const getStockValue = (d: Block) => d.result.size;
+const getDate = (d: Block): Date => new Date(parseInt(d.result.timestamp.slice(2), 16) * 1000);
+const getStockValue = (d: Block): number => d.result.size;
 
 export default function AreaChart({
   data,
@@ -57,8 +58,8 @@ export default function AreaChart({
   hideLeftAxis?: boolean;
   top?: number;
   left?: number;
-  children?: React.ReactNode;
-}) {
+  children?: ReactNode;
+}): JSX.Element | null {
   if (width < 10) return null;
   return (
     <Group left={left || margin.left} top={top || margin.top}>

@@ -21,8 +21,16 @@ type PendingTransaction struct {
 	CreatedAt           time.Time `bson:"createdAt" json:"createdAt"`
 }
 
-// PendingTransactionResponse represents the RPC response for pending transactions
+// PendingTransactionResponse represents the RPC response for zond_pendingTransactions
+// Returns a simple array of transactions
 type PendingTransactionResponse struct {
+	Jsonrpc string               `json:"jsonrpc"`
+	Id      int                  `json:"id"`
+	Result  []PendingTransaction `json:"result"`
+}
+
+// LegacyPendingTransactionResponse represents the txpool_content format (not used by Zond)
+type LegacyPendingTransactionResponse struct {
 	Jsonrpc string `json:"jsonrpc"`
 	Id      int    `json:"id"`
 	Result  struct {

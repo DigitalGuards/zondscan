@@ -2,14 +2,13 @@
 
 import React from "react";
 import Link from "next/link";
-import config from "../../config";
 import { toFixed } from "../lib/helpers";
 
 interface RichlistProps {
   richlist: any[];
 }
 
-export default function RichlistClient({ richlist }: RichlistProps) {
+export default function RichlistClient({ richlist }: RichlistProps): JSX.Element {
 
   const safeRichlist = richlist || [];
 
@@ -18,12 +17,12 @@ export default function RichlistClient({ richlist }: RichlistProps) {
   );
 
   React.useEffect(() => {
-    const handleResize = () => setWindowWidth(window.innerWidth);
+    const handleResize = (): void => setWindowWidth(window.innerWidth);
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const renderMobileView = () => (
+  const renderMobileView = (): JSX.Element => (
     <div className="space-y-4">
       {safeRichlist.map((item: any, index: number) => (
         <div
@@ -73,7 +72,7 @@ export default function RichlistClient({ richlist }: RichlistProps) {
     </div>
   );
 
-  const renderDesktopView = () => (
+  const renderDesktopView = (): JSX.Element => (
     <div className="overflow-x-auto">
       <table className="min-w-full">
         <thead>

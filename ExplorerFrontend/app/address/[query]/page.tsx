@@ -1,5 +1,4 @@
-import React from "react";
-import { Metadata } from 'next';
+import type { Metadata } from 'next';
 import AddressView from "./address-view";
 import { sharedMetadata } from '../../lib/seo/metaData';
 import type { AddressData } from "./types";
@@ -83,7 +82,7 @@ async function fetchAddressData(address: string): Promise<AddressData | null> {
     }
 }
 
-export default async function Page({ params }: PageProps) {
+export default async function Page({ params }: PageProps): Promise<JSX.Element> {
     const resolvedParams = await params;
     const address = resolvedParams.query;
     const addressData = await fetchAddressData(address);

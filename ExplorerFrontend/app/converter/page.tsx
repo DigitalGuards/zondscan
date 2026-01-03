@@ -1,4 +1,4 @@
-import { Metadata } from 'next';
+import type { Metadata } from 'next';
 import { sharedMetadata } from '../lib/seo/metaData';
 import ConverterClient from './converter-client';
 
@@ -28,6 +28,6 @@ export const metadata: Metadata = {
   },
 };
 
-export default function QuantaToShorPage() {
+export default function QuantaToShorPage(): JSX.Element {
   return <ConverterClient />;
 }

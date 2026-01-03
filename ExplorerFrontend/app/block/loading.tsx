@@ -1,4 +1,4 @@
-export default function Loading() {
+export default function Loading(): JSX.Element {
   return (
     <div className="p-8">
       <div className="relative overflow-hidden rounded-2xl 

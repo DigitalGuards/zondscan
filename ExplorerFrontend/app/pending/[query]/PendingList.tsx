@@ -1,12 +1,12 @@
 "use client";
 
 import axios from 'axios';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import config from '../../../config';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { formatAmount } from '../../lib/helpers';
-import { PendingTransaction } from '../tx/types';
+import type { PendingTransaction } from '../tx/types';
 
 interface PaginatedResponse {
   // New format fields
@@ -34,7 +34,7 @@ interface TransactionCardProps {
 
 const TransactionCard: React.FC<TransactionCardProps> = ({ transaction }) => {
   // Use UTC to avoid hydration mismatch
-  const formatDateUTC = (timestamp: number) => {
+  const formatDateUTC = (timestamp: number): string => {
     const d = new Date(timestamp * 1000);
     const day = d.getUTCDate().toString().padStart(2, '0');
     const month = (d.getUTCMonth() + 1).toString().padStart(2, '0');
@@ -108,7 +108,7 @@ const fetchPendingTransactions = async (page: number): Promise<PaginatedResponse
   return response.data;
 };
 
-export default function PendingList({ initialData, currentPage }: PendingListProps) {
+export default function PendingList({ initialData, currentPage }: PendingListProps): JSX.Element {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
   const { data, isError, error, refetch, isFetching } = useQuery({
@@ -118,7 +118,7 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
     refetchInterval: 5000,
   });
 
-  const handleRefresh = async () => {
+  const handleRefresh = async (): Promise<void> => {
     setIsRefreshing(true);
     await refetch();
     setLastChecked(new Date());
@@ -145,8 +145,8 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
     // Handle both old and new response formats
     if (data?.result?.pending) {
       // New format
-      Object.entries(data.result.pending).forEach(([address, nonceMap]) => {
-        Object.entries(nonceMap).forEach(([nonce, tx]) => {
+      Object.entries(data.result.pending).forEach(([_address, nonceMap]) => {
+        Object.entries(nonceMap).forEach(([_nonce, tx]) => {
           transactions.push(tx as PendingTransaction);
         });
       });

@@ -23,7 +23,7 @@ func GetPendingTransactions() string {
 
 	rpcReq := models.JsonRPC{
 		Jsonrpc: "2.0",
-		Method:  "txpool_content",
+		Method:  "zond_pendingTransactions",
 		Params:  []interface{}{},
 		ID:      1,
 	}

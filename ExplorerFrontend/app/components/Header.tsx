@@ -1,22 +1,18 @@
 "use client"
 
-import React from "react"
 import { Fragment, useState } from 'react'
 import { Dialog, Disclosure, Popover, Transition } from '@headlessui/react'
 import {
   ArrowPathIcon,
   Bars3Icon,
-  CursorArrowRaysIcon,
   SquaresPlusIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
-import { ChevronDownIcon, PhoneIcon, PlayCircleIcon } from '@heroicons/react/20/solid'
+import { ChevronDownIcon } from '@heroicons/react/20/solid'
 import Link from 'next/link'
 import Image from 'next/image'
 import LookUpIcon from '../../public/lookup.svg'
-import TokenIcon from '../../public/token.svg'
 import PartnerHandshakeIcon from '../../public/partner-handshake-icon.svg'
-import LoadingIcon from '../../public/loading.svg'
 import BlockchainIcon from '../../public/blockchain-icon.svg'
 import ContractIcon from '../../public/contract.svg'
 import QRLFavicon from '../../public/favicon.ico'
@@ -32,11 +28,11 @@ const tools = [
   { name: 'Unit Converter', description: 'Convert QRL <-> Any currency', href: '/converter', icon: ArrowPathIcon, imgSrc: null },
 ]
 
-function classNames(...classes: string[]) {
+function classNames(...classes: string[]): string {
   return classes.filter(Boolean).join(' ')
 }
 
-export default function Header() {
+export default function Header(): JSX.Element {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [IsDropDownBlockchain, setIsDropDownBlockchain] = useState(false);
   const [isDropDownTools, setisDropDownTools] = useState(false);
@@ -159,7 +155,7 @@ export default function Header() {
           <div className="fixed inset-0 z-10" />
           <Dialog.Panel className="fixed inset-y-0 right-0 z-10 w-full overflow-y-auto bg-[#1a1a1a] px-6 py-6 sm:max-w-sm sm:ring-1 sm:ring-gray-900/10">
             <div className="flex items-center justify-between">
-              <Link href="/" className="-m-1.5 p-1.5" onClick={(e) => setMobileMenuOpen(false)}>
+              <Link href="/" className="-m-1.5 p-1.5" onClick={() => setMobileMenuOpen(false)}>
                 <span className="sr-only">Quanta Explorer</span>
                 <Image className="h-8 w-auto" src={QRLFavicon} alt="QRL Favicon" layout="fixed" />
               </Link>

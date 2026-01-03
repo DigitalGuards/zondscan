@@ -69,13 +69,13 @@ const formatTimestamp = (timestamp: string | null | undefined): string => {
   return `${month}/${day}/${year}, ${hours}:${minutes}:${seconds} UTC`;
 };
 
-export default function BlockDetailClient({ blockNumber }: BlockDetailClientProps) {
+export default function BlockDetailClient({ blockNumber }: BlockDetailClientProps): JSX.Element {
   const [blockData, setBlockData] = useState<Block | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchBlock = async () => {
+    const fetchBlock = async (): Promise<void> => {
       try {
         setLoading(true);
         const response = await axios.get(`${config.handlerUrl}/block/${blockNumber}`);
@@ -218,7 +218,7 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
               <h2 className="text-lg font-semibold text-[#ffa729] mb-4">Transactions</h2>
               <div className="space-y-2">
                 {blockData?.transactions && blockData.transactions.length > 0 ? (
-                  blockData.transactions.map((tx, index) => (
+                  blockData.transactions.map((tx) => (
                     <div 
                       key={tx.hash} 
                       className="p-4 rounded-lg bg-[#2d2d2d] border border-[#3d3d3d] hover:border-[#ffa729] transition-colors"

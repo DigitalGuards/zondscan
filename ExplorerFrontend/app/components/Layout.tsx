@@ -1,12 +1,13 @@
-import React, { PropsWithChildren } from "react";
+import type { PropsWithChildren } from "react";
 import Header from "./Header";
 
-const Layout = ({ children }: PropsWithChildren) => {
+const Layout = ({ children }: PropsWithChildren): JSX.Element => {
   return (
     <>
       <Header />
-      <section>{children}</section>;
+      <section>{children}</section>
     </>
   );
 };
+
 export default Layout;

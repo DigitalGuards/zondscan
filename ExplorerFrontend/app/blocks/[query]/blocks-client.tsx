@@ -4,7 +4,7 @@ import React from 'react';
 import axios from 'axios';
 import config from '../../../config';
 import { useQuery } from '@tanstack/react-query';
-import { Block, BlocksResponse } from './types';
+import type { Block, BlocksResponse } from './types';
 import { useRouter } from 'next/navigation';
 import SearchBar from '../../components/SearchBar';
 
@@ -14,7 +14,7 @@ interface BlockCardProps {
 
 const BlockCard: React.FC<BlockCardProps> = ({ blockData }) => {
   // Format date using UTC to avoid hydration mismatch
-  const formatDate = (timestamp: number) => {
+  const formatDate = (timestamp: number): string => {
     const date = new Date(timestamp * 1000);
     const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
     const day = date.getUTCDate().toString().padStart(2, '0');
@@ -26,7 +26,7 @@ const BlockCard: React.FC<BlockCardProps> = ({ blockData }) => {
   };
 
   // Truncate hash to show first 6 and last 4 characters
-  const truncateHash = (hash: string) => {
+  const truncateHash = (hash: string): string => {
     if (!hash) return '';
     return `${hash.substring(0, 6)}...${hash.substring(hash.length - 4)}`;
   };
@@ -89,7 +89,7 @@ const BlockCard: React.FC<BlockCardProps> = ({ blockData }) => {
   );
 };
 
-const fetchBlocks = async (page: string) => {
+const fetchBlocks = async (page: string): Promise<BlocksResponse> => {
   const response = await axios.get<BlocksResponse>(`${config.handlerUrl}/blocks?page=${page}&limit=5`);
   return response.data;
 };
@@ -99,7 +99,7 @@ interface BlocksClientProps {
   initialPage: string;
 }
 
-export default function BlocksClient({ initialData, initialPage }: BlocksClientProps) {
+export default function BlocksClient({ initialData, initialPage }: BlocksClientProps): JSX.Element {
   const router = useRouter();
   const currentPage = parseInt(initialPage);
 
@@ -115,12 +115,12 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
   // Limit total pages to 300 and calculate based on 5 blocks per page
   const totalPages = data ? Math.min(Math.round(data.total / 5), 300) : 300;
 
-  const goToNextPage = () => {
+  const goToNextPage = (): void => {
     const nextPage = Math.min(currentPage + 1, totalPages);
     router.push(`/blocks/${nextPage}`);
   };
 
-  const goToPreviousPage = () => {
+  const goToPreviousPage = (): void => {
     const prevPage = Math.max(currentPage - 1, 1);
     router.push(`/blocks/${prevPage}`);
   };

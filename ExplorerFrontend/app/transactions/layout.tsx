@@ -1,13 +1,17 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 export default function TransactionsLayout({
   children,
 }: {
-  children: React.ReactNode;
-}) {
+  children: ReactNode;
+}): JSX.Element {
   return (
-    <div className="transactions-layout">
-      {children}
+    <div className="page-container">
+      <div className="page-content">
+        {children}
+      </div>
     </div>
   );
 }
