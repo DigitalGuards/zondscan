@@ -198,7 +198,7 @@ EOL
 
     # Install dependencies
     print_status "Installing frontend dependencies..."
-    npm install || print_error "Failed to install frontend dependencies"
+    npm install --legacy-peer-deps || print_error "Failed to install frontend dependencies"
 
     # Update browserslist database
     print_status "Updating browserslist database..."

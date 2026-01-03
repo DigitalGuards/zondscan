@@ -51,7 +51,7 @@ read -p "Do you want to clean install dependencies? (y/n): " clean_install
 if [[ "$clean_install" =~ ^[Yy]$ ]]; then
     echo -e "${YELLOW}Clean installing dependencies...${NC}"
     rm -rf node_modules package-lock.json
-    npm install
+    npm install --legacy-peer-deps
     if [ $? -ne 0 ]; then
         echo -e "${RED}Error: npm install failed${NC}"
         exit 1
