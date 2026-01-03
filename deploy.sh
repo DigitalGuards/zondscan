@@ -70,7 +70,7 @@ check_dependencies() {
 select_node() {
     print_status "Select Zond node to use:"
     PS3="Please choose the node (1-3): "
-    options=("Local node (127.0.0.1:8545)" "Testnet Remote node (REDACTED:8545)" "Custom node (enter URL manually)")
+    options=("Local node (127.0.0.1:8545)" "Testnet Remote node (qrlwallet.com)" "Custom node (enter URL manually)")
     select opt in "${options[@]}"
     do
         case $opt in
@@ -78,8 +78,8 @@ select_node() {
                 NODE_URL="http://127.0.0.1:8545"
                 break
                 ;;
-            "Testnet Remote node (REDACTED:8545)")
-                NODE_URL="http://REDACTED:8545"
+            "Testnet Remote node (qrlwallet.com)")
+                NODE_URL="https://qrlwallet.com/api/zond-rpc/testnet"
                 break
                 ;;
             "Custom node (enter URL manually)")
