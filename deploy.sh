@@ -67,11 +67,10 @@ check_dependencies() {
 
 
 # Prompt for node selection
-# Prompt for node selection
 select_node() {
     print_status "Select Zond node to use:"
-    PS3="Please choose the node (1-2): "
-    options=("Local node (127.0.0.1:8545)" "Testnet Remote node (REDACTED:8545)")
+    PS3="Please choose the node (1-3): "
+    options=("Local node (127.0.0.1:8545)" "Testnet Remote node (qrlwallet.com)" "Custom node (enter URL manually)")
     select opt in "${options[@]}"
     do
         case $opt in
@@ -79,9 +78,27 @@ select_node() {
                 NODE_URL="http://127.0.0.1:8545"
                 break
                 ;;
-            "Testnet Remote node (REDACTED:8545)")
-                NODE_URL="http://REDACTED:8545"
+            "Testnet Remote node (qrlwallet.com)")
+                NODE_URL="https://qrlwallet.com/api/zond-rpc/testnet"
                 break
+                ;;
+            "Custom node (enter URL manually)")
+                while true; do
+                    read -p "Enter custom node URL (e.g., http://192.168.1.100:8545): " CUSTOM_NODE_URL
+
+                    # Basic validation: check if URL starts with http:// or https://
+                    if [[ $CUSTOM_NODE_URL =~ ^https?:// ]]; then
+                        NODE_URL="$CUSTOM_NODE_URL"
+                        print_status "Custom node URL set to: $NODE_URL"
+                        break 2
+                    else
+                        print_error "Invalid URL format. Please use http:// or https:// prefix."
+                        read -p "Try again? (y/n): " TRY_AGAIN
+                        if [[ ! $TRY_AGAIN =~ ^[Yy]$ ]]; then
+                            print_error "Node URL is required. Exiting..."
+                        fi
+                    fi
+                done
                 ;;
             *) echo "Invalid option. Please try again.";;
         esac
@@ -144,7 +161,7 @@ setup_backendapi() {
         cat > .env << EOL
 GIN_MODE=release
 MONGOURI=mongodb://localhost:27017/qrldata-z?readPreference=primary
-HTTP_PORT=:8080
+HTTP_PORT=:8081
 NODE_URL=$NODE_URL
 EOL
     fi
@@ -187,7 +204,7 @@ server {
     }
 
     location /api/ {
-        proxy_pass http://127.0.0.1:8080/;
+        proxy_pass http://127.0.0.1:8081/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -235,7 +252,7 @@ server {
     }
 
     location /api/ {
-        proxy_pass http://127.0.0.1:8080/;
+        proxy_pass http://127.0.0.1:8081/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -294,7 +311,7 @@ setup_frontend() {
         cat > .env << EOL
 DATABASE_URL=mongodb://localhost:27017/qrldata-z?readPreference=primary
 DOMAIN_NAME=$PUBLIC_URL
-HANDLER_URL=http://127.0.0.1:8080
+HANDLER_URL=http://127.0.0.1:8081
 NEXT_PUBLIC_HANDLER_URL=$PUBLIC_URL/api
 EOL
     fi
@@ -307,18 +324,18 @@ EOL
         cat > .env.local << EOL
 DATABASE_URL=mongodb://localhost:27017/qrldata-z?readPreference=primary
 DOMAIN_NAME=$PUBLIC_URL
-HANDLER_URL=http://127.0.0.1:8080
+HANDLER_URL=http://127.0.0.1:8081
 NEXT_PUBLIC_HANDLER_URL=$PUBLIC_URL/api
 EOL
     fi
 
     # Install dependencies
     print_status "Installing frontend dependencies..."
-    npm install || print_error "Failed to install frontend dependencies"
+    npm install --legacy-peer-deps || print_error "Failed to install frontend dependencies"
 
     # Update browserslist database
     print_status "Updating browserslist database..."
-    npx browserslist@latest --update-db || print_error "Failed to update browserslist"
+    npx update-browserslist-db@latest || print_error "Failed to update browserslist"
 
     # Build production frontend
     print_status "Building production frontend..."
@@ -389,7 +406,7 @@ main() {
 
     # Check if required ports are available
     check_port 3000
-    check_port 8080
+    check_port 8081
 
     # Clone and setup
     clone_repo
@@ -414,7 +431,7 @@ main() {
     print_status "Deployment complete! Services are starting up..."
     echo -e "\nAccess points:"
     echo "- Frontend: http://localhost:3000"
-    echo "- Server API: http://localhost:8080"
+    echo "- Server API: http://localhost:8081"
     echo -e "\nMake sure you have:"
     echo "1. MongoDB running on localhost:27017"
     echo "2. Zond node accessible at $NODE_URL"

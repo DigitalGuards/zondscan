@@ -101,7 +101,7 @@ func ReturnRankAddress(address string) (int64, error) {
 	// Normalize address by converting to lowercase
 	addressHex := strings.ToLower(address)
 
-	query, err := hex.DecodeString(strings.TrimPrefix(addressHex, "Z"))
+	query, err := hex.DecodeString(strings.TrimPrefix(addressHex, "z"))
 	if err != nil {
 		fmt.Println(err)
 	}

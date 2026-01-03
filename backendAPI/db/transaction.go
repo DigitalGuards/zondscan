@@ -308,7 +308,9 @@ func ReturnTransactions(address string, page, limit int) ([]models.TransactionBy
 		opts.SetLimit(int64(limit))
 	}
 
-	decoded, err := hex.DecodeString(strings.TrimPrefix(address, "Z"))
+	// Normalize address to handle both uppercase and lowercase Z prefix
+	normalizedAddress := strings.TrimPrefix(strings.TrimPrefix(address, "Z"), "z")
+	decoded, err := hex.DecodeString(normalizedAddress)
 	if err != nil {
 		fmt.Println(err)
 	}

@@ -1,5 +1,3 @@
-'use client';
-
 export function decodeToHex(input, format) {
   const decoded = atob(input);
   let hex = '';

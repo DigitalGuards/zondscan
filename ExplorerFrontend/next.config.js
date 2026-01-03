@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   distDir: 'build',
+  // Turbopack configuration (empty for now, may need buffer polyfill in future)
+  turbopack: {},
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {
