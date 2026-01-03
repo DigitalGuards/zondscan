@@ -76,8 +76,8 @@ check_mongodb() {
 # Prompt for node selection
 select_node() {
     print_status "Select Zond node to use:"
-    PS3="Please choose the node (1-2): "
-    options=("Local node (127.0.0.1:8545)" "Testnet Remote node (REDACTED:8545)")
+    PS3="Please choose the node (1-3): "
+    options=("Local node (127.0.0.1:8545)" "Testnet Remote node (REDACTED:8545)" "Custom node (enter URL manually)")
     select opt in "${options[@]}"
     do
         case $opt in
@@ -88,6 +88,24 @@ select_node() {
             "Testnet Remote node (REDACTED:8545)")
                 NODE_URL="http://REDACTED:8545"
                 break
+                ;;
+            "Custom node (enter URL manually)")
+                while true; do
+                    read -p "Enter custom node URL (e.g., http://192.168.1.100:8545): " CUSTOM_NODE_URL
+
+                    # Basic validation: check if URL starts with http:// or https://
+                    if [[ $CUSTOM_NODE_URL =~ ^https?:// ]]; then
+                        NODE_URL="$CUSTOM_NODE_URL"
+                        print_status "Custom node URL set to: $NODE_URL"
+                        break 2
+                    else
+                        print_error "Invalid URL format. Please use http:// or https:// prefix."
+                        read -p "Try again? (y/n): " TRY_AGAIN
+                        if [[ ! $TRY_AGAIN =~ ^[Yy]$ ]]; then
+                            print_error "Node URL is required. Exiting..."
+                        fi
+                    fi
+                done
                 ;;
             *) echo "Invalid option. Please try again.";;
         esac
