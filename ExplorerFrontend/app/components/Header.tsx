@@ -1,7 +1,7 @@
 "use client"
 
-import { Fragment, useState } from 'react'
-import { Dialog, Disclosure, Popover, Transition } from '@headlessui/react'
+import { useState } from 'react'
+import { Dialog, Disclosure, Popover } from '@headlessui/react'
 import {
   ArrowPathIcon,
   Bars3Icon,
@@ -68,17 +68,8 @@ export default function Header(): JSX.Element {
                 <ChevronDownIcon className="h-5 w-5 flex-none text-gray-400" aria-hidden="true" />
               </div>
 
-              <Transition
-                show={IsDropDownBlockchain}
-                as={Fragment}
-                enter="transition ease-out duration-200"
-                enterFrom="opacity-0 translate-y-1"
-                enterTo="opacity-100 translate-y-0"
-                leave="transition ease-in duration-150"
-                leaveFrom="opacity-100 translate-y-0"
-                leaveTo="opacity-0 translate-y-1"
-              >
-                <div className="absolute -left-8 top-full z-10 w-screen max-w-md overflow-hidden rounded-xl bg-[#2d2d2d] shadow-lg">
+              {IsDropDownBlockchain && (
+                <div className="absolute -left-8 top-full z-10 w-screen max-w-md overflow-hidden rounded-xl bg-[#2d2d2d] shadow-lg transition ease-out duration-200">
                   <div className="p-4">
                     {blockchain.map((item) => (
                       <Link key={item.name} href={item.href} passHref>
@@ -99,7 +90,7 @@ export default function Header(): JSX.Element {
                     ))}
                   </div>
                 </div>
-              </Transition>
+              )}
             </div>
 
             <div
@@ -112,24 +103,15 @@ export default function Header(): JSX.Element {
                 <ChevronDownIcon className="h-5 w-5 flex-none text-gray-400" aria-hidden="true" />
               </div>
 
-              <Transition
-                show={isDropDownTools}
-                as={Fragment}
-                enter="transition ease-out duration-200"
-                enterFrom="opacity-0 translate-y-1"
-                enterTo="opacity-100 translate-y-0"
-                leave="transition ease-in duration-150"
-                leaveFrom="opacity-100 translate-y-0"
-                leaveTo="opacity-0 translate-y-1"
-              >
-                <div className="absolute -left-8 top-full z-10 w-screen max-w-md overflow-hidden rounded-xl bg-[#2d2d2d] shadow-lg">
+              {isDropDownTools && (
+                <div className="absolute -left-8 top-full z-10 w-screen max-w-md overflow-hidden rounded-xl bg-[#2d2d2d] shadow-lg transition ease-out duration-200">
                   <div className="p-4">
                     {tools.map((item) => (
                       <Link key={item.name} href={item.href} passHref>
                         <p className="group relative flex items-center gap-x-6 rounded-lg p-4 text-sm leading-6 hover:bg-[#3d3d3d] transition-colors w-full">
                           <div className="flex h-11 w-11 flex-none items-center justify-center rounded-lg bg-[#1a1a1a] group-hover:bg-[#2d2d2d]">
                             {item.imgSrc ? (
-                              <Image src={item.imgSrc} width={24} height={24} alt={item.name} layout="fixed" />
+                              <Image src={item.imgSrc} width={24} height={24} alt={item.name} />
                             ) : (
                               item.icon && <item.icon className="h-6 w-6 text-gray-300 group-hover:text-[#ffa729]" aria-hidden="true" />
                             )}
@@ -143,7 +125,7 @@ export default function Header(): JSX.Element {
                     ))}
                   </div>
                 </div>
-              </Transition>
+              )}
             </div>
 
             <Link href="/richlist" className="text-sm font-semibold leading-6 text-gray-300 hover:text-[#ffa729] transition-colors">
