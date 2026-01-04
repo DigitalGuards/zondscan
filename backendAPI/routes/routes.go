@@ -506,7 +506,14 @@ func UserRoute(router *gin.Engine) {
 		limit, _ := strconv.ParseInt(c.DefaultQuery("limit", "10"), 10, 64)
 		search := c.Query("search")
 
-		query, total, err := db.ReturnContracts(page, limit, search)
+		// Parse isToken filter (optional)
+		var isTokenFilter *bool
+		if isTokenParam := c.Query("isToken"); isTokenParam != "" {
+			isToken := isTokenParam == "true"
+			isTokenFilter = &isToken
+		}
+
+		query, total, err := db.ReturnContracts(page, limit, search, isTokenFilter)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": fmt.Sprintf("Failed to fetch contracts: %v", err),

@@ -13,7 +13,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-func ReturnContracts(page int64, limit int64, search string) ([]models.ContractInfo, int64, error) {
+func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool) ([]models.ContractInfo, int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -23,17 +23,29 @@ func ReturnContracts(page int64, limit int64, search string) ([]models.ContractI
 	// Base filter
 	filter := bson.D{}
 
+	// Add isToken filter if specified
+	if isTokenFilter != nil {
+		filter = append(filter, bson.E{Key: "isToken", Value: *isTokenFilter})
+	}
+
 	// Add search if provided, using correct field names
 	if search != "" {
 		// Normalize the search address to lowercase for case-insensitive lookup
 		normalizedSearch := strings.ToLower(search)
 
 		// Zond addresses start with 'Z'. Search assumes the provided string is the correct format.
-		filter = bson.D{
+		searchFilter := bson.D{
 			{Key: "$or", Value: bson.A{
 				bson.D{{Key: "address", Value: normalizedSearch}},        // Match contract address
 				bson.D{{Key: "creatorAddress", Value: normalizedSearch}}, // Match creator address
+				bson.D{{Key: "name", Value: bson.D{{Key: "$regex", Value: normalizedSearch}, {Key: "$options", Value: "i"}}}}, // Match token name
 			}},
+		}
+		// Combine with existing filter
+		if len(filter) > 0 {
+			filter = bson.D{{Key: "$and", Value: bson.A{filter, searchFilter}}}
+		} else {
+			filter = searchFilter
 		}
 	}
 

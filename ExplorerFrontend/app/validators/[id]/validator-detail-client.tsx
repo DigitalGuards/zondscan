@@ -102,7 +102,7 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto p-4 lg:p-6">
+      <div className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
         <div className="animate-pulse space-y-6">
           <div className="h-8 bg-gray-700 rounded w-1/3"></div>
           <div className="bg-[#2d2d2d] rounded-xl p-6 space-y-4">
@@ -117,7 +117,7 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
 
   if (error) {
     return (
-      <div className="max-w-4xl mx-auto p-4 lg:p-6">
+      <div className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
         <div className="bg-red-900/20 border border-red-800 rounded-xl p-6 text-center">
           <h2 className="text-xl font-semibold text-red-400 mb-2">Error</h2>
           <p className="text-gray-400">{error}</p>
@@ -139,7 +139,7 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
   const [amount, unit] = formatValidatorBalance(validator.effectiveBalance);
 
   return (
-    <div className="max-w-4xl mx-auto p-4 lg:p-6">
+    <div className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
       {/* Back Button */}
       <Link
         href="/validators"
@@ -154,7 +154,7 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">
+          <h1 className="text-xl sm:text-2xl font-bold text-[#ffa729]">
             Validator #{validator.index}
           </h1>
           <p className="text-gray-400 mt-1">
@@ -203,7 +203,7 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
       {/* Details Section */}
       <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] overflow-hidden">
         <div className="p-4 border-b border-[#3d3d3d]">
-          <h2 className="text-lg font-semibold text-white">Validator Details</h2>
+          <h2 className="text-lg font-semibold text-[#ffa729]">Validator Details</h2>
         </div>
         <div className="divide-y divide-[#3d3d3d]">
           {/* Public Key */}

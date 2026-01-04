@@ -1,207 +1,103 @@
-"use client"
+'use client';
 
-import * as React from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
-import Box from '@mui/material/Box';
 import axios from 'axios';
-import config from '../../config.js';
+import config from '../../config';
 
 interface ContractData {
-  _id: string;  // MongoDB ObjectId
-  creatorAddress: string;     // Changed from contractCreatorAddress
-  address: string;            // Changed from contractAddress
-  name?: string;              // Changed from tokenName
-  symbol?: string;            // Changed from tokenSymbol
-  decimals?: number;          // Changed from tokenDecimals
+  _id: string;
+  creatorAddress: string;
+  address: string;
+  name?: string;
+  symbol?: string;
+  decimals?: number;
+  totalSupply?: string;
+  creationBlockNumber?: string;
   isToken: boolean;
 }
 
 interface ContractsClientProps {
-  initialData: any[];
+  initialData: ContractData[];
   totalContracts: number;
 }
 
-const ITEMS_PER_PAGE = 10;
+type TabType = 'tokens' | 'contracts';
 
-const truncateMiddle = (str: string, startChars = 6, endChars = 6): string => {
-  if (!str) return '';
-  if (str.length <= startChars + endChars) return str;
-  return `${str.slice(0, startChars)}...${str.slice(-endChars)}`;
-};
+const ITEMS_PER_PAGE = 15;
 
-function Pagination({
-  currentPage,
-  totalPages,
-  onPageChange
-}: {
-  currentPage: number;
-  totalPages: number;
-  onPageChange: (page: number) => void;
-}): JSX.Element {
-  return (
-    <div className="flex justify-center gap-4 mt-6">
-      <button
-        onClick={() => onPageChange(currentPage - 1)}
-        disabled={currentPage === 0}
-        className="px-4 py-2 rounded-lg bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] text-white border border-[#3d3d3d] hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d] transition-all duration-300"
-      >
-        Previous
-      </button>
-      <span className="px-4 py-2 text-white bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-lg border border-[#3d3d3d]">
-        Page {currentPage + 1} of {totalPages}
-      </span>
-      <button
-        onClick={() => onPageChange(currentPage + 1)}
-        disabled={currentPage >= totalPages - 1}
-        className="px-4 py-2 rounded-lg bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] text-white border border-[#3d3d3d] hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d] transition-all duration-300"
-      >
-        Next
-      </button>
-    </div>
-  );
-}
+// Format total supply (uses 10^decimals)
+function formatTotalSupply(supply: string | undefined, decimals: number | undefined): string {
+  if (!supply || supply === '0') return '0';
+  try {
+    const value = BigInt(supply);
+    const divisor = BigInt(10 ** (decimals || 18));
+    const formatted = Number(value) / Number(divisor);
 
-function CustomTable({ data }: { data: ContractData[] }): JSX.Element {
-  const [windowWidth, setWindowWidth] = React.useState(typeof window !== 'undefined' ? window.innerWidth : 0);
-
-  React.useEffect(() => {
-    const handleResize = (): void => setWindowWidth(window.innerWidth);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // Generate unique keys for each row
-  const rows = React.useMemo(() => 
-    data.map((row, index) => ({
-      ...row,
-      key: row._id || `contract-${index}` // Ensure each row has a unique key
-    }))
-  , [data]);
-
-  if (windowWidth < 768) {
-    return (
-      <div className="space-y-4">
-        {rows.map((row) => (
-          <div key={row.key} className="p-4 rounded-lg border border-[#3d3d3d] bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]">
-            <div className="space-y-2">
-              <div>
-                <span className="text-[#ffa729] text-sm">Contract Address:</span>
-                <Link href={`/address/${row.address}`} className="ml-2 text-white hover:text-[#ffa729] text-sm break-all">
-                  {truncateMiddle(row.address)}
-                </Link>
-              </div>
-              <div>
-                <span className="text-[#ffa729] text-sm">Creator:</span>
-                <Link href={`/address/${row.creatorAddress}`} className="ml-2 text-white hover:text-[#ffa729] text-sm break-all">
-                  {truncateMiddle(row.creatorAddress)}
-                </Link>
-              </div>
-              <div>
-                <span className="text-[#ffa729] text-sm">Token Name:</span>
-                <span className="ml-2 text-white text-sm break-all">{row.name}</span>
-              </div>
-              <div>
-                <span className="text-[#ffa729] text-sm">Token Symbol:</span>
-                <span className="ml-2 text-white text-sm break-all">{row.symbol}</span>
-              </div>
-              <div>
-                <span className="text-[#ffa729] text-sm">Token Decimals:</span>
-                <span className="ml-2 text-white text-sm break-all">{row.decimals}</span>
-              </div>
-              <div>
-                <span className="text-[#ffa729] text-sm">Is Token:</span>
-                <span className="ml-2 text-white text-sm break-all">{row.isToken ? 'Yes' : 'No'}</span>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
+    if (formatted >= 1_000_000_000) {
+      return (formatted / 1_000_000_000).toFixed(2) + 'B';
+    } else if (formatted >= 1_000_000) {
+      return (formatted / 1_000_000).toFixed(2) + 'M';
+    } else if (formatted >= 1_000) {
+      return (formatted / 1_000).toFixed(2) + 'K';
+    } else {
+      return formatted.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    }
+  } catch {
+    return '0';
   }
-
-  return (
-    <div className="overflow-x-auto rounded-lg border border-[#3d3d3d] bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]">
-      <table className="min-w-full">
-        <thead>
-          <tr className="border-b border-[#3d3d3d]">
-            <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Contract Address</th>
-            <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Creator</th>
-            <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Token Name</th>
-            <th className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Token Symbol</th>
-            <th className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Token Decimals</th>
-            <th className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">Is Token</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.key} className="border-b border-[#3d3d3d] hover:bg-[rgba(255,167,41,0.05)] transition-colors">
-              <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap">
-                <Link href={`/address/${row.address}`} className="text-[#ffa729] hover:text-[#ffb954] transition-colors">
-                  {truncateMiddle(row.address, 8, 8)}
-                </Link>
-              </td>
-              <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap">
-                <Link href={`/address/${row.creatorAddress}`} className="text-[#ffa729] hover:text-[#ffb954] transition-colors">
-                  {truncateMiddle(row.creatorAddress, 8, 8)}
-                </Link>
-              </td>
-              <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{row.name}</td>
-              <td className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{row.symbol}</td>
-              <td className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{row.decimals}</td>
-              <td className="hidden md:table-cell px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">{row.isToken ? 'Yes' : 'No'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
 }
 
-function SearchInput({ value, onChange }: { value: string; onChange: (value: string) => void }): JSX.Element {
-  return (
-    <div className="relative mb-6">
-      <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-        <svg className="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20">
-          <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z"/>
-        </svg>
-      </div>
-      <input
-        type="search"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="block w-full p-4 pl-10 text-sm text-white border border-[#3d3d3d] rounded-lg 
-                  bg-[#2d2d2d] hover:border-[#4d4d4d] focus:ring-1 focus:ring-[#ffa729] focus:border-[#ffa729] 
-                  placeholder-gray-400 outline-none transition-colors"
-        placeholder="Search by contract address or token name"
-      />
-    </div>
-  );
+// Format block number from hex
+function formatBlockNumber(blockNum: string | undefined): string {
+  if (!blockNum) return '-';
+  try {
+    if (blockNum.startsWith('0x')) {
+      return parseInt(blockNum, 16).toLocaleString();
+    }
+    return parseInt(blockNum).toLocaleString();
+  } catch {
+    return '-';
+  }
 }
 
-export default function ContractsClient({ initialData, totalContracts }: ContractsClientProps): JSX.Element {
-  const [searchQuery, setSearchQuery] = React.useState('');
-  const [currentPage, setCurrentPage] = React.useState(0);
-  const [contracts, setContracts] = React.useState<ContractData[]>(initialData);
-  const [loading, setLoading] = React.useState(false);
-  const [total, setTotal] = React.useState(totalContracts);
+// Truncate address for display
+function truncateAddress(addr: string, start = 8, end = 6): string {
+  if (!addr) return '';
+  if (addr.length <= start + end) return addr;
+  return `${addr.slice(0, start)}...${addr.slice(-end)}`;
+}
 
-  const fetchContracts = React.useCallback(async (page: number, search: string) => {
+export default function ContractsClient({ initialData, totalContracts }: ContractsClientProps) {
+  const [activeTab, setActiveTab] = useState<TabType>('tokens');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(0);
+  const [contracts, setContracts] = useState<ContractData[]>(initialData);
+  const [loading, setLoading] = useState(false);
+  const [total, setTotal] = useState(totalContracts);
+
+  const fetchContracts = useCallback(async (page: number, search: string, isToken: boolean | null) => {
     try {
       setLoading(true);
-      // Remove '0x' prefix if present and convert to lowercase
       const cleanSearch = search ? search.toLowerCase().replace(/^0x/, '') : undefined;
-      
-      const response = await axios.get(`${config.handlerUrl}/contracts`, {
-        params: {
-          page,
-          limit: ITEMS_PER_PAGE,
-          search: cleanSearch
-        }
-      });
-      
-      console.log('API response:', response.data);
+
+      const params: Record<string, any> = {
+        page,
+        limit: ITEMS_PER_PAGE,
+      };
+
+      if (cleanSearch) {
+        params.search = cleanSearch;
+      }
+
+      // Filter by isToken based on active tab
+      if (isToken !== null) {
+        params.isToken = isToken;
+      }
+
+      const response = await axios.get(`${config.handlerUrl}/contracts`, { params });
+
       if (response.data?.response) {
-        // Store the raw response data - will be properly transformed in the useMemo
         setContracts(response.data.response);
         setTotal(response.data.total || 0);
       }
@@ -214,72 +110,291 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
     }
   }, []);
 
-  // Single effect to handle both search and pagination
-  React.useEffect(() => {
-    // Skip initial fetch if we have initialData and no search
-    if (initialData.length > 0 && !searchQuery && currentPage === 0) {
-      return;
-    }
-
+  // Fetch when tab, search, or page changes
+  useEffect(() => {
+    const isToken = activeTab === 'tokens' ? true : false;
     const timer = setTimeout(() => {
-      fetchContracts(currentPage, searchQuery);
-    }, searchQuery ? 300 : 0); // Only debounce when searching
+      fetchContracts(currentPage, searchQuery, isToken);
+    }, searchQuery ? 300 : 0);
 
     return () => clearTimeout(timer);
-  }, [searchQuery, currentPage, fetchContracts, initialData.length]);
+  }, [activeTab, searchQuery, currentPage, fetchContracts]);
 
-  const transformedData = React.useMemo(() => {
-    console.log('Raw contracts:', contracts);
-    return contracts.map((item: any, index: number) => {
-      console.log('Raw item before transform:', item);
-      const transformed = {
-        _id: item._id || `contract-${index}`,
-        creatorAddress: item.creatorAddress || '',
-        address: item.address || '',
-        name: item.name || '',
-        symbol: item.symbol || '',
-        decimals: item.decimals,
-        isToken: item.isToken || false
-      };
-      console.log('Transformed item:', transformed);
-      return transformed;
-    });
-  }, [contracts]);
+  // Reset page when tab or search changes
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [activeTab, searchQuery]);
 
   const totalPages = Math.max(1, Math.ceil(total / ITEMS_PER_PAGE));
 
+  const TabButton = ({ tab, label, count }: { tab: TabType; label: string; count?: number }) => (
+    <button
+      onClick={() => setActiveTab(tab)}
+      className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+        activeTab === tab
+          ? 'bg-[#ffa729] text-black'
+          : 'bg-[#2d2d2d] text-gray-300 hover:bg-[#3d3d3d]'
+      }`}
+    >
+      {label}
+      {count !== undefined && (
+        <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
+          activeTab === tab ? 'bg-black/20' : 'bg-[#1f1f1f]'
+        }`}>
+          {count}
+        </span>
+      )}
+    </button>
+  );
+
   return (
-    <Box className="p-4">
-      <SearchInput 
-        value={searchQuery} 
-        onChange={(value) => {
-          setSearchQuery(value);
-          setCurrentPage(0); // Reset page when searching
-        }}
-      />
+    <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-[#ffa729] mb-2">Smart Contracts</h1>
+        <p className="text-gray-400">Browse deployed tokens and smart contracts on the QRL Zond network</p>
+      </div>
 
-      {loading ? (
-        <div className="flex justify-center items-center py-8">
-          Loading...
+      {/* Tabs */}
+      <div className="flex gap-2 mb-6">
+        <TabButton tab="tokens" label="Tokens" />
+        <TabButton tab="contracts" label="All Contracts" />
+      </div>
+
+      {/* Search */}
+      <div className="mb-6">
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+            <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <input
+            type="text"
+            placeholder={activeTab === 'tokens' ? 'Search by token name or address...' : 'Search by contract address...'}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full p-3 pl-10 bg-[#2d2d2d] border border-[#3d3d3d] rounded-lg text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#ffa729] focus:border-transparent"
+          />
         </div>
-      ) : transformedData.length > 0 ? (
-        <CustomTable data={transformedData} />
-      ) : (
-        <div className="text-center py-8 text-gray-400">
-          No contracts found
+      </div>
+
+      {/* Results Count */}
+      <div className="mb-4 text-sm text-gray-400">
+        {loading ? 'Loading...' : `${total} ${activeTab === 'tokens' ? 'tokens' : 'contracts'} found`}
+      </div>
+
+      {/* Content */}
+      <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] overflow-hidden">
+        {loading ? (
+          <div className="p-4 space-y-4">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-16 bg-gray-700/30 rounded animate-pulse" />
+            ))}
+          </div>
+        ) : contracts.length === 0 ? (
+          <div className="p-8 text-center text-gray-400">
+            {activeTab === 'tokens' ? 'No tokens found' : 'No contracts found'}
+          </div>
+        ) : activeTab === 'tokens' ? (
+          <TokensTable contracts={contracts} />
+        ) : (
+          <ContractsTable contracts={contracts} />
+        )}
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && !loading && (
+        <div className="mt-6 flex flex-wrap justify-center items-center gap-2">
+          <button
+            onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
+            disabled={currentPage === 0}
+            className="px-3 py-1.5 rounded-lg bg-[#1f1f1f] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d] text-sm"
+          >
+            Previous
+          </button>
+
+          <span className="text-sm text-gray-400 mx-2">
+            Page {currentPage + 1} of {totalPages}
+          </span>
+
+          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+            let pageNum;
+            if (totalPages <= 5) {
+              pageNum = i;
+            } else if (currentPage <= 2) {
+              pageNum = i;
+            } else if (currentPage >= totalPages - 3) {
+              pageNum = totalPages - 5 + i;
+            } else {
+              pageNum = currentPage - 2 + i;
+            }
+
+            return (
+              <button
+                key={i}
+                onClick={() => setCurrentPage(pageNum)}
+                className={`w-8 h-8 rounded-lg text-sm ${
+                  currentPage === pageNum
+                    ? 'bg-[#ffa729] text-black'
+                    : 'bg-[#1f1f1f] text-gray-300 hover:bg-[#3d3d3d]'
+                }`}
+              >
+                {pageNum + 1}
+              </button>
+            );
+          })}
+
+          <button
+            onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
+            disabled={currentPage >= totalPages - 1}
+            className="px-3 py-1.5 rounded-lg bg-[#1f1f1f] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d] text-sm"
+          >
+            Next
+          </button>
         </div>
       )}
+    </div>
+  );
+}
 
-      {totalPages > 1 && (
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={(page) => {
-            setCurrentPage(page);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-        />
-      )}
-    </Box>
+// Tokens Table Component
+function TokensTable({ contracts }: { contracts: ContractData[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-[#3d3d3d]">
+        <thead className="bg-[#2d2d2d]/50">
+          <tr>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Token
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Contract Address
+            </th>
+            <th className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Decimals
+            </th>
+            <th className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Total Supply
+            </th>
+            <th className="hidden lg:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Creator
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[#3d3d3d]">
+          {contracts.map((contract, index) => (
+            <tr key={contract._id || index} className="hover:bg-[#2d2d2d]/30">
+              <td className="px-4 py-4 whitespace-nowrap">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#ffa729] to-[#ff8c00] flex items-center justify-center text-black font-bold text-sm">
+                    {contract.symbol ? contract.symbol.charAt(0) : '?'}
+                  </div>
+                  <div>
+                    <div className="text-white font-medium">{contract.name || 'Unknown Token'}</div>
+                    <div className="text-gray-500 text-sm">{contract.symbol || '-'}</div>
+                  </div>
+                </div>
+              </td>
+              <td className="px-4 py-4 whitespace-nowrap">
+                <Link
+                  href={`/address/${contract.address}`}
+                  className="text-[#ffa729] hover:underline font-mono text-sm"
+                >
+                  {truncateAddress(contract.address)}
+                </Link>
+              </td>
+              <td className="hidden md:table-cell px-4 py-4 whitespace-nowrap text-gray-300 text-sm">
+                {contract.decimals ?? '-'}
+              </td>
+              <td className="hidden sm:table-cell px-4 py-4 whitespace-nowrap text-gray-300 text-sm font-mono">
+                {formatTotalSupply(contract.totalSupply, contract.decimals)}
+              </td>
+              <td className="hidden lg:table-cell px-4 py-4 whitespace-nowrap">
+                <Link
+                  href={`/address/${contract.creatorAddress}`}
+                  className="text-gray-400 hover:text-[#ffa729] font-mono text-sm"
+                >
+                  {truncateAddress(contract.creatorAddress, 6, 4)}
+                </Link>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// All Contracts Table Component
+function ContractsTable({ contracts }: { contracts: ContractData[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-[#3d3d3d]">
+        <thead className="bg-[#2d2d2d]/50">
+          <tr>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Contract Address
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Type
+            </th>
+            <th className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Creator
+            </th>
+            <th className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Created at Block
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[#3d3d3d]">
+          {contracts.map((contract, index) => (
+            <tr key={contract._id || index} className="hover:bg-[#2d2d2d]/30">
+              <td className="px-4 py-4 whitespace-nowrap">
+                <Link
+                  href={`/address/${contract.address}`}
+                  className="text-[#ffa729] hover:underline font-mono text-sm"
+                >
+                  <span className="hidden sm:inline">{truncateAddress(contract.address, 10, 8)}</span>
+                  <span className="sm:hidden">{truncateAddress(contract.address, 6, 4)}</span>
+                </Link>
+              </td>
+              <td className="px-4 py-4 whitespace-nowrap">
+                {contract.isToken ? (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-900/30 text-green-400 border border-green-800">
+                    Token
+                    {contract.symbol && <span className="ml-1 text-green-500">({contract.symbol})</span>}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-900/30 text-blue-400 border border-blue-800">
+                    Contract
+                  </span>
+                )}
+              </td>
+              <td className="hidden sm:table-cell px-4 py-4 whitespace-nowrap">
+                <Link
+                  href={`/address/${contract.creatorAddress}`}
+                  className="text-gray-400 hover:text-[#ffa729] font-mono text-sm"
+                >
+                  {truncateAddress(contract.creatorAddress, 6, 4)}
+                </Link>
+              </td>
+              <td className="hidden md:table-cell px-4 py-4 whitespace-nowrap text-gray-300 text-sm font-mono">
+                {contract.creationBlockNumber ? (
+                  <Link
+                    href={`/block/${formatBlockNumber(contract.creationBlockNumber).replace(/,/g, '')}`}
+                    className="text-gray-400 hover:text-[#ffa729]"
+                  >
+                    #{formatBlockNumber(contract.creationBlockNumber)}
+                  </Link>
+                ) : (
+                  '-'
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

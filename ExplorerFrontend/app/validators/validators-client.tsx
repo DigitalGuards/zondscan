@@ -106,7 +106,7 @@ export default function ValidatorsWrapper(): JSX.Element {
 
   if (error && !validators.length) {
     return (
-      <div className="max-w-7xl mx-auto p-4 lg:p-6">
+      <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
         <div className="bg-red-900/20 border border-red-800 rounded-xl p-6 text-center">
           <h2 className="text-xl font-semibold text-red-400 mb-2">Error</h2>
           <p className="text-gray-400">{error}</p>
@@ -122,10 +122,10 @@ export default function ValidatorsWrapper(): JSX.Element {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-4 lg:p-6">
+    <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
       {/* Page Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white mb-2">Validators</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-[#ffa729] mb-2">Validators</h1>
         <p className="text-gray-400">
           View all validators on the QRL Zond network
         </p>
@@ -141,7 +141,7 @@ export default function ValidatorsWrapper(): JSX.Element {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Status Distribution Chart */}
         <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4">
-          <h3 className="text-lg font-semibold text-white mb-4">Status Distribution</h3>
+          <h3 className="text-lg font-semibold text-[#ffa729] mb-4">Status Distribution</h3>
           <div className="flex justify-center">
             {loading ? (
               <div className="h-[300px] flex items-center justify-center">
@@ -162,7 +162,7 @@ export default function ValidatorsWrapper(): JSX.Element {
 
         {/* Total Staked Chart */}
         <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4">
-          <h3 className="text-lg font-semibold text-white mb-4">Total Staked Over Time</h3>
+          <h3 className="text-lg font-semibold text-[#ffa729] mb-4">Total Staked Over Time</h3>
           {loading ? (
             <div className="h-[300px] flex items-center justify-center">
               <div className="animate-pulse text-gray-500">Loading chart...</div>
@@ -180,7 +180,7 @@ export default function ValidatorsWrapper(): JSX.Element {
 
       {/* Validator Count History */}
       <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4 mb-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Validator Count Over Time</h3>
+        <h3 className="text-lg font-semibold text-[#ffa729] mb-4">Validator Count Over Time</h3>
         {loading ? (
           <div className="h-[250px] flex items-center justify-center">
             <div className="animate-pulse text-gray-500">Loading chart...</div>
@@ -197,7 +197,7 @@ export default function ValidatorsWrapper(): JSX.Element {
 
       {/* Validators Table */}
       <div className="mb-6">
-        <h3 className="text-lg font-semibold text-white mb-4">All Validators</h3>
+        <h3 className="text-lg font-semibold text-[#ffa729] mb-4">All Validators</h3>
         <ValidatorTable validators={validators} loading={loading} />
       </div>
     </div>
