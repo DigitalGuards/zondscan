@@ -92,8 +92,11 @@ This is the Golang implementation of the QRL blockchain synchronizer to MongoDB.
 ```env
 MONGOURI=mongodb://localhost:27017
 NODE_URL=http://localhost:8545
+MEMPOOL_NODE_URL=http://localhost:8545  # Optional: separate endpoint for mempool detection
 BEACONCHAIN_API=http://beaconnodehttpapi:3500
 ```
+
+**Note:** `MEMPOOL_NODE_URL` is optional. If not set, it falls back to `NODE_URL`. This is useful when using a public RPC for block sync but a local node (with txpool access) for mempool detection.
 
 2. Build the application:
 ```bash

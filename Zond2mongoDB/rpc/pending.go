@@ -13,11 +13,15 @@ import (
 )
 
 // GetPendingTransactions retrieves all pending transactions from the node
+// Uses MEMPOOL_NODE_URL if set, otherwise falls back to NODE_URL
 func GetPendingTransactions() string {
-	// Get node URL from environment variable or use default
-	nodeURL := os.Getenv("NODE_URL")
+	// Try MEMPOOL_NODE_URL first (for dedicated mempool node), fall back to NODE_URL
+	nodeURL := os.Getenv("MEMPOOL_NODE_URL")
 	if nodeURL == "" {
-		zap.L().Error("NODE_URL environment variable not set")
+		nodeURL = os.Getenv("NODE_URL")
+	}
+	if nodeURL == "" {
+		zap.L().Error("Neither MEMPOOL_NODE_URL nor NODE_URL environment variable set")
 		return ""
 	}
 

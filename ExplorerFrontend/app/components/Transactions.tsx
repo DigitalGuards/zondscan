@@ -26,23 +26,14 @@ interface Transaction {
   TxType: string;
 }
 
-interface DecoderParams {
-  row: {
-    TxHash: string;
-    Address: string;
-  };
-}
-
-const Decoder = (params: DecoderParams): JSX.Element => {
-  const output = "0x" + decodeToHex(params.row.TxHash);
-  const url = `${config.siteUrl}/tx/${output}`;
-  return <Link href={url}>{output}</Link>;
+// Helper functions to decode values to strings (for data storage)
+const decodeHash = (hash: string): string => {
+  return "0x" + decodeToHex(hash);
 };
 
-const DecoderAddress = (params: DecoderParams): JSX.Element => {
-  const rawAddress = "0x" + decodeToHex(params.row.Address);
-  const formattedAddress = formatAddress(rawAddress);
-  return <Link href={`${config.siteUrl}/address/${formattedAddress}`}>{formattedAddress}</Link>;
+const decodeAddress = (address: string): string => {
+  const rawAddress = "0x" + decodeToHex(address);
+  return formatAddress(rawAddress);
 };
 
 const ConvertTime = (value: any, row: Transaction): string => {
@@ -74,8 +65,8 @@ export default function Transactions(): JSX.Element {
         const transformedData = data.map((item: any, index: number) => ({
           id: index,
           ...item,
-          Address: DecoderAddress({row: item}),
-          TxHash: Decoder({row: item}),
+          Address: decodeAddress(item.Address),
+          TxHash: decodeHash(item.TxHash),
         }));
     
         setTransactions(transformedData);
