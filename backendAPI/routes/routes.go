@@ -437,6 +437,61 @@ func UserRoute(router *gin.Engine) {
 		c.JSON(http.StatusOK, validatorResponse)
 	})
 
+	// Get current epoch information
+	router.GET("/epoch", func(c *gin.Context) {
+		epochInfo, err := db.GetEpochInfo()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to fetch epoch info: %v", err),
+			})
+			return
+		}
+		c.JSON(http.StatusOK, epochInfo)
+	})
+
+	// Get validator history for charts
+	router.GET("/validators/history", func(c *gin.Context) {
+		limitStr := c.DefaultQuery("limit", "100")
+		limit := 100
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+
+		history, err := db.GetValidatorHistory(limit)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to fetch validator history: %v", err),
+			})
+			return
+		}
+		c.JSON(http.StatusOK, history)
+	})
+
+	// Get validator statistics
+	router.GET("/validators/stats", func(c *gin.Context) {
+		stats, err := db.GetValidatorStats()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to fetch validator stats: %v", err),
+			})
+			return
+		}
+		c.JSON(http.StatusOK, stats)
+	})
+
+	// Get individual validator details
+	router.GET("/validator/:id", func(c *gin.Context) {
+		id := c.Param("id")
+		validator, err := db.GetValidatorByID(id)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": fmt.Sprintf("Validator not found: %v", err),
+			})
+			return
+		}
+		c.JSON(http.StatusOK, validator)
+	})
+
 	router.GET("/transactions", func(c *gin.Context) {
 		query, err := db.ReturnLatestTransactions()
 		if err != nil {

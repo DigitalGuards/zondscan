@@ -125,3 +125,113 @@ func GetBlockNumberFromHash(hash string) string {
 
 	return block.Result.Number
 }
+
+// UpsertEpochInfo stores or updates the current epoch information
+func UpsertEpochInfo(epochInfo *models.EpochInfo) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	epochInfo.ID = "current"
+	epochInfo.UpdatedAt = time.Now().Unix()
+
+	opts := options.Update().SetUpsert(true)
+	filter := bson.M{"_id": "current"}
+	update := bson.M{"$set": epochInfo}
+
+	_, err := configs.EpochInfoCollections.UpdateOne(ctx, filter, update, opts)
+	if err != nil {
+		configs.Logger.Error("Failed to upsert epoch info", zap.Error(err))
+		return err
+	}
+
+	configs.Logger.Debug("Upserted epoch info",
+		zap.String("headEpoch", epochInfo.HeadEpoch),
+		zap.String("headSlot", epochInfo.HeadSlot))
+	return nil
+}
+
+// GetEpochInfo retrieves the current epoch information
+func GetEpochInfo() (*models.EpochInfo, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var epochInfo models.EpochInfo
+	err := configs.EpochInfoCollections.FindOne(ctx, bson.M{"_id": "current"}).Decode(&epochInfo)
+	if err != nil {
+		configs.Logger.Error("Failed to get epoch info", zap.Error(err))
+		return nil, err
+	}
+
+	return &epochInfo, nil
+}
+
+// InsertValidatorHistory inserts a validator history record for a specific epoch
+func InsertValidatorHistory(record *models.ValidatorHistoryRecord) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Use epoch as unique identifier to prevent duplicate entries
+	opts := options.Update().SetUpsert(true)
+	filter := bson.M{"epoch": record.Epoch}
+	update := bson.M{"$set": record}
+
+	_, err := configs.ValidatorHistoryCollections.UpdateOne(ctx, filter, update, opts)
+	if err != nil {
+		configs.Logger.Error("Failed to insert validator history", zap.Error(err))
+		return err
+	}
+
+	configs.Logger.Debug("Inserted validator history",
+		zap.String("epoch", record.Epoch),
+		zap.Int("validatorsCount", record.ValidatorsCount))
+	return nil
+}
+
+// GetValidatorHistory retrieves historical validator data, optionally limited
+func GetValidatorHistory(limit int) ([]models.ValidatorHistoryRecord, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	findOpts := options.Find().SetSort(bson.D{{Key: "epoch", Value: -1}})
+	if limit > 0 {
+		findOpts.SetLimit(int64(limit))
+	}
+
+	cursor, err := configs.ValidatorHistoryCollections.Find(ctx, bson.M{}, findOpts)
+	if err != nil {
+		configs.Logger.Error("Failed to get validator history", zap.Error(err))
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var history []models.ValidatorHistoryRecord
+	if err := cursor.All(ctx, &history); err != nil {
+		return nil, err
+	}
+
+	return history, nil
+}
+
+// GetValidatorByIndex retrieves a validator by their index
+func GetValidatorByIndex(index string) (*models.ValidatorRecord, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var storage models.ValidatorStorage
+	err := configs.ValidatorsCollections.FindOne(ctx, bson.M{
+		"validators.index": index,
+	}).Decode(&storage)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Find the matching validator
+	for _, v := range storage.Validators {
+		if v.Index == index {
+			return &v, nil
+		}
+	}
+
+	return nil, fmt.Errorf("validator not found")
+}

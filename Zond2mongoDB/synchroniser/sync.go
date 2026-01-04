@@ -5,6 +5,7 @@ import (
 	"Zond2mongoDB/db"
 	"Zond2mongoDB/models"
 	"Zond2mongoDB/rpc"
+	"Zond2mongoDB/services"
 	"Zond2mongoDB/utils"
 	"context"
 	"fmt"
@@ -1466,6 +1467,17 @@ func syncValidators() error {
 		return fmt.Errorf("failed to get latest block: %v", err)
 	}
 	currentEpoch := strconv.FormatUint(uint64(utils.HexToInt(latestBlock).Int64()/128), 10)
+
+	// Fetch and store epoch info from beacon chain
+	chainHead, err := rpc.GetBeaconChainHead()
+	if err != nil {
+		configs.Logger.Warn("Failed to get beacon chain head", zap.Error(err))
+		// Don't fail - continue with validator sync
+	} else {
+		if err := services.StoreEpochInfo(chainHead); err != nil {
+			configs.Logger.Warn("Failed to store epoch info", zap.Error(err))
+		}
+	}
 
 	// Get validators from beacon chain
 	err = rpc.GetValidators()

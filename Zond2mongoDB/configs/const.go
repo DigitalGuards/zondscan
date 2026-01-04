@@ -27,6 +27,8 @@ const (
 	WALLET_COUNT_COLLECTION                    = "walletCount"
 	DAILY_TRANSACTIONS_VOLUME_COLLECTION       = "dailyTransactionsVolume"
 	PENDING_TRANSACTIONS_COLLECTION            = "pending_transactions"
+	EPOCH_INFO_COLLECTION                      = "epoch_info"
+	VALIDATOR_HISTORY_COLLECTION               = "validator_history"
 )
 
 // API and configuration constants
@@ -52,6 +54,8 @@ var CoinGeckoCollections *mongo.Collection = GetCollection(DB, COINGECKO_COLLECT
 var WalletCountCollections *mongo.Collection = GetCollection(DB, WALLET_COUNT_COLLECTION)
 var DailyTransactionsVolumeCollections *mongo.Collection = GetCollection(DB, DAILY_TRANSACTIONS_VOLUME_COLLECTION)
 var PendingTransactionsCollections *mongo.Collection = GetCollection(DB, PENDING_TRANSACTIONS_COLLECTION)
+var EpochInfoCollections *mongo.Collection = GetCollection(DB, EPOCH_INFO_COLLECTION)
+var ValidatorHistoryCollections *mongo.Collection = GetCollection(DB, VALIDATOR_HISTORY_COLLECTION)
 
 // Global logger instance - initialized once and used throughout the application
 var Logger *zap.Logger = L.FileLogger(LOG_FILENAME)

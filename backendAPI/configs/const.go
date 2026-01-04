@@ -23,4 +23,6 @@ var TotalCirculatingSupplyCollection *mongo.Collection = GetCollection(DB, "tota
 var CoinGeckoCollection *mongo.Collection = GetCollection(DB, "coingecko")
 var WalletCountCollections *mongo.Collection = GetCollection(DB, "walletCount")
 var DailyTransactionsVolumeCollection *mongo.Collection = GetCollection(DB, "dailyTransactionsVolume")
+var EpochInfoCollection *mongo.Collection = GetCollection(DB, "epoch_info")
+var ValidatorHistoryCollection *mongo.Collection = GetCollection(DB, "validator_history")
 var Validate = validator.New()

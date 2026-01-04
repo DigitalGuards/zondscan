@@ -1,280 +1,204 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import config from '../../config';
-import { formatAmount, epochsToDays } from '../lib/helpers';
+import EpochInfoPanel from './components/EpochInfoPanel';
+import ValidatorStatsCards from './components/ValidatorStatsCards';
+import ValidatorStatusChart from './components/ValidatorStatusChart';
+import ValidatorHistoryChart from './components/ValidatorHistoryChart';
+import ValidatorTable from './components/ValidatorTable';
 
 interface Validator {
+  index: string;
   address: string;
-  uptime: number;
+  status: string;
   age: number;
   stakedAmount: string;
   isActive: boolean;
 }
 
+interface EpochInfo {
+  headEpoch: string;
+  headSlot: string;
+  finalizedEpoch: string;
+  justifiedEpoch: string;
+  slotsPerEpoch: number;
+  secondsPerSlot: number;
+  slotInEpoch: number;
+  timeToNextEpoch: number;
+  updatedAt: number;
+}
+
+interface ValidatorStats {
+  totalValidators: number;
+  activeCount: number;
+  pendingCount: number;
+  exitedCount: number;
+  slashedCount: number;
+  totalStaked: string;
+  currentEpoch: string;
+}
+
+interface HistoryRecord {
+  epoch: string;
+  timestamp: number;
+  validatorsCount: number;
+  activeCount: number;
+  totalStaked: string;
+}
+
 export default function ValidatorsWrapper(): JSX.Element {
   const [validators, setValidators] = useState<Validator[]>([]);
+  const [epochInfo, setEpochInfo] = useState<EpochInfo | null>(null);
+  const [stats, setStats] = useState<ValidatorStats | null>(null);
+  const [history, setHistory] = useState<HistoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [totalStaked, setTotalStaked] = useState('0');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
-  const itemsPerPage = 10;
+  const [chartWidth, setChartWidth] = useState(400);
 
+  // Update chart width on resize
   useEffect(() => {
-    // Handle window resize
-    const handleResize = (): void => {
-      setWindowWidth(window.innerWidth);
+    const updateWidth = () => {
+      const width = Math.min(window.innerWidth - 48, 600);
+      setChartWidth(width);
     };
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, []);
 
-    // Add event listener
-    if (typeof window !== 'undefined') {
-      window.addEventListener('resize', handleResize);
-      // Initial width
-      setWindowWidth(window.innerWidth);
+  const fetchData = useCallback(async () => {
+    try {
+      // Fetch all data in parallel
+      const [validatorsRes, epochRes, statsRes, historyRes] = await Promise.all([
+        axios.get(`${config.handlerUrl}/validators`).catch(() => ({ data: { validators: [] } })),
+        axios.get(`${config.handlerUrl}/epoch`).catch(() => ({ data: null })),
+        axios.get(`${config.handlerUrl}/validators/stats`).catch(() => ({ data: null })),
+        axios.get(`${config.handlerUrl}/validators/history?limit=100`).catch(() => ({ data: { history: [] } })),
+      ]);
+
+      // Process validators - add Z prefix to addresses
+      const processedValidators = (validatorsRes.data.validators || []).map((v: any) => ({
+        ...v,
+        address: v.address.startsWith('Z') ? v.address : 'Z' + v.address,
+      }));
+
+      setValidators(processedValidators);
+      setEpochInfo(epochRes.data);
+      setStats(statsRes.data);
+      setHistory(historyRes.data?.history || []);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching validator data:', err);
+      setError('Failed to load validator data. Please try again later.');
+    } finally {
+      setLoading(false);
     }
-
-    // Cleanup
-    return () => {
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('resize', handleResize);
-      }
-    };
   }, []);
 
   useEffect(() => {
-    async function fetchValidators(): Promise<void> {
-      try {
-        const response = await axios.get(`${config.handlerUrl}/validators`);
-        const validatorsData = response.data.validators || [];
-        
-        // Process validators to decode addresses
-        const processedValidators = validatorsData.map((validator: any) => {
-          // The address from the API is the validator's public key in hex format
-          // We need to convert it to a proper QRL address with Z prefix
-          let formattedAddress = validator.address;
-          
-          try {
-            // The public key is already in hex format, just add the Z prefix
-            formattedAddress = 'Z' + validator.address;
-          } catch (error) {
-            console.error('Error formatting validator address:', error);
-            // If conversion fails, use the original address
-            formattedAddress = validator.address;
-          }
-          
-          return {
-            ...validator,
-            address: formattedAddress
-          };
-        });
-        
-        setValidators(processedValidators);
-        setTotalStaked(response.data.totalStaked || '0');
-      } catch (err) {
-        console.error('Error fetching validators:', err);
-        setError('Failed to load validator information. Please try again later.');
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchValidators();
-    const interval = setInterval(fetchValidators, 60000);
+    fetchData();
+    // Refresh data every 60 seconds
+    const interval = setInterval(fetchData, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchData]);
 
-  // Filter validators based on search query
-  const filteredValidators = validators.filter((validator: any) => {
-    const searchLower = searchQuery.toLowerCase();
+  if (error && !validators.length) {
     return (
-      validator.address.toLowerCase().includes(searchLower) ||
-      validator.stakedAmount.toLowerCase().includes(searchLower)
+      <div className="max-w-7xl mx-auto p-4 lg:p-6">
+        <div className="bg-red-900/20 border border-red-800 rounded-xl p-6 text-center">
+          <h2 className="text-xl font-semibold text-red-400 mb-2">Error</h2>
+          <p className="text-gray-400">{error}</p>
+          <button
+            onClick={fetchData}
+            className="mt-4 px-4 py-2 bg-[#2d2d2d] border border-[#3d3d3d] rounded-lg text-gray-300 hover:border-[#ffa729]"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
     );
-  });
-
-  const totalPages = Math.ceil(filteredValidators.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentValidators = filteredValidators.slice(startIndex, endIndex);
-
-  const goToPage = (page: number): void => {
-    setCurrentPage(page);
-  };
-
-  if (loading) {
-    return <div className="p-4 text-gray-300">Loading validators...</div>;
-  }
-
-  if (error) {
-    return <div className="p-4 text-red-500">Error: {error}</div>;
   }
 
   return (
     <div className="max-w-7xl mx-auto p-4 lg:p-6">
-      {/* Statistics Section */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-        <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4">
-          <h3 className="text-lg font-semibold text-gray-400">Total Validators</h3>
-          <p className="text-2xl text-[#ffa729]">{validators.length}</p>
-        </div>
-        <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4">
-          <h3 className="text-lg font-semibold text-gray-400">Active Validators</h3>
-          <p className="text-2xl text-[#ffa729]">{validators.filter(v => v.isActive).length}</p>
-        </div>
-        <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4 sm:col-span-2 lg:col-span-1">
-          <h3 className="text-lg font-semibold text-gray-400">Total Staked</h3>
-          <p className="text-2xl text-[#ffa729]">{formatAmount(totalStaked)[0]} {formatAmount(totalStaked)[1]}</p>
-        </div>
-      </div>
-
-      {/* Search Bar */}
+      {/* Page Header */}
       <div className="mb-6">
-        <input
-          type="text"
-          placeholder="Search validator by address or staked amount..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full p-2 bg-[#2d2d2d] border border-[#3d3d3d] rounded-lg text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#ffa729] focus:border-transparent"
-        />
+        <h1 className="text-2xl font-bold text-white mb-2">Validators</h1>
+        <p className="text-gray-400">
+          View all validators on the QRL Zond network
+        </p>
       </div>
 
-      {/* Validators List */}
-      <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-[#3d3d3d]">
-            <thead className="bg-[#2d2d2d]/50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Validator</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
-                <th className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Age</th>
-                <th className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Uptime</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Staked</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#3d3d3d]">
-              {currentValidators.map((validator, index) => (
-                <tr key={index} className="hover:bg-[#2d2d2d]/30">
-                  <td className="px-4 py-3 whitespace-nowrap text-sm">
-                    <a href={`/address/${validator.address}`} className="text-[#ffa729] hover:underline font-mono">
-                      {windowWidth < 640 
-                        ? `${validator.address.slice(0, 8)}...${validator.address.slice(-6)}`
-                        : validator.address}
-                    </a>
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                      validator.isActive
-                        ? 'bg-green-900/20 text-green-400'
-                        : 'bg-red-900/20 text-red-400'
-                    }`}>
-                      {validator.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="hidden sm:table-cell px-4 py-3 whitespace-nowrap text-sm text-gray-300">
-                    {epochsToDays(validator.age).toFixed(1)} days
-                  </td>
-                  <td className="hidden sm:table-cell px-4 py-3 whitespace-nowrap text-sm text-gray-300">
-                    {validator.uptime.toFixed(2)}%
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-300 font-mono">
-                    {formatAmount(validator.stakedAmount)[0]} {formatAmount(validator.stakedAmount)[1]}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {/* Epoch Info Panel */}
+      <EpochInfoPanel epochInfo={epochInfo} loading={loading} />
 
-        {/* Mobile Expandable Details */}
-        <div className="sm:hidden">
-          {currentValidators.map((validator, index) => (
-            <details key={`mobile-${index}`} className="border-t border-[#3d3d3d]">
-              <summary className="px-4 py-3 cursor-pointer hover:bg-[#2d2d2d]/30">
-                <div className="flex items-center justify-between">
-                  <a href={`/address/${validator.address}`} className="text-[#ffa729] hover:underline font-mono">
-                    {`${validator.address.slice(0, 8)}...${validator.address.slice(-6)}`}
-                  </a>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                    validator.isActive ? 'bg-green-900/20 text-green-400' : 'bg-red-900/20 text-red-400'
-                  }`}>
-                    {validator.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-              </summary>
-              <div className="px-4 py-2 space-y-2 bg-[#2d2d2d]/30">
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Age:</span>
-                  <span className="text-gray-300">{epochsToDays(validator.age).toFixed(1)} days</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Uptime:</span>
-                  <span className="text-gray-300">{validator.uptime.toFixed(2)}%</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Staked:</span>
-                  <span className="text-gray-300 font-mono">
-                    {formatAmount(validator.stakedAmount)[0]} {formatAmount(validator.stakedAmount)[1]}
-                  </span>
-                </div>
+      {/* Stats Cards */}
+      <ValidatorStatsCards stats={stats} loading={loading} />
+
+      {/* Charts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Status Distribution Chart */}
+        <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4">
+          <h3 className="text-lg font-semibold text-white mb-4">Status Distribution</h3>
+          <div className="flex justify-center">
+            {loading ? (
+              <div className="h-[300px] flex items-center justify-center">
+                <div className="animate-pulse text-gray-500">Loading chart...</div>
               </div>
-            </details>
-          ))}
+            ) : (
+              <ValidatorStatusChart
+                activeCount={stats?.activeCount || 0}
+                pendingCount={stats?.pendingCount || 0}
+                exitedCount={stats?.exitedCount || 0}
+                slashedCount={stats?.slashedCount || 0}
+                width={Math.min(chartWidth, 350)}
+                height={300}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Total Staked Chart */}
+        <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4">
+          <h3 className="text-lg font-semibold text-white mb-4">Total Staked Over Time</h3>
+          {loading ? (
+            <div className="h-[300px] flex items-center justify-center">
+              <div className="animate-pulse text-gray-500">Loading chart...</div>
+            </div>
+          ) : (
+            <ValidatorHistoryChart
+              data={history}
+              type="staked"
+              width={chartWidth}
+              height={300}
+            />
+          )}
         </div>
       </div>
 
-      {/* Pagination Controls */}
-      <div className="mt-4 flex flex-wrap justify-center items-center gap-2">
-        <button
-          onClick={() => goToPage(currentPage - 1)}
-          disabled={currentPage === 1}
-          className="px-3 sm:px-4 py-2 rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d]
-                   hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d]
-                   transition-colors text-sm sm:text-base"
-        >
-          Previous
-        </button>
-        
-        <span className="text-sm sm:text-base">Page {currentPage} of {totalPages}</span>
-        
-        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-          let pageNum;
-          if (totalPages <= 5) {
-            pageNum = i + 1;
-          } else if (currentPage <= 3) {
-            pageNum = i + 1;
-          } else if (currentPage >= totalPages - 2) {
-            pageNum = totalPages - 4 + i;
-          } else {
-            pageNum = currentPage - 2 + i;
-          }
-          
-          return (
-            <button
-              key={i}
-              onClick={() => goToPage(pageNum)}
-              className={`w-8 h-8 rounded-lg text-sm ${
-                currentPage === pageNum
-                  ? 'bg-[#ffa729] text-black'
-                  : 'bg-[#2d2d2d] text-gray-300 hover:bg-[#3d3d3d]'
-              }`}
-            >
-              {pageNum}
-            </button>
-          );
-        })}
-        
-        <button
-          onClick={() => goToPage(currentPage + 1)}
-          disabled={currentPage === totalPages}
-          className="px-3 sm:px-4 py-2 rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d]
-                   hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d]
-                   transition-colors text-sm sm:text-base"
-        >
-          Next
-        </button>
+      {/* Validator Count History */}
+      <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4 mb-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Validator Count Over Time</h3>
+        {loading ? (
+          <div className="h-[250px] flex items-center justify-center">
+            <div className="animate-pulse text-gray-500">Loading chart...</div>
+          </div>
+        ) : (
+          <ValidatorHistoryChart
+            data={history}
+            type="count"
+            width={Math.min(window.innerWidth - 48, 1200)}
+            height={250}
+          />
+        )}
+      </div>
+
+      {/* Validators Table */}
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold text-white mb-4">All Validators</h3>
+        <ValidatorTable validators={validators} loading={loading} />
       </div>
     </div>
   );
