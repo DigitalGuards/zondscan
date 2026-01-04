@@ -5,6 +5,8 @@ import (
 	"Zond2mongoDB/models"
 	"context"
 	"fmt"
+	"math/big"
+	"strconv"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -18,9 +20,16 @@ func StoreValidators(beaconResponse models.BeaconValidatorResponse, currentEpoch
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// Parse current epoch for status calculation
+	currentEpochInt, _ := strconv.ParseInt(currentEpoch, 10, 64)
+
 	// Convert each validator
 	newValidators := make([]models.ValidatorRecord, 0, len(beaconResponse.ValidatorList))
 	for _, v := range beaconResponse.ValidatorList {
+		// Determine if this validator is the leader for their slot (simplified: based on index mod)
+		slotNum, _ := strconv.ParseInt(v.Index, 10, 64)
+		isLeader := slotNum%128 == 0 // Simplified leader selection
+
 		record := models.ValidatorRecord{
 			Index:                      v.Index,
 			PublicKeyHex:               models.Base64ToHex(v.Validator.PublicKey),
@@ -31,10 +40,16 @@ func StoreValidators(beaconResponse models.BeaconValidatorResponse, currentEpoch
 			ActivationEpoch:            v.Validator.ActivationEpoch,
 			ExitEpoch:                  v.Validator.ExitEpoch,
 			WithdrawableEpoch:          v.Validator.WithdrawableEpoch,
-			SlotNumber:                 v.Index, // Using index as slot number
-			IsLeader:                   true,    // Set based on your leader selection logic
+			SlotNumber:                 v.Index,
+			IsLeader:                   isLeader,
 		}
 		newValidators = append(newValidators, record)
+	}
+
+	// Store validator history for this epoch
+	if err := StoreValidatorHistory(newValidators, currentEpoch, currentEpochInt); err != nil {
+		configs.Logger.Warn("Failed to store validator history", zap.Error(err))
+		// Don't fail the main operation
 	}
 
 	// First try to get existing document
@@ -127,4 +142,93 @@ func GetValidatorByPublicKey(publicKeyHex string) (*models.ValidatorRecord, erro
 	}
 
 	return nil, fmt.Errorf("validator not found")
+}
+
+// StoreEpochInfo stores the current epoch information from beacon chain head
+func StoreEpochInfo(chainHead *models.BeaconChainHeadResponse) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	epochInfo := &models.EpochInfo{
+		ID:             "current",
+		HeadEpoch:      chainHead.HeadEpoch,
+		HeadSlot:       chainHead.HeadSlot,
+		FinalizedEpoch: chainHead.FinalizedEpoch,
+		JustifiedEpoch: chainHead.JustifiedEpoch,
+		FinalizedSlot:  chainHead.FinalizedSlot,
+		JustifiedSlot:  chainHead.JustifiedSlot,
+		UpdatedAt:      time.Now().Unix(),
+	}
+
+	opts := options.Update().SetUpsert(true)
+	filter := bson.M{"_id": "current"}
+	update := bson.M{"$set": epochInfo}
+
+	_, err := configs.EpochInfoCollections.UpdateOne(ctx, filter, update, opts)
+	if err != nil {
+		configs.Logger.Error("Failed to upsert epoch info", zap.Error(err))
+		return err
+	}
+
+	configs.Logger.Debug("Stored epoch info",
+		zap.String("headEpoch", epochInfo.HeadEpoch),
+		zap.String("headSlot", epochInfo.HeadSlot))
+	return nil
+}
+
+// StoreValidatorHistory computes and stores validator statistics for the current epoch
+func StoreValidatorHistory(validators []models.ValidatorRecord, epoch string, currentEpochInt int64) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var activeCount, pendingCount, exitedCount, slashedCount int
+	totalStaked := big.NewInt(0)
+
+	for _, v := range validators {
+		// Calculate status
+		status := models.GetValidatorStatus(v.ActivationEpoch, v.ExitEpoch, v.Slashed, currentEpochInt)
+
+		switch status {
+		case "active":
+			activeCount++
+		case "pending":
+			pendingCount++
+		case "exited":
+			exitedCount++
+		case "slashed":
+			slashedCount++
+		}
+
+		// Sum effective balance
+		if balance, ok := new(big.Int).SetString(v.EffectiveBalance, 10); ok {
+			totalStaked.Add(totalStaked, balance)
+		}
+	}
+
+	record := &models.ValidatorHistoryRecord{
+		Epoch:           epoch,
+		Timestamp:       time.Now().Unix(),
+		ValidatorsCount: len(validators),
+		ActiveCount:     activeCount,
+		PendingCount:    pendingCount,
+		ExitedCount:     exitedCount,
+		SlashedCount:    slashedCount,
+		TotalStaked:     totalStaked.String(),
+	}
+
+	// Use epoch as unique identifier to prevent duplicate entries
+	opts := options.Update().SetUpsert(true)
+	filter := bson.M{"epoch": record.Epoch}
+	update := bson.M{"$set": record}
+
+	_, err := configs.ValidatorHistoryCollections.UpdateOne(ctx, filter, update, opts)
+	if err != nil {
+		configs.Logger.Error("Failed to insert validator history", zap.Error(err))
+		return err
+	}
+
+	configs.Logger.Debug("Stored validator history",
+		zap.String("epoch", record.Epoch),
+		zap.Int("validatorsCount", record.ValidatorsCount))
+	return nil
 }

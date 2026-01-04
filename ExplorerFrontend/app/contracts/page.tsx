@@ -9,9 +9,9 @@ interface ContractResponse {
   total: number;
 }
 
-async function getContracts(page: number = 0, limit: number = 10): Promise<ContractResponse> {
+async function getContracts(page: number = 0, limit: number = 15, isToken: boolean = true): Promise<ContractResponse> {
   try {
-    const response = await fetch(`${config.handlerUrl}/contracts?page=${page}&limit=${limit}`, {
+    const response = await fetch(`${config.handlerUrl}/contracts?page=${page}&limit=${limit}&isToken=${isToken}`, {
       next: { revalidate: 10 },
     });
 

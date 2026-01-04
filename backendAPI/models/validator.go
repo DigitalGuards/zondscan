@@ -31,9 +31,80 @@ type ValidatorResponse struct {
 
 // Validator represents a single validator in the API response
 type Validator struct {
-	Address      string  `json:"address"`      // Public key in hex format
-	Uptime       float64 `json:"uptime"`       // Validator uptime percentage
-	Age          int64   `json:"age"`          // Age in epochs
-	StakedAmount string  `json:"stakedAmount"` // Amount staked in hex
-	IsActive     bool    `json:"isActive"`     // Whether the validator is currently active
+	Index        string `json:"index"`        // Validator index
+	Address      string `json:"address"`      // Public key in hex format
+	Status       string `json:"status"`       // active, pending, exited, slashed
+	Age          int64  `json:"age"`          // Age in epochs
+	StakedAmount string `json:"stakedAmount"` // Amount staked
+	IsActive     bool   `json:"isActive"`     // Whether the validator is currently active
+}
+
+// EpochInfo represents the current epoch state
+type EpochInfo struct {
+	ID             string `bson:"_id" json:"_id"`
+	HeadEpoch      string `bson:"headEpoch" json:"headEpoch"`
+	HeadSlot       string `bson:"headSlot" json:"headSlot"`
+	FinalizedEpoch string `bson:"finalizedEpoch" json:"finalizedEpoch"`
+	JustifiedEpoch string `bson:"justifiedEpoch" json:"justifiedEpoch"`
+	FinalizedSlot  string `bson:"finalizedSlot" json:"finalizedSlot"`
+	JustifiedSlot  string `bson:"justifiedSlot" json:"justifiedSlot"`
+	UpdatedAt      int64  `bson:"updatedAt" json:"updatedAt"`
+}
+
+// EpochInfoResponse represents the API response for epoch information
+type EpochInfoResponse struct {
+	HeadEpoch       string `json:"headEpoch"`
+	HeadSlot        string `json:"headSlot"`
+	FinalizedEpoch  string `json:"finalizedEpoch"`
+	JustifiedEpoch  string `json:"justifiedEpoch"`
+	SlotsPerEpoch   int    `json:"slotsPerEpoch"`
+	SecondsPerSlot  int    `json:"secondsPerSlot"`
+	SlotInEpoch     int64  `json:"slotInEpoch"`
+	TimeToNextEpoch int64  `json:"timeToNextEpoch"` // Seconds until next epoch
+	UpdatedAt       int64  `json:"updatedAt"`
+}
+
+// ValidatorHistoryRecord represents historical validator statistics
+type ValidatorHistoryRecord struct {
+	ID              string `bson:"_id,omitempty" json:"_id,omitempty"`
+	Epoch           string `bson:"epoch" json:"epoch"`
+	Timestamp       int64  `bson:"timestamp" json:"timestamp"`
+	ValidatorsCount int    `bson:"validatorsCount" json:"validatorsCount"`
+	ActiveCount     int    `bson:"activeCount" json:"activeCount"`
+	PendingCount    int    `bson:"pendingCount" json:"pendingCount"`
+	ExitedCount     int    `bson:"exitedCount" json:"exitedCount"`
+	SlashedCount    int    `bson:"slashedCount" json:"slashedCount"`
+	TotalStaked     string `bson:"totalStaked" json:"totalStaked"`
+}
+
+// ValidatorHistoryResponse represents the API response for validator history
+type ValidatorHistoryResponse struct {
+	History []ValidatorHistoryRecord `json:"history"`
+}
+
+// ValidatorDetailResponse represents detailed information about a single validator
+type ValidatorDetailResponse struct {
+	Index                      string `json:"index"`
+	PublicKeyHex               string `json:"publicKeyHex"`
+	WithdrawalCredentialsHex   string `json:"withdrawalCredentialsHex"`
+	EffectiveBalance           string `json:"effectiveBalance"`
+	Slashed                    bool   `json:"slashed"`
+	ActivationEligibilityEpoch string `json:"activationEligibilityEpoch"`
+	ActivationEpoch            string `json:"activationEpoch"`
+	ExitEpoch                  string `json:"exitEpoch"`
+	WithdrawableEpoch          string `json:"withdrawableEpoch"`
+	Status                     string `json:"status"`
+	Age                        int64  `json:"age"`
+	CurrentEpoch               string `json:"currentEpoch"`
+}
+
+// ValidatorStatsResponse represents aggregated validator statistics
+type ValidatorStatsResponse struct {
+	TotalValidators int    `json:"totalValidators"`
+	ActiveCount     int    `json:"activeCount"`
+	PendingCount    int    `json:"pendingCount"`
+	ExitedCount     int    `json:"exitedCount"`
+	SlashedCount    int    `json:"slashedCount"`
+	TotalStaked     string `json:"totalStaked"`
+	CurrentEpoch    string `json:"currentEpoch"`
 }

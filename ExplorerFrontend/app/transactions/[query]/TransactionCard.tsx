@@ -6,7 +6,11 @@ import { SendIcon, ReceiveIcon } from './TransactionIcons';
 import CopyHashButton from "../../components/CopyHashButton";
 import type { TransactionCardProps } from './types';
 
-export default function TransactionCard({ transaction }: TransactionCardProps): JSX.Element {
+interface ExtendedTransactionCardProps extends TransactionCardProps {
+  currentPage?: number;
+}
+
+export default function TransactionCard({ transaction, currentPage }: ExtendedTransactionCardProps): JSX.Element {
   const router = useRouter();
   const isSending = transaction.InOut === 0;
 
@@ -24,7 +28,8 @@ export default function TransactionCard({ transaction }: TransactionCardProps): 
   const [formattedAmount, unit] = formatAmount(transaction.Amount);
 
   const handleClick = (): void => {
-    router.push(`/tx/${txHash}`);
+    const pageParam = currentPage ? `?from=transactions&page=${currentPage}` : '';
+    router.push(`/tx/${txHash}${pageParam}`);
   };
 
   return (

@@ -116,3 +116,63 @@ func (v *ValidatorDetails) GetAge(currentEpoch int64) int64 {
 func (v *ValidatorDetails) ToAddress() string {
 	return v.PublicKey
 }
+
+// EpochInfo represents the current epoch state from beacon chain
+type EpochInfo struct {
+	ID              string `bson:"_id" json:"_id"`                           // Always "current"
+	HeadEpoch       string `bson:"headEpoch" json:"headEpoch"`               // Current head epoch
+	HeadSlot        string `bson:"headSlot" json:"headSlot"`                 // Current head slot
+	FinalizedEpoch  string `bson:"finalizedEpoch" json:"finalizedEpoch"`     // Last finalized epoch
+	JustifiedEpoch  string `bson:"justifiedEpoch" json:"justifiedEpoch"`     // Last justified epoch
+	FinalizedSlot   string `bson:"finalizedSlot" json:"finalizedSlot"`       // Last finalized slot
+	JustifiedSlot   string `bson:"justifiedSlot" json:"justifiedSlot"`       // Last justified slot
+	GenesisTime     string `bson:"genesisTime" json:"genesisTime"`           // Genesis timestamp
+	UpdatedAt       int64  `bson:"updatedAt" json:"updatedAt"`               // Last update timestamp
+}
+
+// BeaconChainHeadResponse represents the response from beacon chain head endpoint
+type BeaconChainHeadResponse struct {
+	HeadSlot                   string `json:"headSlot"`
+	HeadEpoch                  string `json:"headEpoch"`
+	HeadBlockRoot              string `json:"headBlockRoot"`
+	FinalizedSlot              string `json:"finalizedSlot"`
+	FinalizedEpoch             string `json:"finalizedEpoch"`
+	FinalizedBlockRoot         string `json:"finalizedBlockRoot"`
+	JustifiedSlot              string `json:"justifiedSlot"`
+	JustifiedEpoch             string `json:"justifiedEpoch"`
+	JustifiedBlockRoot         string `json:"justifiedBlockRoot"`
+	PreviousJustifiedSlot      string `json:"previousJustifiedSlot"`
+	PreviousJustifiedEpoch     string `json:"previousJustifiedEpoch"`
+	PreviousJustifiedBlockRoot string `json:"previousJustifiedBlockRoot"`
+	OptimisticStatus           bool   `json:"optimisticStatus"`
+}
+
+// ValidatorHistoryRecord represents historical validator statistics per epoch
+type ValidatorHistoryRecord struct {
+	ID              string `bson:"_id,omitempty" json:"_id,omitempty"`
+	Epoch           string `bson:"epoch" json:"epoch"`
+	Timestamp       int64  `bson:"timestamp" json:"timestamp"`
+	ValidatorsCount int    `bson:"validatorsCount" json:"validatorsCount"`
+	ActiveCount     int    `bson:"activeCount" json:"activeCount"`
+	PendingCount    int    `bson:"pendingCount" json:"pendingCount"`
+	ExitedCount     int    `bson:"exitedCount" json:"exitedCount"`
+	SlashedCount    int    `bson:"slashedCount" json:"slashedCount"`
+	TotalStaked     string `bson:"totalStaked" json:"totalStaked"` // Sum of effective balances
+}
+
+// GetValidatorStatus computes the validator status based on current epoch
+func GetValidatorStatus(activationEpoch, exitEpoch string, slashed bool, currentEpoch int64) string {
+	activation, _ := strconv.ParseInt(activationEpoch, 10, 64)
+	exit, _ := strconv.ParseInt(exitEpoch, 10, 64)
+
+	if slashed {
+		return "slashed"
+	}
+	if activation > currentEpoch {
+		return "pending"
+	}
+	if exit <= currentEpoch {
+		return "exited"
+	}
+	return "active"
+}

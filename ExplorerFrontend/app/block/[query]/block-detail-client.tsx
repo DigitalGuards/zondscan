@@ -1,10 +1,32 @@
 "use client";
 
 import axios from 'axios';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import config from '../../../config';
 import Link from 'next/link';
 import { formatAmount } from '../../lib/helpers';
+
+// Back link component that uses useSearchParams
+function BackToBlocksLink(): JSX.Element | null {
+  const searchParams = useSearchParams();
+  const fromBlocks = searchParams.get('from') === 'blocks';
+  const returnPage = searchParams.get('page') || '1';
+
+  if (!fromBlocks) return null;
+
+  return (
+    <Link
+      href={`/blocks/${returnPage}`}
+      className="inline-flex items-center text-gray-400 hover:text-[#ffa729] mb-4 md:mb-6"
+    >
+      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+      </svg>
+      Back to Latest Blocks
+    </Link>
+  );
+}
 
 type Block = {
   baseFeePerGas: string;
@@ -159,7 +181,12 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
 
   return (
     <div className="p-8">
-      <div className="relative overflow-hidden rounded-2xl 
+      {/* Back Button - only shown when coming from Latest Blocks */}
+      <Suspense fallback={null}>
+        <BackToBlocksLink />
+      </Suspense>
+
+      <div className="relative overflow-hidden rounded-2xl
                     bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
                     border border-[#3d3d3d] shadow-xl">
         <div className="p-6">

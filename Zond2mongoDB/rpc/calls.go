@@ -587,6 +587,49 @@ func GetValidators() error {
 	return nil
 }
 
+// GetBeaconChainHead fetches the current chain head information from the beacon chain API
+func GetBeaconChainHead() (*models.BeaconChainHeadResponse, error) {
+	beaconchainURL := os.Getenv("BEACONCHAIN_API")
+	if beaconchainURL == "" {
+		return nil, fmt.Errorf("BEACONCHAIN_API environment variable not set")
+	}
+
+	url := strings.TrimRight(beaconchainURL, "/") + "/zond/v1alpha1/beacon/chainhead"
+	client := GetHTTPClient()
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get response from beacon API: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code from beacon API: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	var chainHead models.BeaconChainHeadResponse
+	if err := json.Unmarshal(body, &chainHead); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
+	}
+
+	zap.L().Debug("Fetched beacon chain head",
+		zap.String("headEpoch", chainHead.HeadEpoch),
+		zap.String("headSlot", chainHead.HeadSlot),
+		zap.String("finalizedEpoch", chainHead.FinalizedEpoch))
+
+	return &chainHead, nil
+}
+
 func GetCode(address string, blockNrOrHash string) (string, error) {
 	// Validate address format
 	if err := validation.ValidateAddress(address); err != nil {
