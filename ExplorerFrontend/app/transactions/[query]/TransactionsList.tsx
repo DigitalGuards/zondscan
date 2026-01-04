@@ -54,9 +54,10 @@ export default function TransactionsList({
       ) : (
         <div className="max-w-[900px] mx-auto mb-8">
           {transactions.map(transaction => (
-            <TransactionCard 
-              key={transaction.TxHash} 
-              transaction={transaction} 
+            <TransactionCard
+              key={transaction.TxHash}
+              transaction={transaction}
+              currentPage={currentPage}
             />
           ))}
         </div>

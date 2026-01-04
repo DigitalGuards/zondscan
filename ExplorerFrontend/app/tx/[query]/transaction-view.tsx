@@ -1,11 +1,34 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import type { TransactionDetails } from './types';
 import { getConfirmations, getTransactionStatus } from './types';
 import { formatAmount } from '../../lib/helpers';
 import CopyHashButton from '../../components/CopyHashButton';
 import CopyAddressButton from '../../components/CopyAddressButton';
+
+// Back link component that uses useSearchParams
+function BackToTransactionsLink(): JSX.Element | null {
+  const searchParams = useSearchParams();
+  const fromTransactions = searchParams.get('from') === 'transactions';
+  const returnPage = searchParams.get('page') || '1';
+
+  if (!fromTransactions) return null;
+
+  return (
+    <Link
+      href={`/transactions/${returnPage}`}
+      className="inline-flex items-center text-gray-400 hover:text-[#ffa729] mb-4 md:mb-6"
+    >
+      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+      </svg>
+      Back to Latest Transactions
+    </Link>
+  );
+}
 
 const formatTimestamp = (timestamp: number): string => {
   if (!timestamp) return 'Unknown';
@@ -53,7 +76,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
     const checkScreenSize = (): void => {
       setIsMobile(window.innerWidth < 768);
     };
-    
+
     checkScreenSize();
     window.addEventListener('resize', checkScreenSize);
     return () => window.removeEventListener('resize', checkScreenSize);
@@ -99,7 +122,12 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
 
   return (
     <div className="py-4 md:py-8">
-      <div className="relative overflow-hidden rounded-xl md:rounded-2xl 
+      {/* Back Button - only shown when coming from Latest Transactions */}
+      <Suspense fallback={null}>
+        <BackToTransactionsLink />
+      </Suspense>
+
+      <div className="relative overflow-hidden rounded-xl md:rounded-2xl
                     bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
                     border border-[#3d3d3d] shadow-lg md:shadow-xl">
         <div className="p-4 md:p-8">

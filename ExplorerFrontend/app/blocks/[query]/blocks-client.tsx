@@ -10,9 +10,10 @@ import SearchBar from '../../components/SearchBar';
 
 interface BlockCardProps {
   blockData: Block;
+  currentPage?: number;
 }
 
-const BlockCard: React.FC<BlockCardProps> = ({ blockData }) => {
+const BlockCard: React.FC<BlockCardProps> = ({ blockData, currentPage }) => {
   // Format date using UTC to avoid hydration mismatch
   const formatDate = (timestamp: number): string => {
     const date = new Date(timestamp * 1000);
@@ -41,9 +42,11 @@ const BlockCard: React.FC<BlockCardProps> = ({ blockData }) => {
 
   const blockNumber = formatBlockNumber(blockData.number);
 
+  const pageParam = currentPage ? `?from=blocks&page=${currentPage}` : '';
+
   return (
-    <a 
-      href={`/block/${blockNumber}`}
+    <a
+      href={`/block/${blockNumber}${pageParam}`}
       className='relative overflow-hidden rounded-xl 
                 bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
                 border border-[#3d3d3d] shadow-xl
@@ -174,7 +177,7 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
 
       <div className="mb-6 sm:mb-8">
         {data?.blocks.map((blockData) => (
-          <BlockCard key={blockData.number} blockData={blockData} />
+          <BlockCard key={blockData.number} blockData={blockData} currentPage={currentPage} />
         ))}
       </div>
       <div className="flex justify-center items-center gap-2 sm:gap-4 text-sm sm:text-base text-gray-300">
