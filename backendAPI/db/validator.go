@@ -5,6 +5,7 @@ import (
 	"backendAPI/models"
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"time"
 
@@ -121,7 +122,7 @@ const FAR_FUTURE_EPOCH = "18446744073709551615"
 func parseEpoch(epochStr string) int64 {
 	// FAR_FUTURE_EPOCH is special - return max int64 to indicate "never"
 	if epochStr == FAR_FUTURE_EPOCH {
-		return int64(^uint64(0) >> 1) // Max int64: 9223372036854775807
+		return math.MaxInt64
 	}
 	// Try decimal first
 	if epoch, err := strconv.ParseInt(epochStr, 10, 64); err == nil {

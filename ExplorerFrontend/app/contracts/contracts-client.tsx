@@ -31,7 +31,7 @@ function formatTotalSupply(supply: string | undefined, decimals: number | undefi
   if (!supply || supply === '0') return '0';
   try {
     const value = BigInt(supply);
-    const divisor = BigInt(10 ** (decimals || 18));
+    const divisor = BigInt(10 ** (decimals ?? 18));
     const formatted = Number(value) / Number(divisor);
 
     if (formatted >= 1_000_000_000) {

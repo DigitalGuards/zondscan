@@ -72,10 +72,10 @@ export default function ValidatorsWrapper(): JSX.Element {
     try {
       // Fetch all data in parallel
       const [validatorsRes, epochRes, statsRes, historyRes] = await Promise.all([
-        axios.get(`${config.handlerUrl}/validators`).catch(() => ({ data: { validators: [] } })),
-        axios.get(`${config.handlerUrl}/epoch`).catch(() => ({ data: null })),
-        axios.get(`${config.handlerUrl}/validators/stats`).catch(() => ({ data: null })),
-        axios.get(`${config.handlerUrl}/validators/history?limit=100`).catch(() => ({ data: { history: [] } })),
+        axios.get(`${config.handlerUrl}/validators`).catch((err) => { console.error('Failed to fetch validators:', err); return { data: { validators: [] } }; }),
+        axios.get(`${config.handlerUrl}/epoch`).catch((err) => { console.error('Failed to fetch epoch:', err); return { data: null }; }),
+        axios.get(`${config.handlerUrl}/validators/stats`).catch((err) => { console.error('Failed to fetch validator stats:', err); return { data: null }; }),
+        axios.get(`${config.handlerUrl}/validators/history?limit=100`).catch((err) => { console.error('Failed to fetch validator history:', err); return { data: { history: [] } }; }),
       ]);
 
       // Process validators - add Z prefix to addresses

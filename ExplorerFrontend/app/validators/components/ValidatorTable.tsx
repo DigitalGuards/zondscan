@@ -83,7 +83,13 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
           comparison = a.age - b.age;
           break;
         case 'stakedAmount':
-          comparison = BigInt(a.stakedAmount) > BigInt(b.stakedAmount) ? 1 : -1;
+          const aAmount = BigInt(a.stakedAmount);
+          const bAmount = BigInt(b.stakedAmount);
+          if (aAmount > bAmount) {
+            comparison = 1;
+          } else if (aAmount < bAmount) {
+            comparison = -1;
+          }
           break;
         case 'status':
           comparison = statusOrder[a.status] - statusOrder[b.status];

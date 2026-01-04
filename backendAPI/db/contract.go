@@ -33,11 +33,17 @@ func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool
 		// Normalize the search address to lowercase for case-insensitive lookup
 		normalizedSearch := strings.ToLower(search)
 
-		// Zond addresses start with 'Z'. Search assumes the provided string is the correct format.
+		// Also try with Z prefix in case user pastes address without it
+		searchWithZ := normalizedSearch
+		if !strings.HasPrefix(normalizedSearch, "z") {
+			searchWithZ = "z" + normalizedSearch
+		}
+
+		// Zond addresses start with 'Z'. Search for both with and without Z prefix.
 		searchFilter := bson.D{
 			{Key: "$or", Value: bson.A{
-				bson.D{{Key: "address", Value: normalizedSearch}},        // Match contract address
-				bson.D{{Key: "creatorAddress", Value: normalizedSearch}}, // Match creator address
+				bson.D{{Key: "address", Value: bson.M{"$in": bson.A{normalizedSearch, searchWithZ}}}},        // Match contract address
+				bson.D{{Key: "creatorAddress", Value: bson.M{"$in": bson.A{normalizedSearch, searchWithZ}}}}, // Match creator address
 				bson.D{{Key: "name", Value: bson.D{{Key: "$regex", Value: normalizedSearch}, {Key: "$options", Value: "i"}}}}, // Match token name
 			}},
 		}
