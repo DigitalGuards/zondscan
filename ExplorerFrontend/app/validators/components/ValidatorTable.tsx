@@ -125,12 +125,12 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) {
       return (
-        <span className="text-gray-600 ml-1">&#8597;</span>
+        <span className="text-gray-600 ml-1">↕</span>
       );
     }
     return (
       <span className="text-[#ffa729] ml-1">
-        {sortDirection === 'asc' ? '&#8593;' : '&#8595;'}
+        {sortDirection === 'asc' ? '↑' : '↓'}
       </span>
     );
   };

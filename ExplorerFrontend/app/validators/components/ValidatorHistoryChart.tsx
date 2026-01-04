@@ -46,8 +46,8 @@ const getDate = (d: HistoryRecord) => new Date(d.timestamp * 1000);
 const getCount = (d: HistoryRecord) => d.validatorsCount;
 const getStaked = (d: HistoryRecord) => {
   const val = BigInt(d.totalStaked);
-  // Convert from wei to QRL (divide by 10^18)
-  return Number(val / BigInt(10 ** 12)) / 10 ** 6;
+  // Convert from Shor to QRL (divide by 10^12)
+  return Number(val / BigInt(10 ** 12));
 };
 
 const bisectDate = bisector<HistoryRecord, Date>((d) => getDate(d)).left;
