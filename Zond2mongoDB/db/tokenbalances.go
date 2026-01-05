@@ -22,12 +22,12 @@ func StoreTokenBalance(contractAddress string, holderAddress string, amount stri
 		zap.String("transferAmount", amount),
 		zap.String("blockNumber", blockNumber))
 
-	// Special handling for zero address
-	if holderAddress == "0x0" ||
-		holderAddress == "0x0000000000000000000000000000000000000000" ||
-		holderAddress == "Z0" ||
-		holderAddress == "Z0000000000000000000000000000000000000000" ||
-		strings.ToLower(holderAddress) == "0x0000000000000000000000000000000000000000" {
+	// Special handling for zero address (QRL uses Z prefix)
+	normalizedHolder := strings.ToLower(holderAddress)
+	if normalizedHolder == "z0" ||
+		normalizedHolder == "z0000000000000000000000000000000000000000" ||
+		normalizedHolder == "0x0" ||
+		normalizedHolder == "0x0000000000000000000000000000000000000000" {
 		configs.Logger.Info("Skipping token balance update for zero address",
 			zap.String("holderAddress", holderAddress))
 		return nil

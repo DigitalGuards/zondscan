@@ -35,11 +35,11 @@ func StoreTokenTransfer(transfer models.TokenTransfer) error {
 
 	// Additional validation and normalization before inserting
 	if transfer.From == "" {
-		transfer.From = "0x0" // Normalize empty from address to zero address
+		transfer.From = "Z0000000000000000000000000000000000000000" // Normalize empty from address to zero address
 	}
 
 	if transfer.To == "" {
-		transfer.To = "0x0" // Normalize empty to address to zero address
+		transfer.To = "Z0000000000000000000000000000000000000000" // Normalize empty to address to zero address
 	}
 
 	_, err := collection.InsertOne(ctx, transfer)
@@ -284,9 +284,9 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 			continue
 		}
 
-		// Extract from and to addresses
-		from := "0x" + rpc.TrimLeftZeros(log.Topics[1][26:])
-		to := "0x" + rpc.TrimLeftZeros(log.Topics[2][26:])
+		// Extract from and to addresses (use Z prefix for QRL addresses)
+		from := "Z" + rpc.TrimLeftZeros(log.Topics[1][26:])
+		to := "Z" + rpc.TrimLeftZeros(log.Topics[2][26:])
 
 		configs.Logger.Debug("Token transfer details",
 			zap.String("from", from),
@@ -313,12 +313,12 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 		}
 
 		// Normalize addresses to ensure consistency
-		if from == "" {
-			from = "0x0"
+		if from == "" || from == "Z" {
+			from = "Z0000000000000000000000000000000000000000"
 		}
 
-		if to == "" {
-			to = "0x0"
+		if to == "" || to == "Z" {
+			to = "Z0000000000000000000000000000000000000000"
 		}
 
 		// Log token transfer identified

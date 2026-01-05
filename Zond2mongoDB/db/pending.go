@@ -78,3 +78,35 @@ func CleanupOldPendingTransactions(maxAge time.Duration) error {
 
 	return nil
 }
+
+// GetAllPendingTransactionHashes returns all pending transaction hashes
+func GetAllPendingTransactionHashes() ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cursor, err := configs.PendingTransactionsCollections.Find(ctx, bson.M{"status": "pending"})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var hashes []string
+	for cursor.Next(ctx) {
+		var tx models.PendingTransaction
+		if err := cursor.Decode(&tx); err != nil {
+			continue
+		}
+		hashes = append(hashes, tx.Hash)
+	}
+
+	return hashes, nil
+}
+
+// DeletePendingTransaction removes a pending transaction by hash
+func DeletePendingTransaction(hash string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := configs.PendingTransactionsCollections.DeleteOne(ctx, bson.M{"_id": hash})
+	return err
+}
