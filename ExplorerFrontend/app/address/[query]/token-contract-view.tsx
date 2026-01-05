@@ -347,7 +347,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                         <tbody className="divide-y divide-gray-700/50">
                                             {holders.map((holder, idx) => {
                                                 const totalSupplyBigInt = totalSupply ? BigInt(totalSupply) : BigInt(0);
-                                                const share = totalSupplyBigInt > 0n && holder.balance
+                                                const share = totalSupplyBigInt > BigInt(0) && holder.balance
                                                     ? ((BigInt(holder.balance) * BigInt(10000)) / totalSupplyBigInt)
                                                     : BigInt(0);
                                                 const sharePercent = Number(share) / 100;
