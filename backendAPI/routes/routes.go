@@ -331,7 +331,10 @@ func UserRoute(router *gin.Engine) {
 		}
 
 		// Check if this transaction created a contract
-		contractCreated, _ := db.GetContractByCreationTx(value)
+		contractCreated, err := db.GetContractByCreationTx(value)
+		if err != nil {
+			log.Printf("Error checking for contract creation tx %s: %v", value, err)
+		}
 
 		response := gin.H{
 			"response":    query,

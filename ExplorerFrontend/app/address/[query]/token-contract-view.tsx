@@ -216,6 +216,8 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
     const symbol = tokenInfo?.symbol ?? contractData.symbol ?? 'TOKEN';
     const name = tokenInfo?.name ?? contractData.name ?? 'Unknown Token';
     const totalSupply = tokenInfo?.totalSupply ?? contractData.totalSupply ?? '0';
+    const creatorAddress = creationTx?.From || tokenInfo?.creatorAddress || contractData.creatorAddress || '';
+    const creationTxHash = tokenInfo?.creationTxHash || contractData.creationTransaction || '';
 
     const tabs = [
         { id: 'overview', label: 'Overview' },
@@ -315,9 +317,9 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                 <div>
                                     <div className="text-xs md:text-sm text-gray-400 mb-1">Creator</div>
                                     <div className="flex items-center gap-2">
-                                        <AddressDisplay address={creationTx?.From || tokenInfo?.creatorAddress || contractData.creatorAddress || ''} />
-                                        {(creationTx?.From || tokenInfo?.creatorAddress || contractData.creatorAddress) && (
-                                            <CopyAddressButton address={creationTx?.From || tokenInfo?.creatorAddress || contractData.creatorAddress || ''} />
+                                        <AddressDisplay address={creatorAddress} />
+                                        {creatorAddress && (
+                                            <CopyAddressButton address={creatorAddress} />
                                         )}
                                     </div>
                                 </div>
@@ -342,13 +344,13 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                     <div className="text-xs md:text-sm text-gray-400">Transaction Hash</div>
                                     <div className="flex items-center gap-2">
                                         <Link
-                                            href={`/tx/${tokenInfo?.creationTxHash || contractData.creationTransaction}`}
+                                            href={`/tx/${creationTxHash}`}
                                             className="text-accent hover:text-accent-hover font-mono text-xs md:text-sm"
                                         >
-                                            {tokenInfo?.creationTxHash || contractData.creationTransaction || 'Unknown'}
+                                            {creationTxHash || 'Unknown'}
                                         </Link>
-                                        {(tokenInfo?.creationTxHash || contractData.creationTransaction) && (
-                                            <CopyAddressButton address={tokenInfo?.creationTxHash || contractData.creationTransaction || ''} />
+                                        {creationTxHash && (
+                                            <CopyAddressButton address={creationTxHash} />
                                         )}
                                     </div>
                                 </div>
