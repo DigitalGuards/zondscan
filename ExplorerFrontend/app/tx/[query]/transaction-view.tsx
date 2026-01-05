@@ -195,6 +195,47 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                 <AddressDisplay address={transaction.to} isMobile={isMobile} />
               </div>
 
+              {/* Contract Creation Info */}
+              {transaction.contractCreated && (
+                <div className="col-span-1 md:col-span-2 pt-4 border-t border-gray-700">
+                  <div className="bg-green-900/20 border border-green-500/30 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-green-400">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <h3 className="text-green-400 font-semibold">Contract Created</h3>
+                      {transaction.contractCreated.isToken && (
+                        <span className="px-2 py-0.5 rounded bg-[#ffa729]/20 text-[#ffa729] text-xs font-medium">
+                          QRC-20 Token
+                        </span>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <span className="text-sm text-gray-400">Contract Address: </span>
+                        <a
+                          href={`/address/${transaction.contractCreated.address}`}
+                          className="text-[#ffa729] hover:text-[#ffb84d] font-mono text-sm transition-colors"
+                        >
+                          {isMobile
+                            ? `${transaction.contractCreated.address.slice(0, 10)}...${transaction.contractCreated.address.slice(-8)}`
+                            : transaction.contractCreated.address
+                          }
+                        </a>
+                      </div>
+                      {transaction.contractCreated.isToken && transaction.contractCreated.name && (
+                        <div>
+                          <span className="text-sm text-gray-400">Token: </span>
+                          <span className="text-white font-medium">
+                            {transaction.contractCreated.name} ({transaction.contractCreated.symbol})
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <h2 className="text-sm font-semibold text-gray-400 mb-2">Value</h2>
                 <p className="text-xl md:text-2xl font-semibold text-[#ffa729]">

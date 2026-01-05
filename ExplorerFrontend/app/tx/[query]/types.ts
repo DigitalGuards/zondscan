@@ -11,6 +11,13 @@ export interface TransactionDetails {
   nonce?: number;
   latestBlock?: number;
   PaidFees?: number;
+  contractCreated?: {
+    address: string;
+    isToken: boolean;
+    name: string;
+    symbol: string;
+    decimals: number;
+  };
 }
 
 // Helper function to calculate confirmations

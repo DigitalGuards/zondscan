@@ -143,3 +143,29 @@ func CountContracts() (int64, error) {
 
 	return count, nil
 }
+
+// GetContractByCreationTx returns contract info for a given creation transaction hash
+func GetContractByCreationTx(txHash string) (*models.ContractInfo, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var result models.ContractInfo
+
+	// Normalize tx hash to lowercase with 0x prefix
+	normalizedHash := strings.ToLower(txHash)
+	if !strings.HasPrefix(normalizedHash, "0x") {
+		normalizedHash = "0x" + normalizedHash
+	}
+
+	filter := bson.D{{Key: "creationTransaction", Value: normalizedHash}}
+	err := configs.ContractInfoCollection.FindOne(ctx, filter).Decode(&result)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil // No contract created by this tx
+		}
+		return nil, err
+	}
+
+	return &result, nil
+}

@@ -41,6 +41,16 @@ interface TokenTransfer {
     transferType: string;
 }
 
+interface CreationTxData {
+    BlockNumber: string;
+    BlockTimestamp: string;
+    From: string;
+    TxHash: string;
+    GasUsed: string;
+    GasPrice: string;
+    Value: string;
+}
+
 interface TokenContractViewProps {
     address: string;
     contractData: {
@@ -120,6 +130,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
     const [holdersPage, setHoldersPage] = useState(0);
     const [transfersPage, setTransfersPage] = useState(0);
     const [loading, setLoading] = useState(true);
+    const [creationTx, setCreationTx] = useState<CreationTxData | null>(null);
     const limit = 25;
 
     // Fetch token info
@@ -137,6 +148,27 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
         };
         fetchTokenInfo();
     }, [address, handlerUrl]);
+
+    // Fetch creation transaction details
+    useEffect(() => {
+        const creationTxHash = tokenInfo?.creationTxHash || contractData.creationTransaction;
+        if (!creationTxHash) return;
+
+        const fetchCreationTx = async (): Promise<void> => {
+            try {
+                const res = await fetch(`${handlerUrl}/tx/${creationTxHash}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.response) {
+                        setCreationTx(data.response);
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to fetch creation tx:', error);
+            }
+        };
+        fetchCreationTx();
+    }, [tokenInfo?.creationTxHash, contractData.creationTransaction, handlerUrl]);
 
     // Fetch holders when tab is active
     useEffect(() => {
@@ -184,6 +216,8 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
     const symbol = tokenInfo?.symbol ?? contractData.symbol ?? 'TOKEN';
     const name = tokenInfo?.name ?? contractData.name ?? 'Unknown Token';
     const totalSupply = tokenInfo?.totalSupply ?? contractData.totalSupply ?? '0';
+    const creatorAddress = creationTx?.From || tokenInfo?.creatorAddress || contractData.creatorAddress || '';
+    const creationTxHash = tokenInfo?.creationTxHash || contractData.creationTransaction || '';
 
     const tabs = [
         { id: 'overview', label: 'Overview' },
@@ -276,49 +310,112 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
             <div className="bg-card-gradient rounded-xl border border-border overflow-hidden">
                 {/* Overview Tab */}
                 {activeTab === 'overview' && (
-                    <div className="p-4 md:p-6 space-y-4">
-                        <h3 className="text-lg font-semibold text-accent mb-4">Contract Details</h3>
+                    <div className="p-4 md:p-6 space-y-6">
+                        <div>
+                            <h3 className="text-lg font-semibold text-accent mb-4">Contract Details</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <div className="text-xs md:text-sm text-gray-400 mb-1">Creator</div>
+                                    <div className="flex items-center gap-2">
+                                        <AddressDisplay address={creatorAddress} />
+                                        {creatorAddress && (
+                                            <CopyAddressButton address={creatorAddress} />
+                                        )}
+                                    </div>
+                                </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <div className="text-xs md:text-sm text-gray-400 mb-1">Creator</div>
-                                <div className="flex items-center gap-2">
-                                    <AddressDisplay address={tokenInfo?.creatorAddress || contractData.creatorAddress || ''} />
-                                    {(tokenInfo?.creatorAddress || contractData.creatorAddress) && (
-                                        <CopyAddressButton address={tokenInfo?.creatorAddress || contractData.creatorAddress || ''} />
-                                    )}
+                                <div>
+                                    <div className="text-xs md:text-sm text-gray-400 mb-1">Contract Size</div>
+                                    <div className="text-sm text-gray-300">
+                                        {contractData.contractCode
+                                            ? `${Math.floor(contractData.contractCode.length * 0.75).toLocaleString()} bytes`
+                                            : '-'
+                                        }
+                                    </div>
                                 </div>
                             </div>
+                        </div>
 
-                            <div>
-                                <div className="text-xs md:text-sm text-gray-400 mb-1">Creation Transaction</div>
-                                <div className="flex items-center gap-2">
-                                    <Link
-                                        href={`/tx/${tokenInfo?.creationTxHash || contractData.creationTransaction}`}
-                                        className="text-accent hover:text-accent-hover font-mono text-xs md:text-sm truncate"
-                                    >
-                                        {tokenInfo?.creationTxHash || contractData.creationTransaction || 'Unknown'}
-                                    </Link>
+                        {/* Creation Transaction Details */}
+                        <div>
+                            <h3 className="text-lg font-semibold text-accent mb-4">Creation Transaction</h3>
+                            <div className="bg-black/20 rounded-lg p-4 space-y-3">
+                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+                                    <div className="text-xs md:text-sm text-gray-400">Transaction Hash</div>
+                                    <div className="flex items-center gap-2">
+                                        <Link
+                                            href={`/tx/${creationTxHash}`}
+                                            className="text-accent hover:text-accent-hover font-mono text-xs md:text-sm"
+                                        >
+                                            {creationTxHash || 'Unknown'}
+                                        </Link>
+                                        {creationTxHash && (
+                                            <CopyAddressButton address={creationTxHash} />
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
 
-                            <div>
-                                <div className="text-xs md:text-sm text-gray-400 mb-1">Creation Block</div>
-                                <Link
-                                    href={`/block/${tokenInfo?.creationBlock || ''}`}
-                                    className="text-accent hover:text-accent-hover text-sm"
-                                >
-                                    {tokenInfo?.creationBlock ? parseInt(tokenInfo.creationBlock, 16).toLocaleString() : '-'}
-                                </Link>
-                            </div>
+                                <div className="border-t border-gray-700/50" />
 
-                            <div>
-                                <div className="text-xs md:text-sm text-gray-400 mb-1">Contract Size</div>
-                                <div className="text-sm text-gray-300">
-                                    {contractData.contractCode
-                                        ? `${Math.floor(contractData.contractCode.length * 0.75).toLocaleString()} bytes`
-                                        : '-'
-                                    }
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div className="flex justify-between md:flex-col">
+                                        <div className="text-xs md:text-sm text-gray-400">Block</div>
+                                        <Link
+                                            href={`/block/${creationTx?.BlockNumber || tokenInfo?.creationBlock || ''}`}
+                                            className="text-accent hover:text-accent-hover text-sm"
+                                        >
+                                            {creationTx?.BlockNumber
+                                                ? parseInt(creationTx.BlockNumber, 16).toLocaleString()
+                                                : tokenInfo?.creationBlock
+                                                    ? parseInt(tokenInfo.creationBlock, 16).toLocaleString()
+                                                    : '-'}
+                                        </Link>
+                                    </div>
+
+                                    <div className="flex justify-between md:flex-col">
+                                        <div className="text-xs md:text-sm text-gray-400">Timestamp</div>
+                                        <div className="text-sm text-gray-300">
+                                            {creationTx?.BlockTimestamp
+                                                ? formatTimestamp(creationTx.BlockTimestamp)
+                                                : '-'}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-between md:flex-col">
+                                        <div className="text-xs md:text-sm text-gray-400">Gas Used</div>
+                                        <div className="text-sm text-gray-300">
+                                            {creationTx?.GasUsed
+                                                ? parseInt(creationTx.GasUsed, 16).toLocaleString()
+                                                : '-'}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-between md:flex-col">
+                                        <div className="text-xs md:text-sm text-gray-400">Gas Price</div>
+                                        <div className="text-sm text-gray-300">
+                                            {creationTx?.GasPrice
+                                                ? `${(parseInt(creationTx.GasPrice, 16) / 1e9).toFixed(2)} Gwei`
+                                                : '-'}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-between md:flex-col">
+                                        <div className="text-xs md:text-sm text-gray-400">Transaction Fee</div>
+                                        <div className="text-sm text-gray-300">
+                                            {creationTx?.GasUsed && creationTx?.GasPrice
+                                                ? `${formatAmount(`0x${(BigInt(creationTx.GasUsed) * BigInt(creationTx.GasPrice)).toString(16)}`)} QRL`
+                                                : '-'}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-between md:flex-col">
+                                        <div className="text-xs md:text-sm text-gray-400">Value</div>
+                                        <div className="text-sm text-gray-300">
+                                            {creationTx?.Value
+                                                ? `${formatAmount(creationTx.Value)} QRL`
+                                                : '0 QRL'}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
