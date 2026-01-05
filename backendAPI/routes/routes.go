@@ -652,4 +652,76 @@ func UserRoute(router *gin.Engine) {
 			Count:   len(tokens),
 		})
 	})
+
+	// Get token info (summary stats for a token contract)
+	router.GET("/token/:address/info", func(c *gin.Context) {
+		address := c.Param("address")
+
+		info, err := db.GetTokenInfo(address)
+		if err != nil {
+			log.Printf("Error fetching token info for %s: %v", address, err)
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Token not found",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, info)
+	})
+
+	// Get token holders with pagination
+	router.GET("/token/:address/holders", func(c *gin.Context) {
+		address := c.Param("address")
+		page, _ := strconv.Atoi(c.DefaultQuery("page", "0"))
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "25"))
+
+		if limit > 100 {
+			limit = 100
+		}
+
+		holders, totalCount, err := db.GetTokenHolders(address, page, limit)
+		if err != nil {
+			log.Printf("Error fetching token holders for %s: %v", address, err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to fetch token holders",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, models.TokenHoldersResponse{
+			ContractAddress: address,
+			Holders:         holders,
+			TotalHolders:    totalCount,
+			Page:            page,
+			Limit:           limit,
+		})
+	})
+
+	// Get token transfers with pagination
+	router.GET("/token/:address/transfers", func(c *gin.Context) {
+		address := c.Param("address")
+		page, _ := strconv.Atoi(c.DefaultQuery("page", "0"))
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "25"))
+
+		if limit > 100 {
+			limit = 100
+		}
+
+		transfers, totalCount, err := db.GetTokenTransfers(address, page, limit)
+		if err != nil {
+			log.Printf("Error fetching token transfers for %s: %v", address, err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to fetch token transfers",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, models.TokenTransfersResponse{
+			ContractAddress: address,
+			Transfers:       transfers,
+			TotalTransfers:  totalCount,
+			Page:            page,
+			Limit:           limit,
+		})
+	})
 }
