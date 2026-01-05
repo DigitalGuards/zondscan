@@ -107,7 +107,7 @@ const formatTimestamp = (timestamp: string): string => {
     }
 
     const date = new Date(parseInt(ts) * 1000);
-    return date.toLocaleString();
+    return date.toUTCString();
 };
 
 export default function TokenContractView({ address, contractData, handlerUrl }: TokenContractViewProps) {
@@ -346,8 +346,9 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                         </thead>
                                         <tbody className="divide-y divide-gray-700/50">
                                             {holders.map((holder, idx) => {
-                                                const share = totalSupply && holder.balance
-                                                    ? ((BigInt(holder.balance) * BigInt(10000)) / BigInt(totalSupply))
+                                                const totalSupplyBigInt = totalSupply ? BigInt(totalSupply) : BigInt(0);
+                                                const share = totalSupplyBigInt > 0n && holder.balance
+                                                    ? ((BigInt(holder.balance) * BigInt(10000)) / totalSupplyBigInt)
                                                     : BigInt(0);
                                                 const sharePercent = Number(share) / 100;
 
