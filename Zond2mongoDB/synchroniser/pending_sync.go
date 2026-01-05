@@ -198,7 +198,7 @@ func verifyPendingTransactions() error {
 		// Check if transaction has a receipt (meaning it's mined)
 		receipt, err := rpc.GetTransactionReceipt(hash)
 		if err != nil {
-			configs.Logger.Debug("Failed to get receipt for pending tx",
+			configs.Logger.Warn("Failed to get receipt for pending tx",
 				zap.String("hash", hash),
 				zap.Error(err))
 			continue

@@ -84,7 +84,9 @@ func GetAllPendingTransactionHashes() ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cursor, err := configs.PendingTransactionsCollections.Find(ctx, bson.M{"status": "pending"})
+	// Use projection to only fetch _id field for efficiency
+	opts := options.Find().SetProjection(bson.M{"_id": 1})
+	cursor, err := configs.PendingTransactionsCollections.Find(ctx, bson.M{"status": "pending"}, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -92,11 +94,14 @@ func GetAllPendingTransactionHashes() ([]string, error) {
 
 	var hashes []string
 	for cursor.Next(ctx) {
-		var tx models.PendingTransaction
-		if err := cursor.Decode(&tx); err != nil {
+		var result struct {
+			ID string `bson:"_id"`
+		}
+		if err := cursor.Decode(&result); err != nil {
+			configs.Logger.Warn("Failed to decode pending transaction hash", zap.Error(err))
 			continue
 		}
-		hashes = append(hashes, tx.Hash)
+		hashes = append(hashes, result.ID)
 	}
 
 	return hashes, nil

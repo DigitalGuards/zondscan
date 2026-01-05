@@ -9,6 +9,9 @@ import (
 
 const QUANTA float64 = 1000000000000000000
 
+// QRL address constants
+const QRLZeroAddress = "Z0000000000000000000000000000000000000000"
+
 // Collection names
 const (
 	ADDRESSES_COLLECTION                       = "addresses"

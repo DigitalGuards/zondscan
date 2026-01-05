@@ -35,11 +35,11 @@ func StoreTokenTransfer(transfer models.TokenTransfer) error {
 
 	// Additional validation and normalization before inserting
 	if transfer.From == "" {
-		transfer.From = "Z0000000000000000000000000000000000000000" // Normalize empty from address to zero address
+		transfer.From = configs.QRLZeroAddress // Normalize empty from address to zero address
 	}
 
 	if transfer.To == "" {
-		transfer.To = "Z0000000000000000000000000000000000000000" // Normalize empty to address to zero address
+		transfer.To = configs.QRLZeroAddress // Normalize empty to address to zero address
 	}
 
 	_, err := collection.InsertOne(ctx, transfer)
@@ -314,11 +314,11 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 
 		// Normalize addresses to ensure consistency
 		if from == "" || from == "Z" {
-			from = "Z0000000000000000000000000000000000000000"
+			from = configs.QRLZeroAddress
 		}
 
 		if to == "" || to == "Z" {
-			to = "Z0000000000000000000000000000000000000000"
+			to = configs.QRLZeroAddress
 		}
 
 		// Log token transfer identified

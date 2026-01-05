@@ -73,9 +73,15 @@ func GetTokenBalancesByAddress(address string) ([]models.TokenBalance, error) {
 				"decimals":        "$tokenInfo.decimals",
 			},
 		},
+		// Convert balance string to decimal for proper numeric sorting
+		{
+			"$addFields": bson.M{
+				"balanceDecimal": bson.M{"$toDecimal": "$balance"},
+			},
+		},
 		// Sort by balance descending (highest value tokens first)
 		{
-			"$sort": bson.M{"balance": -1},
+			"$sort": bson.M{"balanceDecimal": -1},
 		},
 	}
 

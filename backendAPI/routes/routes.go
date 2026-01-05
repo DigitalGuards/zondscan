@@ -641,7 +641,7 @@ func UserRoute(router *gin.Engine) {
 		if err != nil {
 			log.Printf("Error fetching token balances for %s: %v", address, err)
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to fetch token balances: %v", err),
+				"error": "Failed to fetch token balances",
 			})
 			return
 		}
