@@ -54,7 +54,7 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
     return value.startsWith('0x') ? value : `0x${value}`;
   };
 
-  const transaction = {
+  const transaction: TransactionDetails = {
     hash: txData.TxHash,
     blockNumber: txData.BlockNumber ? parseInt(txData.BlockNumber, 16) : 0,
     from: txData.From,
@@ -65,7 +65,8 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
     gasPrice: ensureHexString(txData.GasPrice),
     nonce: txData.Nonce ? parseInt(txData.Nonce, 16) : 0,
     latestBlock: data.latestBlock,
-    PaidFees: txData.PaidFees ? Number(txData.PaidFees) : undefined
+    PaidFees: txData.PaidFees ? Number(txData.PaidFees) : undefined,
+    contractCreated: data.contractCreated || undefined
   };
 
   console.log('Processed transaction:', JSON.stringify(transaction, null, 2));

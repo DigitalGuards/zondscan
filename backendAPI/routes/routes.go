@@ -330,10 +330,25 @@ func UserRoute(router *gin.Engine) {
 			}
 		}
 
-		c.JSON(http.StatusOK, gin.H{
+		// Check if this transaction created a contract
+		contractCreated, _ := db.GetContractByCreationTx(value)
+
+		response := gin.H{
 			"response":    query,
 			"latestBlock": latestBlockNum,
-		})
+		}
+
+		if contractCreated != nil {
+			response["contractCreated"] = gin.H{
+				"address":  contractCreated.ContractAddress,
+				"isToken":  contractCreated.IsToken,
+				"name":     contractCreated.TokenName,
+				"symbol":   contractCreated.TokenSymbol,
+				"decimals": contractCreated.TokenDecimals,
+			}
+		}
+
+		c.JSON(http.StatusOK, response)
 	})
 
 	router.GET("/latestblock", func(c *gin.Context) {
