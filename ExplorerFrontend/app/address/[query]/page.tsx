@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import AddressView from "./address-view";
+import TokenContractView from "./token-contract-view";
 import { sharedMetadata } from '../../lib/seo/metaData';
 import type { AddressData } from "./types";
 import { decodeToHex, formatAddress } from '../../lib/helpers';
@@ -86,6 +87,7 @@ export default async function Page({ params }: PageProps): Promise<JSX.Element> 
     const resolvedParams = await params;
     const address = resolvedParams.query;
     const addressData = await fetchAddressData(address);
+    const handlerUrl = process.env.NEXT_PUBLIC_HANDLER_URL || process.env.HANDLER_URL || 'http://127.0.0.1:8080';
 
     if (!addressData) {
         return (
@@ -95,10 +97,21 @@ export default async function Page({ params }: PageProps): Promise<JSX.Element> 
         );
     }
 
+    // Check if this is a token contract
+    const isTokenContract = addressData.contract_code?.isToken === true;
+
     return (
         <main>
             <h1 className="sr-only">Address {address}</h1>
-            <AddressView addressData={addressData} addressSegment={address} />
+            {isTokenContract ? (
+                <TokenContractView
+                    address={address}
+                    contractData={addressData.contract_code!}
+                    handlerUrl={handlerUrl}
+                />
+            ) : (
+                <AddressView addressData={addressData} addressSegment={address} />
+            )}
         </main>
     );
 }
