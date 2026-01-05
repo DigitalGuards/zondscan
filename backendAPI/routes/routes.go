@@ -630,4 +630,26 @@ func UserRoute(router *gin.Engine) {
 			"limit":        limit,
 		})
 	})
+
+	// Get all token balances for a wallet address
+	// This endpoint is designed for wallet integration (e.g., qrlwallet)
+	// to auto-discover tokens held by an address on import
+	router.GET("/address/:address/tokens", func(c *gin.Context) {
+		address := c.Param("address")
+
+		tokens, err := db.GetTokenBalancesByAddress(address)
+		if err != nil {
+			log.Printf("Error fetching token balances for %s: %v", address, err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to fetch token balances",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, models.TokenBalancesResponse{
+			Address: address,
+			Tokens:  tokens,
+			Count:   len(tokens),
+		})
+	})
 }

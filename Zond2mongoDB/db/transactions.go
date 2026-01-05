@@ -23,17 +23,14 @@ func ProcessTransactions(blockData interface{}) {
 		processTransactionData(&tx, blockData.(models.ZondDatabaseBlock).Result.Timestamp, to, contractAddress, statusTx, isContract, blockData.(models.ZondDatabaseBlock).Result.Size)
 
 		// Store contract addresses for later token processing
-		// instead of processing them inline
-		if contractAddress != "" || to != "" {
-			targetAddress := to
-			if contractAddress != "" {
-				targetAddress = contractAddress
-			}
-
-			// Only queue it if it's a non-empty address
-			if targetAddress != "" {
-				QueuePotentialTokenContract(targetAddress, &tx, blockData.(models.ZondDatabaseBlock).Result.Timestamp)
-			}
+		// Only queue if this is actually a contract (new creation or interaction with existing contract)
+		// This avoids queuing regular wallet addresses which would just be filtered out later
+		if contractAddress != "" {
+			// New contract creation - always queue
+			QueuePotentialTokenContract(contractAddress, &tx, blockData.(models.ZondDatabaseBlock).Result.Timestamp)
+		} else if isContract && to != "" {
+			// Transaction to an existing contract - queue for token processing
+			QueuePotentialTokenContract(to, &tx, blockData.(models.ZondDatabaseBlock).Result.Timestamp)
 		}
 	}
 }

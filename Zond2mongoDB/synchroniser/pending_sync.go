@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	MEMPOOL_SYNC_INTERVAL = 5 * time.Second
-	CLEANUP_INTERVAL      = 1 * time.Hour
-	MAX_PENDING_AGE       = 24 * time.Hour
+	MEMPOOL_SYNC_INTERVAL       = 5 * time.Second
+	CLEANUP_INTERVAL            = 1 * time.Hour
+	VERIFY_PENDING_INTERVAL     = 5 * time.Minute
+	MAX_PENDING_AGE             = 24 * time.Hour
 )
 
 // StartPendingTransactionSync starts the periodic mempool monitoring
@@ -35,6 +36,13 @@ func StartPendingTransactionSync() {
 			configs.Logger.Error("Failed to cleanup old pending transactions", zap.Error(err))
 		}
 	}, CLEANUP_INTERVAL, "pending cleanup")
+
+	// Start verification of pending transactions against node
+	go runPeriodicTask(func() {
+		if err := verifyPendingTransactions(); err != nil {
+			configs.Logger.Error("Failed to verify pending transactions", zap.Error(err))
+		}
+	}, VERIFY_PENDING_INTERVAL, "pending verification")
 }
 
 // UpdatePendingTransactionsInBlock checks if any pending transactions are included in the new block
@@ -165,6 +173,56 @@ func syncMempool() error {
 			zap.Time("timestamp", now))
 	} else {
 		configs.Logger.Debug("No pending transactions found in txpool")
+	}
+
+	return nil
+}
+
+// verifyPendingTransactions checks pending transactions against the node
+// and removes any that have been mined (have a receipt)
+func verifyPendingTransactions() error {
+	hashes, err := db.GetAllPendingTransactionHashes()
+	if err != nil {
+		return err
+	}
+
+	if len(hashes) == 0 {
+		return nil
+	}
+
+	configs.Logger.Info("Verifying pending transactions against node",
+		zap.Int("count", len(hashes)))
+
+	removedCount := 0
+	for _, hash := range hashes {
+		// Check if transaction has a receipt (meaning it's mined)
+		receipt, err := rpc.GetTransactionReceipt(hash)
+		if err != nil {
+			configs.Logger.Warn("Failed to get receipt for pending tx",
+				zap.String("hash", hash),
+				zap.Error(err))
+			continue
+		}
+
+		// If receipt exists with status, transaction is mined - remove from pending
+		if receipt != nil && receipt.Result.Status != "" {
+			if err := db.DeletePendingTransaction(hash); err != nil {
+				configs.Logger.Error("Failed to delete mined pending transaction",
+					zap.String("hash", hash),
+					zap.Error(err))
+			} else {
+				removedCount++
+				configs.Logger.Info("Removed mined transaction from pending",
+					zap.String("hash", hash),
+					zap.String("blockNumber", receipt.Result.BlockNumber))
+			}
+		}
+	}
+
+	if removedCount > 0 {
+		configs.Logger.Info("Pending transaction verification complete",
+			zap.Int("removed", removedCount),
+			zap.Int("total", len(hashes)))
 	}
 
 	return nil
