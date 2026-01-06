@@ -198,7 +198,7 @@ func processBlockPeriodically() {
 			// Clear any previous failure tracking on success
 			clearFailedBlock(currentBlock)
 
-			processTokenTransfersForBlock(currentBlock)
+			ProcessTokenTransfersForBlock(currentBlock)
 
 			// Move to next block
 			currentBlock = utils.AddHexNumbers(currentBlock, "0x1")
