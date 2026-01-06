@@ -57,11 +57,16 @@ export default function ValidatorsWrapper(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [chartWidth, setChartWidth] = useState(400);
 
-  // Update chart width on resize
+  // Update chart width on resize - responsive for mobile
   useEffect(() => {
     const updateWidth = () => {
-      const width = Math.min(window.innerWidth - 48, 600);
-      setChartWidth(width);
+      // On mobile (< 640px), account for padding and give more breathing room
+      // On larger screens, constrain to reasonable max
+      const isMobile = window.innerWidth < 640;
+      const padding = isMobile ? 64 : 48; // More padding on mobile for card borders
+      const maxWidth = isMobile ? 500 : 600;
+      const width = Math.min(window.innerWidth - padding, maxWidth);
+      setChartWidth(Math.max(width, 280)); // Minimum 280px for readability
     };
     updateWidth();
     window.addEventListener('resize', updateWidth);
@@ -138,13 +143,13 @@ export default function ValidatorsWrapper(): JSX.Element {
       <ValidatorStatsCards stats={stats} loading={loading} />
 
       {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6">
         {/* Status Distribution Chart */}
-        <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4">
-          <h3 className="text-lg font-semibold text-[#ffa729] mb-4">Status Distribution</h3>
-          <div className="flex justify-center">
+        <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-3 sm:p-4">
+          <h3 className="text-base sm:text-lg font-semibold text-[#ffa729] mb-3 sm:mb-4">Status Distribution</h3>
+          <div className="flex justify-center overflow-hidden">
             {loading ? (
-              <div className="h-[300px] flex items-center justify-center">
+              <div className="h-[250px] sm:h-[300px] flex items-center justify-center">
                 <div className="animate-pulse text-gray-500">Loading chart...</div>
               </div>
             ) : (
@@ -154,45 +159,49 @@ export default function ValidatorsWrapper(): JSX.Element {
                 exitedCount={stats?.exitedCount || 0}
                 slashedCount={stats?.slashedCount || 0}
                 width={Math.min(chartWidth, 350)}
-                height={300}
+                height={typeof window !== 'undefined' && window.innerWidth < 640 ? 250 : 300}
               />
             )}
           </div>
         </div>
 
         {/* Total Staked Chart */}
-        <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4">
-          <h3 className="text-lg font-semibold text-[#ffa729] mb-4">Total Staked Over Time</h3>
+        <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-3 sm:p-4 overflow-hidden">
+          <h3 className="text-base sm:text-lg font-semibold text-[#ffa729] mb-3 sm:mb-4">Total Staked Over Time</h3>
+          <div className="overflow-x-auto">
+            {loading ? (
+              <div className="h-[250px] sm:h-[300px] flex items-center justify-center">
+                <div className="animate-pulse text-gray-500">Loading chart...</div>
+              </div>
+            ) : (
+              <ValidatorHistoryChart
+                data={history}
+                type="staked"
+                width={Math.max(chartWidth - 24, 300)}
+                height={typeof window !== 'undefined' && window.innerWidth < 640 ? 250 : 300}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Validator Count History */}
+      <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-3 sm:p-4 mb-6 overflow-hidden">
+        <h3 className="text-base sm:text-lg font-semibold text-[#ffa729] mb-3 sm:mb-4">Validator Count Over Time</h3>
+        <div className="overflow-x-auto">
           {loading ? (
-            <div className="h-[300px] flex items-center justify-center">
+            <div className="h-[200px] sm:h-[250px] flex items-center justify-center">
               <div className="animate-pulse text-gray-500">Loading chart...</div>
             </div>
           ) : (
             <ValidatorHistoryChart
               data={history}
-              type="staked"
-              width={chartWidth}
-              height={300}
+              type="count"
+              width={Math.max(typeof window !== 'undefined' ? Math.min(window.innerWidth - 64, 1200) : 800, 300)}
+              height={typeof window !== 'undefined' && window.innerWidth < 640 ? 200 : 250}
             />
           )}
         </div>
-      </div>
-
-      {/* Validator Count History */}
-      <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4 mb-6">
-        <h3 className="text-lg font-semibold text-[#ffa729] mb-4">Validator Count Over Time</h3>
-        {loading ? (
-          <div className="h-[250px] flex items-center justify-center">
-            <div className="animate-pulse text-gray-500">Loading chart...</div>
-          </div>
-        ) : (
-          <ValidatorHistoryChart
-            data={history}
-            type="count"
-            width={Math.min(window.innerWidth - 48, 1200)}
-            height={250}
-          />
-        )}
       </div>
 
       {/* Validators Table */}
