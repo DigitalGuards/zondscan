@@ -10,7 +10,7 @@ function formatValidatorStake(amount: string): [string, string] {
   try {
     const value = BigInt(amount);
     const divisor = BigInt('1000000000'); // 10^9 (Shor to QRL)
-    const qrlValue = Number(value) / Number(divisor);
+    const qrlValue = Number(value / divisor);
     return [qrlValue.toLocaleString(undefined, { maximumFractionDigits: 0 }), 'QRL'];
   } catch {
     return ['0', 'QRL'];

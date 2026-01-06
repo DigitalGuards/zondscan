@@ -48,6 +48,35 @@ interface HistoryRecord {
   totalStaked: string;
 }
 
+// Custom hook for responsive viewport dimensions (SSR-safe)
+function useViewport() {
+  const [viewport, setViewport] = useState({
+    width: 800, // Default for SSR
+    isMobile: false,
+    chartWidth: 400,
+    fullChartWidth: 800,
+  });
+
+  useEffect(() => {
+    const updateViewport = () => {
+      const width = window.innerWidth;
+      const isMobile = width < 640;
+      const padding = isMobile ? 64 : 48;
+      const maxWidth = isMobile ? 500 : 600;
+      const chartWidth = Math.max(Math.min(width - padding, maxWidth), 280);
+      const fullChartWidth = Math.max(Math.min(width - 64, 1200), 300);
+
+      setViewport({ width, isMobile, chartWidth, fullChartWidth });
+    };
+
+    updateViewport();
+    window.addEventListener('resize', updateViewport);
+    return () => window.removeEventListener('resize', updateViewport);
+  }, []);
+
+  return viewport;
+}
+
 export default function ValidatorsWrapper(): JSX.Element {
   const [validators, setValidators] = useState<Validator[]>([]);
   const [epochInfo, setEpochInfo] = useState<EpochInfo | null>(null);
@@ -55,23 +84,9 @@ export default function ValidatorsWrapper(): JSX.Element {
   const [history, setHistory] = useState<HistoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [chartWidth, setChartWidth] = useState(400);
 
-  // Update chart width on resize - responsive for mobile
-  useEffect(() => {
-    const updateWidth = () => {
-      // On mobile (< 640px), account for padding and give more breathing room
-      // On larger screens, constrain to reasonable max
-      const isMobile = window.innerWidth < 640;
-      const padding = isMobile ? 64 : 48; // More padding on mobile for card borders
-      const maxWidth = isMobile ? 500 : 600;
-      const width = Math.min(window.innerWidth - padding, maxWidth);
-      setChartWidth(Math.max(width, 280)); // Minimum 280px for readability
-    };
-    updateWidth();
-    window.addEventListener('resize', updateWidth);
-    return () => window.removeEventListener('resize', updateWidth);
-  }, []);
+  // Use viewport hook for responsive dimensions (SSR-safe)
+  const { isMobile, chartWidth, fullChartWidth } = useViewport();
 
   const fetchData = useCallback(async () => {
     try {
@@ -159,7 +174,7 @@ export default function ValidatorsWrapper(): JSX.Element {
                 exitedCount={stats?.exitedCount || 0}
                 slashedCount={stats?.slashedCount || 0}
                 width={Math.min(chartWidth, 350)}
-                height={typeof window !== 'undefined' && window.innerWidth < 640 ? 250 : 300}
+                height={isMobile ? 250 : 300}
               />
             )}
           </div>
@@ -178,7 +193,7 @@ export default function ValidatorsWrapper(): JSX.Element {
                 data={history}
                 type="staked"
                 width={Math.max(chartWidth - 24, 300)}
-                height={typeof window !== 'undefined' && window.innerWidth < 640 ? 250 : 300}
+                height={isMobile ? 250 : 300}
               />
             )}
           </div>
@@ -197,8 +212,8 @@ export default function ValidatorsWrapper(): JSX.Element {
             <ValidatorHistoryChart
               data={history}
               type="count"
-              width={Math.max(typeof window !== 'undefined' ? Math.min(window.innerWidth - 64, 1200) : 800, 300)}
-              height={typeof window !== 'undefined' && window.innerWidth < 640 ? 200 : 250}
+              width={fullChartWidth}
+              height={isMobile ? 200 : 250}
             />
           )}
         </div>

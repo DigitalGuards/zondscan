@@ -21,7 +21,7 @@ function formatStakedAmount(amount: string): string {
   try {
     const value = BigInt(amount);
     const divisor = BigInt('1000000000'); // 10^9 (Shor to QRL)
-    const qrlValue = Number(value) / Number(divisor);
+    const qrlValue = Number(value / divisor);
 
     if (qrlValue >= 1000000) {
       return (qrlValue / 1000000).toFixed(2) + 'M';
