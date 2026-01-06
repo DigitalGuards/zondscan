@@ -46,8 +46,8 @@ const getDate = (d: HistoryRecord) => new Date(d.timestamp * 1000);
 const getCount = (d: HistoryRecord) => d.validatorsCount;
 const getStaked = (d: HistoryRecord) => {
   const val = BigInt(d.totalStaked);
-  // Convert from Shor to QRL (divide by 10^12)
-  return Number(val / BigInt(10 ** 12));
+  // Convert from Shor to QRL (divide by 10^9, beacon chain uses Shor)
+  return Number(val / BigInt(10 ** 9));
 };
 
 const bisectDate = bisector<HistoryRecord, Date>((d) => getDate(d)).left;

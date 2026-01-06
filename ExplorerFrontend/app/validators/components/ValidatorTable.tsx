@@ -4,13 +4,13 @@ import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { epochsToDays } from '../../lib/helpers';
 
-// Format staked amount (uses 10^12 decimals for QRL validators)
+// Format staked amount (beacon chain stores effective balance in Shor, 1 QRL = 10^9 Shor)
 function formatValidatorStake(amount: string): [string, string] {
   if (!amount || amount === '0') return ['0', 'QRL'];
   try {
     const value = BigInt(amount);
-    const divisor = BigInt('1000000000000'); // 10^12 (Shor)
-    const qrlValue = Number(value) / Number(divisor);
+    const divisor = BigInt('1000000000'); // 10^9 (Shor to QRL)
+    const qrlValue = Number(value / divisor);
     return [qrlValue.toLocaleString(undefined, { maximumFractionDigits: 0 }), 'QRL'];
   } catch {
     return ['0', 'QRL'];
@@ -144,9 +144,9 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
   if (loading) {
     return (
       <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] overflow-hidden">
-        <div className="p-4 space-y-4">
+        <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
           {[...Array(10)].map((_, i) => (
-            <div key={i} className="h-12 bg-gray-700/30 rounded animate-pulse" />
+            <div key={i} className="h-10 sm:h-12 bg-gray-700/30 rounded animate-pulse" />
           ))}
         </div>
       </div>
@@ -156,19 +156,19 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
   return (
     <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] overflow-hidden">
       {/* Search and Controls */}
-      <div className="p-4 border-b border-[#3d3d3d]">
-        <div className="flex flex-col sm:flex-row gap-4">
+      <div className="p-3 sm:p-4 border-b border-[#3d3d3d]">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
           <input
             type="text"
-            placeholder="Search by index, address, or status..."
+            placeholder="Search validators..."
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
               setCurrentPage(1);
             }}
-            className="flex-1 p-2 bg-[#1f1f1f] border border-[#3d3d3d] rounded-lg text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#ffa729] focus:border-transparent"
+            className="flex-1 p-2 text-sm sm:text-base bg-[#1f1f1f] border border-[#3d3d3d] rounded-lg text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#ffa729] focus:border-transparent"
           />
-          <div className="text-sm text-gray-400 flex items-center">
+          <div className="text-xs sm:text-sm text-gray-400 flex items-center">
             {filteredAndSortedValidators.length} validators
           </div>
         </div>
@@ -252,50 +252,53 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="p-4 border-t border-[#3d3d3d] flex flex-wrap justify-center items-center gap-2">
+        <div className="p-3 sm:p-4 border-t border-[#3d3d3d] flex flex-wrap justify-center items-center gap-1 sm:gap-2">
           <button
             onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
             disabled={currentPage === 1}
-            className="px-3 py-1.5 rounded-lg bg-[#1f1f1f] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d] text-sm"
+            className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-[#1f1f1f] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d] text-xs sm:text-sm"
           >
-            Previous
+            Prev
           </button>
 
-          <span className="text-sm text-gray-400 mx-2">
-            Page {currentPage} of {totalPages}
+          <span className="text-xs sm:text-sm text-gray-400 mx-1 sm:mx-2">
+            {currentPage}/{totalPages}
           </span>
 
-          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-            let pageNum;
-            if (totalPages <= 5) {
-              pageNum = i + 1;
-            } else if (currentPage <= 3) {
-              pageNum = i + 1;
-            } else if (currentPage >= totalPages - 2) {
-              pageNum = totalPages - 4 + i;
-            } else {
-              pageNum = currentPage - 2 + i;
-            }
+          {/* Hide page numbers on very small screens */}
+          <div className="hidden sm:flex gap-1">
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let pageNum;
+              if (totalPages <= 5) {
+                pageNum = i + 1;
+              } else if (currentPage <= 3) {
+                pageNum = i + 1;
+              } else if (currentPage >= totalPages - 2) {
+                pageNum = totalPages - 4 + i;
+              } else {
+                pageNum = currentPage - 2 + i;
+              }
 
-            return (
-              <button
-                key={i}
-                onClick={() => setCurrentPage(pageNum)}
-                className={`w-8 h-8 rounded-lg text-sm ${
-                  currentPage === pageNum
-                    ? 'bg-[#ffa729] text-black'
-                    : 'bg-[#1f1f1f] text-gray-300 hover:bg-[#3d3d3d]'
-                }`}
-              >
-                {pageNum}
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={i}
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`w-8 h-8 rounded-lg text-sm ${
+                    currentPage === pageNum
+                      ? 'bg-[#ffa729] text-black'
+                      : 'bg-[#1f1f1f] text-gray-300 hover:bg-[#3d3d3d]'
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+          </div>
 
           <button
             onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
             disabled={currentPage === totalPages}
-            className="px-3 py-1.5 rounded-lg bg-[#1f1f1f] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d] text-sm"
+            className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-[#1f1f1f] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d] text-xs sm:text-sm"
           >
             Next
           </button>
