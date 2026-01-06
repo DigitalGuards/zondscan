@@ -1,6 +1,6 @@
 import React from 'react';
 import TransactionsList from './[query]/TransactionsList';
-import { Transaction } from './[query]/types';
+import type { Transaction } from '@/app/types';
 import config from '../../config';
 
 export const dynamic = 'force-dynamic';

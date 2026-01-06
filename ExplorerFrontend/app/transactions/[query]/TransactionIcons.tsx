@@ -1,4 +1,4 @@
-import type { SVGIconProps } from './types';
+import type { SVGIconProps } from '@/app/types';
 
 export function ReceiveIcon(props: SVGIconProps): JSX.Element {
   return (

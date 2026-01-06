@@ -2,7 +2,7 @@
 
 import { formatAmount } from '../../lib/helpers';
 import { STAKING_QUANTA } from '../../lib/constants';
-import type { BalanceDisplayProps } from './types';
+import type { BalanceDisplayProps } from '@/app/types';
 
 export default function BalanceDisplay({ balance }: BalanceDisplayProps): JSX.Element {
   const [formattedBalance, unit] = formatAmount(balance);

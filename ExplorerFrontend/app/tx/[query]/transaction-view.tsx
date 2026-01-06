@@ -3,8 +3,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import type { TransactionDetails } from './types';
-import { getConfirmations, getTransactionStatus } from './types';
+import { type TransactionDetails, getConfirmations, getTransactionStatus } from '@/app/types';
 import { formatAmount } from '../../lib/helpers';
 import CopyHashButton from '../../components/CopyHashButton';
 import CopyAddressButton from '../../components/CopyAddressButton';

@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import TransactionView from './transaction-view';
-import type { TransactionDetails } from './types';
+import type { TransactionDetails } from '@/app/types';
 import config from '../../../config';
 
 interface PageProps {

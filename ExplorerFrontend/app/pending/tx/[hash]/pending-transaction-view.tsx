@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import type { PendingTransaction } from '../types';
+import type { PendingTransaction } from '@/app/types';
 import { formatAmount } from '../../../lib/helpers';
 
 interface PendingTransactionViewProps {

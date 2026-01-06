@@ -4,7 +4,7 @@ import React from 'react';
 import axios from 'axios';
 import config from '../../../config';
 import { useQuery } from '@tanstack/react-query';
-import type { Block, BlocksResponse } from './types';
+import type { Block, BlocksResponse } from '@/app/types';
 import { useRouter } from 'next/navigation';
 import SearchBar from '../../components/SearchBar';
 

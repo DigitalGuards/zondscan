@@ -1,7 +1,7 @@
 'use client';
 
 import { epochToISO } from '../../lib/helpers';
-import type { ActivityDisplayProps } from './types';
+import type { ActivityDisplayProps } from '@/app/types';
 
 export default function ActivityDisplay({ firstSeen, lastSeen }: ActivityDisplayProps): JSX.Element {
   return (

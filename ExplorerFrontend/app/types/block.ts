@@ -1,3 +1,6 @@
+/**
+ * Block data structure
+ */
 export interface Block {
   number: number;
   timestamp: number;
@@ -12,12 +15,10 @@ export interface Block {
   transactions: string[];
 }
 
+/**
+ * Response containing multiple blocks
+ */
 export interface BlocksResponse {
   blocks: Block[];
   total: number;
-}
-
-export interface PageProps {
-  params: { query: string };
-  searchParams: { [key: string]: string | string[] | undefined };
 }
