@@ -19,6 +19,13 @@ import (
 	"go.uber.org/zap"
 )
 
+// Note: Token-related functions have been moved to token_sync.go:
+// - ProcessTokensAfterInitialSync
+// - ProcessTokenTransfersForBlock
+// - InitializeTokenCollections
+// - GetTokenSyncRange
+// - StoreInitialSyncStartBlock
+
 // RPC delay constants (can be overridden via environment)
 const (
 	DefaultRPCDelayMs     = 50
@@ -113,9 +120,9 @@ func Sync() {
 		// Store the initial sync starting point for later token processing
 		if nextBlock == "0x0" {
 			// If starting from genesis, record block 1 as the start
-			storeInitialSyncStartBlock("0x1")
+			StoreInitialSyncStartBlock("0x1")
 		} else {
-			storeInitialSyncStartBlock(nextBlock)
+			StoreInitialSyncStartBlock(nextBlock)
 		}
 
 		nextBlock = utils.AddHexNumbers(nextBlock, "0x1")
@@ -198,25 +205,14 @@ func Sync() {
 	}
 
 	// Process token transfers for the entire range after the initial sync
-	initialSyncStart := db.GetLastKnownBlockNumberFromInitialSync()
-	if initialSyncStart == "0x0" {
-		initialSyncStart = "0x1" // Start from block 1 if no initial sync start block is available
-	}
-
-	// Verify we aren't trying to process tokens beyond what's actually synced
-	if utils.CompareHexNumbers(lastSyncedBlock, "0x0") > 0 &&
-		utils.CompareHexNumbers(maxHex, lastSyncedBlock) > 0 {
-		maxHex = lastSyncedBlock
-		configs.Logger.Info("Limiting token processing to last synced block",
-			zap.String("lastSyncedBlock", lastSyncedBlock))
-	}
+	initialSyncStart, tokenMaxHex := GetTokenSyncRange(lastSyncedBlock, maxHex)
 
 	configs.Logger.Info("Processing token transfers for all synced blocks...",
 		zap.String("from_block", initialSyncStart),
-		zap.String("to_block", maxHex))
+		zap.String("to_block", tokenMaxHex))
 
-	// Create a dedicated function to process tokens and call it directly
-	processTokensAfterInitialSync(initialSyncStart, maxHex)
+	// Process tokens using the dedicated token sync module
+	ProcessTokensAfterInitialSync(initialSyncStart, tokenMaxHex)
 
 	// Start auxiliary services after initial sync
 	go func() {
@@ -233,102 +229,6 @@ func Sync() {
 	singleBlockInsertion()
 }
 
-// processTokensAfterInitialSync handles token transfer processing after the initial block sync is complete
-func processTokensAfterInitialSync(initialSyncStart string, maxHex string) {
-	configs.Logger.Info("Beginning post-sync token transfer processing",
-		zap.String("from_block", initialSyncStart),
-		zap.String("to_block", maxHex))
-
-	// Get blocks with transactions only
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// Query for blocks that have at least one transaction
-	filter := bson.M{
-		"result.number": bson.M{
-			"$gte": initialSyncStart,
-			"$lte": maxHex,
-		},
-		"result.transactions.0": bson.M{"$exists": true}, // At least one transaction
-	}
-
-	// Only retrieve block numbers to keep memory usage low
-	projection := bson.M{"result.number": 1, "_id": 0}
-
-	cursor, err := configs.BlocksCollections.Find(ctx, filter, options.Find().SetProjection(projection))
-	if err != nil {
-		configs.Logger.Error("Failed to query blocks with transactions",
-			zap.Error(err))
-		return
-	}
-	defer cursor.Close(ctx)
-
-	var blocksWithTxs []string
-
-	// Extract block numbers with transactions
-	for cursor.Next(ctx) {
-		var block struct {
-			Result struct {
-				Number string `bson:"number"`
-			} `bson:"result"`
-		}
-
-		if err := cursor.Decode(&block); err != nil {
-			configs.Logger.Error("Failed to decode block",
-				zap.Error(err))
-			continue
-		}
-
-		blocksWithTxs = append(blocksWithTxs, block.Result.Number)
-	}
-
-	if len(blocksWithTxs) == 0 {
-		configs.Logger.Info("No blocks with transactions found in range")
-		return
-	}
-
-	configs.Logger.Info("Found blocks with transactions to process",
-		zap.Int("count", len(blocksWithTxs)))
-
-	// Process token transfers for blocks with transactions in batches
-	tokenBatchSize := 10
-	totalProcessed := 0
-	batchCounter := 0
-
-	for i := 0; i < len(blocksWithTxs); i += tokenBatchSize {
-		// Calculate end index for current batch
-		end := i + tokenBatchSize
-		if end > len(blocksWithTxs) {
-			end = len(blocksWithTxs)
-		}
-
-		batchBlocks := blocksWithTxs[i:end]
-		batchSize := len(batchBlocks)
-
-		configs.Logger.Info("Processing token transfers batch",
-			zap.Int("batch", batchCounter),
-			zap.Int("size", batchSize))
-
-		// Process each block in the batch
-		for _, blockNumber := range batchBlocks {
-			processTokenTransfersForBlock(blockNumber)
-			totalProcessed++
-		}
-
-		configs.Logger.Info("Completed token transfer batch",
-			zap.Int("batch", batchCounter),
-			zap.Int("blocks_processed", batchSize),
-			zap.Int("total_processed", totalProcessed))
-
-		batchCounter++
-
-		// Add a small delay between batches to prevent overwhelming the node
-		time.Sleep(86 * time.Millisecond)
-	}
-
-	configs.Logger.Info("Completed token transfer processing for all blocks with transactions",
-		zap.Int("total_blocks_processed", totalProcessed))
-}
 
 // findHighestProcessedBlock finds the highest block number that exists in the database
 func findHighestProcessedBlock() string {
@@ -381,31 +281,15 @@ func forceUpdateSyncState(blockNumber string) {
 func processInitialBlock() {
 	configs.Logger.Info("Processing genesis block")
 
-	// Initialize collections that need special handling
-	configs.Logger.Info("Initializing token collections")
-
-	// Initialize token transfers collection
-	err := db.InitializeTokenTransfersCollection()
-	if err != nil {
-		configs.Logger.Error("Failed to initialize token transfers collection", zap.Error(err))
+	// Initialize token collections using the token sync module
+	if err := InitializeTokenCollections(); err != nil {
+		configs.Logger.Error("Failed to initialize token collections", zap.Error(err))
 		// Continue anyway - we'll log the error but try to proceed
-	} else {
-		configs.Logger.Info("Successfully initialized token transfers collection")
-	}
-
-	// Initialize token balances collection
-	err = db.InitializeTokenBalancesCollection()
-	if err != nil {
-		configs.Logger.Error("Failed to initialize token balances collection", zap.Error(err))
-		// Continue anyway - we'll log the error but try to proceed
-	} else {
-		configs.Logger.Info("Successfully initialized token balances collection")
 	}
 
 	// Initialize validators
 	configs.Logger.Info("Initializing validators")
-	err = syncValidators()
-	if err != nil {
+	if err := syncValidators(); err != nil {
 		configs.Logger.Error("Failed to initialize validators", zap.Error(err))
 	} else {
 		configs.Logger.Info("Successfully initialized validators")
@@ -532,59 +416,3 @@ func processSubsequentBlocks(currentBlock string) string {
 	return utils.AddHexNumbers(currentBlock, "0x1")
 }
 
-// processTokenTransfersForBlock processes token transfers in a block
-func processTokenTransfersForBlock(blockNumber string) {
-	// Get block from database to get timestamp
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	configs.Logger.Info("Starting token transfer processing for block",
-		zap.String("blockNumber", blockNumber))
-
-	filter := bson.M{"result.number": blockNumber}
-	var block models.ZondDatabaseBlock
-	err := configs.BlocksCollections.FindOne(ctx, filter).Decode(&block)
-	if err != nil {
-		configs.Logger.Error("Failed to get block for token transfer processing",
-			zap.String("blockNumber", blockNumber),
-			zap.Error(err))
-		return
-	}
-
-	configs.Logger.Info("Retrieved block for token transfer processing",
-		zap.String("blockNumber", blockNumber),
-		zap.String("blockHash", block.Result.Hash),
-		zap.String("timestamp", block.Result.Timestamp))
-
-	// Skip token transfer processing if block has no transactions
-	if len(block.Result.Transactions) == 0 {
-		configs.Logger.Debug("Skipping token transfer processing for empty block",
-			zap.String("blockNumber", blockNumber))
-		return
-	}
-
-	// Process token transfers
-	configs.Logger.Info("Calling ProcessBlockTokenTransfers",
-		zap.String("blockNumber", blockNumber))
-
-	err = db.ProcessBlockTokenTransfers(blockNumber, block.Result.Timestamp)
-	if err != nil {
-		configs.Logger.Error("Failed to process token transfers for block",
-			zap.String("blockNumber", blockNumber),
-			zap.Error(err))
-	} else {
-		configs.Logger.Info("Processed token transfers for block",
-			zap.String("blockNumber", blockNumber))
-	}
-}
-
-// storeInitialSyncStartBlock stores the block number that was used as the starting point
-// for the initial sync. This is used for token transfer processing after initial sync.
-func storeInitialSyncStartBlock(blockNumber string) {
-	err := db.StoreInitialSyncStartBlock(blockNumber)
-	if err != nil {
-		configs.Logger.Error("Failed to store initial sync start block",
-			zap.String("block", blockNumber),
-			zap.Error(err))
-	}
-}

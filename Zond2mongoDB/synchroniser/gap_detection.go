@@ -229,7 +229,7 @@ func detectAndFillGapsPeriodically() {
 
 		// Process token transfers for filled gaps
 		for _, gap := range gaps[:filled] {
-			processTokenTransfersForBlock(gap)
+			ProcessTokenTransfersForBlock(gap)
 		}
 	}
 }
