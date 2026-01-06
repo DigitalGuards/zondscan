@@ -1,6 +1,6 @@
 import axios from 'axios';
 import config from '../../../../config';
-import type { PendingTransaction } from '../types';
+import type { PendingTransaction } from '@/app/types';
 import PendingTransactionView from './pending-transaction-view';
 
 interface PageProps {

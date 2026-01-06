@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import BlocksClient from './blocks-client';
-import type { BlocksResponse } from './types';
+import type { BlocksResponse } from '@/app/types';
 import config from '../../../config';
 import { sharedMetadata } from '../../lib/seo/metaData';
 

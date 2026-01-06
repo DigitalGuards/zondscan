@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import TransactionCard from './TransactionCard';
 import SearchBar from '../../components/SearchBar';
-import type { TransactionsListProps } from './types';
+import type { TransactionsListProps } from '@/app/types';
 
 export default function TransactionsList({ 
   initialData, 

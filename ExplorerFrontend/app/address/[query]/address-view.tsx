@@ -6,7 +6,7 @@ import QRCodeButton from "../../components/QRCodeButton";
 import TanStackTable from "../../components/TanStackTable";
 import BalanceDisplay from "./balance-display";
 import ActivityDisplay from "./activity-display";
-import type { AddressData } from "./types";
+import type { AddressData } from "@/app/types";
 import Link from "next/link";
 
 interface AddressViewProps {

@@ -6,7 +6,7 @@ import config from '../../../config';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { formatAmount } from '../../lib/helpers';
-import type { PendingTransaction } from '../tx/types';
+import type { PendingTransaction } from '@/app/types';
 
 interface PaginatedResponse {
   // New format fields

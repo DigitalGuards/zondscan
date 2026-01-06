@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import AddressView from "./address-view";
 import TokenContractView from "./token-contract-view";
 import { sharedMetadata } from '../../lib/seo/metaData';
-import type { AddressData } from "./types";
+import type { AddressData } from "@/app/types";
 import { decodeToHex, formatAddress } from '../../lib/helpers';
 
 interface PageProps {

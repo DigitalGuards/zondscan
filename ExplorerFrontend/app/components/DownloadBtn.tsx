@@ -1,6 +1,6 @@
 import { formatTimestamp, normalizeHexString, formatAddress } from '../lib/helpers';
 import type { MouseEvent } from 'react';
-import type { DownloadBtnProps, DownloadBtnInternalProps } from './types';
+import type { DownloadBtnProps, DownloadBtnInternalProps } from '@/app/types';
 
 function escapeCSV(value: string | number): string {
   const str = String(value);

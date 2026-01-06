@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { formatAmount, truncateHash } from "../../lib/helpers";
 import { SendIcon, ReceiveIcon } from './TransactionIcons';
 import CopyHashButton from "../../components/CopyHashButton";
-import type { TransactionCardProps } from './types';
+import type { TransactionCardProps } from '@/app/types';
 
 interface ExtendedTransactionCardProps extends TransactionCardProps {
   currentPage?: number;

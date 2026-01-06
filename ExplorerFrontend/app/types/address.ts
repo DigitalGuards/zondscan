@@ -1,6 +1,9 @@
-import type { Transaction, InternalTransaction } from '../../components/types';
+import type { Transaction, InternalTransaction } from './transaction';
 
-interface ContractData {
+/**
+ * Contract data associated with an address
+ */
+export interface ContractData {
   creatorAddress: string;
   address: string;
   contractCode: string;
@@ -13,6 +16,9 @@ interface ContractData {
   updatedAt: string;
 }
 
+/**
+ * Full address data including transactions and contract info
+ */
 export interface AddressData {
   address: {
     balance: number;
@@ -24,10 +30,16 @@ export interface AddressData {
   response: unknown;
 }
 
+/**
+ * Props for balance display component
+ */
 export interface BalanceDisplayProps {
   balance: number;
 }
 
+/**
+ * Props for activity display component
+ */
 export interface ActivityDisplayProps {
   firstSeen: number;
   lastSeen: number;

@@ -11,8 +11,7 @@ import TableRow from '@mui/material/TableRow';
 import Link from "next/link";
 import Image from 'next/image';
 import { decodeToHex } from '../lib/helpers';
-import type { Transaction } from './types';
-import { TransactionType } from './types';
+import { TransactionType, type Transaction } from '@/app/types';
 
 interface TransactionsDisplayProps {
   posts: Transaction[];
@@ -47,8 +46,9 @@ function getTransactionIcon(inOut: number): string {
   return inOut === 0 ? '/receive.svg' : '/send.svg';
 }
 
-function formatAmount(amount: number): string {
-  return `${amount / 1000000000} QRL`;
+function formatAmount(amount: number | string): string {
+  const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+  return `${numAmount / 1000000000} QRL`;
 }
 
 function getTransactionType(type: TransactionType): string {

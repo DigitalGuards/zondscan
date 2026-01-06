@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import config from '../../../config';
 import AddressView from "./address-view";
-import type { AddressData } from "./types";
+import type { AddressData } from "@/app/types";
 import { decodeToHex, formatAddress } from '../../lib/helpers';
 
 interface AddressClientProps {
