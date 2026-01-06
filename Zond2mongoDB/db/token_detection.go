@@ -18,6 +18,18 @@ type TokenDetectionResult struct {
 	TotalSupply string
 }
 
+// preserveCreationInfo copies creation metadata from an existing contract to a new contract info.
+// This ensures we don't lose historical data like creator address and creation transaction.
+func preserveCreationInfo(contractInfo *models.ContractInfo, existingContract *models.ContractInfo) {
+	if existingContract == nil {
+		return
+	}
+	contractInfo.CreatorAddress = existingContract.CreatorAddress
+	contractInfo.CreationTransaction = existingContract.CreationTransaction
+	contractInfo.CreationBlockNumber = existingContract.CreationBlockNumber
+	contractInfo.ContractCode = existingContract.ContractCode
+}
+
 // DetectToken checks if a contract address is a valid ERC20 token
 // by calling the standard ERC20 methods (name, symbol, decimals)
 func DetectToken(contractAddress string) TokenDetectionResult {
@@ -99,11 +111,8 @@ func EnsureTokenInDatabase(contractAddress string, blockNumber string, txHash st
 			contractInfo.CreatorAddress = txDetails.From
 		}
 	} else {
-		// Preserve existing creation information directly
-		contractInfo.CreatorAddress = existingContract.CreatorAddress
-		contractInfo.CreationTransaction = existingContract.CreationTransaction
-		contractInfo.CreationBlockNumber = existingContract.CreationBlockNumber
-		contractInfo.ContractCode = existingContract.ContractCode
+		// Preserve existing creation information
+		preserveCreationInfo(&contractInfo, existingContract)
 	}
 
 	// Store/merge the contract info
@@ -155,12 +164,7 @@ func RefreshTokenMetadata(contractAddress string) error {
 	}
 
 	// Preserve creation info if it exists
-	if existingContract != nil {
-		contractInfo.CreatorAddress = existingContract.CreatorAddress
-		contractInfo.CreationTransaction = existingContract.CreationTransaction
-		contractInfo.CreationBlockNumber = existingContract.CreationBlockNumber
-		contractInfo.ContractCode = existingContract.ContractCode
-	}
+	preserveCreationInfo(&contractInfo, existingContract)
 
 	return StoreContract(contractInfo)
 }

@@ -6,6 +6,7 @@ import (
 	"Zond2mongoDB/models"
 	"Zond2mongoDB/utils"
 	"context"
+	"errors"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -210,11 +211,11 @@ func InitializeTokenCollections() error {
 		configs.Logger.Info("Successfully initialized token balances collection")
 	}
 
-	// Return first error if any occurred (maintaining original behavior of returning an error)
+	// Return combined errors if any occurred
 	if len(initErrors) > 0 {
 		configs.Logger.Error("Token collection initialization completed with errors",
 			zap.Int("error_count", len(initErrors)))
-		return initErrors[0]
+		return errors.Join(initErrors...)
 	}
 
 	return nil
