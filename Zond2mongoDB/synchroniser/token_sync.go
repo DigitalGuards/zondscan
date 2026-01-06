@@ -187,23 +187,35 @@ func ProcessTokenTransfersForBlock(blockNumber string) {
 	}
 }
 
-// InitializeTokenCollections initializes the token-related MongoDB collections
+// InitializeTokenCollections initializes the token-related MongoDB collections.
+// It attempts all initializations even if individual ones fail, collecting errors.
 func InitializeTokenCollections() error {
 	configs.Logger.Info("Initializing token collections")
+
+	var initErrors []error
 
 	// Initialize token transfers collection
 	if err := db.InitializeTokenTransfersCollection(); err != nil {
 		configs.Logger.Error("Failed to initialize token transfers collection", zap.Error(err))
-		return err
+		initErrors = append(initErrors, err)
+	} else {
+		configs.Logger.Info("Successfully initialized token transfers collection")
 	}
-	configs.Logger.Info("Successfully initialized token transfers collection")
 
 	// Initialize token balances collection
 	if err := db.InitializeTokenBalancesCollection(); err != nil {
 		configs.Logger.Error("Failed to initialize token balances collection", zap.Error(err))
-		return err
+		initErrors = append(initErrors, err)
+	} else {
+		configs.Logger.Info("Successfully initialized token balances collection")
 	}
-	configs.Logger.Info("Successfully initialized token balances collection")
+
+	// Return first error if any occurred (maintaining original behavior of returning an error)
+	if len(initErrors) > 0 {
+		configs.Logger.Error("Token collection initialization completed with errors",
+			zap.Int("error_count", len(initErrors)))
+		return initErrors[0]
+	}
 
 	return nil
 }

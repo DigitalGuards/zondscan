@@ -62,6 +62,12 @@ func EnsureTokenInDatabase(contractAddress string, blockNumber string, txHash st
 
 	// Try to get existing contract from DB to preserve creation information
 	existingContract, err := GetContract(contractAddress)
+	if err != nil {
+		// Log unexpected errors (not just "not found")
+		configs.Logger.Debug("GetContract returned error",
+			zap.String("address", contractAddress),
+			zap.Error(err))
+	}
 
 	// Build the contract info
 	contractInfo := models.ContractInfo{
@@ -79,29 +85,25 @@ func EnsureTokenInDatabase(contractAddress string, blockNumber string, txHash st
 	}
 
 	// If this is the first time we're seeing this token, record discovery info
-	if err != nil || existingContract == nil {
+	if existingContract == nil {
 		contractInfo.CreationBlockNumber = blockNumber
 		contractInfo.CreationTransaction = txHash
 
 		// Try to get creator from transaction
 		txDetails, txErr := rpc.GetTxDetailsByHash(txHash)
-		if txErr == nil && txDetails != nil {
+		if txErr != nil {
+			configs.Logger.Debug("Failed to get transaction details for token creator",
+				zap.String("txHash", txHash),
+				zap.Error(txErr))
+		} else if txDetails != nil {
 			contractInfo.CreatorAddress = txDetails.From
 		}
 	} else {
-		// Preserve existing creation information
-		if existingContract.CreatorAddress != "" {
-			contractInfo.CreatorAddress = existingContract.CreatorAddress
-		}
-		if existingContract.CreationTransaction != "" {
-			contractInfo.CreationTransaction = existingContract.CreationTransaction
-		}
-		if existingContract.CreationBlockNumber != "" {
-			contractInfo.CreationBlockNumber = existingContract.CreationBlockNumber
-		}
-		if existingContract.ContractCode != "" {
-			contractInfo.ContractCode = existingContract.ContractCode
-		}
+		// Preserve existing creation information directly
+		contractInfo.CreatorAddress = existingContract.CreatorAddress
+		contractInfo.CreationTransaction = existingContract.CreationTransaction
+		contractInfo.CreationBlockNumber = existingContract.CreationBlockNumber
+		contractInfo.ContractCode = existingContract.ContractCode
 	}
 
 	// Store/merge the contract info
