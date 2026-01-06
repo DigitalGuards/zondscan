@@ -68,30 +68,30 @@ export default function EpochInfoPanel({ epochInfo, loading }: EpochInfoPanelPro
   }
 
   return (
-    <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-3 sm:p-4 mb-6">
+    <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-3 sm:p-4 mb-6 overflow-hidden">
       {/* Epoch Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 mb-3 sm:mb-4">
-        <div>
+        <div className="min-w-0">
           <span className="text-gray-400 text-xs sm:text-sm">Current Epoch</span>
-          <p className="text-base sm:text-xl font-semibold text-[#ffa729]">
+          <p className="text-base sm:text-xl font-semibold text-[#ffa729] truncate">
             {parseInt(epochInfo.headEpoch).toLocaleString()}
           </p>
         </div>
-        <div>
+        <div className="min-w-0">
           <span className="text-gray-400 text-xs sm:text-sm">Current Slot</span>
-          <p className="text-base sm:text-xl font-semibold text-gray-200">
+          <p className="text-base sm:text-xl font-semibold text-gray-200 truncate">
             {parseInt(epochInfo.headSlot).toLocaleString()}
           </p>
         </div>
-        <div>
+        <div className="min-w-0">
           <span className="text-gray-400 text-xs sm:text-sm">Finalized</span>
-          <p className="text-base sm:text-xl font-semibold text-green-400">
+          <p className="text-base sm:text-xl font-semibold text-green-400 truncate">
             {parseInt(epochInfo.finalizedEpoch).toLocaleString()}
           </p>
         </div>
-        <div>
+        <div className="min-w-0">
           <span className="text-gray-400 text-xs sm:text-sm">Justified</span>
-          <p className="text-base sm:text-xl font-semibold text-blue-400">
+          <p className="text-base sm:text-xl font-semibold text-blue-400 truncate">
             {parseInt(epochInfo.justifiedEpoch).toLocaleString()}
           </p>
         </div>
