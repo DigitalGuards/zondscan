@@ -10,7 +10,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Link from "next/link";
 import Image from 'next/image';
-import { decodeToHex } from '../lib/helpers';
+import { decodeToHex, formatAmount } from '../lib/helpers';
 import { TransactionType, type Transaction } from '@/app/types';
 
 interface TransactionsDisplayProps {
@@ -44,11 +44,6 @@ function convertTime(timestamp: number): string {
 
 function getTransactionIcon(inOut: number): string {
   return inOut === 0 ? '/receive.svg' : '/send.svg';
-}
-
-function formatAmount(amount: number | string): string {
-  const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
-  return `${numAmount / 1000000000} QRL`;
 }
 
 function getTransactionType(type: TransactionType): string {
@@ -107,7 +102,7 @@ export default function TransactionsDisplay({
                 {getTransactionType(post.TxType)}
               </TableCell>
               <TableCell>
-                {formatAmount(post.Amount)}
+                {formatAmount(post.Amount).join(' ')}
               </TableCell>
               <TableCell>
                 {convertTime(post.TimeStamp)}

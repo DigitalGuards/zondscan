@@ -359,43 +359,20 @@ func forceUpdateSyncState(blockNumber string) {
 
 	syncColl := configs.GetCollection(configs.DB, db.SyncStateCollection)
 
-	// First, try to delete the existing document to avoid duplicate key errors
-	_, err := syncColl.DeleteOne(ctx, bson.M{"_id": db.LastSyncedBlockID})
-	if err != nil {
-		configs.Logger.Warn("Failed to delete existing sync state document",
-			zap.Error(err))
-		// Continue anyway - the document might not exist
-	}
-
-	// Now insert a new document with the updated block number
-	_, err = syncColl.InsertOne(ctx, bson.M{
-		"_id":          db.LastSyncedBlockID,
-		"block_number": blockNumber,
-	})
+	// Use upsert to atomically update or insert the sync state
+	_, err := syncColl.UpdateOne(
+		ctx,
+		bson.M{"_id": db.LastSyncedBlockID},
+		bson.M{"$set": bson.M{"block_number": blockNumber}},
+		options.Update().SetUpsert(true),
+	)
 
 	if err != nil {
-		configs.Logger.Error("Failed to force update sync state",
+		configs.Logger.Error("Failed to update sync state",
 			zap.String("block", blockNumber),
 			zap.Error(err))
-
-		// As a fallback, try a regular update
-		_, updateErr := syncColl.UpdateOne(
-			ctx,
-			bson.M{"_id": db.LastSyncedBlockID},
-			bson.M{"$set": bson.M{"block_number": blockNumber}},
-			options.Update().SetUpsert(true),
-		)
-
-		if updateErr != nil {
-			configs.Logger.Error("Fallback update also failed",
-				zap.String("block", blockNumber),
-				zap.Error(updateErr))
-		} else {
-			configs.Logger.Info("Successfully forced update of sync state using fallback method",
-				zap.String("block", blockNumber))
-		}
 	} else {
-		configs.Logger.Info("Successfully forced update of sync state",
+		configs.Logger.Info("Successfully updated sync state",
 			zap.String("block", blockNumber))
 	}
 }

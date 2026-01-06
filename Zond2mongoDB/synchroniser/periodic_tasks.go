@@ -6,6 +6,7 @@ import (
 	"Zond2mongoDB/rpc"
 	"Zond2mongoDB/services"
 	"Zond2mongoDB/utils"
+	"fmt"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -358,7 +359,7 @@ func syncValidators() error {
 	// Get current epoch from latest block
 	latestBlock, err := rpc.GetLatestBlock()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get latest block: %w", err)
 	}
 	currentEpoch := strconv.FormatUint(uint64(utils.HexToInt(latestBlock).Int64()/128), 10)
 
