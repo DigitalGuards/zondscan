@@ -336,6 +336,12 @@ func UserRoute(router *gin.Engine) {
 			log.Printf("Error checking for contract creation tx %s: %v", value, err)
 		}
 
+		// Check if this transaction is a token transfer
+		tokenTransfer, err := db.GetTokenTransferByTxHash(value)
+		if err != nil {
+			log.Printf("Error checking for token transfer tx %s: %v", value, err)
+		}
+
 		response := gin.H{
 			"response":    query,
 			"latestBlock": latestBlockNum,
@@ -348,6 +354,18 @@ func UserRoute(router *gin.Engine) {
 				"name":     contractCreated.TokenName,
 				"symbol":   contractCreated.TokenSymbol,
 				"decimals": contractCreated.TokenDecimals,
+			}
+		}
+
+		if tokenTransfer != nil {
+			response["tokenTransfer"] = gin.H{
+				"contractAddress": tokenTransfer.ContractAddress,
+				"from":            tokenTransfer.From,
+				"to":              tokenTransfer.To,
+				"amount":          tokenTransfer.Amount,
+				"tokenName":       tokenTransfer.TokenName,
+				"tokenSymbol":     tokenTransfer.TokenSymbol,
+				"tokenDecimals":   tokenTransfer.TokenDecimals,
 			}
 		}
 
