@@ -345,13 +345,8 @@ export function formatTokenAmount(amount: string | undefined | null, decimals: n
   }
 
   try {
-    // Handle hex strings
-    let rawAmount: bigint;
-    if (amount.startsWith('0x')) {
-      rawAmount = BigInt(amount);
-    } else {
-      rawAmount = BigInt(amount);
-    }
+    // BigInt handles both decimal strings and hex strings with 0x prefix
+    const rawAmount = BigInt(amount);
 
     if (rawAmount === BigInt(0)) {
       return '0';

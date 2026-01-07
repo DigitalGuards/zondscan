@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -269,18 +270,31 @@ func GetTokenTransferByTxHash(txHash string) (*models.TokenTransfer, error) {
 	var transfer models.TokenTransfer
 	// First try with 0x prefix (standard storage format)
 	err := collection.FindOne(ctx, bson.M{"txHash": normalizedHash}).Decode(&transfer)
-	if err != nil {
-		// Try without 0x prefix in case storage format varies
-		hashWithoutPrefix := strings.TrimPrefix(normalizedHash, "0x")
-		err = collection.FindOne(ctx, bson.M{"txHash": hashWithoutPrefix}).Decode(&transfer)
-		if err != nil {
-			// Try with original hash as-is
-			err = collection.FindOne(ctx, bson.M{"txHash": txHash}).Decode(&transfer)
-			if err != nil {
-				return nil, nil // No token transfer found, not an error
-			}
-		}
+	if err == nil {
+		return &transfer, nil
+	}
+	if err != mongo.ErrNoDocuments {
+		return nil, err
 	}
 
-	return &transfer, nil
+	// Try without 0x prefix in case storage format varies
+	hashWithoutPrefix := strings.TrimPrefix(normalizedHash, "0x")
+	err = collection.FindOne(ctx, bson.M{"txHash": hashWithoutPrefix}).Decode(&transfer)
+	if err == nil {
+		return &transfer, nil
+	}
+	if err != mongo.ErrNoDocuments {
+		return nil, err
+	}
+
+	// Try with original hash as-is
+	err = collection.FindOne(ctx, bson.M{"txHash": txHash}).Decode(&transfer)
+	if err == nil {
+		return &transfer, nil
+	}
+	if err != mongo.ErrNoDocuments {
+		return nil, err
+	}
+
+	return nil, nil
 }

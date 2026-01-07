@@ -80,7 +80,9 @@ export default function PendingTransactionView({ pendingTx }: PendingTransaction
                 <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                   <span className="text-sm text-gray-400 min-w-[80px]">Method:</span>
                   <span className="text-white font-mono text-sm">
-                    {decodedTransfer.methodName}(address, uint256)
+                    {decodedTransfer.methodName === 'transferFrom'
+                      ? `${decodedTransfer.methodName}(address, address, uint256)`
+                      : `${decodedTransfer.methodName}(address, uint256)`}
                   </span>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
