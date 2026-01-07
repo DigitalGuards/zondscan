@@ -18,6 +18,7 @@ backendAPI/
 │   ├── db_test.go    # Database tests
 │   ├── pending.go    # Pending transaction operations
 │   ├── stats.go      # Statistics and utility functions
+│   ├── token.go      # Token balance and transfer queries
 │   ├── transaction.go # Transaction operations
 │   └── validator.go  # Validator operations
 ├── handler/          # Request handlers
@@ -137,23 +138,80 @@ pm2 start ./backendAPI.exe --name "handler"
 
 ## API Documentation
 
-The server provides various API endpoints for:
+### Overview & Statistics
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/overview` | GET | Network statistics (market cap, price, wallet count, circulating supply, validators, contracts) |
+| `/latestblock` | GET | Current block height |
+| `/debug/blocks` | GET | Debug endpoint showing total blocks and latest block |
 
-### Overview Data
-- `/overview`: General blockchain statistics
-- Real-time market data and network status
+### Blocks
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/blocks` | GET | Paginated block list. Query: `page`, `limit` |
+| `/block/:query` | GET | Single block by number (decimal or 0x hex) |
+| `/blocksizes` | GET | Historical block size data for charts |
 
-### Block Explorer
-- `/blocks`: Block listing and details
-- `/tx`: Transaction details
-- `/address`: Address information and history
+### Transactions
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/txs` | GET | Paginated network transactions. Query: `page` |
+| `/tx/:query` | GET | Transaction details by hash. Includes `tokenTransfer` if ERC20, `contractCreated` if deployment |
+| `/transactions` | GET | Latest transactions (limited) |
+| `/coinbase/:query` | GET | Coinbase transaction details |
 
-### Validator Information
-- `/validators`: Active validator list
-- Staking statistics and performance metrics
+### Pending Transactions
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/pending-transactions` | GET | Paginated mempool transactions. Query: `page`, `limit` |
+| `/pending-transaction/:hash` | GET | Single pending transaction. Returns 404 if mined or not found |
 
-### Search Functionality
-- Unified search across blocks, transactions, and addresses
-- Auto-suggestion and quick navigation
+### Addresses
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/address/aggregate/:query` | GET | Full address data (balance, rank, transactions, internal txs, contract code) |
+| `/address/:address/transactions` | GET | Paginated address transactions. Query: `page`, `limit` |
+| `/address/:address/tokens` | GET | Token balances held by address (for wallet integration) |
+| `/getBalance` | POST | Get address balance. Form: `address` |
+| `/richlist` | GET | Top addresses by balance |
+| `/walletdistribution/:query` | GET | Wallet distribution statistics |
 
-For detailed API documentation, refer to the handler implementations in `handler/handler.go` and route definitions in `routes/routes.go`.
+### Tokens (ERC20)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/token/:address/info` | GET | Token metadata (name, symbol, decimals, total supply, holder count) |
+| `/token/:address/holders` | GET | Paginated token holders. Query: `page`, `limit` (max 100) |
+| `/token/:address/transfers` | GET | Paginated token transfer history. Query: `page`, `limit` (max 100) |
+
+### Contracts
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/contracts` | GET | Paginated contracts. Query: `page`, `limit`, `search`, `isToken` (optional filter) |
+
+### Validators
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/validators` | GET | Paginated validator list. Query: `page_token` |
+| `/validator/:id` | GET | Individual validator by index or public key |
+| `/validators/stats` | GET | Validator statistics (total, active, slashed) |
+| `/validators/history` | GET | Historical validator counts. Query: `limit` (default 100) |
+| `/epoch` | GET | Current epoch information |
+
+### Response Format
+
+All endpoints return JSON. Paginated endpoints include:
+```json
+{
+  "data": [...],
+  "total": 1234,
+  "page": 1,
+  "limit": 10
+}
+```
+
+Error responses:
+```json
+{
+  "error": "Error message"
+}
+```

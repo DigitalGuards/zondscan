@@ -47,6 +47,9 @@ This is the Golang implementation of the QRL blockchain synchronizer to MongoDB.
 │   ├── contracts.go  # Smart contract handling
 │   ├── conversion.go # Data conversion utilities
 │   ├── db.go        # Core database operations
+│   ├── token_detection.go  # ERC20 token detection via RPC
+│   ├── tokenbalances.go    # Token holder balance tracking
+│   ├── tokentransfers.go   # Token transfer event processing
 │   ├── transactions.go
 │   ├── validators.go # Validator data management
 │   ├── volume.go    # Volume tracking
@@ -82,7 +85,8 @@ This is the Golang implementation of the QRL blockchain synchronizer to MongoDB.
 │   └── validator_service.go # Validator data processing and storage
 │
 └── synchroniser/   # Blockchain synchronization
-    └── sync.go     # Core sync logic
+    ├── sync.go         # Core sync logic
+    └── pending_sync.go # Mempool transaction sync (every 5s)
 ```
 
 ## Setup
@@ -156,6 +160,42 @@ pm2 start ./syncer.exe --name "synchroniser"
   - Tracks contract status and verification
   - Stores token information for ERC20 contracts
 
+### Token System
+The synchronizer tracks ERC20 token activity across the network:
+
+- **Token Detection** (`db/token_detection.go`):
+  - Detects tokens by calling ERC20 methods (name, symbol, decimals)
+  - Validates contracts implement the ERC20 interface
+  - Fetches total supply for token contracts
+
+- **Transfer Tracking** (`db/tokentransfers.go`):
+  - Parses Transfer event logs from transaction receipts
+  - Event signature: `0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef`
+  - Stores from/to addresses, amounts, and enriches with token metadata
+  - Links transfers to their transaction hash and block
+
+- **Balance Tracking** (`db/tokenbalances.go`):
+  - Maintains real-time token balances for all holders
+  - Updates balances on each transfer (increment recipient, decrement sender)
+  - Supports querying all tokens held by an address
+
+- **Collections**:
+  - `tokenTransfers`: Individual transfer events with full metadata
+  - `tokenBalances`: Current balance per holder per token contract
+
+### Pending Transaction Sync
+The synchronizer monitors the mempool for pending transactions:
+
+- **Polling** (`synchroniser/pending_sync.go`):
+  - Polls `txpool_content` every 5 seconds
+  - Uses `MEMPOOL_NODE_URL` (falls back to `NODE_URL`)
+  - Requires local node access (public RPCs typically block txpool)
+
+- **Lifecycle**:
+  - New transactions stored with `status: "pending"`
+  - Transactions updated to `status: "mined"` when included in a block
+  - Old pending transactions (>24h) are cleaned up
+
 ### RPC Client
 - Handles communication with the Zond node
 - Manages beacon chain API interactions
@@ -206,6 +246,51 @@ pm2 start ./syncer.exe --name "synchroniser"
   "creatorAddress": "abcdef...",
   "creationTransaction": "abcdef...",
   "updatedAt": "1683924000"
+}
+```
+
+### Token Transfer Storage
+```json
+{
+  "txHash": "0xabc123...",
+  "blockNumber": "0x1a2b3c",
+  "contractAddress": "0xtoken...",
+  "from": "0xsender...",
+  "to": "0xrecipient...",
+  "amount": "1000000000000000000",
+  "tokenName": "My Token",
+  "tokenSymbol": "MTK",
+  "tokenDecimals": 18,
+  "timestamp": "1683924000"
+}
+```
+
+### Token Balance Storage
+```json
+{
+  "holderAddress": "0xholder...",
+  "contractAddress": "0xtoken...",
+  "balance": "5000000000000000000",
+  "tokenName": "My Token",
+  "tokenSymbol": "MTK",
+  "tokenDecimals": 18,
+  "lastUpdated": "2024-01-07T12:00:00Z"
+}
+```
+
+### Pending Transaction Storage
+```json
+{
+  "hash": "0xtxhash...",
+  "from": "0xsender...",
+  "to": "0xrecipient...",
+  "value": "0x1bc16d674ec80000",
+  "gas": "0x5208",
+  "gasPrice": "0x3b9aca00",
+  "nonce": "0x5",
+  "input": "0x...",
+  "status": "pending",
+  "firstSeen": "2024-01-07T12:00:00Z"
 }
 ```
 

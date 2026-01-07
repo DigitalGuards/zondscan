@@ -78,6 +78,19 @@ interface OptionalInternalTransactionFields {
 export type InternalTransaction = BaseInternalTransaction & OptionalInternalTransactionFields;
 
 /**
+ * Token transfer information for a transaction
+ */
+export interface TokenTransferInfo {
+  contractAddress: string;
+  from: string;
+  to: string;
+  amount: string;
+  tokenName: string;
+  tokenSymbol: string;
+  tokenDecimals: number;
+}
+
+/**
  * Detailed transaction information for transaction detail pages
  */
 export interface TransactionDetails {
@@ -100,6 +113,7 @@ export interface TransactionDetails {
     symbol: string;
     decimals: number;
   };
+  tokenTransfer?: TokenTransferInfo;
 }
 
 /**

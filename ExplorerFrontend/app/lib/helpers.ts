@@ -245,3 +245,132 @@ export function formatAddress(address: string | undefined | null): string {
   // If invalid format, return as is
   return address;
 }
+
+/**
+ * Decoded token transfer information from input data
+ */
+export interface DecodedTokenTransfer {
+  to: string;
+  amount: string;
+  methodName: string;
+}
+
+/**
+ * Decodes ERC20 transfer input data
+ * ERC20 transfer method signature: 0xa9059cbb
+ * Format: 0xa9059cbb + 32 bytes (to address, padded) + 32 bytes (amount)
+ * @param inputData - The transaction input data
+ * @returns Decoded transfer info or null if not a transfer
+ */
+export function decodeTokenTransferInput(inputData: string | undefined | null): DecodedTokenTransfer | null {
+  if (!inputData || inputData === '0x' || inputData.length < 10) {
+    return null;
+  }
+
+  // Normalize input
+  const data = inputData.toLowerCase();
+
+  // Check for ERC20 transfer method signature (0xa9059cbb)
+  if (data.startsWith('0xa9059cbb')) {
+    // transfer(address,uint256)
+    // Expected length: 0x (2) + method (8) + address (64) + amount (64) = 138
+    if (data.length !== 138) {
+      return null;
+    }
+
+    try {
+      // Extract recipient address (bytes 10-74, last 40 chars are the address)
+      const toAddressPadded = data.slice(10, 74);
+      const toAddress = 'Z' + toAddressPadded.slice(-40);
+
+      // Extract amount (bytes 74-138)
+      const amountHex = '0x' + data.slice(74);
+      const amount = BigInt(amountHex).toString();
+
+      return {
+        to: toAddress,
+        amount: amount,
+        methodName: 'transfer'
+      };
+    } catch (error) {
+      console.error('Error decoding transfer input:', error);
+      return null;
+    }
+  }
+
+  // Check for ERC20 transferFrom method signature (0x23b872dd)
+  if (data.startsWith('0x23b872dd')) {
+    // transferFrom(address,address,uint256)
+    // Expected length: 0x (2) + method (8) + from (64) + to (64) + amount (64) = 202
+    if (data.length !== 202) {
+      return null;
+    }
+
+    try {
+      // Extract from address (bytes 10-74)
+      const fromAddressPadded = data.slice(10, 74);
+      const fromAddress = 'Z' + fromAddressPadded.slice(-40);
+
+      // Extract to address (bytes 74-138)
+      const toAddressPadded = data.slice(74, 138);
+      const toAddress = 'Z' + toAddressPadded.slice(-40);
+
+      // Extract amount (bytes 138-202)
+      const amountHex = '0x' + data.slice(138);
+      const amount = BigInt(amountHex).toString();
+
+      return {
+        to: toAddress,
+        amount: amount,
+        methodName: 'transferFrom'
+      };
+    } catch (error) {
+      console.error('Error decoding transferFrom input:', error);
+      return null;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Formats a token amount with proper decimals
+ * @param amount - The raw token amount (as string)
+ * @param decimals - The number of decimals for the token
+ * @returns Formatted amount string
+ */
+export function formatTokenAmount(amount: string | undefined | null, decimals: number = 18): string {
+  if (!amount || amount === '0' || amount === '0x0') {
+    return '0';
+  }
+
+  try {
+    // BigInt handles both decimal strings and hex strings with 0x prefix
+    const rawAmount = BigInt(amount);
+
+    if (rawAmount === BigInt(0)) {
+      return '0';
+    }
+
+    // Convert to decimal representation
+    const divisor = BigInt(10 ** decimals);
+    const wholePart = rawAmount / divisor;
+    const fractionalPart = rawAmount % divisor;
+
+    // Format the fractional part with leading zeros
+    let fractionalStr = fractionalPart.toString().padStart(decimals, '0');
+    // Remove trailing zeros
+    fractionalStr = fractionalStr.replace(/0+$/, '');
+
+    if (fractionalStr === '') {
+      // Format whole part with thousand separators
+      return wholePart.toLocaleString('en-US');
+    }
+
+    // Format whole part with thousand separators and add fractional part
+    return `${wholePart.toLocaleString('en-US')}.${fractionalStr}`;
+  } catch (error) {
+    console.error('Error formatting token amount:', error, amount);
+    return amount;
+  }
+}
