@@ -20,6 +20,11 @@ spec:
         app.kubernetes.io/component: database
         app.kubernetes.io/part-of: zond-explorer
     spec:
+      # Security context - MongoDB 7 image runs as user 999 (mongodb)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
       containers:
         - name: mongodb
           image: mongo:7

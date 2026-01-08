@@ -24,7 +24,6 @@ backendAPI
 
 # Documentation
 *.md
-!**/*.go
 
 # Environment files
 .env

@@ -8,7 +8,8 @@ metadata:
     app.kubernetes.io/component: database
     app.kubernetes.io/part-of: zond-explorer
 spec:
-  type: ClusterIP
+  # Headless service for StatefulSet (required for stable network identity)
+  clusterIP: None
   ports:
     - port: 27017
       targetPort: 27017
