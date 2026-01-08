@@ -26,8 +26,8 @@ WORKDIR /app
 # Install ca-certificates for HTTPS connections
 RUN apk --no-cache add ca-certificates
 
-# Create non-root user for security
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# Create non-root user with static UID to match K8s runAsUser
+RUN addgroup -S -g 1000 appgroup && adduser -S -u 1000 -G appgroup appuser
 
 # Copy binary from builder
 COPY --from=builder /app/backendAPI .

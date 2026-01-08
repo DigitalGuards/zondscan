@@ -40,7 +40,9 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/build/standalone ./
 COPY --from=builder /app/build/static ./build/static
 
-# Set correct ownership
+# Set correct ownership for non-root user
+RUN chown -R nextjs:nodejs /app
+
 USER nextjs
 
 # Expose port

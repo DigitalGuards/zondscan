@@ -24,8 +24,13 @@ spec:
     spec:
       containers:
         - name: syncer
+          # NOTE: In production, replace :latest with specific version tags (e.g., :v1.0.0 or :abc1234)
+          # Use CI/CD to set the image tag from git commit SHA or semantic version
           image: zond-explorer-syncer:latest
           imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8081
+              name: health
           env:
             - name: MONGOURI
               valueFrom:
@@ -42,6 +47,24 @@ spec:
                 configMapKeyRef:
                   name: zond-explorer-config
                   key: BEACONCHAIN_API
+            - name: HEALTH_PORT
+              value: "8081"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
           resources:
             requests:
               memory: "256Mi"

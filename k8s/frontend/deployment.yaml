@@ -21,6 +21,8 @@ spec:
     spec:
       containers:
         - name: frontend
+          # NOTE: In production, replace :latest with specific version tags (e.g., :v1.0.0 or :abc1234)
+          # Use CI/CD to set the image tag from git commit SHA or semantic version
           image: zond-explorer-frontend:latest
           imagePullPolicy: IfNotPresent
           ports:

@@ -36,16 +36,7 @@ spec:
     - host: explorer.zond.network  # Replace with your domain
       http:
         paths:
-          # API routes - route /api/* to backend
-          - path: /api
-            pathType: Prefix
-            backend:
-              service:
-                name: backend
-                port:
-                  number: 8080
-
-          # Backend API endpoints (for direct access)
+          # Backend API endpoints
           - path: /overview
             pathType: Prefix
             backend:
