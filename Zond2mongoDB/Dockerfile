@@ -11,7 +11,7 @@ COPY . .
 
 # Download dependencies and build
 RUN go mod download && \
-    CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o synchroniser .
+    CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o syncer-bin .
 
 # Stage 2: Production runner
 FROM alpine:latest
@@ -25,7 +25,7 @@ RUN apk --no-cache add ca-certificates
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 # Copy binary from builder
-COPY --from=builder /build/synchroniser .
+COPY --from=builder /build/syncer-bin ./syncer
 
 # Set ownership
 RUN chown -R appuser:appgroup /app
@@ -34,4 +34,4 @@ RUN chown -R appuser:appgroup /app
 USER appuser
 
 # Run the application
-CMD ["./synchroniser"]
+CMD ["./syncer"]
