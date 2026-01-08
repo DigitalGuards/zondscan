@@ -71,7 +71,8 @@ services:
     restart: unless-stopped
     environment:
       - MONGOURI=mongodb://mongodb:27017
-      - NODE_URL=http://host.docker.internal:8545
+      - NODE_URL=https://qrlwallet.com/api/zond-rpc/testnet
+      - MEMPOOL_NODE_URL=http://host.docker.internal:8545
       - BEACONCHAIN_API=http://host.docker.internal:5051
     depends_on:
       mongodb:
