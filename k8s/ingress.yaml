@@ -1,0 +1,104 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: zond-explorer-ingress
+  namespace: zond-explorer
+  labels:
+    app.kubernetes.io/name: zond-explorer
+    app.kubernetes.io/component: ingress
+  annotations:
+    # Nginx ingress controller annotations
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+
+    # Rate limiting (optional)
+    # nginx.ingress.kubernetes.io/limit-rps: "100"
+
+    # CORS (if needed)
+    # nginx.ingress.kubernetes.io/enable-cors: "true"
+    # nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+
+    # SSL redirect (enable in production)
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+
+    # Cert-manager for automatic TLS (uncomment in production)
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  # TLS configuration (uncomment in production)
+  # tls:
+  #   - hosts:
+  #       - explorer.zond.network
+  #     secretName: zond-explorer-tls
+
+  rules:
+    - host: explorer.zond.network  # Replace with your domain
+      http:
+        paths:
+          # API routes - route /api/* to backend
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          # Backend API endpoints (for direct access)
+          - path: /overview
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          - path: /txs
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          - path: /blocks
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          - path: /validators
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          - path: /contracts
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          # All other routes go to frontend
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 3000

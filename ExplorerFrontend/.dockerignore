@@ -1,0 +1,41 @@
+# Dependencies
+node_modules
+
+# Build output
+build
+.next
+
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+README*
+CHANGELOG*
+
+# Environment files
+.env
+.env.*
+.env.local
+.env.development
+.env.production
+
+# IDE and editor files
+.idea
+.vscode
+*.swp
+*.swo
+
+# Testing
+coverage
+.nyc_output
+cypress/videos
+cypress/screenshots
+
+# Misc
+.DS_Store
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

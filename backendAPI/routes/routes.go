@@ -15,6 +15,11 @@ import (
 )
 
 func UserRoute(router *gin.Engine) {
+	// Health check endpoint for Kubernetes probes
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
 	// Add pending transactions endpoint with pagination
 	router.GET("/pending-transactions", func(c *gin.Context) {
 		// Parse pagination parameters

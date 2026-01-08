@@ -1,0 +1,42 @@
+# Binaries at root only
+synchroniser
+!synchroniser/
+syncer
+zsyncer
+backendAPI
+
+# Binary files anywhere
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Binaries in subdirectories
+**/main
+**/Zond2mongoDB
+
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+!**/*.go
+
+# Environment files
+.env
+.env.*
+
+# IDE and editor files
+.idea
+.vscode
+*.swp
+*.swo
+
+# Misc
+.DS_Store
+*.log
+logs/

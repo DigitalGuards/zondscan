@@ -1,0 +1,88 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: zond-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - zond-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backendAPI
+      dockerfile: Dockerfile
+    container_name: zond-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - MONGOURI=mongodb://mongodb:27017/qrldata-z
+      - NODE_URL=http://host.docker.internal:8545
+      - HTTP_PORT=:8080
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - zond-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./ExplorerFrontend
+      dockerfile: Dockerfile
+    container_name: zond-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=mongodb://mongodb:27017/qrldata-z
+      - NEXT_PUBLIC_HANDLER_URL=http://backend:8080
+      - NEXT_PUBLIC_DOMAIN_NAME=localhost
+    depends_on:
+      - backend
+    networks:
+      - zond-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  syncer:
+    build:
+      context: ./Zond2mongoDB
+      dockerfile: Dockerfile
+    container_name: zond-syncer
+    restart: unless-stopped
+    environment:
+      - MONGOURI=mongodb://mongodb:27017
+      - NODE_URL=http://host.docker.internal:8545
+      - BEACONCHAIN_API=http://host.docker.internal:5051
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - zond-network
+
+networks:
+  zond-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    name: zond-mongodb-data
