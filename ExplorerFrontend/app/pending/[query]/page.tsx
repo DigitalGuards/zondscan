@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import PendingList from './PendingList';
 import axios from 'axios';
 import config from '../../../config';
-import type { PendingTransaction } from '../tx/types';
+import type { PendingTransaction } from '@/app/types';
 import { sharedMetadata } from '../../lib/seo/metaData';
 
 interface PaginatedResponse {

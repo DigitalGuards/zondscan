@@ -21,7 +21,7 @@ import { formatAmount, formatTimestamp, normalizeHexString, formatAddress } from
 import DebouncedInput from "./DebouncedInput";
 import { DownloadBtn, DownloadBtnInternal } from "./DownloadBtn";
 import Link from "next/link";
-import type { Transaction, InternalTransaction } from "./types";
+import type { Transaction, InternalTransaction } from "@/app/types";
 
 const truncateMiddle = (str: string, startChars = 8, endChars = 8): string => {
   if (str.length <= startChars + endChars) return str;

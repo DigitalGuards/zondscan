@@ -3,9 +3,8 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import type { TransactionDetails } from './types';
-import { getConfirmations, getTransactionStatus } from './types';
-import { formatAmount } from '../../lib/helpers';
+import { type TransactionDetails, getConfirmations, getTransactionStatus } from '@/app/types';
+import { formatAmount, formatTokenAmount } from '../../lib/helpers';
 import CopyHashButton from '../../components/CopyHashButton';
 import CopyAddressButton from '../../components/CopyAddressButton';
 
@@ -231,6 +230,65 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                           </span>
                         </div>
                       )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Token Transfer Info */}
+              {transaction.tokenTransfer && (
+                <div className="col-span-1 md:col-span-2 pt-4 border-t border-gray-700">
+                  <div className="bg-[#ffa729]/10 border border-[#ffa729]/30 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                      </svg>
+                      <h3 className="text-[#ffa729] font-semibold">Token Transfer</h3>
+                      <span className="px-2 py-0.5 rounded bg-[#ffa729]/20 text-[#ffa729] text-xs font-medium">
+                        QRC-20
+                      </span>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                        <span className="text-sm text-gray-400 min-w-[80px]">Token:</span>
+                        <a
+                          href={`/address/${transaction.tokenTransfer.contractAddress}`}
+                          className="text-[#ffa729] hover:text-[#ffb84d] font-medium transition-colors"
+                        >
+                          {transaction.tokenTransfer.tokenName} ({transaction.tokenTransfer.tokenSymbol})
+                        </a>
+                      </div>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                        <span className="text-sm text-gray-400 min-w-[80px]">Amount:</span>
+                        <span className="text-white font-semibold text-lg">
+                          {formatTokenAmount(transaction.tokenTransfer.amount, transaction.tokenTransfer.tokenDecimals)}
+                          <span className="text-[#ffa729] ml-2 text-sm">{transaction.tokenTransfer.tokenSymbol}</span>
+                        </span>
+                      </div>
+                      <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-2">
+                        <span className="text-sm text-gray-400 min-w-[80px]">From:</span>
+                        <a
+                          href={`/address/${transaction.tokenTransfer.from}`}
+                          className="text-gray-300 hover:text-[#ffa729] font-mono text-sm transition-colors break-all"
+                        >
+                          {isMobile
+                            ? `${transaction.tokenTransfer.from.slice(0, 10)}...${transaction.tokenTransfer.from.slice(-8)}`
+                            : transaction.tokenTransfer.from
+                          }
+                        </a>
+                      </div>
+                      <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-2">
+                        <span className="text-sm text-gray-400 min-w-[80px]">To:</span>
+                        <a
+                          href={`/address/${transaction.tokenTransfer.to}`}
+                          className="text-gray-300 hover:text-[#ffa729] font-mono text-sm transition-colors break-all"
+                        >
+                          {isMobile
+                            ? `${transaction.tokenTransfer.to.slice(0, 10)}...${transaction.tokenTransfer.to.slice(-8)}`
+                            : transaction.tokenTransfer.to
+                          }
+                        </a>
+                      </div>
                     </div>
                   </div>
                 </div>

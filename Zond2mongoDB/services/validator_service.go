@@ -46,12 +46,6 @@ func StoreValidators(beaconResponse models.BeaconValidatorResponse, currentEpoch
 		newValidators = append(newValidators, record)
 	}
 
-	// Store validator history for this epoch
-	if err := StoreValidatorHistory(newValidators, currentEpoch, currentEpochInt); err != nil {
-		configs.Logger.Warn("Failed to store validator history", zap.Error(err))
-		// Don't fail the main operation
-	}
-
 	// First try to get existing document
 	var storage models.ValidatorStorage
 	err := configs.GetValidatorCollection().FindOne(ctx, bson.M{"_id": "validators"}).Decode(&storage)
@@ -99,8 +93,16 @@ func StoreValidators(beaconResponse models.BeaconValidatorResponse, currentEpoch
 		return err
 	}
 
+	// Store validator history for this epoch AFTER updating storage
+	// Use the accumulated validators (storage.Validators) not just the new ones
+	if err := StoreValidatorHistory(storage.Validators, currentEpoch, currentEpochInt); err != nil {
+		configs.Logger.Warn("Failed to store validator history", zap.Error(err))
+		// Don't fail the main operation
+	}
+
 	configs.Logger.Info("Successfully updated validators",
-		zap.Int("count", len(newValidators)),
+		zap.Int("newCount", len(newValidators)),
+		zap.Int("totalCount", len(storage.Validators)),
 		zap.String("epoch", currentEpoch))
 	return nil
 }

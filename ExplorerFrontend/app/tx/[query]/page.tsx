@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import TransactionView from './transaction-view';
-import type { TransactionDetails } from './types';
+import type { TransactionDetails } from '@/app/types';
 import config from '../../../config';
 
 interface PageProps {
@@ -66,7 +66,8 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
     nonce: txData.Nonce ? parseInt(txData.Nonce, 16) : 0,
     latestBlock: data.latestBlock,
     PaidFees: txData.PaidFees ? Number(txData.PaidFees) : undefined,
-    contractCreated: data.contractCreated || undefined
+    contractCreated: data.contractCreated || undefined,
+    tokenTransfer: data.tokenTransfer || undefined
   };
 
   console.log('Processed transaction:', JSON.stringify(transaction, null, 2));

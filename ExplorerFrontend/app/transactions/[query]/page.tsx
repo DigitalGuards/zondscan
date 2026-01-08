@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import TransactionsClient from './transactions-client';
-import type { TransactionsResponse } from './types';
+import type { TransactionsResponse } from '@/app/types';
 import config from '../../../config';
 
 async function getTransactions(page: string): Promise<TransactionsResponse> {

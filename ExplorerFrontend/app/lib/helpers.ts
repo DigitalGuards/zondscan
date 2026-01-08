@@ -1,4 +1,4 @@
-export function decodeToHex(input, format) {
+export function decodeToHex(input: string, format?: string): string {
   const decoded = atob(input);
   let hex = '';
   for (let i = 0; i < decoded.length; i++) {
@@ -8,7 +8,7 @@ export function decodeToHex(input, format) {
   return hex;
 }
 
-export function toFixed(x) {
+export function toFixed(x: number | string | undefined | null): string {
   if (x === undefined || x === null) {
     return "0";
   }
@@ -22,23 +22,23 @@ export function toFixed(x) {
   }
 
   if (Math.abs(num) < 1.0) {
-    var e = parseInt(num.toString().split('e-')[1]);
+    const e = parseInt(num.toString().split('e-')[1]);
     if (e) {
-        let val = num * Math.pow(10, e-1);
-        return '0.' + (new Array(e)).join('0') + val.toString().substring(2);
+      const val = num * Math.pow(10, e - 1);
+      return '0.' + (new Array(e)).join('0') + val.toString().substring(2);
     }
   } else {
-    var e = parseInt(num.toString().split('+')[1]);
+    const e = parseInt(num.toString().split('+')[1]);
     if (e > 20) {
-        e -= 20;
-        let val = num / Math.pow(10, e);
-        return val + (new Array(e+1)).join('0');
+      const adjustedE = e - 20;
+      const val = num / Math.pow(10, adjustedE);
+      return val + (new Array(adjustedE + 1)).join('0');
     }
   }
   return num.toString();
 }
 
-export function formatGas(amount) {
+export function formatGas(amount: number | string | undefined | null): [string, string] {
   // Handle undefined or null
   if (amount === undefined || amount === null) {
     return ['0', 'Shor'];
@@ -50,7 +50,7 @@ export function formatGas(amount) {
   }
 
   try {
-    let value;
+    let value: number | bigint;
     // Handle hex strings (e.g., "0x123")
     if (typeof amount === 'string' && amount.startsWith('0x')) {
       value = parseInt(amount, 16);
@@ -63,7 +63,7 @@ export function formatGas(amount) {
     else {
       value = BigInt(amount);
     }
-    
+
     // Return the numeric value as a string with 'Shor' unit
     return [value.toString(), 'Shor'];
   } catch (error) {
@@ -72,7 +72,7 @@ export function formatGas(amount) {
   }
 }
 
-export function formatAmount(amount) {
+export function formatAmount(amount: number | string | undefined | null): [string, string] {
   // Handle undefined or null
   if (amount === undefined || amount === null) {
     return ['0.00', 'QRL'];
@@ -83,7 +83,7 @@ export function formatAmount(amount) {
     return ['0.00', 'QRL'];
   }
 
-  let totalNum;
+  let totalNum: number;
   try {
     // Handle hex strings (e.g., "0x123") from node
     if (typeof amount === 'string' && amount.startsWith('0x')) {
@@ -94,8 +94,8 @@ export function formatAmount(amount) {
       totalNum = Number(wholePart) + Number(fractionalPart) / Number(divisor);
     }
     // Handle decimal numbers (convert to wei/shor format first)
-    else if (typeof amount === 'number' || (typeof amount === 'string' && !isNaN(amount))) {
-      const floatValue = parseFloat(amount);
+    else if (typeof amount === 'number' || (typeof amount === 'string' && !isNaN(Number(amount)))) {
+      const floatValue = parseFloat(String(amount));
       if (floatValue < 1000000000000000000) { // If number is already in QRL format
         totalNum = floatValue;
       } else {
@@ -133,36 +133,36 @@ export function formatAmount(amount) {
   }
 }
 
-export function normalizeHexString(hexData) {
+export function normalizeHexString(hexData: string | undefined | null): string {
   if (!hexData) return '';
-  
+
   // If it starts with 0x, remove the prefix
   if (typeof hexData === 'string' && hexData.startsWith('0x')) {
     return hexData.slice(2);
   }
-  
+
   // If it starts with Z, remove the prefix
   if (typeof hexData === 'string' && hexData.startsWith('Z')) {
     return hexData.slice(1);
   }
-  
+
   // If it's a valid hex string without prefix, return as is
   if (typeof hexData === 'string' && /^[0-9a-fA-F]+$/.test(hexData)) {
     return hexData;
   }
-  
+
   console.error('Invalid hex string:', hexData);
   return '';
 }
 
-export function epochToISO(timestamp) {
+export function epochToISO(timestamp: number | undefined | null): string {
   if (!timestamp) return '1970-01-01';
-  const date = new Date(timestamp * 1000); 
+  const date = new Date(timestamp * 1000);
   const datePart = date.toISOString().split('T')[0];
   return datePart;
 }
 
-export function formatTimestamp(timestamp) {
+export function formatTimestamp(timestamp: number | undefined | null): string {
   if (!timestamp) return '';
   const date = new Date(timestamp * 1000);
   // Use UTC to avoid hydration mismatch between server and client
@@ -177,32 +177,33 @@ export function formatTimestamp(timestamp) {
   return `${month}/${day}/${year}, ${hour12}:${minutes}:${seconds} ${ampm} UTC`;
 }
 
-export function formatNumber(value) {
+export function formatNumber(value: number): string {
   if (typeof value !== "number" || isNaN(value)) {
     return "Error";
   }
+  let formatted: string;
   if (value >= 1e12) {
-      value = (value / 1e12).toFixed(2) + 'T';
+    formatted = (value / 1e12).toFixed(2) + 'T';
   } else if (value >= 1e9) {
-      value = (value / 1e9).toFixed(2) + 'B';
+    formatted = (value / 1e9).toFixed(2) + 'B';
   } else if (value >= 1e6) {
-      value = (value / 1e6).toFixed(2) + 'M';
+    formatted = (value / 1e6).toFixed(2) + 'M';
   } else if (value >= 1e3) {
-      value = (value / 1e3).toFixed(2) + 'K';
+    formatted = (value / 1e3).toFixed(2) + 'K';
   } else {
-      value = value.toFixed(2);
+    formatted = value.toFixed(2);
   }
-  return '$' + value;
+  return '$' + formatted;
 }
 
-export function formatNumberWithCommas(x) {
+export function formatNumberWithCommas(x: number | string | undefined | null): string {
   if (x === undefined || x === null) {
     return "0";
   }
   return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-export function epochsToDays(epochs) {
+export function epochsToDays(epochs: number): number {
   // Each epoch is 128 slots
   // Each slot takes 60 seconds
   // So each epoch is 128 * 60 seconds
@@ -210,24 +211,22 @@ export function epochsToDays(epochs) {
   return (epochs * 128 * 60) / (24 * 60 * 60);
 }
 
-export function truncateHash(hash, startLength = 6, endLength = 4) {
-  if (!hash || hash.length < startLength + endLength) return hash;
+export function truncateHash(hash: string | undefined | null, startLength = 6, endLength = 4): string {
+  if (!hash || hash.length < startLength + endLength) return hash || '';
   return `${hash.slice(0, startLength)}...${hash.slice(-endLength)}`;
 }
 
 /**
  * Formats an address to ensure it has the correct prefix (Z for QRL addresses, 0x for contract addresses)
- * @param {string} address - The address to format
- * @returns {string} - The formatted address
  */
-export function formatAddress(address) {
+export function formatAddress(address: string | undefined | null): string {
   if (!address) return '';
-  
+
   // If already has Z prefix, return as is
   if (address.startsWith('Z')) {
     return address;
   }
-  
+
   // If has 0x prefix
   if (address.startsWith('0x')) {
     // For contract addresses (starting with 0x7), keep the 0x prefix
@@ -237,12 +236,141 @@ export function formatAddress(address) {
     // For regular addresses, convert to Z prefix
     return 'Z' + address.slice(2);
   }
-  
+
   // If no prefix but is a valid hex string, add Z prefix
   if (/^[0-9a-fA-F]+$/.test(address)) {
     return 'Z' + address;
   }
-  
+
   // If invalid format, return as is
   return address;
+}
+
+/**
+ * Decoded token transfer information from input data
+ */
+export interface DecodedTokenTransfer {
+  to: string;
+  amount: string;
+  methodName: string;
+}
+
+/**
+ * Decodes ERC20 transfer input data
+ * ERC20 transfer method signature: 0xa9059cbb
+ * Format: 0xa9059cbb + 32 bytes (to address, padded) + 32 bytes (amount)
+ * @param inputData - The transaction input data
+ * @returns Decoded transfer info or null if not a transfer
+ */
+export function decodeTokenTransferInput(inputData: string | undefined | null): DecodedTokenTransfer | null {
+  if (!inputData || inputData === '0x' || inputData.length < 10) {
+    return null;
+  }
+
+  // Normalize input
+  const data = inputData.toLowerCase();
+
+  // Check for ERC20 transfer method signature (0xa9059cbb)
+  if (data.startsWith('0xa9059cbb')) {
+    // transfer(address,uint256)
+    // Expected length: 0x (2) + method (8) + address (64) + amount (64) = 138
+    if (data.length !== 138) {
+      return null;
+    }
+
+    try {
+      // Extract recipient address (bytes 10-74, last 40 chars are the address)
+      const toAddressPadded = data.slice(10, 74);
+      const toAddress = 'Z' + toAddressPadded.slice(-40);
+
+      // Extract amount (bytes 74-138)
+      const amountHex = '0x' + data.slice(74);
+      const amount = BigInt(amountHex).toString();
+
+      return {
+        to: toAddress,
+        amount: amount,
+        methodName: 'transfer'
+      };
+    } catch (error) {
+      console.error('Error decoding transfer input:', error);
+      return null;
+    }
+  }
+
+  // Check for ERC20 transferFrom method signature (0x23b872dd)
+  if (data.startsWith('0x23b872dd')) {
+    // transferFrom(address,address,uint256)
+    // Expected length: 0x (2) + method (8) + from (64) + to (64) + amount (64) = 202
+    if (data.length !== 202) {
+      return null;
+    }
+
+    try {
+      // Extract from address (bytes 10-74)
+      const fromAddressPadded = data.slice(10, 74);
+      const fromAddress = 'Z' + fromAddressPadded.slice(-40);
+
+      // Extract to address (bytes 74-138)
+      const toAddressPadded = data.slice(74, 138);
+      const toAddress = 'Z' + toAddressPadded.slice(-40);
+
+      // Extract amount (bytes 138-202)
+      const amountHex = '0x' + data.slice(138);
+      const amount = BigInt(amountHex).toString();
+
+      return {
+        to: toAddress,
+        amount: amount,
+        methodName: 'transferFrom'
+      };
+    } catch (error) {
+      console.error('Error decoding transferFrom input:', error);
+      return null;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Formats a token amount with proper decimals
+ * @param amount - The raw token amount (as string)
+ * @param decimals - The number of decimals for the token
+ * @returns Formatted amount string
+ */
+export function formatTokenAmount(amount: string | undefined | null, decimals: number = 18): string {
+  if (!amount || amount === '0' || amount === '0x0') {
+    return '0';
+  }
+
+  try {
+    // BigInt handles both decimal strings and hex strings with 0x prefix
+    const rawAmount = BigInt(amount);
+
+    if (rawAmount === BigInt(0)) {
+      return '0';
+    }
+
+    // Convert to decimal representation
+    const divisor = BigInt(10 ** decimals);
+    const wholePart = rawAmount / divisor;
+    const fractionalPart = rawAmount % divisor;
+
+    // Format the fractional part with leading zeros
+    let fractionalStr = fractionalPart.toString().padStart(decimals, '0');
+    // Remove trailing zeros
+    fractionalStr = fractionalStr.replace(/0+$/, '');
+
+    if (fractionalStr === '') {
+      // Format whole part with thousand separators
+      return wholePart.toLocaleString('en-US');
+    }
+
+    // Format whole part with thousand separators and add fractional part
+    return `${wholePart.toLocaleString('en-US')}.${fractionalStr}`;
+  } catch (error) {
+    console.error('Error formatting token amount:', error, amount);
+    return amount;
+  }
 }

@@ -2,7 +2,7 @@
 
 import React, { useEffect } from 'react';
 import TransactionsList from './TransactionsList';
-import type { Transaction } from './types';
+import type { Transaction } from '@/app/types';
 import config from '../../../config';
 
 interface TransactionsResponse {

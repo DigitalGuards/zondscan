@@ -5,7 +5,6 @@ import (
 	"Zond2mongoDB/models"
 	"Zond2mongoDB/rpc"
 	"context"
-	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -183,103 +182,10 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 			zap.String("contractAddress", contractAddress),
 			zap.String("txHash", log.TransactionHash))
 
-		// ---> Double-check token status via RPC before checking DB <---
-		name, symbol, decimals, isTokenRPC := rpc.GetTokenInfo(contractAddress)
-		if isTokenRPC {
-			configs.Logger.Debug("RPC check confirms contract is a token (or potentially is)",
-				zap.String("address", contractAddress))
-
-			// First try to get existing contract from DB to preserve creation information
-			existingContract, err := GetContract(contractAddress)
-
-			// Prepare contract info based on RPC result
-			contractUpdate := models.ContractInfo{
-				Address:   contractAddress,
-				Status:    "0x1", // Assume successful
-				IsToken:   true,
-				Name:      name,
-				Symbol:    symbol,
-				Decimals:  decimals,
-				UpdatedAt: time.Now().UTC().Format(time.RFC3339),
-				// Add creation information if this is a new token discovery
-				CreationBlockNumber: blockNumber,         // Set the block where we found the token
-				CreationTransaction: log.TransactionHash, // Set the transaction that contained the transfer
-			}
-
-			// Try to get transaction details to find the creator
-			txDetails, txErr := rpc.GetTxDetailsByHash(log.TransactionHash)
-			if txErr == nil && txDetails != nil {
-				configs.Logger.Debug("Retrieved transaction details for token creator identification",
-					zap.String("txHash", log.TransactionHash))
-				contractUpdate.CreatorAddress = txDetails.From
-			} else {
-				configs.Logger.Debug("Failed to get transaction details for token discovery",
-					zap.String("txHash", log.TransactionHash),
-					zap.Error(txErr))
-			}
-
-			// If we have existing contract data, preserve the existing creation information
-			// as it might be more accurate than what we just discovered
-			if err == nil && existingContract != nil {
-				// Preserve creation information if present
-				if existingContract.CreatorAddress != "" {
-					contractUpdate.CreatorAddress = existingContract.CreatorAddress
-				}
-				if existingContract.CreationTransaction != "" {
-					contractUpdate.CreationTransaction = existingContract.CreationTransaction
-				}
-				if existingContract.CreationBlockNumber != "" {
-					contractUpdate.CreationBlockNumber = existingContract.CreationBlockNumber
-				}
-				if existingContract.ContractCode != "" {
-					contractUpdate.ContractCode = existingContract.ContractCode
-				}
-			}
-
-			// Attempt to get total supply as well
-			totalSupply, supplyErr := rpc.GetTokenTotalSupply(contractAddress)
-			if supplyErr == nil {
-				contractUpdate.TotalSupply = totalSupply
-			} else {
-				configs.Logger.Debug("Failed to get total supply during RPC double-check",
-					zap.String("address", contractAddress),
-					zap.Error(supplyErr))
-			}
-
-			// Store/Merge this information into the database
-			errUpdate := StoreContract(contractUpdate)
-			if errUpdate != nil {
-				configs.Logger.Error("Failed to store/update contract during RPC double-check",
-					zap.String("address", contractAddress),
-					zap.Error(errUpdate))
-				// Continue processing the log anyway, maybe DB check will work
-			}
-		} else {
-			configs.Logger.Debug("RPC check indicates contract is not a token",
-				zap.String("address", contractAddress))
-			// Optionally: Update DB to set IsToken=false if desired, but might conflict with other logic.
-			// For now, just rely on the subsequent DB check.
-		}
-		// ---> End of double-check <---
-
-		// Check if this contract is already known to be a token in DB (might have been updated above)
-		contract, err := GetContract(contractAddress)
-		if err != nil {
-			// If GetContract failed even after potentially storing it, log error and skip.
-			// This case covers the original 'contract not found' scenario, but now after an attempted update.
-			// If isTokenRPC was true but StoreContract failed, we log and skip here.
-			// If isTokenRPC was false, this follows the original 'contract not found and not a token' path.
-			configs.Logger.Warn("Failed to get contract from DB after RPC check, skipping log",
-				zap.String("address", contractAddress),
-				zap.Error(err),
-				zap.Bool("isTokenRPC", isTokenRPC))
-			continue
-		}
-
-		// Now, check the IsToken status from the potentially updated DB record
-		if !contract.IsToken {
-			// Known contract in DB, but confirmed not a token (either originally or by RPC double-check)
-			configs.Logger.Debug("Contract confirmed as not a token in DB, skipping",
+		// Use the consolidated token detection logic
+		contract, isToken := EnsureTokenInDatabase(contractAddress, blockNumber, log.TransactionHash)
+		if !isToken || contract == nil {
+			configs.Logger.Debug("Contract is not a token, skipping",
 				zap.String("address", contractAddress))
 			continue
 		}

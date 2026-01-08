@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -250,4 +251,50 @@ func GetTokenInfo(contractAddress string) (*models.TokenInfo, error) {
 		CreationTxHash:  contract.CreationTransaction,
 		CreationBlock:   contract.CreationBlockNumber,
 	}, nil
+}
+
+// GetTokenTransferByTxHash returns token transfer info for a given transaction hash
+// Returns nil if no token transfer is associated with this transaction
+func GetTokenTransferByTxHash(txHash string) (*models.TokenTransfer, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	collection := configs.GetCollection(configs.DB, "tokenTransfers")
+
+	// Normalize the transaction hash - syncer stores with 0x prefix in lowercase
+	normalizedHash := strings.ToLower(txHash)
+	if !strings.HasPrefix(normalizedHash, "0x") {
+		normalizedHash = "0x" + normalizedHash
+	}
+
+	var transfer models.TokenTransfer
+	// First try with 0x prefix (standard storage format)
+	err := collection.FindOne(ctx, bson.M{"txHash": normalizedHash}).Decode(&transfer)
+	if err == nil {
+		return &transfer, nil
+	}
+	if err != mongo.ErrNoDocuments {
+		return nil, err
+	}
+
+	// Try without 0x prefix in case storage format varies
+	hashWithoutPrefix := strings.TrimPrefix(normalizedHash, "0x")
+	err = collection.FindOne(ctx, bson.M{"txHash": hashWithoutPrefix}).Decode(&transfer)
+	if err == nil {
+		return &transfer, nil
+	}
+	if err != mongo.ErrNoDocuments {
+		return nil, err
+	}
+
+	// Try with original hash as-is
+	err = collection.FindOne(ctx, bson.M{"txHash": txHash}).Decode(&transfer)
+	if err == nil {
+		return &transfer, nil
+	}
+	if err != mongo.ErrNoDocuments {
+		return nil, err
+	}
+
+	return nil, nil
 }

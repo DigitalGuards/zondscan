@@ -48,6 +48,35 @@ interface HistoryRecord {
   totalStaked: string;
 }
 
+// Custom hook for responsive viewport dimensions (SSR-safe)
+function useViewport() {
+  const [viewport, setViewport] = useState({
+    width: 800, // Default for SSR
+    isMobile: false,
+    chartWidth: 400,
+    fullChartWidth: 800,
+  });
+
+  useEffect(() => {
+    const updateViewport = () => {
+      const width = window.innerWidth;
+      const isMobile = width < 640;
+      const padding = isMobile ? 64 : 48;
+      const maxWidth = isMobile ? 500 : 600;
+      const chartWidth = Math.max(Math.min(width - padding, maxWidth), 280);
+      const fullChartWidth = Math.max(Math.min(width - 64, 1200), 300);
+
+      setViewport({ width, isMobile, chartWidth, fullChartWidth });
+    };
+
+    updateViewport();
+    window.addEventListener('resize', updateViewport);
+    return () => window.removeEventListener('resize', updateViewport);
+  }, []);
+
+  return viewport;
+}
+
 export default function ValidatorsWrapper(): JSX.Element {
   const [validators, setValidators] = useState<Validator[]>([]);
   const [epochInfo, setEpochInfo] = useState<EpochInfo | null>(null);
@@ -55,18 +84,9 @@ export default function ValidatorsWrapper(): JSX.Element {
   const [history, setHistory] = useState<HistoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [chartWidth, setChartWidth] = useState(400);
 
-  // Update chart width on resize
-  useEffect(() => {
-    const updateWidth = () => {
-      const width = Math.min(window.innerWidth - 48, 600);
-      setChartWidth(width);
-    };
-    updateWidth();
-    window.addEventListener('resize', updateWidth);
-    return () => window.removeEventListener('resize', updateWidth);
-  }, []);
+  // Use viewport hook for responsive dimensions (SSR-safe)
+  const { isMobile, chartWidth, fullChartWidth } = useViewport();
 
   const fetchData = useCallback(async () => {
     try {
@@ -138,13 +158,13 @@ export default function ValidatorsWrapper(): JSX.Element {
       <ValidatorStatsCards stats={stats} loading={loading} />
 
       {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6">
         {/* Status Distribution Chart */}
-        <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4">
-          <h3 className="text-lg font-semibold text-[#ffa729] mb-4">Status Distribution</h3>
-          <div className="flex justify-center">
+        <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-3 sm:p-4">
+          <h3 className="text-base sm:text-lg font-semibold text-[#ffa729] mb-3 sm:mb-4">Status Distribution</h3>
+          <div className="flex justify-center overflow-hidden">
             {loading ? (
-              <div className="h-[300px] flex items-center justify-center">
+              <div className="h-[250px] sm:h-[300px] flex items-center justify-center">
                 <div className="animate-pulse text-gray-500">Loading chart...</div>
               </div>
             ) : (
@@ -154,45 +174,49 @@ export default function ValidatorsWrapper(): JSX.Element {
                 exitedCount={stats?.exitedCount || 0}
                 slashedCount={stats?.slashedCount || 0}
                 width={Math.min(chartWidth, 350)}
-                height={300}
+                height={isMobile ? 250 : 300}
               />
             )}
           </div>
         </div>
 
         {/* Total Staked Chart */}
-        <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4">
-          <h3 className="text-lg font-semibold text-[#ffa729] mb-4">Total Staked Over Time</h3>
+        <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-3 sm:p-4 overflow-hidden">
+          <h3 className="text-base sm:text-lg font-semibold text-[#ffa729] mb-3 sm:mb-4">Total Staked Over Time</h3>
+          <div className="overflow-x-auto">
+            {loading ? (
+              <div className="h-[250px] sm:h-[300px] flex items-center justify-center">
+                <div className="animate-pulse text-gray-500">Loading chart...</div>
+              </div>
+            ) : (
+              <ValidatorHistoryChart
+                data={history}
+                type="staked"
+                width={Math.max(chartWidth - 24, 300)}
+                height={isMobile ? 250 : 300}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Validator Count History */}
+      <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-3 sm:p-4 mb-6 overflow-hidden">
+        <h3 className="text-base sm:text-lg font-semibold text-[#ffa729] mb-3 sm:mb-4">Validator Count Over Time</h3>
+        <div className="overflow-x-auto">
           {loading ? (
-            <div className="h-[300px] flex items-center justify-center">
+            <div className="h-[200px] sm:h-[250px] flex items-center justify-center">
               <div className="animate-pulse text-gray-500">Loading chart...</div>
             </div>
           ) : (
             <ValidatorHistoryChart
               data={history}
-              type="staked"
-              width={chartWidth}
-              height={300}
+              type="count"
+              width={fullChartWidth}
+              height={isMobile ? 200 : 250}
             />
           )}
         </div>
-      </div>
-
-      {/* Validator Count History */}
-      <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4 mb-6">
-        <h3 className="text-lg font-semibold text-[#ffa729] mb-4">Validator Count Over Time</h3>
-        {loading ? (
-          <div className="h-[250px] flex items-center justify-center">
-            <div className="animate-pulse text-gray-500">Loading chart...</div>
-          </div>
-        ) : (
-          <ValidatorHistoryChart
-            data={history}
-            type="count"
-            width={Math.min(window.innerWidth - 48, 1200)}
-            height={250}
-          />
-        )}
       </div>
 
       {/* Validators Table */}
