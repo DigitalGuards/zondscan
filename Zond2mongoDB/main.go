@@ -3,6 +3,7 @@ package main
 import (
 	"Zond2mongoDB/configs"
 	"Zond2mongoDB/synchroniser"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -28,6 +29,22 @@ func main() {
 	configs.Logger.Info("Starting blockchain synchronization process...")
 	configs.Logger.Info("MongoDB URL: " + os.Getenv("MONGOURI"))
 	configs.Logger.Info("Node URL: " + os.Getenv("NODE_URL"))
+
+	// Start health check server for Kubernetes probes
+	go func() {
+		http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"status":"ok"}`))
+		})
+		healthPort := os.Getenv("HEALTH_PORT")
+		if healthPort == "" {
+			healthPort = "8081"
+		}
+		configs.Logger.Info("Starting health check server on port " + healthPort)
+		if err := http.ListenAndServe(":"+healthPort, nil); err != nil {
+			configs.Logger.Error("Health server failed: " + err.Error())
+		}
+	}()
 
 	// Start pending transaction sync (this is not started in sync.go)
 	configs.Logger.Info("Starting pending transaction sync service...")

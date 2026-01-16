@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zond-explorer-config
+  namespace: zond-explorer
+  labels:
+    app.kubernetes.io/name: zond-explorer
+data:
+  # Backend configuration
+  HTTP_PORT: ":8080"
+
+  # Frontend configuration
+  NEXT_PUBLIC_HANDLER_URL: "http://backend:8080"
+  NEXT_PUBLIC_DOMAIN_NAME: "explorer.zond.network"
+
+  # Zond node configuration - replace with your actual node URLs
+  NODE_URL: "http://zond-node:8545"
+  BEACONCHAIN_API: "http://zond-beacon:5051"

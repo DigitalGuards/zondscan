@@ -163,6 +163,96 @@ pm2 save
 
 Great! The explorer should now be live. (Don't forget to use tmux or pm2 for Zond too!)
 
+## Docker Setup
+
+### Quick Start with Docker Compose
+
+The fastest way to run all services locally:
+
+```bash
+# Clone and navigate to the project
+git clone https://github.com/DigitalGuards/zondexplorer.git
+cd zondexplorer
+
+# Start all services
+docker compose up -d
+
+# Check status
+docker compose ps
+
+# View logs
+docker compose logs -f
+```
+
+**Services:**
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8082
+- MongoDB: localhost:27018
+
+**Note:** The Zond node URL defaults to `host.docker.internal:8545`. Update `docker-compose.yml` to point to your actual Zond node.
+
+### Building Images Manually
+
+```bash
+# Build all images
+./scripts/docker-build.sh
+
+# Or build individually
+docker build -t zond-explorer-frontend:latest ./ExplorerFrontend
+docker build -t zond-explorer-backend:latest ./backendAPI
+docker build -t zond-explorer-syncer:latest ./Zond2mongoDB
+```
+
+### Stopping Services
+
+```bash
+docker compose down           # Stop and remove containers
+docker compose down -v        # Also remove volumes (deletes MongoDB data)
+```
+
+## Kubernetes Deployment
+
+### Prerequisites
+- Kubernetes cluster (minikube, k3s, EKS, GKE, etc.)
+- kubectl configured
+- Docker images pushed to a registry (or use local images with minikube)
+
+### Deploy to Kubernetes
+
+```bash
+# Deploy all resources
+./scripts/k8s-deploy.sh
+
+# Check deployment status
+kubectl get pods -n zond-explorer
+
+# View logs
+kubectl logs -f deployment/backend -n zond-explorer
+```
+
+### Configuration
+
+Before deploying to production, update these files:
+
+1. **k8s/secrets.yaml** - Set your MongoDB credentials:
+   ```bash
+   echo -n "mongodb://user:pass@your-mongodb:27017/qrldata-z" | base64
+   ```
+
+2. **k8s/configmap.yaml** - Set your Zond node URLs:
+   ```yaml
+   NODE_URL: "http://your-zond-node:8545"
+   BEACONCHAIN_API: "http://your-beacon:5051"
+   ```
+
+3. **k8s/ingress.yaml** - Set your domain and enable TLS
+
+### Cleanup
+
+```bash
+./scripts/k8s-deploy.sh --delete
+```
+
 ## System Architecture and Data Flow
 
 ### Backend Architecture

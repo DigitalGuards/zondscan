@@ -1,0 +1,36 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+backendAPI
+
+# Test binary
+*.test
+
+# Output of go coverage tool
+*.out
+
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+README*
+CHANGELOG*
+
+# Environment files
+.env
+.env.*
+
+# IDE and editor files
+.idea
+.vscode
+*.swp
+*.swo
+
+# Misc
+.DS_Store
+*.log

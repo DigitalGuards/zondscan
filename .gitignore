@@ -43,3 +43,7 @@ zond-contract-example*
 backendAPI/backendAPI.log
 *.cert
 *.key
+
+# Compiled binaries
+Zond2mongoDB/backendAPI
+backendAPI/syncer
