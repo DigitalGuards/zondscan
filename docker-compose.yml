@@ -69,6 +69,8 @@ services:
       dockerfile: Dockerfile
     container_name: zond-syncer
     restart: unless-stopped
+    ports:
+      - "8081:8081"
     environment:
       - MONGOURI=mongodb://mongodb:27017
       - NODE_URL=https://qrlwallet.com/api/zond-rpc/testnet
@@ -79,6 +81,12 @@ services:
         condition: service_healthy
     networks:
       - zond-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
 networks:
   zond-network:

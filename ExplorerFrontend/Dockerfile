@@ -32,8 +32,10 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # Create non-root user for security
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
+
+# Install wget for healthcheck
+RUN apk add --no-cache wget
 
 # Copy necessary files from builder
 COPY --from=builder /app/public ./public

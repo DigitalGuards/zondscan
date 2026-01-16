@@ -23,8 +23,8 @@ FROM alpine:latest
 
 WORKDIR /app
 
-# Install ca-certificates for HTTPS connections
-RUN apk --no-cache add ca-certificates
+# Install ca-certificates for HTTPS connections and wget for healthcheck
+RUN apk --no-cache add ca-certificates wget
 
 # Create non-root user with static UID to match K8s runAsUser
 RUN addgroup -S -g 1000 appgroup && adduser -S -u 1000 -G appgroup appuser

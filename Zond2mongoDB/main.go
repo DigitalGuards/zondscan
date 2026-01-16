@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -42,7 +44,7 @@ func main() {
 		}
 		configs.Logger.Info("Starting health check server on port " + healthPort)
 		if err := http.ListenAndServe(":"+healthPort, nil); err != nil {
-			configs.Logger.Error("Health server failed: " + err.Error())
+			configs.Logger.Error("Health server failed", zap.Error(err))
 		}
 	}()
 
