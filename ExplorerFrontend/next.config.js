@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   distDir: 'build',
+  output: 'standalone',
   // Turbopack configuration (empty for now, may need buffer polyfill in future)
   turbopack: {},
   webpack: (config, { isServer }) => {

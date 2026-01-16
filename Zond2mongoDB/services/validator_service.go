@@ -63,16 +63,25 @@ func StoreValidators(beaconResponse models.BeaconValidatorResponse, currentEpoch
 			Validators: newValidators,
 		}
 	} else {
-		// Append new validators to existing ones
-		// First, create a map of existing validators by public key for deduplication
-		existingValidators := make(map[string]bool)
-		for _, v := range storage.Validators {
-			existingValidators[v.PublicKeyHex] = true
+		// Update existing validators and add new ones
+		// Create a map of existing validators by public key for quick lookup
+		existingValidatorIndex := make(map[string]int)
+		for i, v := range storage.Validators {
+			existingValidatorIndex[v.PublicKeyHex] = i
 		}
 
-		// Only append validators that don't already exist
+		// Update existing validators or append new ones
 		for _, v := range newValidators {
-			if !existingValidators[v.PublicKeyHex] {
+			if idx, exists := existingValidatorIndex[v.PublicKeyHex]; exists {
+				// Update existing validator's mutable fields
+				storage.Validators[idx].EffectiveBalance = v.EffectiveBalance
+				storage.Validators[idx].Slashed = v.Slashed
+				storage.Validators[idx].ExitEpoch = v.ExitEpoch
+				storage.Validators[idx].WithdrawableEpoch = v.WithdrawableEpoch
+				storage.Validators[idx].SlotNumber = v.SlotNumber
+				storage.Validators[idx].IsLeader = v.IsLeader
+			} else {
+				// Add new validator
 				storage.Validators = append(storage.Validators, v)
 			}
 		}

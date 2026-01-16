@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: zond-explorer
+  labels:
+    app.kubernetes.io/name: zond-explorer
+    app.kubernetes.io/part-of: qrl-zond

@@ -1,0 +1,232 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: zond-explorer-ingress
+  namespace: zond-explorer
+  labels:
+    app.kubernetes.io/name: zond-explorer
+    app.kubernetes.io/component: ingress
+  annotations:
+    # Nginx ingress controller annotations
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+
+    # Rate limiting (optional)
+    # nginx.ingress.kubernetes.io/limit-rps: "100"
+
+    # CORS (if needed)
+    # nginx.ingress.kubernetes.io/enable-cors: "true"
+    # nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+
+    # SSL redirect (enable in production)
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+
+    # Cert-manager for automatic TLS (uncomment in production)
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  # TLS configuration (uncomment in production)
+  # tls:
+  #   - hosts:
+  #       - explorer.zond.network
+  #     secretName: zond-explorer-tls
+
+  rules:
+    - host: explorer.zond.network  # Replace with your domain
+      http:
+        paths:
+          # Backend API endpoints - all API routes must be listed here
+          # to prevent them from being routed to the frontend
+
+          # Core data endpoints
+          - path: /overview
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          # Transaction endpoints
+          - path: /tx
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          - path: /txs
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          - path: /transactions
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          - path: /pending-transaction
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          - path: /pending-transactions
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          # Block endpoints
+          - path: /block
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          - path: /blocks
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          - path: /blocksizes
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          - path: /latestblock
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          # Address endpoints
+          - path: /address
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          - path: /richlist
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          - path: /walletdistribution
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          - path: /getBalance
+            pathType: Exact
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          # Validator endpoints
+          - path: /validator
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          - path: /validators
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          - path: /epoch
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          # Token/Contract endpoints
+          - path: /token
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          - path: /contracts
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          # Other endpoints
+          - path: /coinbase
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          - path: /debug
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+
+          # All other routes go to frontend (must be last)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 3000
