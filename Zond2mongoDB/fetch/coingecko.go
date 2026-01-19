@@ -84,7 +84,8 @@ func fetchWithTimeout() (*models.MarketDataResponse, error) {
 
 	configs.Logger.Info("Successfully fetched CoinGecko data",
 		zap.Float32("marketCap", data.MarketData.MarketCap.USD),
-		zap.Float32("price", data.MarketData.CurrentPrice.USD))
+		zap.Float32("price", data.MarketData.CurrentPrice.USD),
+		zap.Float32("volume", data.MarketData.TotalVolume.USD))
 
 	return &data, nil
 }

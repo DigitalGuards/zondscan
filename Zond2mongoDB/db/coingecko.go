@@ -40,7 +40,42 @@ func UpdateCoinGeckoDataInDB(data *models.MarketDataResponse) error {
 	configs.Logger.Info("Successfully updated CoinGecko data",
 		zap.Float32("marketCap", doc.MarketCapUSD),
 		zap.Float32("price", doc.PriceUSD),
+		zap.Float32("volume", doc.VolumeUSD),
 		zap.Time("lastUpdated", doc.LastUpdated))
+
+	// Also store in price history for historical tracking
+	if err := InsertPriceHistory(data); err != nil {
+		configs.Logger.Warn("Failed to insert price history", zap.Error(err))
+		// Don't return error - current price update succeeded
+	}
+
+	return nil
+}
+
+// InsertPriceHistory adds a new price snapshot to the price history collection
+func InsertPriceHistory(data *models.MarketDataResponse) error {
+	if data == nil {
+		return errors.New("cannot insert nil data to price history")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	historyDoc := data.ToPriceHistoryDocument()
+
+	_, err := configs.PriceHistoryCollections.InsertOne(ctx, historyDoc)
+	if err != nil {
+		configs.Logger.Error("Failed to insert price history",
+			zap.Error(err),
+			zap.Float32("price", historyDoc.PriceUSD),
+			zap.Time("timestamp", historyDoc.Timestamp))
+		return err
+	}
+
+	configs.Logger.Debug("Inserted price history snapshot",
+		zap.Float32("price", historyDoc.PriceUSD),
+		zap.Float32("volume", historyDoc.VolumeUSD),
+		zap.Time("timestamp", historyDoc.Timestamp))
 
 	return nil
 }

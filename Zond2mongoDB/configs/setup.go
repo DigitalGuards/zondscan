@@ -55,7 +55,7 @@ func ConnectDB() *mongo.Client {
 	}
 	ensureCollection(db, "dailyTransactionsVolume", volumeValidator)
 
-	// CoinGecko Data
+	// CoinGecko Data (current price)
 	coingeckoValidator := bson.M{
 		"$jsonSchema": bson.M{
 			"bsonType": "object",
@@ -69,6 +69,10 @@ func ConnectDB() *mongo.Client {
 					"bsonType":    "double",
 					"description": "must be a double and is required",
 				},
+				"volumeUSD": bson.M{
+					"bsonType":    "double",
+					"description": "24h trading volume in USD",
+				},
 				"lastUpdated": bson.M{
 					"bsonType":    "date",
 					"description": "must be a date and is required",
@@ -77,6 +81,33 @@ func ConnectDB() *mongo.Client {
 		},
 	}
 	ensureCollection(db, "coingecko", coingeckoValidator)
+
+	// Price History (historical snapshots)
+	priceHistoryValidator := bson.M{
+		"$jsonSchema": bson.M{
+			"bsonType": "object",
+			"required": []string{"timestamp", "priceUSD"},
+			"properties": bson.M{
+				"timestamp": bson.M{
+					"bsonType":    "date",
+					"description": "must be a date and is required",
+				},
+				"priceUSD": bson.M{
+					"bsonType":    "double",
+					"description": "must be a double and is required",
+				},
+				"marketCapUSD": bson.M{
+					"bsonType":    "double",
+					"description": "market cap in USD",
+				},
+				"volumeUSD": bson.M{
+					"bsonType":    "double",
+					"description": "24h trading volume in USD",
+				},
+			},
+		},
+	}
+	ensureCollection(db, "priceHistory", priceHistoryValidator)
 
 	// Wallet Count
 	walletValidator := bson.M{
@@ -277,12 +308,28 @@ func initializeCollections(db *mongo.Database) {
 		bson.M{"$setOnInsert": bson.M{
 			"marketCapUSD": 0.0,
 			"priceUSD":     0.0,
+			"volumeUSD":    0.0,
 			"lastUpdated":  time.Now(),
 		}},
 		options.Update().SetUpsert(true),
 	)
 	if err != nil {
 		Logger.Error("Failed to initialize CoinGecko collection", zap.Error(err))
+	}
+
+	// Initialize priceHistory collection with timestamp index for efficient time-range queries
+	priceHistoryCollection := db.Collection("priceHistory")
+	_, err = priceHistoryCollection.Indexes().CreateOne(
+		ctx,
+		mongo.IndexModel{
+			Keys:    bson.D{{Key: "timestamp", Value: -1}}, // Descending for recent-first queries
+			Options: options.Index().SetName("timestamp_desc_idx"),
+		},
+	)
+	if err != nil {
+		Logger.Error("Failed to create index for priceHistory collection", zap.Error(err))
+	} else {
+		Logger.Info("Price history collection initialized with timestamp index")
 	}
 
 	// Create and set up the rest of the collections

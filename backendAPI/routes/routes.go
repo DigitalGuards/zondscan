@@ -134,19 +134,63 @@ func UserRoute(router *gin.Engine) {
 			contractCount = 0
 		}
 
+		// Get 24h trading volume
+		tradingVolume := db.GetCurrentVolume()
+
 		// Return response with default values if data isn't available
+
 		c.JSON(http.StatusOK, gin.H{
 			"marketcap":      marketCap,      // Returns 0 if not available
 			"currentPrice":   currentPrice,   // Returns 0 if not available
 			"countwallets":   walletCount,    // Returns 0 if not available
 			"circulating":    circulating,    // Returns "0" if not available
 			"volume":         volume,         // Returns 0 if not available
+			"tradingVolume":  tradingVolume,  // 24h trading volume from CoinGecko
 			"validatorCount": validatorCount, // Returns 0 if not available
 			"contractCount":  contractCount,  // Returns 0 if not available
 			"status": gin.H{
 				"syncing":         true, // Indicate that data is still being synced
 				"dataInitialized": marketCap > 0 || currentPrice > 0 || walletCount > 0 || circulating != "0" || volume > 0,
 			},
+		})
+	})
+
+	// Price history endpoint for wallet apps and charts
+	// Supports intervals: 4h, 12h, 24h, 7d, 30d, all
+	router.GET("/price-history", func(c *gin.Context) {
+		interval := c.DefaultQuery("interval", "24h")
+
+		// Validate interval
+		validIntervals := map[string]bool{
+			"4h": true, "12h": true, "24h": true,
+			"7d": true, "30d": true, "all": true,
+		}
+		if !validIntervals[interval] {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":           "Invalid interval. Valid options: 4h, 12h, 24h, 7d, 30d, all",
+				"requestInterval": interval,
+			})
+			return
+		}
+
+		history, err := db.GetPriceHistory(interval)
+		if err != nil {
+			log.Printf("Error fetching price history: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to fetch price history: %v", err),
+			})
+			return
+		}
+
+		// Return empty array instead of null
+		if history == nil {
+			history = make([]models.PriceHistory, 0)
+		}
+
+		c.JSON(http.StatusOK, models.PriceHistoryResponse{
+			Data:     history,
+			Interval: interval,
+			Count:    len(history),
 		})
 	})
 
