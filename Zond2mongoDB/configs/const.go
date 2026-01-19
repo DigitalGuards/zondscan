@@ -32,6 +32,7 @@ const (
 	PENDING_TRANSACTIONS_COLLECTION            = "pending_transactions"
 	EPOCH_INFO_COLLECTION                      = "epoch_info"
 	VALIDATOR_HISTORY_COLLECTION               = "validator_history"
+	PRICE_HISTORY_COLLECTION                   = "priceHistory"
 )
 
 // API and configuration constants
@@ -59,6 +60,7 @@ var DailyTransactionsVolumeCollections *mongo.Collection = GetCollection(DB, DAI
 var PendingTransactionsCollections *mongo.Collection = GetCollection(DB, PENDING_TRANSACTIONS_COLLECTION)
 var EpochInfoCollections *mongo.Collection = GetCollection(DB, EPOCH_INFO_COLLECTION)
 var ValidatorHistoryCollections *mongo.Collection = GetCollection(DB, VALIDATOR_HISTORY_COLLECTION)
+var PriceHistoryCollections *mongo.Collection = GetCollection(DB, PRICE_HISTORY_COLLECTION)
 
 // Global logger instance - initialized once and used throughout the application
 var Logger *zap.Logger = L.FileLogger(LOG_FILENAME)
