@@ -6,15 +6,15 @@ import (
 
 type Transfer struct {
 	ID             primitive.ObjectID `bson:"_id"`
-	BlockNumber    string             `json:"blockNumber"`    // hex string
-	BlockTimestamp string             `json:"blockTimestamp"` // hex string
-	From           string             `json:"from"`
-	To             string             `json:"to"`
-	TxHash         string             `json:"txHash"`
-	Pk             string             `json:"pk"`
-	Signature      string             `json:"signature"`
-	Nonce          string             `json:"nonce"`  // hex string
-	Value          string             `json:"value"`  // hex string
-	Status         string             `json:"status"` // hex string
-	Size           string             `json:"size"`   // hex string
+	BlockNumber    string             `bson:"blockNumber" json:"blockNumber"`       // hex string
+	BlockTimestamp string             `bson:"blockTimestamp" json:"blockTimestamp"` // hex string
+	From           string             `bson:"from" json:"from"`
+	To             string             `bson:"to" json:"to"`
+	TxHash         string             `bson:"txHash" json:"txHash"`
+	Pk             string             `bson:"pk" json:"pk"`
+	Signature      string             `bson:"signature" json:"signature"`
+	Nonce          string             `bson:"nonce" json:"nonce"`   // hex string
+	Value          float64            `bson:"value" json:"value"`   // QRL amount as float
+	Status         string             `bson:"status" json:"status"` // hex string
+	Size           string             `bson:"size" json:"size"`     // hex string
 }

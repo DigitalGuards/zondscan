@@ -43,12 +43,16 @@ func ConnectDB() *mongo.Client {
 			"required": []string{"volume", "timestamp"},
 			"properties": bson.M{
 				"volume": bson.M{
-					"bsonType":    "string",
-					"description": "must be a hex string and is required",
+					"bsonType":    "double",
+					"description": "transaction volume in QRL",
 				},
 				"timestamp": bson.M{
 					"bsonType":    "string",
-					"description": "must be a hex string and is required",
+					"description": "block timestamp as hex string",
+				},
+				"transferCount": bson.M{
+					"bsonType":    "int",
+					"description": "number of transfers in the period",
 				},
 			},
 		},
