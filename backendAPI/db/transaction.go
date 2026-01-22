@@ -481,7 +481,7 @@ func ReturnSingleCoinbaseTransfer(query string) (models.Transfer, error) {
 	return result, err
 }
 
-func ReturnDailyTransactionsVolume() float64 {
+func ReturnDailyTransactionsVolume() int64 {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -493,7 +493,8 @@ func ReturnDailyTransactionsVolume() float64 {
 		return 0
 	}
 
-	return result.Volume
+	// Round to nearest whole number
+	return int64(result.Volume + 0.5)
 }
 
 func GetTransactionByHash(hash string) (*models.Transaction, error) {
