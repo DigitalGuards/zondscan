@@ -481,7 +481,7 @@ func ReturnSingleCoinbaseTransfer(query string) (models.Transfer, error) {
 	return result, err
 }
 
-func ReturnDailyTransactionsVolume() int64 {
+func ReturnDailyTransactionsVolume() float64 {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
