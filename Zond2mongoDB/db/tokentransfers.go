@@ -5,6 +5,7 @@ import (
 	"Zond2mongoDB/models"
 	"Zond2mongoDB/rpc"
 	"context"
+	"strings"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -40,6 +41,11 @@ func StoreTokenTransfer(transfer models.TokenTransfer) error {
 	if transfer.To == "" {
 		transfer.To = configs.QRLZeroAddress // Normalize empty to address to zero address
 	}
+
+	// Normalize addresses to lowercase for consistent storage
+	transfer.From = strings.ToLower(transfer.From)
+	transfer.To = strings.ToLower(transfer.To)
+	transfer.ContractAddress = strings.ToLower(transfer.ContractAddress)
 
 	_, err := collection.InsertOne(ctx, transfer)
 	if err != nil {

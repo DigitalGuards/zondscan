@@ -54,15 +54,30 @@ func GetLatestBlockFromDB() *models.ZondDatabaseBlock {
 	ctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
 	defer cancel()
 
-	// Query for the latest block by sorting on block number in descending order
+	// Query for the latest block by sorting on timestamp (more reliable than hex string sorting)
 	findOptions := options.FindOne().
 		SetProjection(bson.M{"result.number": 1, "result.timestamp": 1}).
-		SetSort(bson.M{"result.number": -1})
+		SetSort(bson.M{"result.timestamp": -1})
 
 	var block models.ZondDatabaseBlock
 	err := configs.BlocksCollections.FindOne(ctx, bson.D{}, findOptions).Decode(&block)
 	if err != nil {
 		configs.Logger.Info("Failed to find latest block", zap.Error(err))
+		return nil
+	}
+
+	return &block
+}
+
+// GetBlockFromDB retrieves a block by its number from the database
+func GetBlockFromDB(blockNumber string) *models.ZondDatabaseBlock {
+	ctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
+	defer cancel()
+
+	var block models.ZondDatabaseBlock
+	err := configs.BlocksCollections.FindOne(ctx, bson.M{"result.number": blockNumber}).Decode(&block)
+	if err != nil {
+		configs.Logger.Debug("Failed to find block", zap.String("blockNumber", blockNumber), zap.Error(err))
 		return nil
 	}
 

@@ -43,12 +43,16 @@ func ConnectDB() *mongo.Client {
 			"required": []string{"volume", "timestamp"},
 			"properties": bson.M{
 				"volume": bson.M{
-					"bsonType":    "string",
-					"description": "must be a hex string and is required",
+					"bsonType":    "double",
+					"description": "transaction volume in QRL",
 				},
 				"timestamp": bson.M{
 					"bsonType":    "string",
-					"description": "must be a hex string and is required",
+					"description": "block timestamp as hex string",
+				},
+				"transferCount": bson.M{
+					"bsonType":    "int",
+					"description": "number of transfers in the period",
 				},
 			},
 		},
@@ -332,9 +336,23 @@ func initializeCollections(db *mongo.Database) {
 		Logger.Info("Price history collection initialized with timestamp index")
 	}
 
+	// Initialize transfer collection with blockTimestamp index for efficient time-range queries (daily volume)
+	transferCollection := db.Collection("transfer")
+	_, err = transferCollection.Indexes().CreateOne(
+		ctx,
+		mongo.IndexModel{
+			Keys:    bson.D{{Key: "blockTimestamp", Value: -1}}, // Descending for recent-first queries
+			Options: options.Index().SetName("blockTimestamp_desc_idx"),
+		},
+	)
+	if err != nil {
+		Logger.Error("Failed to create blockTimestamp index for transfer collection", zap.Error(err))
+	} else {
+		Logger.Info("Transfer collection initialized with blockTimestamp index")
+	}
+
 	// Create and set up the rest of the collections
 	ensureCollection(db, "blocks", nil)
-	ensureCollection(db, "transfer", nil)
 	ensureCollection(db, "validators", nil)
 	ensureCollection(db, "contractCode", nil)
 	ensureCollection(db, "transactionByAddress", nil)

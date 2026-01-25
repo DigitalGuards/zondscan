@@ -13,12 +13,21 @@ import (
 )
 
 func GetDailyTransactionVolume() {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Get latest block
-	latestBlock := GetLatestBlockFromDB()
+	// Get latest synced block number from sync_state (more reliable than sorting hex strings)
+	latestBlockNumber := GetLastKnownBlockNumber()
+	if latestBlockNumber == "" || latestBlockNumber == "0x0" {
+		configs.Logger.Warn("No latest block found for volume calculation")
+		return
+	}
+
+	// Fetch the block to get its timestamp
+	latestBlock := GetBlockFromDB(latestBlockNumber)
 	if latestBlock == nil {
+		configs.Logger.Warn("Could not fetch latest block for volume calculation",
+			zap.String("blockNumber", latestBlockNumber))
 		return
 	}
 
@@ -26,44 +35,47 @@ func GetDailyTransactionVolume() {
 	currentBlockTimestamp := latestBlock.Result.Timestamp
 	targetBlockTimestamp := utils.SubtractHexNumbers(currentBlockTimestamp, "0x15180") // 0x15180 = 86400 (24 hours in seconds)
 
-	// Get all transfers in the last 24 hours
-	cursor, err := configs.TransferCollections.Find(ctx, bson.M{})
+	// Query transfers within the time range using MongoDB filter
+	filter := bson.M{
+		"blockTimestamp": bson.M{
+			"$gte": targetBlockTimestamp,
+			"$lte": currentBlockTimestamp,
+		},
+	}
+
+	cursor, err := configs.TransferCollections.Find(ctx, filter)
 	if err != nil {
-		configs.Logger.Info("Failed to find transfers", zap.Error(err))
+		configs.Logger.Error("Failed to find transfers", zap.Error(err))
 		return
 	}
 	defer cursor.Close(ctx)
 
-	// Calculate total volume
-	totalVolume := "0x0"
+	// Calculate total volume (values are stored as float64 in QRL)
+	var totalVolume float64 = 0
+	var transferCount int = 0
 	for cursor.Next(ctx) {
 		var singleTransfer models.Transfer
 		if err = cursor.Decode(&singleTransfer); err != nil {
+			configs.Logger.Debug("Failed to decode transfer", zap.Error(err))
 			continue
 		}
-
-		// Check if transfer is within time range
-		if utils.CompareHexNumbers(singleTransfer.BlockTimestamp, targetBlockTimestamp) >= 0 &&
-			utils.CompareHexNumbers(singleTransfer.BlockTimestamp, currentBlockTimestamp) <= 0 {
-			totalVolume = utils.AddHexNumbers(totalVolume, singleTransfer.Value)
-		}
+		totalVolume += singleTransfer.Value
+		transferCount++
 	}
 
-	// Convert hex volume to int64 for database storage
-	volumeInt, err := utils.HexToInt64(totalVolume)
-	if err != nil {
-		configs.Logger.Error("Failed to convert volume to int64",
-			zap.Error(err),
-			zap.String("hexVolume", totalVolume))
-		return
-	}
+	configs.Logger.Info("Calculated daily volume",
+		zap.Float64("totalVolume", totalVolume),
+		zap.Int("transferCount", transferCount),
+		zap.String("fromTimestamp", targetBlockTimestamp),
+		zap.String("toTimestamp", currentBlockTimestamp))
 
-	// Update volume in database
-	filter := bson.M{"type": "daily_volume"}
+	// Update volume in database (store as float64 for precision)
+	filter = bson.M{"type": "daily_volume"}
 	update := bson.M{
 		"$set": bson.M{
-			"volume":    volumeInt,
-			"timestamp": currentBlockTimestamp,
+			"volume":        totalVolume,
+			"timestamp":     currentBlockTimestamp,
+			"transferCount": transferCount,
 		},
 	}
 	opts := options.Update().SetUpsert(true)
@@ -72,38 +84,41 @@ func GetDailyTransactionVolume() {
 	if err != nil {
 		configs.Logger.Error("Failed to update volume",
 			zap.Error(err),
-			zap.Int64("volume", volumeInt),
+			zap.Float64("volume", totalVolume),
 			zap.String("timestamp", currentBlockTimestamp))
 	} else {
 		configs.Logger.Info("Successfully updated volume",
-			zap.Int64("volume", volumeInt),
+			zap.Float64("volume", totalVolume),
 			zap.String("timestamp", currentBlockTimestamp))
 	}
 }
 
-func GetVolumeFromBlockTimestamps(startTimestamp string, endTimestamp string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+func GetVolumeFromBlockTimestamps(startTimestamp string, endTimestamp string) float64 {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cursor, err := configs.TransferCollections.Find(ctx, bson.M{})
+	// Query transfers within the time range using MongoDB filter
+	filter := bson.M{
+		"blockTimestamp": bson.M{
+			"$gte": startTimestamp,
+			"$lte": endTimestamp,
+		},
+	}
+
+	cursor, err := configs.TransferCollections.Find(ctx, filter)
 	if err != nil {
-		configs.Logger.Info("Failed to find transfers", zap.Error(err))
-		return "0x0"
+		configs.Logger.Error("Failed to find transfers", zap.Error(err))
+		return 0
 	}
 	defer cursor.Close(ctx)
 
-	totalVolume := "0x0"
+	var totalVolume float64 = 0
 	for cursor.Next(ctx) {
 		var singleTransfer models.Transfer
 		if err = cursor.Decode(&singleTransfer); err != nil {
 			continue
 		}
-
-		// Check if transfer is within time range
-		if utils.CompareHexNumbers(singleTransfer.BlockTimestamp, startTimestamp) >= 0 &&
-			utils.CompareHexNumbers(singleTransfer.BlockTimestamp, endTimestamp) <= 0 {
-			totalVolume = utils.AddHexNumbers(totalVolume, singleTransfer.Value)
-		}
+		totalVolume += singleTransfer.Value
 	}
 
 	return totalVolume

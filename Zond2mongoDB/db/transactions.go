@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -413,6 +414,11 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 }
 
 func TransferCollection(blockNumber string, blockTimestamp string, from string, to string, hash string, pk string, signature string, nonce string, value float64, data string, contractAddress string, status string, size string, paidFees float64) (*mongo.InsertOneResult, error) {
+	// Normalize addresses to lowercase for consistent storage
+	from = strings.ToLower(from)
+	to = strings.ToLower(to)
+	contractAddress = strings.ToLower(contractAddress)
+
 	var doc bson.D
 
 	baseDoc := bson.D{
@@ -450,6 +456,11 @@ func TransferCollection(blockNumber string, blockTimestamp string, from string, 
 }
 
 func InternalTransactionByAddressCollection(transactionType string, callType string, hash string, from string, to string, input string, output string, traceAddress []int, value float64, gas string, gasUsed string, addressFunctionIdentifier string, amountFunctionIdentifier string, blockTimestamp string) (*mongo.InsertOneResult, error) {
+	// Normalize addresses to lowercase for consistent storage
+	from = strings.ToLower(from)
+	to = strings.ToLower(to)
+	addressFunctionIdentifier = strings.ToLower(addressFunctionIdentifier)
+
 	doc := bson.D{
 		{Key: "type", Value: transactionType},
 		{Key: "callType", Value: callType},
@@ -477,6 +488,10 @@ func InternalTransactionByAddressCollection(transactionType string, callType str
 }
 
 func TransactionByAddressCollection(timeStamp string, txType string, from string, to string, hash string, amount float64, paidFees float64, blockNumber string) (*mongo.InsertOneResult, error) {
+	// Normalize addresses to lowercase for consistent storage
+	from = strings.ToLower(from)
+	to = strings.ToLower(to)
+
 	doc := bson.D{
 		{Key: "txType", Value: txType},
 		{Key: "from", Value: from},
@@ -497,6 +512,9 @@ func TransactionByAddressCollection(timeStamp string, txType string, from string
 }
 
 func UpsertTransactions(address string, value float64, isContract bool) (*mongo.UpdateResult, error) {
+	// Normalize address to lowercase to ensure consistent storage
+	// This matches the backend API's normalization in ReturnSingleAddress
+	address = strings.ToLower(address)
 	filter := bson.D{{Key: "id", Value: address}}
 
 	// If this is flagged as a contract, update with that information

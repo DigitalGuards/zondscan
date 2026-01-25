@@ -19,6 +19,8 @@ type Transfer struct {
 }
 
 type TransactionsVolume struct {
-	ID     primitive.ObjectID `bson:"_id,omitempty"`
-	Volume int64              `bson:"volume"`
+	ID            primitive.ObjectID `bson:"_id,omitempty"`
+	Volume        float64            `bson:"volume"`
+	TransferCount int                `bson:"transferCount"`
+	Timestamp     string             `bson:"timestamp"`
 }

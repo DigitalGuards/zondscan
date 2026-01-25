@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -19,6 +20,10 @@ import (
 func StoreContract(contract models.ContractInfo) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+
+	// Normalize addresses to lowercase for consistent storage
+	contract.Address = strings.ToLower(contract.Address)
+	contract.CreatorAddress = strings.ToLower(contract.CreatorAddress)
 
 	collection := configs.GetContractsCollection()
 	filter := bson.M{"address": contract.Address}
@@ -108,6 +113,9 @@ func StoreContract(contract models.ContractInfo) error {
 func GetContract(address string) (*models.ContractInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+
+	// Normalize address to lowercase for consistent lookup
+	address = strings.ToLower(address)
 
 	var contract models.ContractInfo
 	err := configs.GetContractsCollection().FindOne(ctx, bson.M{"address": address}).Decode(&contract)
@@ -214,6 +222,9 @@ func processContracts(tx *models.Transaction) (string, string, string, bool) {
 // IsAddressContract checks if an address is a contract by querying the contractCode collection
 // and falling back to RPC getCode call if not found
 func IsAddressContract(address string) bool {
+	// Normalize address to lowercase for consistent lookup
+	address = strings.ToLower(address)
+
 	// First check our database
 	contract := getContractFromDB(address)
 	if contract != nil {
