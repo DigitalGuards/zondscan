@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -494,7 +495,7 @@ func ReturnDailyTransactionsVolume() int64 {
 	}
 
 	// Round to nearest whole number
-	return int64(result.Volume + 0.5)
+	return int64(math.Round(result.Volume))
 }
 
 func GetTransactionByHash(hash string) (*models.Transaction, error) {
