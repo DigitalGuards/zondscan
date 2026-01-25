@@ -16,18 +16,23 @@ import (
 
 // StoreTokenBalance updates the token balance for a given address
 func StoreTokenBalance(contractAddress string, holderAddress string, amount string, blockNumber string) error {
+	// Normalize contract address to lowercase to match contractCode collection
+	contractAddress = strings.ToLower(contractAddress)
+
 	configs.Logger.Info("Attempting to store token balance",
 		zap.String("contractAddress", contractAddress),
 		zap.String("holderAddress", holderAddress),
 		zap.String("transferAmount", amount),
 		zap.String("blockNumber", blockNumber))
 
+	// Normalize holder address to lowercase for consistent storage
+	holderAddress = strings.ToLower(holderAddress)
+
 	// Special handling for zero address (QRL uses Z prefix)
-	normalizedHolder := strings.ToLower(holderAddress)
-	if normalizedHolder == "z0" ||
-		normalizedHolder == strings.ToLower(configs.QRLZeroAddress) ||
-		normalizedHolder == "0x0" ||
-		normalizedHolder == "0x0000000000000000000000000000000000000000" {
+	if holderAddress == "z0" ||
+		holderAddress == strings.ToLower(configs.QRLZeroAddress) ||
+		holderAddress == "0x0" ||
+		holderAddress == "0x0000000000000000000000000000000000000000" {
 		configs.Logger.Info("Skipping token balance update for zero address",
 			zap.String("holderAddress", holderAddress))
 		return nil

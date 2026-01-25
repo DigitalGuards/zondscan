@@ -26,17 +26,17 @@ func IsValidHexString(hex string) bool {
 }
 
 // IsValidAddress checks if a string is a valid Zond address
-// Supports both legacy 0x format and new Z format
+// Supports both legacy 0x format and new Z format (case-insensitive Z prefix)
 func IsValidAddress(address string) bool {
-	// Check for new Z-prefix format
-	if strings.HasPrefix(address, "Z") {
+	// Check for new Z-prefix format (uppercase or lowercase)
+	if strings.HasPrefix(address, "Z") || strings.HasPrefix(address, "z") {
 		// Validate the rest of the address is hex
 		for _, c := range address[1:] {
 			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
 				return false
 			}
 		}
-		return len(address) == AddressLength+1 // +1 for "Z" prefix
+		return len(address) == AddressLength+1 // +1 for "Z" or "z" prefix
 	}
 
 	// Check for legacy 0x format
@@ -93,12 +93,12 @@ func StripHexPrefix(hex string) string {
 	return hex
 }
 
-// StripAddressPrefix removes "0x" or "Z" prefix if present
+// StripAddressPrefix removes "0x", "Z", or "z" prefix if present
 func StripAddressPrefix(address string) string {
 	if strings.HasPrefix(address, "0x") {
 		return address[2:]
 	}
-	if strings.HasPrefix(address, "Z") {
+	if strings.HasPrefix(address, "Z") || strings.HasPrefix(address, "z") {
 		return address[1:]
 	}
 	return address
@@ -106,8 +106,8 @@ func StripAddressPrefix(address string) string {
 
 // ConvertToZAddress converts a 0x address to Z format if needed
 func ConvertToZAddress(address string) string {
-	// If already in Z format, return as is
-	if strings.HasPrefix(address, "Z") {
+	// If already in Z format (uppercase or lowercase), return as is
+	if strings.HasPrefix(address, "Z") || strings.HasPrefix(address, "z") {
 		return address
 	}
 

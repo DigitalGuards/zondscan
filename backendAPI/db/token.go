@@ -46,13 +46,30 @@ func GetTokenBalancesByAddress(address string) ([]models.TokenBalance, error) {
 				"holderAddress": bson.M{"$in": searchAddresses},
 			},
 		},
-		// Join with contractCode collection to get token metadata
+		// Add lowercase version of contractAddress for case-insensitive lookup
+		{
+			"$addFields": bson.M{
+				"contractAddressLower": bson.M{"$toLower": "$contractAddress"},
+			},
+		},
+		// Join with contractCode collection using lowercase addresses
 		{
 			"$lookup": bson.M{
-				"from":         "contractCode",
-				"localField":   "contractAddress",
-				"foreignField": "address",
-				"as":           "tokenInfo",
+				"from": "contractCode",
+				"let":  bson.M{"contractAddr": "$contractAddressLower"},
+				"pipeline": []bson.M{
+					{
+						"$match": bson.M{
+							"$expr": bson.M{
+								"$eq": []interface{}{
+									bson.M{"$toLower": "$address"},
+									"$$contractAddr",
+								},
+							},
+						},
+					},
+				},
+				"as": "tokenInfo",
 			},
 		},
 		// Unwind the tokenInfo array (should be single element)
