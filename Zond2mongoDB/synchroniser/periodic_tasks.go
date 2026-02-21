@@ -156,6 +156,13 @@ func processBlockPeriodically() {
 		nextBlock := utils.AddHexNumbers(lastProcessedBlock, "0x1")
 		batchSync(nextBlock, latestBlock)
 
+		// Process token transfers for the batch-synced blocks
+		// This is critical - without this, tokens deployed in batch-synced blocks are never detected
+		configs.Logger.Info("Processing token transfers for batch-synced blocks",
+			zap.String("from", nextBlock),
+			zap.String("to", latestBlock))
+		ProcessTokensAfterInitialSync(nextBlock, latestBlock)
+
 		// Update lastProcessedBlock to reflect what's actually been synced
 		// This is important for consistent state tracking
 		lastProcessedBlock = db.GetLastKnownBlockNumber()
