@@ -118,12 +118,9 @@ func Sync() {
 		}
 
 		// Store the initial sync starting point for later token processing
-		if nextBlock == "0x0" {
-			// If starting from genesis, record block 1 as the start
-			StoreInitialSyncStartBlock("0x1")
-		} else {
-			StoreInitialSyncStartBlock(nextBlock)
-		}
+		// Always start from block 1 to ensure all tokens are detected,
+		// including those created by factory contracts in earlier blocks
+		StoreInitialSyncStartBlock("0x1")
 
 		nextBlock = utils.AddHexNumbers(nextBlock, "0x1")
 
