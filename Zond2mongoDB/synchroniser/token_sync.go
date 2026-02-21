@@ -62,16 +62,17 @@ func processTokensWithConfig(initialSyncStart string, maxHex string, config Toke
 	processTokenTransferBatches(blocksWithTxs, config)
 }
 
-// getBlocksWithTransactions queries the database for blocks that have at least one transaction
+// getBlocksWithTransactions queries the database for blocks that have at least one transaction.
+// It fetches all blocks with transactions and filters by numeric comparison in Go,
+// because hex strings are not zero-padded and MongoDB's lexicographic $gte/$lte
+// comparison produces incorrect results across different hex string lengths.
 func getBlocksWithTransactions(fromBlock, toBlock string, timeoutSec int) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 
+	// Only filter on having transactions - range filtering is done in Go
+	// to avoid lexicographic hex string comparison issues in MongoDB
 	filter := bson.M{
-		"result.number": bson.M{
-			"$gte": fromBlock,
-			"$lte": toBlock,
-		},
 		"result.transactions.0": bson.M{"$exists": true},
 	}
 
@@ -96,7 +97,11 @@ func getBlocksWithTransactions(fromBlock, toBlock string, timeoutSec int) ([]str
 			continue
 		}
 
-		blocksWithTxs = append(blocksWithTxs, block.Result.Number)
+		// Numeric range check using proper hex comparison
+		if utils.CompareHexNumbers(block.Result.Number, fromBlock) >= 0 &&
+			utils.CompareHexNumbers(block.Result.Number, toBlock) <= 0 {
+			blocksWithTxs = append(blocksWithTxs, block.Result.Number)
+		}
 	}
 
 	return blocksWithTxs, nil
