@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	MEMPOOL_SYNC_INTERVAL       = 5 * time.Second
+	MEMPOOL_SYNC_INTERVAL       = 1 * time.Second  // Reduced for faster detection
 	CLEANUP_INTERVAL            = 1 * time.Hour
 	VERIFY_PENDING_INTERVAL     = 5 * time.Minute
 	MAX_PENDING_AGE             = 24 * time.Hour

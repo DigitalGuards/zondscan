@@ -18,23 +18,8 @@ func GetTokenBalancesByAddress(address string) ([]models.TokenBalance, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	// Normalize address to Z-prefix format (QRL standard)
-	// DB stores as "Z" + lowercase hex, e.g. "Z2019ea08f4e..."
-	normalizedAddress := address
-
-	// Convert 0x prefix to Z prefix if needed
-	if strings.HasPrefix(strings.ToLower(address), "0x") {
-		normalizedAddress = "Z" + strings.ToLower(address[2:])
-	} else if strings.HasPrefix(strings.ToLower(address), "z") {
-		// Ensure uppercase Z with lowercase hex
-		normalizedAddress = "Z" + strings.ToLower(address[1:])
-	} else {
-		// No prefix, add Z
-		normalizedAddress = "Z" + strings.ToLower(address)
-	}
-
-	// Search for the normalized address
-	searchAddresses := []string{normalizedAddress}
+	// Search both Z-prefix and z-prefix variants (syncer stores lowercase z)
+	searchAddresses := normalizeAddressBoth(address)
 
 	collection := configs.GetCollection(configs.DB, "tokenBalances")
 
@@ -123,14 +108,20 @@ func GetTokenBalancesByAddress(address string) ([]models.TokenBalance, error) {
 	return results, nil
 }
 
-// normalizeAddress converts an address to QRL Z-prefix format
+// normalizeAddress converts an address to lowercase z-prefix format (matching DB storage)
 func normalizeAddress(address string) string {
 	if strings.HasPrefix(strings.ToLower(address), "0x") {
-		return "Z" + strings.ToLower(address[2:])
+		return "z" + strings.ToLower(address[2:])
 	} else if strings.HasPrefix(strings.ToLower(address), "z") {
-		return "Z" + strings.ToLower(address[1:])
+		return "z" + strings.ToLower(address[1:])
 	}
-	return "Z" + strings.ToLower(address)
+	return "z" + strings.ToLower(address)
+}
+
+// normalizeAddressBoth returns both Z and z prefix variants for querying
+func normalizeAddressBoth(address string) []string {
+	hex := normalizeAddress(address)
+	return []string{hex, "Z" + hex[1:]}
 }
 
 // GetTokenHolders returns all holders of a specific token contract with pagination
@@ -138,11 +129,12 @@ func GetTokenHolders(contractAddress string, page, limit int) ([]models.TokenBal
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	normalizedContract := normalizeAddress(contractAddress)
+	contractVariants := normalizeAddressBoth(contractAddress)
+	contractFilter := bson.M{"contractAddress": bson.M{"$in": contractVariants}}
 	collection := configs.GetCollection(configs.DB, "tokenBalances")
 
 	// Count total holders
-	totalCount, err := collection.CountDocuments(ctx, bson.M{"contractAddress": normalizedContract})
+	totalCount, err := collection.CountDocuments(ctx, contractFilter)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -150,7 +142,7 @@ func GetTokenHolders(contractAddress string, page, limit int) ([]models.TokenBal
 	// Aggregation pipeline to get holders sorted by balance
 	pipeline := []bson.M{
 		{
-			"$match": bson.M{"contractAddress": normalizedContract},
+			"$match": contractFilter,
 		},
 		// Convert balance to decimal for proper sorting
 		{
@@ -194,11 +186,12 @@ func GetTokenTransfers(contractAddress string, page, limit int) ([]models.TokenT
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	normalizedContract := normalizeAddress(contractAddress)
+	contractVariants := normalizeAddressBoth(contractAddress)
+	contractFilter := bson.M{"contractAddress": bson.M{"$in": contractVariants}}
 	collection := configs.GetCollection(configs.DB, "tokenTransfers")
 
 	// Count total transfers
-	totalCount, err := collection.CountDocuments(ctx, bson.M{"contractAddress": normalizedContract})
+	totalCount, err := collection.CountDocuments(ctx, contractFilter)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -209,7 +202,7 @@ func GetTokenTransfers(contractAddress string, page, limit int) ([]models.TokenT
 		SetSkip(int64(page * limit)).
 		SetLimit(int64(limit))
 
-	cursor, err := collection.Find(ctx, bson.M{"contractAddress": normalizedContract}, opts)
+	cursor, err := collection.Find(ctx, contractFilter, opts)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -232,26 +225,27 @@ func GetTokenInfo(contractAddress string) (*models.TokenInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	normalizedContract := normalizeAddress(contractAddress)
+	contractVariants := normalizeAddressBoth(contractAddress)
+	contractInFilter := bson.M{"$in": contractVariants}
 
 	// Get contract info
 	contractCollection := configs.GetCollection(configs.DB, "contractCode")
 	var contract models.ContractInfo
-	err := contractCollection.FindOne(ctx, bson.M{"address": normalizedContract}).Decode(&contract)
+	err := contractCollection.FindOne(ctx, bson.M{"address": contractInFilter}).Decode(&contract)
 	if err != nil {
 		return nil, err
 	}
 
 	// Count holders
 	balanceCollection := configs.GetCollection(configs.DB, "tokenBalances")
-	holderCount, err := balanceCollection.CountDocuments(ctx, bson.M{"contractAddress": normalizedContract})
+	holderCount, err := balanceCollection.CountDocuments(ctx, bson.M{"contractAddress": contractInFilter})
 	if err != nil {
 		holderCount = 0
 	}
 
 	// Count transfers
 	transferCollection := configs.GetCollection(configs.DB, "tokenTransfers")
-	transferCount, err := transferCollection.CountDocuments(ctx, bson.M{"contractAddress": normalizedContract})
+	transferCount, err := transferCollection.CountDocuments(ctx, bson.M{"contractAddress": contractInFilter})
 	if err != nil {
 		transferCount = 0
 	}
