@@ -93,24 +93,20 @@ func ReturnContractCode(address string) (models.ContractInfo, error) {
 
 	var result models.ContractInfo
 
-	// Normalize address while preserving the Z prefix
-	normalizedAddress := address
-	if strings.HasPrefix(address, "Z") {
-		// Keep the Z prefix and normalize the rest
-		normalizedAddress = "Z" + strings.ToLower(address[1:])
-	} else {
-		// Add Z prefix if missing and normalize
-		normalizedAddress = "Z" + strings.ToLower(strings.TrimPrefix(address, "Z"))
-	}
+	// Normalize address - try both Z and z prefixes since the syncer
+	// stores with lowercase z while URLs/API use uppercase Z
+	hexPart := strings.ToLower(strings.TrimPrefix(strings.TrimPrefix(address, "Z"), "z"))
+	upperAddr := "Z" + hexPart
+	lowerAddr := "z" + hexPart
 
-	// Query for contract code using the normalized address
-	filter := bson.D{{Key: "address", Value: normalizedAddress}}
+	// Query for contract code trying both prefix cases
+	filter := bson.M{"address": bson.M{"$in": []string{upperAddr, lowerAddr}}}
 	err := configs.ContractInfoCollection.FindOne(ctx, filter).Decode(&result)
 
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			// Log that we couldn't find the contract
-			log.Printf("No contract found for address: %s (normalized: %s)", address, normalizedAddress)
+			log.Printf("No contract found for address: %s (variants: %s, %s)", address, upperAddr, lowerAddr)
 			// Return empty contract code with expected structure
 			return models.ContractInfo{
 				ContractAddress:        "",

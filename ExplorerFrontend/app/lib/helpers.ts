@@ -143,8 +143,8 @@ export function normalizeHexString(hexData: string | undefined | null): string {
     return hexData.slice(2);
   }
 
-  // If it starts with Z, remove the prefix
-  if (typeof hexData === 'string' && hexData.startsWith('Z')) {
+  // If it starts with Z or z, remove the prefix
+  if (typeof hexData === 'string' && (hexData.startsWith('Z') || hexData.startsWith('z'))) {
     return hexData.slice(1);
   }
 
@@ -224,9 +224,9 @@ export function truncateHash(hash: string | undefined | null, startLength = 6, e
 export function formatAddress(address: string | undefined | null): string {
   if (!address) return '';
 
-  // If already has Z prefix, return as is
-  if (address.startsWith('Z')) {
-    return address;
+  // If already has Z/z prefix, normalize to uppercase Z
+  if (address.startsWith('Z') || address.startsWith('z')) {
+    return 'Z' + address.slice(1);
   }
 
   // If has 0x prefix
