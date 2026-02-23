@@ -144,10 +144,16 @@ func ReturnRankAddress(address string) (int64, error) {
 func GetBalance(address string) (float64, string) {
 	var result models.Balance
 
+	// Ensure address has uppercase Z prefix for RPC calls
+	rpcAddress := address
+	if strings.HasPrefix(rpcAddress, "z") {
+		rpcAddress = "Z" + rpcAddress[1:]
+	}
+
 	group := models.JsonRPC{
 		Jsonrpc: "2.0",
 		Method:  "zond_getBalance",
-		Params:  []interface{}{address, "latest"},
+		Params:  []interface{}{rpcAddress, "latest"},
 		ID:      1,
 	}
 	b, err := json.Marshal(group)
