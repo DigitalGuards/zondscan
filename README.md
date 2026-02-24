@@ -26,7 +26,7 @@ Plus a Zond node (can be either external or local).
 Note: These instructions are only for the explorer related components. Are you trying to get your Zond up and running? Visit https://test-zond.theqrl.org/linux.html
 
 ```
-git clone https://github.com/DigitalGuards/zondexplorer.git
+git clone https://github.com/DigitalGuards/zondscan.git
 ```
 
 #### Requirements
@@ -40,13 +40,13 @@ The easiest way to set up the QRL Explorer is by using the provided deployment s
 
 #### Windows (using Git Bash):
 ```bash
-cd zondexplorer
+cd zondscan
 ./deploy-windowsgitbash.sh
 ```
 
 #### Linux/macOS:
 ```bash
-cd zondexplorer
+cd zondscan
 ./deploy.sh
 ```
 
@@ -68,7 +68,7 @@ If you prefer to set up components individually, follow the instructions below:
 Navigate to the frontend directory:
 
 ```
-cd zondexplorer/ExplorerFrontend
+cd zondscan/ExplorerFrontend
 ```
 
 Create the environment files:
@@ -171,8 +171,8 @@ The fastest way to run all services locally:
 
 ```bash
 # Clone and navigate to the project
-git clone https://github.com/DigitalGuards/zondexplorer.git
-cd zondexplorer
+git clone https://github.com/DigitalGuards/zondscan.git
+cd zondscan
 
 # Start all services
 docker compose up -d
