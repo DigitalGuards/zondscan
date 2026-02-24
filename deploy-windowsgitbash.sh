@@ -148,7 +148,7 @@ clone_repo() {
         fi
     else
         print_status "Cloning QRL Explorer repository..."
-        git clone https://github.com/DigitalGuards/zondexplorer.git ../zondexplorer || print_error "Failed to clone repository"
+        git clone https://github.com/DigitalGuards/zondscan.git ../zondscan || print_error "Failed to clone repository"
         cd ../backendAPI || print_error "Failed to enter project directory"
     fi
     export BASE_DIR=$(pwd)
