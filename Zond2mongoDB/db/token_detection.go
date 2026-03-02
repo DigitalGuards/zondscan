@@ -96,20 +96,13 @@ func EnsureTokenInDatabase(contractAddress string, blockNumber string, txHash st
 		contractInfo.TotalSupply = detection.TotalSupply
 	}
 
-	// If this is the first time we're seeing this token, record discovery info
+	// If this is the first time we're seeing this token, record discovery block
+	// Note: txHash/blockNumber here are from the transfer event that discovered this
+	// token, NOT the creation transaction. We intentionally leave CreatorAddress
+	// and CreationTransaction empty — the contract reprocessing job will backfill
+	// them by finding the actual creation transaction.
 	if existingContract == nil {
 		contractInfo.CreationBlockNumber = blockNumber
-		contractInfo.CreationTransaction = txHash
-
-		// Try to get creator from transaction
-		txDetails, txErr := rpc.GetTxDetailsByHash(txHash)
-		if txErr != nil {
-			configs.Logger.Debug("Failed to get transaction details for token creator",
-				zap.String("txHash", txHash),
-				zap.Error(txErr))
-		} else if txDetails != nil {
-			contractInfo.CreatorAddress = txDetails.From
-		}
 	} else {
 		// Preserve existing creation information
 		preserveCreationInfo(&contractInfo, existingContract)
