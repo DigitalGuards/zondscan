@@ -66,7 +66,12 @@ export default function ValidatorStatusChart({
 
   return (
     <div className="relative">
-      <svg width={width} height={height}>
+      <svg
+        width={width}
+        height={height}
+        role="img"
+        aria-label={`Validator status distribution: ${data.map(d => `${d.label}: ${d.value}`).join(', ')}`}
+      >
         <Group top={centerY + defaultMargin.top} left={centerX + defaultMargin.left}>
           <Pie
             data={data}
@@ -90,13 +95,19 @@ export default function ValidatorStatusChart({
                       d={arcPath}
                       fill={arcFill}
                       opacity={active && !isActive ? 0.5 : 1}
+                      tabIndex={0}
+                      role="img"
+                      aria-label={`${arc.data.label}: ${arc.data.value} validators`}
                       onMouseEnter={() => setActive(arc.data)}
                       onMouseLeave={() => setActive(null)}
+                      onFocus={() => setActive(arc.data)}
+                      onBlur={() => setActive(null)}
                       style={{
                         cursor: 'pointer',
                         transition: 'opacity 0.2s',
                         transform: isActive ? 'scale(1.02)' : 'scale(1)',
                         transformOrigin: 'center',
+                        outline: 'none',
                       }}
                     />
                     {hasSpaceForLabel && (
@@ -143,11 +154,16 @@ export default function ValidatorStatusChart({
         {data.map((item) => (
           <div
             key={item.label}
+            role="listitem"
+            tabIndex={0}
+            aria-label={`${item.label}: ${item.value.toLocaleString()} validators`}
             className={`flex items-center gap-2 cursor-pointer transition-opacity ${
               active && active.label !== item.label ? 'opacity-50' : ''
             }`}
             onMouseEnter={() => setActive(item)}
             onMouseLeave={() => setActive(null)}
+            onFocus={() => setActive(item)}
+            onBlur={() => setActive(null)}
           >
             <div
               className="w-3 h-3 rounded-full"

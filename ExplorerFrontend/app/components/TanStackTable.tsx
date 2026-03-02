@@ -51,6 +51,7 @@ const renderTableHeader = <T extends Transaction | InternalTransaction>(
       {headerGroup.headers.map((header: Header<T, unknown>) => (
         <th
           key={header.id}
+          scope="col"
           className="px-4 py-3 text-left text-sm font-medium text-[#ffa729]"
         >
           {header.isPlaceholder
@@ -458,8 +459,11 @@ export default function TanStackTable({ transactions, internalt }: TableProps): 
     <div className="w-full">
       <div className="p-4 border-b border-[#3d3d3d] space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center space-x-4">
+          <div role="tablist" className="flex items-center space-x-4">
             <button
+              id="tab-transactions"
+              role="tab"
+              aria-selected={!showInternal}
               onClick={() => setShowInternal(false)}
               className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
                 !showInternal
@@ -470,6 +474,9 @@ export default function TanStackTable({ transactions, internalt }: TableProps): 
               Transactions
             </button>
             <button
+              id="tab-internal"
+              role="tab"
+              aria-selected={showInternal}
               onClick={() => setShowInternal(true)}
               className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
                 showInternal
@@ -496,7 +503,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps): 
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      <div role="tabpanel" aria-labelledby={showInternal ? "tab-internal" : "tab-transactions"} className="overflow-x-auto">
         {windowWidth < 768 ? (
           <div className="overflow-hidden">
             {showInternal
@@ -505,7 +512,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps): 
             }
           </div>
         ) : (
-          <table className="w-full">
+          <table aria-label={showInternal ? "Internal transactions" : "Transaction history"} className="w-full">
             <thead>
               {showInternal
                 ? renderTableHeader(internalTransactionTable)
@@ -528,6 +535,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps): 
             {showInternal ? (
               <>
                 <button
+                  aria-label="Go to first page"
                   className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
                   onClick={() => internalTransactionTable.setPageIndex(0)}
                   disabled={!internalTransactionTable.getCanPreviousPage()}
@@ -535,6 +543,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps): 
                   {"<<"}
                 </button>
                 <button
+                  aria-label="Go to previous page"
                   className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
                   onClick={() => internalTransactionTable.previousPage()}
                   disabled={!internalTransactionTable.getCanPreviousPage()}
@@ -542,6 +551,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps): 
                   Previous
                 </button>
                 <button
+                  aria-label="Go to next page"
                   className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
                   onClick={() => internalTransactionTable.nextPage()}
                   disabled={!internalTransactionTable.getCanNextPage()}
@@ -549,6 +559,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps): 
                   Next
                 </button>
                 <button
+                  aria-label="Go to last page"
                   className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
                   onClick={() => internalTransactionTable.setPageIndex(internalTransactionTable.getPageCount() - 1)}
                   disabled={!internalTransactionTable.getCanNextPage()}
@@ -559,6 +570,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps): 
             ) : (
               <>
                 <button
+                  aria-label="Go to first page"
                   className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
                   onClick={() => transactionTable.setPageIndex(0)}
                   disabled={!transactionTable.getCanPreviousPage()}
@@ -566,6 +578,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps): 
                   {"<<"}
                 </button>
                 <button
+                  aria-label="Go to previous page"
                   className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
                   onClick={() => transactionTable.previousPage()}
                   disabled={!transactionTable.getCanPreviousPage()}
@@ -573,6 +586,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps): 
                   Previous
                 </button>
                 <button
+                  aria-label="Go to next page"
                   className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
                   onClick={() => transactionTable.nextPage()}
                   disabled={!transactionTable.getCanNextPage()}
@@ -580,6 +594,7 @@ export default function TanStackTable({ transactions, internalt }: TableProps): 
                   Next
                 </button>
                 <button
+                  aria-label="Go to last page"
                   className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
                   onClick={() => transactionTable.setPageIndex(transactionTable.getPageCount() - 1)}
                   disabled={!transactionTable.getCanNextPage()}

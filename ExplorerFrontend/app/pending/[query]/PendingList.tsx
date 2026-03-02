@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { formatAmount } from '../../lib/helpers';
 import type { PendingTransaction } from '@/app/types';
+import Badge from '../../components/Badge';
 
 interface PaginatedResponse {
   // New format fields
@@ -46,29 +47,35 @@ const TransactionCard: React.FC<TransactionCardProps> = ({ transaction }) => {
   };
   const date = transaction.createdAt ? formatDateUTC(transaction.createdAt) : 'Pending';
 
+  const truncateHash = (hash: string | undefined): string =>
+    hash ? `${hash.slice(0, 10)}...${hash.slice(-8)}` : '';
+
   return (
     <div className="bg-gradient-to-r from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] rounded-xl p-6 shadow-lg hover:border-[#ffa729] transition-colors">
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <Link href={`/pending/tx/${transaction.hash}`} className="text-[#ffa729] hover:text-[#ffb952] font-mono">
-            {transaction.hash}
+          <Link
+            href={`/pending/tx/${transaction.hash}`}
+            title={transaction.hash}
+            className="text-[#ffa729] hover:text-[#ffb952] font-mono"
+          >
+            {truncateHash(transaction.hash)}
           </Link>
-          <span className={`px-2 py-1 rounded text-sm ${
-            transaction.status === 'pending' ? 'bg-yellow-500/20 text-yellow-500' :
-            transaction.status === 'dropped' ? 'bg-red-500/20 text-red-500' :
-            'bg-green-500/20 text-green-500'
-          }`}>
+          <Badge
+            variant={transaction.status === 'pending' ? 'warning' : transaction.status === 'dropped' ? 'error' : 'success'}
+            dot
+          >
             {transaction.status}
-          </span>
+          </Badge>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <p className="text-gray-400 text-sm">From</p>
-            <p className="text-white font-mono truncate">{transaction.from}</p>
+            <p className="text-white font-mono truncate" title={transaction.from}>{truncateHash(transaction.from)}</p>
           </div>
           <div>
             <p className="text-gray-400 text-sm">To</p>
-            <p className="text-white font-mono truncate">{transaction.to}</p>
+            <p className="text-white font-mono truncate" title={transaction.to}>{truncateHash(transaction.to)}</p>
           </div>
           <div>
             <p className="text-gray-400 text-sm">Value</p>
@@ -96,15 +103,12 @@ interface PendingListProps {
 }
 
 const fetchPendingTransactions = async (page: number): Promise<PaginatedResponse> => {
-  console.log('Fetching pending transactions for page:', page);
   const response = await axios.get<PaginatedResponse>(`${config.handlerUrl}/pending-transactions`, {
     params: {
       page,
       limit: ITEMS_PER_PAGE
     }
   });
-  
-  console.log('Received response:', response.data);
   return response.data;
 };
 

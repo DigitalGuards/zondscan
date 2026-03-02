@@ -5,8 +5,9 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { type TransactionDetails, getConfirmations, getTransactionStatus } from '@/app/types';
 import { formatAmount, formatTokenAmount } from '../../lib/helpers';
-import CopyHashButton from '../../components/CopyHashButton';
-import CopyAddressButton from '../../components/CopyAddressButton';
+import CopyButton from '../../components/CopyButton';
+import Breadcrumbs from '../../components/Breadcrumbs';
+import Badge from '../../components/Badge';
 
 // Back link component that uses useSearchParams
 function BackToTransactionsLink(): JSX.Element | null {
@@ -59,7 +60,7 @@ const AddressDisplay = ({ address, isMobile }: { address: string, isMobile: bool
         <div className="absolute -inset-2 rounded-lg bg-[#3d3d3d] opacity-0 
                       group-hover:opacity-10 transition-opacity duration-300" />
       </a>
-      <CopyAddressButton address={address} />
+      <CopyButton value={address} label="Copy address" />
     </div>
   );
 };
@@ -121,10 +122,10 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
 
   return (
     <div className="py-4 md:py-8">
-      {/* Back Button - only shown when coming from Latest Transactions */}
-      <Suspense fallback={null}>
-        <BackToTransactionsLink />
-      </Suspense>
+      <Breadcrumbs items={[
+        { label: 'Transactions', href: '/transactions/1' },
+        { label: `${transaction.hash.slice(0, 10)}...${transaction.hash.slice(-6)}` },
+      ]} />
 
       <div className="relative overflow-hidden rounded-xl md:rounded-2xl
                     bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
@@ -138,11 +139,13 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               </svg>
               <h1 className="text-lg md:text-2xl font-bold text-[#ffa729]">Transaction Details</h1>
             </div>
-            <div className={`px-4 py-2 rounded-xl ${status.color} bg-opacity-20 border border-opacity-20 
-                           flex items-center ${status.color.replace('bg-', 'border-')}`}>
-              <div className={`w-2 h-2 rounded-full ${status.color} mr-2`}></div>
-              <span className="text-sm font-medium">{status.text}</span>
-            </div>
+            <Badge
+              variant={status.color === 'bg-green-500' ? 'success' : status.color === 'bg-blue-500' ? 'info' : 'warning'}
+              size="md"
+              dot
+            >
+              {status.text}
+            </Badge>
           </div>
           
           {/* Content Grid */}
@@ -154,7 +157,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                 <p className="text-gray-300 break-all font-mono mb-2">
                   {isMobile ? `${transaction.hash.slice(0, 10)}...${transaction.hash.slice(-8)}` : transaction.hash}
                 </p>
-                <CopyHashButton hash={transaction.hash} />
+                <CopyButton value={transaction.hash} label="Copy hash" stopPropagation />
               </div>
 
               <div>
@@ -204,9 +207,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                       </svg>
                       <h3 className="text-green-400 font-semibold">Contract Created</h3>
                       {transaction.contractCreated.isToken && (
-                        <span className="px-2 py-0.5 rounded bg-[#ffa729]/20 text-[#ffa729] text-xs font-medium">
-                          QRC-20 Token
-                        </span>
+                        <Badge variant="brand">QRC-20 Token</Badge>
                       )}
                     </div>
                     <div className="space-y-2">
@@ -244,9 +245,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                         <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
                       </svg>
                       <h3 className="text-[#ffa729] font-semibold">Token Transfer</h3>
-                      <span className="px-2 py-0.5 rounded bg-[#ffa729]/20 text-[#ffa729] text-xs font-medium">
-                        QRC-20
-                      </span>
+                      <Badge variant="brand">QRC-20</Badge>
                     </div>
                     <div className="space-y-3">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">

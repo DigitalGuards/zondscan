@@ -3,6 +3,7 @@
 import { formatAmount } from '../../lib/helpers';
 import { STAKING_QUANTA } from '../../lib/constants';
 import type { BalanceDisplayProps } from '@/app/types';
+import Badge from '../../components/Badge';
 
 export default function BalanceDisplay({ balance }: BalanceDisplayProps): JSX.Element {
   const [formattedBalance, unit] = formatAmount(balance);
@@ -17,8 +18,8 @@ export default function BalanceDisplay({ balance }: BalanceDisplayProps): JSX.El
         <span className="text-[10px] md:text-xs lg:text-sm text-gray-400">{unit}</span>
       </div>
       {balance > STAKING_QUANTA && (
-        <div className="mt-2 md:mt-3 lg:mt-4 px-2 md:px-2.5 lg:px-3 py-0.5 md:py-1 bg-green-500/10 text-green-400 text-[10px] md:text-xs lg:text-sm rounded-md md:rounded-lg inline-block">
-          Qualified for Staking
+        <div className="mt-2 md:mt-3 lg:mt-4">
+          <Badge variant="success" dot>Qualified for Staking</Badge>
         </div>
       )}
     </div>

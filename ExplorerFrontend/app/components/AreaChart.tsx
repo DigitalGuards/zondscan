@@ -36,6 +36,7 @@ const getStockValue = (d: Block): number => d.result.size;
 export default function AreaChart({
   data,
   gradientColor,
+  gradientId = 'area-gradient',
   width,
   yMax,
   margin,
@@ -49,6 +50,7 @@ export default function AreaChart({
 }: {
   data: Block[];
   gradientColor: string;
+  gradientId?: string;
   xScale: AxisScale<number>;
   yScale: AxisScale<number>;
   width: number;
@@ -64,7 +66,7 @@ export default function AreaChart({
   return (
     <Group left={left || margin.left} top={top || margin.top}>
       <LinearGradient
-        id="gradient"
+        id={gradientId}
         from={gradientColor}
         fromOpacity={1}
         to={gradientColor}
@@ -76,8 +78,8 @@ export default function AreaChart({
         y={(d) => yScale(getStockValue(d)) || 0}
         yScale={yScale}
         strokeWidth={1}
-        stroke="url(#gradient)"
-        fill="url(#gradient)"
+        stroke={`url(#${gradientId})`}
+        fill={`url(#${gradientId})`}
         curve={curveMonotoneX}
       />
       {!hideBottomAxis && (

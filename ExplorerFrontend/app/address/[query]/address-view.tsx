@@ -1,13 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import CopyAddressButton from "../../components/CopyAddressButton";
+import CopyButton from "../../components/CopyButton";
 import QRCodeButton from "../../components/QRCodeButton";
 import TanStackTable from "../../components/TanStackTable";
 import BalanceDisplay from "./balance-display";
 import ActivityDisplay from "./activity-display";
 import type { AddressData } from "@/app/types";
 import Link from "next/link";
+import Breadcrumbs from "../../components/Breadcrumbs";
+import EmptyState from "../../components/EmptyState";
 
 interface AddressViewProps {
     addressData: AddressData;
@@ -84,6 +86,10 @@ export default function AddressView({ addressData, addressSegment }: AddressView
 
     return (
         <div className="py-3 md:py-6 lg:py-8 px-3 md:px-6 lg:px-8 max-w-[900px] mx-auto">
+            <Breadcrumbs items={[
+                { label: 'Address' },
+                { label: `${addressSegment.slice(0, 10)}...${addressSegment.slice(-6)}` },
+            ]} />
             <div className="relative overflow-hidden rounded-xl md:rounded-2xl 
                         bg-card-gradient
                         border border-border shadow-lg md:shadow-xl mb-4 md:mb-6 lg:mb-8">
@@ -101,7 +107,7 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                     <AddressDisplay address={addressSegment} />
                                     {addressSegment && (
                                         <div className="flex items-center gap-2 mb-2 lg:mb-0 lg:ml-4">
-                                            <CopyAddressButton address={addressSegment} />
+                                            <CopyButton value={addressSegment} label="Copy address" />
                                             <QRCodeButton address={addressSegment} />
                                         </div>
                                     )}
@@ -136,7 +142,7 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                                 address={contractData.creatorAddress || 'Unknown'}
                                             />
                                             {contractData.creatorAddress && (
-                                                <CopyAddressButton address={contractData.creatorAddress} />
+                                                <CopyButton value={contractData.creatorAddress} label="Copy address" />
                                             )}
                                         </div>
                                     </div>
@@ -186,7 +192,7 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                             <Link href={`/tx/${contractData.creationTransaction}`} className="text-xs md:text-sm text-accent hover:text-accent-hover">
                                                 {contractData.creationTransaction}
                                             </Link>
-                                            <CopyAddressButton address={contractData.creationTransaction} />
+                                            <CopyButton value={contractData.creationTransaction} label="Copy hash" />
                                         </div>
                                     </div>
 
@@ -214,9 +220,12 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                             internalt={addressData.internal_transactions_by_address || []}
                         />
                     ) : (
-                        <div className="p-4 md:p-6 text-center text-gray-400">
-                            No transactions found for this address
-                        </div>
+                        <EmptyState
+                            title="No transactions yet"
+                            description="This address has no transaction history."
+                            actionLabel="Explore latest transactions"
+                            actionHref="/transactions/1"
+                        />
                     )}
                 </div>
             </div>

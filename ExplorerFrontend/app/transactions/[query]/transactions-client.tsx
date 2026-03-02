@@ -23,7 +23,6 @@ export default function TransactionsClient({ initialData, pageNumber }: Transact
 
   // Re-fetch data when page changes
   useEffect(() => {
-    console.log(`Client received data with ${initialData.txs?.length || 0} transactions. Total: ${initialData.total || 0}`);
     setData(initialData);
   }, [initialData, pageNumber]);
 
@@ -47,7 +46,6 @@ export default function TransactionsClient({ initialData, pageNumber }: Transact
       }
 
       const newData = await response.json();
-      console.log(`Refetched ${newData.txs?.length || 0} transactions. Total: ${newData.total || 0}`);
       setData(newData);
       setError(null);
     } catch (err) {

@@ -3,8 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { formatAmount, truncateHash } from "../../lib/helpers";
 import { SendIcon, ReceiveIcon } from './TransactionIcons';
-import CopyHashButton from "../../components/CopyHashButton";
+import CopyButton from "../../components/CopyButton";
 import type { TransactionCardProps } from '@/app/types';
+import Badge from "../../components/Badge";
 
 interface ExtendedTransactionCardProps extends TransactionCardProps {
   currentPage?: number;
@@ -65,7 +66,7 @@ export default function TransactionCard({ transaction, currentPage }: ExtendedTr
             </div>
             <div className="flex items-center gap-1">
               <p className="text-[11px] text-gray-300 font-mono leading-none">{truncateHash(txHash, 8, 6)}</p>
-              <CopyHashButton hash={txHash} size="small" />
+              <CopyButton value={txHash} label="Copy hash" size="sm" stopPropagation />
             </div>
           </div>
         </div>
@@ -95,12 +96,10 @@ export default function TransactionCard({ transaction, currentPage }: ExtendedTr
                   {truncateHash(txHash, 12, 8)}
                 </p>
                 <div className="flex-shrink-0">
-                  <CopyHashButton hash={txHash} />
+                  <CopyButton value={txHash} label="Copy hash" stopPropagation />
                 </div>
                 {parseFloat(String(transaction.Amount)) === 0 && (
-                  <span className="text-xs lg:text-sm px-2 py-0.5 bg-[#3d3d3d] text-gray-300 rounded-md">
-                    Contract Call
-                  </span>
+                  <Badge variant="neutral">Contract Call</Badge>
                 )}
               </div>
             </div>

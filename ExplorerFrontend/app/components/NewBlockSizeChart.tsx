@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import axios from "axios";
 import config from '../../config.js';
 import BrushChart from './BlockSizeChart';
-import Typography from '@mui/material/Typography';
-import Divider from '@mui/material/Divider';
 
 const NewBlockSizeChart = (): JSX.Element => {
     const [loading, setLoading] = useState(true);
     const [blocks, setBlocks] = useState([]);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [width, setWidth] = useState(600);
 
     React.useEffect(() => {
         axios.get(config.handlerUrl + "/blocksizes").then((response) => {
@@ -15,16 +15,22 @@ const NewBlockSizeChart = (): JSX.Element => {
         }).finally(() => setLoading(false));
     }, []);
 
-    console.log(loading);
-    console.log(blocks);
+    useEffect(() => {
+        if (!containerRef.current) return;
+        const ro = new ResizeObserver(([entry]) => setWidth(Math.floor(entry.contentRect.width)));
+        ro.observe(containerRef.current);
+        return () => ro.disconnect();
+    }, []);
 
     return (
         <>
-            <Divider />
-            <Typography variant="h6" component="div" m={2} align="center">
-                Average Block Size Chart
-                {loading ? <div>Loading....</div> : <BrushChart width={750} height={500} blocks={blocks} />}
-            </Typography>
+            <hr className="border-[#3d3d3d] my-4" />
+            <div ref={containerRef}>
+                <h2 className="text-lg font-semibold text-white text-center mb-2">
+                    Average Block Size Chart
+                </h2>
+                {loading ? <div>Loading....</div> : <BrushChart width={width} height={500} blocks={blocks} />}
+            </div>
         </>
     );
 }

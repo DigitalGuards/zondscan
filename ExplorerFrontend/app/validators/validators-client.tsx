@@ -164,7 +164,7 @@ export default function ValidatorsWrapper(): JSX.Element {
           <h3 className="text-base sm:text-lg font-semibold text-[#ffa729] mb-3 sm:mb-4">Status Distribution</h3>
           <div className="flex justify-center overflow-hidden">
             {loading ? (
-              <div className="h-[250px] sm:h-[300px] flex items-center justify-center">
+              <div role="status" className="h-[250px] sm:h-[300px] flex items-center justify-center">
                 <div className="animate-pulse text-gray-500">Loading chart...</div>
               </div>
             ) : (
@@ -185,7 +185,7 @@ export default function ValidatorsWrapper(): JSX.Element {
           <h3 className="text-base sm:text-lg font-semibold text-[#ffa729] mb-3 sm:mb-4">Total Staked Over Time</h3>
           <div className="overflow-x-auto">
             {loading ? (
-              <div className="h-[250px] sm:h-[300px] flex items-center justify-center">
+              <div role="status" className="h-[250px] sm:h-[300px] flex items-center justify-center">
                 <div className="animate-pulse text-gray-500">Loading chart...</div>
               </div>
             ) : (
@@ -205,7 +205,7 @@ export default function ValidatorsWrapper(): JSX.Element {
         <h3 className="text-base sm:text-lg font-semibold text-[#ffa729] mb-3 sm:mb-4">Validator Count Over Time</h3>
         <div className="overflow-x-auto">
           {loading ? (
-            <div className="h-[200px] sm:h-[250px] flex items-center justify-center">
+            <div role="status" className="h-[200px] sm:h-[250px] flex items-center justify-center">
               <div className="animate-pulse text-gray-500">Loading chart...</div>
             </div>
           ) : (

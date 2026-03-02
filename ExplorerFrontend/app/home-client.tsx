@@ -24,6 +24,53 @@ interface StatsData {
   error: boolean;
 }
 
+interface StatItem {
+  data: string;
+  title: string;
+  loading: boolean;
+  error: boolean;
+  icon: React.ReactNode;
+}
+
+const StatCard = ({ item }: { item: StatItem }): JSX.Element => (
+  <div className={`relative overflow-hidden rounded-2xl
+                 bg-gradient-to-br from-[#2d2d2d]/80 to-[#1f1f1f]/80
+                 border border-[#3d3d3d] shadow-xl
+                 hover:border-[#ffa729] transition-all duration-300
+                 group`}>
+    <div className="relative p-2 sm:p-6 text-center min-h-[90px] sm:min-h-[160px] flex flex-col justify-center">
+      {item.loading ? (
+        <div className="flex flex-col items-center justify-center space-y-2">
+          <div className="w-16 sm:w-32 h-4 sm:h-8 bg-gray-700/50 rounded animate-pulse"></div>
+          <div className="w-12 sm:w-24 h-2 sm:h-4 bg-gray-700/50 rounded animate-pulse"></div>
+        </div>
+      ) : item.error ? (
+        <div className="flex flex-col items-center justify-center text-red-400">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 sm:h-8 w-4 sm:w-8 mb-1 sm:mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="text-xs">Failed to load data</span>
+        </div>
+      ) : (
+        <>
+          <div className="flex justify-center items-center mb-1 sm:mb-2">
+            <div className="h-4 w-4 sm:h-6 sm:w-6 text-[#ffa729] [&>svg]:h-full [&>svg]:w-full">
+              {item.icon}
+            </div>
+          </div>
+          <p className="text-base sm:text-3xl font-bold mb-1 sm:mb-3 text-[#ffa729]
+                      group-hover:scale-110 transition-transform duration-300 break-words">
+            {item.data}
+          </p>
+          <p className="text-[10px] sm:text-sm text-gray-300 font-medium">
+            {item.title}
+          </p>
+        </>
+      )}
+    </div>
+  </div>
+);
+
 interface DashboardData {
   walletCount: StatsData;
   volume: StatsData;
@@ -115,7 +162,7 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
   const blockchainStats = [
     {
       data: formatNumberWithCommas(data.walletCount.value),
-      title: "Network Bagholder Count",
+      title: "Wallet Count",
       loading: data.walletCount.isLoading,
       error: data.walletCount.error,
       icon: (
@@ -233,53 +280,6 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
     zIndex: -1,
   };
 
-  interface StatItem {
-    data: string;
-    title: string;
-    loading: boolean;
-    error: boolean;
-    icon: React.ReactNode;
-  }
-
-  const StatCard = ({ item }: { item: StatItem }): JSX.Element => (
-    <div className={`relative overflow-hidden rounded-2xl 
-                   bg-gradient-to-br from-[#2d2d2d]/80 to-[#1f1f1f]/80
-                   border border-[#3d3d3d] shadow-xl
-                   hover:border-[#ffa729] transition-all duration-300
-                   group ${!data.dataInitialized ? 'opacity-50' : ''}`}>
-      <div className="relative p-2 sm:p-6 text-center min-h-[90px] sm:min-h-[160px] flex flex-col justify-center">
-        {item.loading ? (
-          <div className="flex flex-col items-center justify-center space-y-2">
-            <div className="w-16 sm:w-32 h-4 sm:h-8 bg-gray-700/50 rounded animate-pulse"></div>
-            <div className="w-12 sm:w-24 h-2 sm:h-4 bg-gray-700/50 rounded animate-pulse"></div>
-          </div>
-        ) : item.error ? (
-          <div className="flex flex-col items-center justify-center text-red-400">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 sm:h-8 w-4 sm:w-8 mb-1 sm:mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="text-xs">Failed to load data</span>
-          </div>
-        ) : (
-          <>
-            <div className="flex justify-center items-center mb-1 sm:mb-2">
-              <div className="h-4 w-4 sm:h-6 sm:w-6 text-[#ffa729] [&>svg]:h-full [&>svg]:w-full">
-                {item.icon}
-              </div>
-            </div>
-            <p className="text-base sm:text-3xl font-bold mb-1 sm:mb-3 text-[#ffa729] 
-                        group-hover:scale-110 transition-transform duration-300 break-words">
-              {item.data}
-            </p>
-            <p className="text-[10px] sm:text-sm text-gray-300 font-medium">
-              {item.title}
-            </p>
-          </>
-        )}
-      </div>
-    </div>
-  );
-
   const seoTextItems = [
     {
       title: "What is ZondScan?",
@@ -340,7 +340,7 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
             {/* Blockchain Stats */}
             <div>
               <h2 className="text-base sm:text-xl font-bold mb-2 sm:mb-4 text-[#ffa729]">Blockchain Statistics</h2>
-              <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4">
+              <div className={`grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4 ${!data.dataInitialized ? 'opacity-50' : ''}`}>
                 {blockchainStats.map((item, idx) => (
                   <StatCard key={idx} item={item} />
                 ))}
@@ -350,7 +350,7 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
             {/* Financial Stats */}
             <div>
               <h2 className="text-base sm:text-xl font-bold mb-2 sm:mb-4 text-[#ffa729]">Financial Statistics</h2>
-              <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-4">
+              <div className={`grid grid-cols-2 gap-2 sm:gap-4 mb-4 ${!data.dataInitialized ? 'opacity-50' : ''}`}>
                 {financialStats.map((item, idx) => (
                   <StatCard key={idx} item={item} />
                 ))}

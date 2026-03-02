@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import type { PendingTransaction } from '@/app/types';
 import { formatAmount, decodeTokenTransferInput, formatTokenAmount } from '../../../lib/helpers';
+import Badge from '../../../components/Badge';
 
 interface PendingTransactionViewProps {
   pendingTx: PendingTransaction;
@@ -27,14 +28,10 @@ export default function PendingTransactionView({ pendingTx }: PendingTransaction
           <div className="flex items-center gap-3">
             <h2 className="text-2xl font-bold text-white">Pending Transaction</h2>
             {isTokenTransfer && (
-              <span className="px-2 py-0.5 rounded bg-[#ffa729]/20 text-[#ffa729] text-xs font-medium">
-                Token Transfer
-              </span>
+              <Badge variant="brand">Token Transfer</Badge>
             )}
           </div>
-          <span className="px-3 py-1 rounded-lg bg-yellow-500/20 text-yellow-500">
-            Pending
-          </span>
+          <Badge variant="warning" size="md" dot>Pending</Badge>
         </div>
 
         <div className="space-y-4">
@@ -72,9 +69,7 @@ export default function PendingTransactionView({ pendingTx }: PendingTransaction
                   <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
                 </svg>
                 <h3 className="text-[#ffa729] font-semibold">Token Transfer (Pending)</h3>
-                <span className="px-2 py-0.5 rounded bg-[#ffa729]/20 text-[#ffa729] text-xs font-medium">
-                  QRC-20
-                </span>
+                <Badge variant="brand">QRC-20</Badge>
               </div>
               <div className="space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
@@ -144,8 +139,7 @@ export default function PendingTransactionView({ pendingTx }: PendingTransaction
 
         <div className="mt-6 pt-6 border-t border-[#3d3d3d]">
           <p className="text-gray-400 text-sm">
-            This transaction is currently pending in the mempool. The page will automatically
-            refresh when the transaction is mined or if its status changes.
+            This transaction is currently pending in the mempool. Refresh the page to check for status updates.
           </p>
         </div>
       </div>
