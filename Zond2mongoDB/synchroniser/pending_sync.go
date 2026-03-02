@@ -105,6 +105,13 @@ func UpdatePendingTransactionsInBlock(block *models.ZondDatabaseBlock) error {
 
 // syncMempool fetches and processes pending transactions from the mempool
 func syncMempool() error {
+	// Skip mempool polling while initial block sync is in progress to avoid
+	// competing with batch block fetches for RPC bandwidth.
+	if !IsInitialSyncComplete() {
+		configs.Logger.Debug("Skipping mempool sync — initial block sync still in progress")
+		return nil
+	}
+
 	// Get pending transactions from node via txpool_content
 	response := rpc.GetPendingTransactions()
 	if response == "" {
