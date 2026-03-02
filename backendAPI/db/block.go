@@ -19,18 +19,16 @@ func ReturnSingleBlock(block uint64) (models.ZondUint64Version, error) {
 
 	var result models.ZondUint64Version
 
-	// Convert decimal block number to hex format with 0x prefix
-	hexBlock := fmt.Sprintf("0x%x", block)
-	filter := primitive.D{{Key: "result.number", Value: hexBlock}}
-
+	// Primary lookup: use blockNumberInt (int64) for an exact numeric match.
+	// This is reliable regardless of whether the hex string was stored with or
+	// without zero-padding, and uses the blockNumberInt_desc_idx index.
+	filter := primitive.D{{Key: "blockNumberInt", Value: int64(block)}}
 	err := configs.BlocksCollection.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
-		// Try with zero-padded hex if the first attempt failed
-		hexBlockPadded := fmt.Sprintf("0x%02x", block)
-		if hexBlockPadded != hexBlock {
-			filter = primitive.D{{Key: "result.number", Value: hexBlockPadded}}
-			err = configs.BlocksCollection.FindOne(ctx, filter).Decode(&result)
-		}
+		// Fallback for documents written before blockNumberInt was added.
+		hexBlock := fmt.Sprintf("0x%x", block)
+		filter = primitive.D{{Key: "result.number", Value: hexBlock}}
+		err = configs.BlocksCollection.FindOne(ctx, filter).Decode(&result)
 		if err != nil {
 			return result, fmt.Errorf("block %d not found", block)
 		}
@@ -144,7 +142,7 @@ func ReturnBlockSizes() ([]primitive.M, error) {
 
 	cursor, err := configs.BlockSizesCollection.Find(ctx, primitive.D{}, opts)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("failed to query block sizes: %w", err)
 	}
 
 	var episodes []primitive.M

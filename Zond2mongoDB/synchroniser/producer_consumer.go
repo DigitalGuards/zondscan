@@ -18,10 +18,10 @@ import (
 // Batch size constants for consistent use across sync methods
 const (
 	// DefaultBatchSize is the standard batch size for normal sync operations
-	DefaultBatchSize = 64
+	DefaultBatchSize = 128
 
 	// LargeBatchSize is used when syncing a large number of blocks (>1000)
-	LargeBatchSize = 128
+	LargeBatchSize = 256
 
 	// BatchSyncThreshold is the number of blocks behind after which we switch to batch sync
 	BatchSyncThreshold = 64
@@ -30,7 +30,7 @@ const (
 	LargeSyncThreshold = 1000 // 0x3e8 in hex
 
 	// MaxProducerConcurrency limits concurrent block fetching goroutines
-	MaxProducerConcurrency = 8
+	MaxProducerConcurrency = 16
 )
 
 // producerSem is a semaphore to limit concurrent producer goroutines

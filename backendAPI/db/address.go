@@ -5,14 +5,12 @@ import (
 	"backendAPI/models"
 	"bytes"
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"math/big"
 	"net/http"
 	"os"
-	"reflect"
 	"strings"
 	"time"
 
@@ -27,9 +25,8 @@ func ReturnSingleAddress(query string) (models.Address, error) {
 	var result models.Address
 	defer cancel()
 
-	// Normalize address by converting to lowercase
-	// This ensures case-insensitive lookup and storage
-	addressHex := strings.ToLower(query)
+	// Normalize address to canonical Z-prefix form
+	addressHex := normalizeAddress(query)
 
 	// Try to find existing address
 	filter := bson.D{{Key: "id", Value: addressHex}}
@@ -95,59 +92,40 @@ func ReturnRichlist() []models.Address {
 
 func ReturnRankAddress(address string) (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	var addresses []models.Address
 	defer cancel()
 
-	// Normalize address by converting to lowercase
-	addressHex := strings.ToLower(address)
+	// Normalize address to canonical Z-prefix form (matches storage format)
+	addressHex := normalizeAddress(address)
 
-	query, err := hex.DecodeString(strings.TrimPrefix(addressHex, "z"))
+	// Look up the target address to get its balance
+	var target models.Address
+	err := configs.AddressesCollections.FindOne(ctx, bson.D{{Key: "id", Value: addressHex}}).Decode(&target)
 	if err != nil {
-		fmt.Println(err)
+		if err == mongo.ErrNoDocuments {
+			// Address not found — return 0 to signal unknown rank
+			return 0, nil
+		}
+		return 0, fmt.Errorf("error looking up address for rank: %v", err)
 	}
 
-	projection := bson.D{
-		{Key: "id", Value: 1},
-		{Key: "balance", Value: 1},
-	}
-
-	opts := options.Find().
-		SetProjection(projection).
-		SetSort(bson.D{{Key: "balance", Value: -1}})
-
-	results, err := configs.AddressesCollections.Find(ctx, bson.D{}, opts)
+	// Count how many addresses have a strictly higher balance; rank = that count + 1
+	count, err := configs.AddressesCollections.CountDocuments(ctx, bson.M{"balance": bson.M{"$gt": target.Balance}})
 	if err != nil {
-		fmt.Println(err)
+		return 0, fmt.Errorf("error counting addresses for rank: %v", err)
 	}
 
-	defer results.Close(ctx)
-	for results.Next(ctx) {
-		var singleAddress models.Address
-		if err = results.Decode(&singleAddress); err != nil {
-			fmt.Println(err)
-		}
-		addresses = append(addresses, singleAddress)
-	}
-
-	var i int64
-	i = 0
-	for i = 0; i < GetWalletCount(); i++ {
-		if reflect.DeepEqual(addresses[i].ID, query) {
-			fmt.Println(query)
-			break
-		}
-	}
-
-	return i + 1, nil
+	return count + 1, nil
 }
 
 func GetBalance(address string) (float64, string) {
 	var result models.Balance
 
-	// Ensure address has uppercase Z prefix for RPC calls
+	// Ensure address has Z prefix for RPC calls
 	rpcAddress := address
-	if strings.HasPrefix(rpcAddress, "z") {
-		rpcAddress = "Z" + rpcAddress[1:]
+	if strings.HasPrefix(rpcAddress, "0x") {
+		rpcAddress = "Z" + rpcAddress[2:]
+	} else if !strings.HasPrefix(rpcAddress, "Z") {
+		rpcAddress = "Z" + rpcAddress
 	}
 
 	group := models.JsonRPC{

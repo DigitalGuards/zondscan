@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -25,6 +26,16 @@ import (
 // - InitializeTokenCollections
 // - GetTokenSyncRange
 // - StoreInitialSyncStartBlock
+
+// initialSyncComplete is set to 1 after the initial block sync finishes.
+// Mempool polling checks this flag and skips work while it is 0 to avoid
+// competing with batch block fetches for RPC bandwidth.
+var initialSyncComplete int32
+
+// IsInitialSyncComplete returns true once the initial block sync has finished.
+func IsInitialSyncComplete() bool {
+	return atomic.LoadInt32(&initialSyncComplete) == 1
+}
 
 // RPC delay constants (can be overridden via environment)
 const (
@@ -225,6 +236,10 @@ func Sync() {
 		configs.Logger.Info("Starting contract reprocessing service...")
 		db.StartContractReprocessingJob()
 	}()
+
+	// Signal that initial sync is done so mempool polling can begin
+	atomic.StoreInt32(&initialSyncComplete, 1)
+	configs.Logger.Info("Initial sync flag set — mempool polling enabled")
 
 	configs.Logger.Info("Starting continuous block monitoring...")
 	singleBlockInsertion()
