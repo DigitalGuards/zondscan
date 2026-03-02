@@ -13,7 +13,7 @@ interface PageProps {
 export async function generateMetadata({ params }: { params: Promise<{ query: string }> }): Promise<Metadata> {
     const resolvedParams = await params;
     const address = resolvedParams.query;
-    const canonicalUrl = `https://zondscan.com/address`;
+    const canonicalUrl = `https://zondscan.com/address/${address}`;
 
     return {
         ...sharedMetadata,
@@ -85,7 +85,10 @@ async function fetchAddressData(address: string): Promise<AddressData | null> {
 
 export default async function Page({ params }: PageProps): Promise<JSX.Element> {
     const resolvedParams = await params;
-    const address = resolvedParams.query;
+    // Normalize lowercase z prefix to uppercase Z
+    const address = resolvedParams.query.startsWith('z') && !resolvedParams.query.startsWith('0x')
+        ? 'Z' + resolvedParams.query.slice(1)
+        : resolvedParams.query;
     const addressData = await fetchAddressData(address);
     const handlerUrl = process.env.NEXT_PUBLIC_HANDLER_URL || process.env.HANDLER_URL || 'http://127.0.0.1:8080';
 

@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { epochsToDays } from '../../lib/helpers';
+import Badge from '../../components/Badge';
 
 // Format staked amount (beacon chain stores effective balance in Shor, 1 QRL = 10^9 Shor)
 function formatValidatorStake(amount: string): [string, string] {
@@ -40,6 +41,17 @@ const statusOrder: Record<string, number> = {
   exited: 2,
   slashed: 3,
 };
+
+function SortIcon({ field, sortField, sortDirection }: { field: SortField; sortField: SortField; sortDirection: SortDirection }) {
+  if (sortField !== field) {
+    return <span className="text-gray-600 ml-1">↕</span>;
+  }
+  return (
+    <span className="text-[#ffa729] ml-1">
+      {sortDirection === 'asc' ? '↑' : '↓'}
+    </span>
+  );
+}
 
 export default function ValidatorTable({ validators, loading }: ValidatorTableProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -110,34 +122,16 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
   );
 
   const getStatusBadge = (status: string) => {
-    const styles: Record<string, string> = {
-      active: 'bg-green-900/30 text-green-400 border-green-800',
-      pending: 'bg-yellow-900/30 text-yellow-400 border-yellow-800',
-      exited: 'bg-gray-900/30 text-gray-400 border-gray-700',
-      slashed: 'bg-red-900/30 text-red-400 border-red-800',
+    const variantMap: Record<string, 'success' | 'warning' | 'neutral' | 'error'> = {
+      active: 'success',
+      pending: 'warning',
+      exited: 'neutral',
+      slashed: 'error',
     };
-
     return (
-      <span
-        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
-          styles[status] || styles.pending
-        }`}
-      >
+      <Badge variant={variantMap[status] || 'warning'} dot>
         {status.charAt(0).toUpperCase() + status.slice(1)}
-      </span>
-    );
-  };
-
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) {
-      return (
-        <span className="text-gray-600 ml-1">↕</span>
-      );
-    }
-    return (
-      <span className="text-[#ffa729] ml-1">
-        {sortDirection === 'asc' ? '↑' : '↓'}
-      </span>
+      </Badge>
     );
   };
 
@@ -160,6 +154,7 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
           <input
             type="text"
+            aria-label="Search validators"
             placeholder="Search validators..."
             value={searchQuery}
             onChange={(e) => {
@@ -176,35 +171,59 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-[#3d3d3d]">
+        <table aria-label="Validators list" className="min-w-full divide-y divide-[#3d3d3d]">
           <thead className="bg-[#2d2d2d]/50">
             <tr>
               <th
-                className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200"
-                onClick={() => handleSort('index')}
+                scope="col"
+                aria-sort={sortField === 'index' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider"
               >
-                Index <SortIcon field="index" />
+                <button
+                  onClick={() => handleSort('index')}
+                  className="flex items-center hover:text-gray-200 focus:outline-none focus:underline"
+                >
+                  Index <SortIcon field="index" sortField={sortField} sortDirection={sortDirection} />
+                </button>
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                 Address
               </th>
               <th
-                className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200"
-                onClick={() => handleSort('status')}
+                scope="col"
+                aria-sort={sortField === 'status' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider"
               >
-                Status <SortIcon field="status" />
+                <button
+                  onClick={() => handleSort('status')}
+                  className="flex items-center hover:text-gray-200 focus:outline-none focus:underline"
+                >
+                  Status <SortIcon field="status" sortField={sortField} sortDirection={sortDirection} />
+                </button>
               </th>
               <th
-                className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200"
-                onClick={() => handleSort('age')}
+                scope="col"
+                aria-sort={sortField === 'age' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider"
               >
-                Age <SortIcon field="age" />
+                <button
+                  onClick={() => handleSort('age')}
+                  className="flex items-center hover:text-gray-200 focus:outline-none focus:underline"
+                >
+                  Age <SortIcon field="age" sortField={sortField} sortDirection={sortDirection} />
+                </button>
               </th>
               <th
-                className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200"
-                onClick={() => handleSort('stakedAmount')}
+                scope="col"
+                aria-sort={sortField === 'stakedAmount' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider"
               >
-                Stake <SortIcon field="stakedAmount" />
+                <button
+                  onClick={() => handleSort('stakedAmount')}
+                  className="flex items-center hover:text-gray-200 focus:outline-none focus:underline"
+                >
+                  Stake <SortIcon field="stakedAmount" sortField={sortField} sortDirection={sortDirection} />
+                </button>
               </th>
             </tr>
           </thead>
@@ -254,6 +273,7 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
       {totalPages > 1 && (
         <div className="p-3 sm:p-4 border-t border-[#3d3d3d] flex flex-wrap justify-center items-center gap-1 sm:gap-2">
           <button
+            aria-label="Go to previous page"
             onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
             disabled={currentPage === 1}
             className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-[#1f1f1f] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d] text-xs sm:text-sm"
@@ -282,6 +302,7 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
               return (
                 <button
                   key={i}
+                  aria-label={`Go to page ${pageNum}`}
                   onClick={() => setCurrentPage(pageNum)}
                   className={`w-8 h-8 rounded-lg text-sm ${
                     currentPage === pageNum
@@ -296,6 +317,7 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
           </div>
 
           <button
+            aria-label="Go to next page"
             onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
             disabled={currentPage === totalPages}
             className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-[#1f1f1f] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d] text-xs sm:text-sm"

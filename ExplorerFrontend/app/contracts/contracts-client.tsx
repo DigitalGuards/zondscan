@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
 import config from '../../config';
+import Badge from '../components/Badge';
+import EmptyState from '../components/EmptyState';
 
 interface ContractData {
   _id: string;
@@ -129,6 +131,8 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
 
   const TabButton = ({ tab, label, count }: { tab: TabType; label: string; count?: number }) => (
     <button
+      role="tab"
+      aria-selected={activeTab === tab}
       onClick={() => setActiveTab(tab)}
       className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
         activeTab === tab
@@ -156,7 +160,7 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6">
+      <div role="tablist" className="flex gap-2 mb-6">
         <TabButton tab="tokens" label="Tokens" />
         <TabButton tab="contracts" label="All Contracts" />
       </div>
@@ -171,6 +175,7 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
           </div>
           <input
             type="text"
+            aria-label="Search contracts"
             placeholder={activeTab === 'tokens' ? 'Search by token name or address...' : 'Search by contract address...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -185,7 +190,7 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
       </div>
 
       {/* Content */}
-      <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] overflow-hidden">
+      <div role="tabpanel" className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] overflow-hidden">
         {loading ? (
           <div className="p-4 space-y-4">
             {[...Array(5)].map((_, i) => (
@@ -193,9 +198,10 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
             ))}
           </div>
         ) : contracts.length === 0 ? (
-          <div className="p-8 text-center text-gray-400">
-            {activeTab === 'tokens' ? 'No tokens found' : 'No contracts found'}
-          </div>
+          <EmptyState
+            title={activeTab === 'tokens' ? 'No tokens found' : 'No contracts found'}
+            description="Try adjusting your search or check back later."
+          />
         ) : activeTab === 'tokens' ? (
           <TokensTable contracts={contracts} />
         ) : (
@@ -207,6 +213,7 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
       {totalPages > 1 && !loading && (
         <div className="mt-6 flex flex-wrap justify-center items-center gap-2">
           <button
+            aria-label="Go to previous page"
             onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
             disabled={currentPage === 0}
             className="px-3 py-1.5 rounded-lg bg-[#1f1f1f] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d] text-sm"
@@ -233,6 +240,7 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
             return (
               <button
                 key={i}
+                aria-label={`Go to page ${pageNum + 1}`}
                 onClick={() => setCurrentPage(pageNum)}
                 className={`w-8 h-8 rounded-lg text-sm ${
                   currentPage === pageNum
@@ -246,6 +254,7 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
           })}
 
           <button
+            aria-label="Go to next page"
             onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
             disabled={currentPage >= totalPages - 1}
             className="px-3 py-1.5 rounded-lg bg-[#1f1f1f] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d] text-sm"
@@ -262,22 +271,22 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
 function TokensTable({ contracts }: { contracts: ContractData[] }) {
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-[#3d3d3d]">
+      <table aria-label="Token contracts" className="min-w-full divide-y divide-[#3d3d3d]">
         <thead className="bg-[#2d2d2d]/50">
           <tr>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
               Token
             </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
               Contract Address
             </th>
-            <th className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+            <th scope="col" className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
               Decimals
             </th>
-            <th className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+            <th scope="col" className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
               Total Supply
             </th>
-            <th className="hidden lg:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+            <th scope="col" className="hidden lg:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
               Creator
             </th>
           </tr>
@@ -330,19 +339,19 @@ function TokensTable({ contracts }: { contracts: ContractData[] }) {
 function ContractsTable({ contracts }: { contracts: ContractData[] }) {
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-[#3d3d3d]">
+      <table aria-label="Smart contracts" className="min-w-full divide-y divide-[#3d3d3d]">
         <thead className="bg-[#2d2d2d]/50">
           <tr>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
               Contract Address
             </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
               Type
             </th>
-            <th className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+            <th scope="col" className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
               Creator
             </th>
-            <th className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+            <th scope="col" className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
               Created at Block
             </th>
           </tr>
@@ -361,14 +370,9 @@ function ContractsTable({ contracts }: { contracts: ContractData[] }) {
               </td>
               <td className="px-4 py-4 whitespace-nowrap">
                 {contract.isToken ? (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-900/30 text-green-400 border border-green-800">
-                    Token
-                    {contract.symbol && <span className="ml-1 text-green-500">({contract.symbol})</span>}
-                  </span>
+                  <Badge variant="success">Token{contract.symbol ? ` (${contract.symbol})` : ''}</Badge>
                 ) : (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-900/30 text-blue-400 border border-blue-800">
-                    Contract
-                  </span>
+                  <Badge variant="info">Contract</Badge>
                 )}
               </td>
               <td className="hidden sm:table-cell px-4 py-4 whitespace-nowrap">

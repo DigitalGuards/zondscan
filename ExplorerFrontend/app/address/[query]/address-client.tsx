@@ -20,9 +20,7 @@ export default function AddressClient({ address }: AddressClientProps): JSX.Elem
         const fetchData = async (): Promise<void> => {
             try {
                 setIsLoading(true);
-                console.log('Fetching address data:', address);
                 const response = await axios.get(`${config.handlerUrl}/address/aggregate/${address}`);
-                console.log('Raw API response:', JSON.stringify(response.data, null, 2));
 
                 // Process transactions to ensure gas values are in hex format
                 if (response.data.transactions_by_address) {
@@ -48,7 +46,6 @@ export default function AddressClient({ address }: AddressClientProps): JSX.Elem
                     };
                 }
 
-                console.log('Processed transactions:', JSON.stringify(response.data.transactions_by_address, null, 2));
                 setAddressData(response.data);
                 setError(null);
             } catch (error) {

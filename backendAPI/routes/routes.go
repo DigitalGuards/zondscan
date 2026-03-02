@@ -284,6 +284,11 @@ func UserRoute(router *gin.Engine) {
 	router.GET("/address/aggregate/:query", func(c *gin.Context) {
 		param := c.Param("query")
 
+		// Normalize address: convert lowercase z prefix to uppercase Z
+		if strings.HasPrefix(param, "z") && !strings.HasPrefix(param, "z0") {
+			param = "Z" + param[1:]
+		}
+
 		// Single Address data
 		addressData, err := db.ReturnSingleAddress(param)
 		if err != nil && err != mongo.ErrNoDocuments {
@@ -605,6 +610,17 @@ func UserRoute(router *gin.Engine) {
 			})
 			return
 		}
+
+		// Normalize addresses: ensure Z prefix is uppercase for display
+		for i := range query {
+			if strings.HasPrefix(query[i].ContractAddress, "z") {
+				query[i].ContractAddress = "Z" + query[i].ContractAddress[1:]
+			}
+			if strings.HasPrefix(query[i].ContractCreatorAddress, "z") {
+				query[i].ContractCreatorAddress = "Z" + query[i].ContractCreatorAddress[1:]
+			}
+		}
+
 		c.JSON(http.StatusOK, gin.H{
 			"response": query,
 			"total":    total,

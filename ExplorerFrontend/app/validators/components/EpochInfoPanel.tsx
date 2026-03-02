@@ -20,24 +20,28 @@ interface EpochInfoPanelProps {
 }
 
 export default function EpochInfoPanel({ epochInfo, loading }: EpochInfoPanelProps) {
-  const [timeRemaining, setTimeRemaining] = useState<number>(0);
+  const currentTimeToNextEpoch = epochInfo?.timeToNextEpoch ?? 0;
 
-  useEffect(() => {
-    if (epochInfo?.timeToNextEpoch) {
-      setTimeRemaining(epochInfo.timeToNextEpoch);
-    }
-  }, [epochInfo?.timeToNextEpoch]);
+  // Sync timeRemaining from prop during render (React-recommended pattern)
+  const [prevTime, setPrevTime] = useState(0);
+  const [timeRemaining, setTimeRemaining] = useState(0);
+  if (currentTimeToNextEpoch !== prevTime) {
+    setPrevTime(currentTimeToNextEpoch);
+    setTimeRemaining(currentTimeToNextEpoch);
+  }
 
-  // Countdown timer
+  // Countdown timer — only calls setState inside the interval callback (deferred)
   useEffect(() => {
-    if (timeRemaining <= 0) return;
+    if (currentTimeToNextEpoch <= 0) return;
+    const start = Date.now();
 
     const timer = setInterval(() => {
-      setTimeRemaining((prev) => Math.max(0, prev - 1));
+      const elapsed = Math.floor((Date.now() - start) / 1000);
+      setTimeRemaining(Math.max(0, currentTimeToNextEpoch - elapsed));
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeRemaining]);
+  }, [currentTimeToNextEpoch]);
 
   const formatTime = (seconds: number): string => {
     const hours = Math.floor(seconds / 3600);
