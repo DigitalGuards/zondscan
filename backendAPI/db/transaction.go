@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"math"
 	"strconv"
 	"strings"
@@ -43,7 +44,7 @@ func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
 
 	results, err := configs.TransactionByAddressCollection.Find(ctx, primitive.D{}, opts)
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("error querying latest transactions: %v", err)
 		return nil, err
 	}
 
@@ -51,7 +52,7 @@ func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
 	for results.Next(ctx) {
 		var singleTransaction models.TransactionByAddress
 		if err = results.Decode(&singleTransaction); err != nil {
-			fmt.Println(err)
+			log.Printf("error decoding latest transaction: %v", err)
 			continue
 		}
 		transactions = append(transactions, singleTransaction)
@@ -153,7 +154,7 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 
 	results, err := configs.TransactionByAddressCollection.Find(ctx, filter, opts)
 	if err != nil {
-		fmt.Printf("Error querying transactions: %v\n", err)
+		log.Printf("error querying transactions: %v", err)
 		return nil, err
 	}
 	defer results.Close(ctx)
@@ -161,7 +162,7 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 	for results.Next(ctx) {
 		var singleTransaction models.TransactionByAddress
 		if err := results.Decode(&singleTransaction); err != nil {
-			fmt.Printf("Error decoding transaction: %v\n", err)
+			log.Printf("error decoding transaction: %v", err)
 			continue
 		}
 
@@ -177,9 +178,9 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 	}
 
 	if len(transactions) == 0 {
-		fmt.Printf("No transactions found for address: %s\n", normalizedAddress)
+		log.Printf("no transactions found for address: %s", normalizedAddress)
 	} else {
-		fmt.Printf("Found %d transactions for address: %s\n", len(transactions), normalizedAddress)
+		log.Printf("found %d transactions for address: %s", len(transactions), normalizedAddress)
 	}
 
 	return transactions, nil
@@ -236,7 +237,7 @@ func ReturnTransactions(address string, page, limit int) ([]models.TransactionBy
 	var transactions []models.TransactionByAddress
 	defer cancel()
 
-	fmt.Println(address, page, limit)
+	log.Printf("querying transactions for address=%s page=%d limit=%d", address, page, limit)
 
 	projection := primitive.D{
 		{Key: "inOut", Value: 1},
@@ -263,20 +264,20 @@ func ReturnTransactions(address string, page, limit int) ([]models.TransactionBy
 	normalizedAddress := strings.TrimPrefix(strings.TrimPrefix(address, "Z"), "z")
 	decoded, err := hex.DecodeString(normalizedAddress)
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("error decoding address hex: %v", err)
 	}
 
 	filter := primitive.D{{Key: "address", Value: decoded}}
 	results, err := configs.TransactionByAddressCollection.Find(ctx, filter, opts)
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("error querying transactions by address: %v", err)
 	}
 
 	defer results.Close(ctx)
 	for results.Next(ctx) {
 		var singleTransaction models.TransactionByAddress
 		if err = results.Decode(&singleTransaction); err != nil {
-			fmt.Println(err)
+			log.Printf("error decoding transaction: %v", err)
 		}
 		transactions = append(transactions, singleTransaction)
 	}
@@ -310,7 +311,7 @@ func CountTransactions(address string) (int, error) {
 
 	count, err := configs.TransactionByAddressCollection.CountDocuments(ctx, filter)
 	if err != nil {
-		fmt.Printf("Error counting transactions: %v\n", err)
+		log.Printf("error counting transactions: %v", err)
 		return 0, err
 	}
 
@@ -393,13 +394,13 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 	// If not found in blocks, try the transfers collection (fallback)
 	decoded, err := hex.DecodeString(strings.TrimPrefix(query, "0x"))
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("error decoding tx hash hex: %v", err)
 	}
 
 	filter := primitive.D{{Key: "txHash", Value: decoded}}
 	err = configs.TransferCollections.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("error finding transfer by hash: %v", err)
 	}
 
 	return result, err
@@ -413,13 +414,13 @@ func ReturnSingleCoinbaseTransfer(query string) (models.Transfer, error) {
 
 	decoded, err := hex.DecodeString(strings.TrimPrefix(query, "0x"))
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("error decoding coinbase tx hash hex: %v", err)
 	}
 
 	filter := primitive.D{{Key: "txHash", Value: decoded}}
 	err = configs.CoinbaseCollection.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("error finding coinbase transfer: %v", err)
 	}
 
 	return result, err
@@ -433,7 +434,7 @@ func ReturnDailyTransactionsVolume() int64 {
 
 	err := configs.DailyTransactionsVolumeCollection.FindOne(ctx, primitive.D{}).Decode(&result)
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("error fetching daily transactions volume: %v", err)
 		return 0
 	}
 

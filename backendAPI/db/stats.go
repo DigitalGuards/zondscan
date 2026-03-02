@@ -5,17 +5,13 @@ import (
 	"backendAPI/models"
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
-
-func ReturnDateTime() string {
-	currentTime := time.Now()
-	return currentTime.Format("2006-01-02 3:4:5 PM")
-}
 
 func ReturnTotalCirculatingSupply() string {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -25,57 +21,49 @@ func ReturnTotalCirculatingSupply() string {
 
 	err := configs.TotalCirculatingSupplyCollection.FindOne(ctx, primitive.D{}).Decode(&result)
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("error fetching circulating supply: %v", err)
 		return ""
 	}
 
 	return result.Circulating
 }
 
-func GetMarketCap() float64 {
+// getCoinGeckoData fetches the single CoinGecko document from MongoDB.
+func getCoinGeckoData() (*models.CoinGecko, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	var result models.CoinGecko
-
 	err := configs.CoinGeckoCollection.FindOne(ctx, primitive.D{}).Decode(&result)
+	return &result, err
+}
+
+func GetMarketCap() float64 {
+	data, err := getCoinGeckoData()
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("error fetching market cap: %v", err)
 		return 0
 	}
-
-	return result.MarketCapUSD
+	return data.MarketCapUSD
 }
 
 func GetCurrentPrice() float64 {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	var result models.CoinGecko
-
-	err := configs.CoinGeckoCollection.FindOne(ctx, primitive.D{}).Decode(&result)
+	data, err := getCoinGeckoData()
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("error fetching current price: %v", err)
 		return 0
 	}
-
-	return result.PriceUSD
+	return data.PriceUSD
 }
 
 // GetCurrentVolume returns the current 24h trading volume in USD
 func GetCurrentVolume() float64 {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	var result models.CoinGecko
-
-	err := configs.CoinGeckoCollection.FindOne(ctx, primitive.D{}).Decode(&result)
+	data, err := getCoinGeckoData()
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("error fetching current volume: %v", err)
 		return 0
 	}
-
-	return result.VolumeUSD
+	return data.VolumeUSD
 }
 
 // GetPriceHistory returns historical price data for the given duration

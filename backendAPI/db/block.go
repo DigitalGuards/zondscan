@@ -5,6 +5,7 @@ import (
 	"backendAPI/models"
 	"context"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -147,7 +148,7 @@ func ReturnBlockSizes() ([]primitive.M, error) {
 
 	var episodes []primitive.M
 	if err = cursor.All(ctx, &episodes); err != nil {
-		fmt.Println(err)
+		log.Printf("error decoding block sizes: %v", err)
 	}
 
 	return episodes, err
