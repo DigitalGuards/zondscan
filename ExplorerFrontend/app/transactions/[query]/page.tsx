@@ -4,11 +4,10 @@ import type { Metadata } from 'next';
 import TransactionsClient from './transactions-client';
 import type { TransactionsResponse } from '@/app/types';
 import config from '../../../config';
+import { sharedMetadata } from '../../lib/seo/metaData';
 
 async function getTransactions(page: string): Promise<TransactionsResponse> {
   try {
-    console.log(`Fetching transactions for page ${page}`);
-    
     const pageNum = parseInt(page, 10) || 1;
     
     const timestamp = Date.now();
@@ -32,8 +31,6 @@ async function getTransactions(page: string): Promise<TransactionsResponse> {
     }
 
     const data = await response.json();
-    console.log(`Received ${data.txs?.length || 0} transactions. Total reported: ${data.total || 0}`);
-    
     return data;
   } catch (error) {
     console.error('Error fetching transactions:', error);
@@ -59,17 +56,25 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
   const canonicalUrl = `https://zondscan.com/transactions`;
   
   return {
+    ...sharedMetadata,
     title: `Transactions - Page ${pageNumber} | ZondScan`,
     description: `View all transactions on the Zond blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
     alternates: {
+      ...sharedMetadata.alternates,
       canonical: canonicalUrl,
     },
     openGraph: {
+      ...sharedMetadata.openGraph,
       title: `Transactions - Page ${pageNumber} | ZondScan`,
       description: `View all transactions on the Zond blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
       url: `https://zondscan.com/transactions/${pageNumber}`,
       siteName: 'ZondScan',
       type: 'website',
+    },
+    twitter: {
+      ...sharedMetadata.twitter,
+      title: `Transactions - Page ${pageNumber} | ZondScan`,
+      description: `View all transactions on the Zond blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
     },
   };
 }
@@ -77,32 +82,17 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
 export default async function Page({ params }: PageProps): Promise<JSX.Element> {
   const resolvedParams = await params;
   const pageNumber = resolvedParams.query || '1';
+  const data = await getTransactions(pageNumber);
 
-  try {
-    const data = await getTransactions(pageNumber);
-
-    return (
-      <main>
-        <h1 className="sr-only">Transactions - Page {pageNumber}</h1>
-        <Suspense fallback={<LoadingUI />}>
-          <TransactionsClient 
-            initialData={data} 
-            pageNumber={pageNumber} 
-          />
-        </Suspense>
-      </main>
-    );
-  } catch (error) {
-    return (
-      <div role="alert" className="p-4">
-        <h1 className="text-xl font-bold mb-2">Error</h1>
-        <p>Failed to load transactions. Please try again later.</p>
-        {process.env.NODE_ENV === 'development' && (
-          <pre className="mt-2 text-sm text-red-500">
-            {error instanceof Error ? error.message : 'Unknown error'}
-          </pre>
-        )}
-      </div>
-    );
-  }
+  return (
+    <main>
+      <h1 className="sr-only">Transactions - Page {pageNumber}</h1>
+      <Suspense fallback={<LoadingUI />}>
+        <TransactionsClient
+          initialData={data}
+          pageNumber={pageNumber}
+        />
+      </Suspense>
+    </main>
+  );
 }

@@ -189,6 +189,7 @@ function BrushChart({
           xScale={dateScale}
           yScale={stockScale}
           gradientColor={background2}
+          gradientId="block-size-main-gradient"
         />
         <AreaChart
           hideBottomAxis
@@ -201,6 +202,7 @@ function BrushChart({
           margin={brushMargin}
           top={topChartHeight + topChartBottomMargin + margin.top}
           gradientColor={background2}
+          gradientId="block-size-brush-gradient"
         >
           <PatternLines
             id={PATTERN_ID}
@@ -229,8 +231,22 @@ function BrushChart({
           />
         </AreaChart>
       </svg>
-      <button onClick={handleClearClick}>Clear</button>&nbsp;
-      <button onClick={handleResetClick}>Reset</button>
+      <div className="flex gap-2 mt-2">
+        <button
+          type="button"
+          onClick={handleClearClick}
+          className="px-3 py-1.5 text-sm rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] hover:text-white transition-colors"
+        >
+          Clear
+        </button>
+        <button
+          type="button"
+          onClick={handleResetClick}
+          className="px-3 py-1.5 text-sm rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] hover:text-white transition-colors"
+        >
+          Reset
+        </button>
+      </div>
     </div>
   );
 }

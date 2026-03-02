@@ -18,7 +18,7 @@ clean_pm2() {
     pm2 flush || print_status "No logs to flush"
 
     # Stop and delete only processes started by this deployment
-    for name in handler syncer frontend; do
+    for name in handler syncer synchroniser frontend; do
         pm2 delete $name || print_status "No process named $name to delete"
     done
 
@@ -128,7 +128,7 @@ check_port() {
 
 # Clone the repository
 clone_repo() {
-    if [ -d ".git" ]; then
+    if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
         print_status "Repository already exists. Checking git status..."
         git status
         
@@ -141,8 +141,8 @@ clone_repo() {
         fi
     else
         print_status "Cloning QRL Explorer repository..."
-        git clone https://github.com/DigitalGuards/zondexplorer.git || print_error "Failed to clone repository"
-        cd ../backendAPI || print_error "Failed to enter project directory"
+        git clone https://github.com/DigitalGuards/zondscan.git || print_error "Failed to clone repository"
+        cd zondscan || print_error "Failed to enter project directory"
     fi
 
     export BASE_DIR=$(pwd)
@@ -335,7 +335,7 @@ EOL
 
     # Update browserslist database
     print_status "Updating browserslist database..."
-    npx update-browserslist-db@latest || print_error "Failed to update browserslist"
+    npx update-browserslist-db@latest || print_status "Failed to update browserslist, continuing..."
 
     # Build production frontend
     print_status "Building production frontend..."
@@ -372,7 +372,7 @@ EOL
 
     # Start synchronizer with PM2, explicitly setting environment variables
     print_status "Starting synchronizer with PM2..."
-     pm2 start ./zsyncer --name "syncer" --cwd "$BASE_DIR/Zond2mongoDB" || print_error "Failed to start synchronizer"
+     pm2 start ./zsyncer --name "synchroniser" --cwd "$BASE_DIR/Zond2mongoDB" || print_error "Failed to start synchronizer"
 }
 
 # Save PM2 processes

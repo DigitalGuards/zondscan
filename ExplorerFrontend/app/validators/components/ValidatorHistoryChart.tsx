@@ -8,6 +8,7 @@ import { scaleTime, scaleLinear } from '@visx/scale';
 import { LinearGradient } from '@visx/gradient';
 import { curveMonotoneX } from '@visx/curve';
 import { GridRows } from '@visx/grid';
+import EmptyState from '../../components/EmptyState';
 import { extent, max, bisector } from 'd3-array';
 import { useTooltip, TooltipWithBounds, defaultStyles } from '@visx/tooltip';
 import { localPoint } from '@visx/event';
@@ -131,9 +132,10 @@ export default function ValidatorHistoryChart({
 
   if (sortedData.length < 2) {
     return (
-      <div className="flex items-center justify-center h-[200px] text-gray-400">
-        Not enough historical data yet
-      </div>
+      <EmptyState
+        title="Not enough data yet"
+        description="Check back as more epochs complete."
+      />
     );
   }
 

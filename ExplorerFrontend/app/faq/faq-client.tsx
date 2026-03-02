@@ -32,7 +32,7 @@ const faqs = [
   },
   {
     question: "Who created Zondscan?",
-    answer: "Zondscan was created by DigitalGuards, a company based in the Netherlands. The explorer is completely open-source and its code is available on GitHub at <a href='https://github.com/DigitalGuards/zondexplorer' target='_blank' rel='noopener noreferrer' style='color: #ffa729; border-bottom: 1px solid #ffa729; text-decoration: none;'>github.com/DigitalGuards/zondexplorer</a>. You can learn more about DigitalGuards at <a href='https://digitalguards.nl/' target='_blank' rel='noopener noreferrer' style='color: #ffa729; border-bottom: 1px solid #ffa729; text-decoration: none;'>digitalguards.nl</a>."
+    answer: "Zondscan was created by DigitalGuards, a company based in the Netherlands. The explorer is completely open-source and its code is available on GitHub at <a href='https://github.com/DigitalGuards/zondscan' target='_blank' rel='noopener noreferrer' style='color: #ffa729; border-bottom: 1px solid #ffa729; text-decoration: none;'>github.com/DigitalGuards/zondscan</a>. You can learn more about DigitalGuards at <a href='https://digitalguards.nl/' target='_blank' rel='noopener noreferrer' style='color: #ffa729; border-bottom: 1px solid #ffa729; text-decoration: none;'>digitalguards.nl</a>."
   },
   {
     question: "How can I contact support?",

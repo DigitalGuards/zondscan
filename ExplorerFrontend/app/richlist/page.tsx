@@ -26,9 +26,10 @@ export const metadata: Metadata = {
 
 
 export default async function RichlistPage(): Promise<JSX.Element> {
-  const response = await fetch(config.handlerUrl + "/richlist", {
-    cache: 'no-store'
-  });
+  const response = await fetch(config.handlerUrl + "/richlist", { cache: 'no-store' });
+  if (!response.ok) {
+    throw new Error('Failed to load richlist data');
+  }
   const data = await response.json();
-  return <RichlistClient richlist={data.richlist} />;
+  return <RichlistClient richlist={data.richlist ?? []} />;
 }

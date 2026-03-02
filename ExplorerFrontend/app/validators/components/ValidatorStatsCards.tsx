@@ -90,9 +90,9 @@ export default function ValidatorStatsCards({ stats, loading }: ValidatorStatsCa
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-4 mb-6">
-      {statCards.map((card, index) => (
+      {statCards.map((card) => (
         <div
-          key={index}
+          key={card.label}
           className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-2 sm:p-4"
         >
           <h3 className="text-xs sm:text-sm font-medium text-gray-400 mb-1">{card.label}</h3>

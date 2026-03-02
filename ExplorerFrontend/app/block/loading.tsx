@@ -1,7 +1,7 @@
 export default function Loading(): JSX.Element {
   return (
-    <div className="p-8">
-      <div className="relative overflow-hidden rounded-2xl 
+    <div role="status" aria-label="Loading" className="p-8">
+      <div className="relative overflow-hidden rounded-2xl
                     bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
                     border border-[#3d3d3d] shadow-xl">
         <div className="p-6">

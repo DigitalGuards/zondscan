@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     title: 'Validators | QRL Explorer',
     description:
       'View active validators, their ages, uptime, and staking information on the QRL network',
-    url: 'https://zondscan.com/richlist',
+    url: 'https://zondscan.com/validators',
   },
   twitter: {
     ...sharedMetadata.twitter,

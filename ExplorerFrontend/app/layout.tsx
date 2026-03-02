@@ -120,16 +120,18 @@ export default function RootLayout({ children }: RootLayoutProps): JSX.Element {
       </head>
       <body className="min-h-screen bg-[#1a1a1a] text-gray-300">
         <Providers>
+          <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-[#ffa729] focus:text-black focus:rounded-lg focus:text-sm focus:font-medium">
+            Skip to main content
+          </a>
           <div className="flex min-h-screen">
             <Sidebar />
-            <main className="flex-1 lg:ml-64 min-h-screen relative transition-all duration-300 mt-[72px] lg:mt-4">
-              <div className="relative">
+            <div className="flex-1 lg:ml-64 min-h-screen relative transition-all duration-300 mt-[72px] lg:mt-4 flex flex-col">
+              <main id="main-content" className="flex-1 relative">
                 {children}
-                <Footer />
-              </div>
-            </main>
+              </main>
+              <Footer />
+            </div>
           </div>
-          
         </Providers>
       </body>
     </html>
