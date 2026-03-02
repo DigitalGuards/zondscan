@@ -96,13 +96,19 @@ func EnsureTokenInDatabase(contractAddress string, blockNumber string, txHash st
 		contractInfo.TotalSupply = detection.TotalSupply
 	}
 
-	// If this is the first time we're seeing this token, record discovery block
-	// Note: txHash/blockNumber here are from the transfer event that discovered this
-	// token, NOT the creation transaction. We intentionally leave CreatorAddress
-	// and CreationTransaction empty — the contract reprocessing job will backfill
-	// them by finding the actual creation transaction.
+	// If this is the first time we're seeing this token, look up the actual
+	// creation transaction from the transfer collection (a fast DB query).
+	// This populates creator info immediately instead of waiting for the
+	// hourly reprocessing job.
 	if existingContract == nil {
 		contractInfo.CreationBlockNumber = blockNumber
+		if creationTx := findCreationTransaction(contractAddress); creationTx != nil {
+			contractInfo.CreationTransaction = creationTx.TxHash
+			contractInfo.CreationBlockNumber = creationTx.BlockNumber
+			if creationTx.From != "" && creationTx.From != "Z" {
+				contractInfo.CreatorAddress = creationTx.From
+			}
+		}
 	} else {
 		// Preserve existing creation information
 		preserveCreationInfo(&contractInfo, existingContract)
