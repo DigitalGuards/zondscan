@@ -162,7 +162,7 @@ func producer(start string, end string) <-chan Data {
 			}
 
 			// Add reduced delay for bulk sync operations (5-7ms instead of 50-76ms)
-			time.Sleep(getRPCDelayForBulkSync())
+			time.Sleep(getRPCDelay(true))
 
 			// Try to fetch block with retry logic
 			var data *models.ZondDatabaseBlock

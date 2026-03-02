@@ -5,6 +5,16 @@ import (
 	"strings"
 )
 
+// hasZPrefix reports whether s begins with 'Z' or 'z'.
+func hasZPrefix(s string) bool {
+	return len(s) > 0 && (s[0] == 'Z' || s[0] == 'z')
+}
+
+// hasHexPrefix reports whether s begins with "0x" or "0X".
+func hasHexPrefix(s string) bool {
+	return len(s) > 1 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')
+}
+
 const (
 	AddressLength = 40 // Length of address without prefix (0x or Z)
 	HashLength    = 64 // Length of transaction/block hash without 0x prefix
@@ -12,7 +22,7 @@ const (
 
 // IsValidHexString checks if a string is a valid hex string with 0x prefix
 func IsValidHexString(hex string) bool {
-	if !strings.HasPrefix(hex, "0x") {
+	if !hasHexPrefix(hex) {
 		return false
 	}
 
@@ -29,7 +39,7 @@ func IsValidHexString(hex string) bool {
 // Supports both legacy 0x format and new Z format (case-insensitive Z prefix)
 func IsValidAddress(address string) bool {
 	// Check for new Z-prefix format (uppercase or lowercase)
-	if strings.HasPrefix(address, "Z") || strings.HasPrefix(address, "z") {
+	if hasZPrefix(address) {
 		// Validate the rest of the address is hex
 		for _, c := range address[1:] {
 			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
@@ -56,7 +66,7 @@ func IsValidHash(hash string) bool {
 
 // EnsureHexPrefix adds "0x" prefix if missing
 func EnsureHexPrefix(hex string) string {
-	if !strings.HasPrefix(hex, "0x") {
+	if !hasHexPrefix(hex) {
 		return "0x" + hex
 	}
 	return hex
@@ -87,7 +97,7 @@ func ValidateAddress(address string) error {
 
 // StripHexPrefix removes "0x" prefix if present
 func StripHexPrefix(hex string) string {
-	if strings.HasPrefix(hex, "0x") {
+	if hasHexPrefix(hex) {
 		return hex[2:]
 	}
 	return hex
@@ -95,10 +105,10 @@ func StripHexPrefix(hex string) string {
 
 // StripAddressPrefix removes "0x", "Z", or "z" prefix if present
 func StripAddressPrefix(address string) string {
-	if strings.HasPrefix(address, "0x") {
+	if hasHexPrefix(address) {
 		return address[2:]
 	}
-	if strings.HasPrefix(address, "Z") || strings.HasPrefix(address, "z") {
+	if hasZPrefix(address) {
 		return address[1:]
 	}
 	return address
@@ -112,11 +122,11 @@ func ConvertToZAddress(address string) string {
 		return ""
 	}
 
-	if strings.HasPrefix(address, "Z") || strings.HasPrefix(address, "z") {
+	if hasZPrefix(address) {
 		return "Z" + strings.ToLower(address[1:])
 	}
 
-	if strings.HasPrefix(address, "0x") || strings.HasPrefix(address, "0X") {
+	if hasHexPrefix(address) {
 		return "Z" + strings.ToLower(address[2:])
 	}
 
