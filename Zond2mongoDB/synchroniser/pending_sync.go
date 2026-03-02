@@ -103,6 +103,33 @@ func UpdatePendingTransactionsInBlock(block *models.ZondDatabaseBlock) error {
 	return nil
 }
 
+// processTxPoolGroup upserts all transactions from a single txpool group (pending or
+// queued). It sets Status, LastSeen, From, and Nonce on each transaction before
+// writing to the database, and returns the number of successfully upserted records.
+func processTxPoolGroup(txGroup map[string]map[string]models.PendingTransaction, now time.Time) int {
+	count := 0
+	for address, nonceTxs := range txGroup {
+		for nonce, tx := range nonceTxs {
+			tx.Status = "pending"
+			tx.LastSeen = now
+			if tx.From == "" {
+				tx.From = address
+			}
+			if tx.Nonce == "" {
+				tx.Nonce = nonce
+			}
+			if err := db.UpsertPendingTransaction(&tx); err != nil {
+				configs.Logger.Error("Failed to upsert pending transaction",
+					zap.String("hash", tx.Hash),
+					zap.Error(err))
+			} else {
+				count++
+			}
+		}
+	}
+	return count
+}
+
 // syncMempool fetches and processes pending transactions from the mempool
 func syncMempool() error {
 	// Skip mempool polling while initial block sync is in progress to avoid
@@ -129,50 +156,11 @@ func syncMempool() error {
 	}
 
 	now := time.Now()
-	count := 0
 
 	// Process pending transactions from txpool_content format
 	// txpool_content returns: {"pending": {"address": {"nonce": tx}}, "queued": {...}}
-	for address, nonceTxs := range txpoolResp.Result.Pending {
-		for nonce, tx := range nonceTxs {
-			tx.Status = "pending"
-			tx.LastSeen = now
-			if tx.From == "" {
-				tx.From = address
-			}
-			if tx.Nonce == "" {
-				tx.Nonce = nonce
-			}
-			if err := db.UpsertPendingTransaction(&tx); err != nil {
-				configs.Logger.Error("Failed to upsert pending transaction",
-					zap.String("hash", tx.Hash),
-					zap.Error(err))
-			} else {
-				count++
-			}
-		}
-	}
-
-	// Also process queued transactions
-	for address, nonceTxs := range txpoolResp.Result.Queued {
-		for nonce, tx := range nonceTxs {
-			tx.Status = "pending"
-			tx.LastSeen = now
-			if tx.From == "" {
-				tx.From = address
-			}
-			if tx.Nonce == "" {
-				tx.Nonce = nonce
-			}
-			if err := db.UpsertPendingTransaction(&tx); err != nil {
-				configs.Logger.Error("Failed to upsert pending transaction",
-					zap.String("hash", tx.Hash),
-					zap.Error(err))
-			} else {
-				count++
-			}
-		}
-	}
+	count := processTxPoolGroup(txpoolResp.Result.Pending, now)
+	count += processTxPoolGroup(txpoolResp.Result.Queued, now)
 
 	if count > 0 {
 		configs.Logger.Info("Synced pending transactions",

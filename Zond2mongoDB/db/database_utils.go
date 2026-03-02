@@ -14,14 +14,7 @@ import (
 // bootstrap the database with initial collections.
 // Returns true if collections are found, false if the database is empty.
 func IsCollectionsExist() bool {
-	cNames := configs.GetListCollectionNames(configs.DB)
-
-	collectionsExist := true
-	if len(cNames) == 0 {
-		collectionsExist = false
-	}
-
-	return collectionsExist
+	return len(configs.GetListCollectionNames(configs.DB)) > 0
 }
 
 // CountWallets returns the total number of non-contract wallet addresses in the database.

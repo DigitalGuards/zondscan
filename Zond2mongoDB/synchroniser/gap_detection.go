@@ -147,7 +147,7 @@ func fillGaps(gaps []string) int {
 		}
 
 		// Add RPC delay to prevent overwhelming the node
-		time.Sleep(getRPCDelay())
+		time.Sleep(getRPCDelay(false))
 
 		// Fetch and insert the block
 		data, err := rpc.GetBlockByNumberMainnet(blockNum)
