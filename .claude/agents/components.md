@@ -1122,7 +1122,7 @@ A single-line form field for entering short text values.
 
 ## Textarea
 
-**Also known as:** Textbox  ·  Text box
+**Also known as:** Textbox
 
 A multi-line text field for longer content entry.
 
