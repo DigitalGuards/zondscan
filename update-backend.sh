@@ -66,7 +66,7 @@ echo -e "${GREEN}Synchroniser deployed successfully${NC}"
 
 # Deploy BackendAPI server
 echo -e "${YELLOW}Building and deploying server...${NC}"
-cd /BackendAPI
+cd ../backendAPI
 if [ $? -ne 0 ]; then
     echo -e "${RED}Error: Could not find BackendAPI directory${NC}"
     exit 1
