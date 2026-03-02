@@ -62,18 +62,23 @@ func processTokensWithConfig(initialSyncStart string, maxHex string, config Toke
 	processTokenTransferBatches(blocksWithTxs, config)
 }
 
-// getBlocksWithTransactions queries the database for blocks that have at least one transaction.
-// It fetches all blocks with transactions and filters by numeric comparison in Go,
-// because hex strings are not zero-padded and MongoDB's lexicographic $gte/$lte
-// comparison produces incorrect results across different hex string lengths.
+// getBlocksWithTransactions queries the database for blocks that have at least one
+// transaction and fall within [fromBlock, toBlock] (inclusive).
+// It uses the blockNumberInt field for numeric range comparison so that MongoDB's
+// $gte/$lte operators work correctly regardless of hex string length.
 func getBlocksWithTransactions(fromBlock, toBlock string, timeoutSec int) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 
-	// Only filter on having transactions - range filtering is done in Go
-	// to avoid lexicographic hex string comparison issues in MongoDB
+	fromInt := db.HexToInt64(fromBlock)
+	toInt := db.HexToInt64(toBlock)
+
 	filter := bson.M{
 		"result.transactions.0": bson.M{"$exists": true},
+		"blockNumberInt": bson.M{
+			"$gte": fromInt,
+			"$lte": toInt,
+		},
 	}
 
 	projection := bson.M{"result.number": 1, "_id": 0}
@@ -97,11 +102,7 @@ func getBlocksWithTransactions(fromBlock, toBlock string, timeoutSec int) ([]str
 			continue
 		}
 
-		// Numeric range check using proper hex comparison
-		if utils.CompareHexNumbers(block.Result.Number, fromBlock) >= 0 &&
-			utils.CompareHexNumbers(block.Result.Number, toBlock) <= 0 {
-			blocksWithTxs = append(blocksWithTxs, block.Result.Number)
-		}
+		blocksWithTxs = append(blocksWithTxs, block.Result.Number)
 	}
 
 	return blocksWithTxs, nil

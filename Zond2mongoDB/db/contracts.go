@@ -4,10 +4,10 @@ import (
 	"Zond2mongoDB/configs"
 	"Zond2mongoDB/models"
 	"Zond2mongoDB/rpc"
+	"Zond2mongoDB/validation"
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -21,9 +21,9 @@ func StoreContract(contract models.ContractInfo) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	// Normalize addresses to lowercase for consistent storage
-	contract.Address = strings.ToLower(contract.Address)
-	contract.CreatorAddress = strings.ToLower(contract.CreatorAddress)
+	// Normalize addresses to canonical Z-prefix form
+	contract.Address = validation.ConvertToZAddress(contract.Address)
+	contract.CreatorAddress = validation.ConvertToZAddress(contract.CreatorAddress)
 
 	collection := configs.GetContractsCollection()
 	filter := bson.M{"address": contract.Address}
@@ -41,7 +41,8 @@ func StoreContract(contract models.ContractInfo) error {
 
 		// Merge fields from the new 'contract' object, only if the new value is non-empty/non-zero
 		// and the existing value *is* empty/zero. This prioritizes data from the creation tx.
-		if merged.CreatorAddress == "" && contract.CreatorAddress != "" {
+		// Treat bare "Z" (from legacy ConvertToZAddress("")) as empty.
+		if (merged.CreatorAddress == "" || merged.CreatorAddress == "Z") && contract.CreatorAddress != "" && contract.CreatorAddress != "Z" {
 			merged.CreatorAddress = contract.CreatorAddress
 		}
 		if merged.CreationTransaction == "" && contract.CreationTransaction != "" {
@@ -114,8 +115,8 @@ func GetContract(address string) (*models.ContractInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Normalize address to lowercase for consistent lookup
-	address = strings.ToLower(address)
+	// Normalize address to canonical Z-prefix form
+	address = validation.ConvertToZAddress(address)
 
 	var contract models.ContractInfo
 	err := configs.GetContractsCollection().FindOne(ctx, bson.M{"address": address}).Decode(&contract)
@@ -222,8 +223,8 @@ func processContracts(tx *models.Transaction) (string, string, string, bool) {
 // IsAddressContract checks if an address is a contract by querying the contractCode collection
 // and falling back to RPC getCode call if not found
 func IsAddressContract(address string) bool {
-	// Normalize address to lowercase for consistent lookup
-	address = strings.ToLower(address)
+	// Normalize address to canonical Z-prefix form
+	address = validation.ConvertToZAddress(address)
 
 	// First check our database
 	contract := getContractFromDB(address)
@@ -316,7 +317,11 @@ func getContractFromDB(address string) *models.ContractInfo {
 	// If not found in main collection, check the contractCode collection
 	collection := configs.GetCollection(configs.DB, "contractCode")
 	var contract models.ContractInfo
-	err = collection.FindOne(context.Background(), bson.M{"address": address}).Decode(&contract)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	err = collection.FindOne(ctx, bson.M{"address": address}).Decode(&contract)
 	if err != nil {
 		return nil
 	}
@@ -328,12 +333,14 @@ func ReprocessIncompleteContracts() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Find contracts with missing information
+	// Find contracts with missing information, including bare "Z" creator addresses
 	filter := bson.M{
 		"$or": []bson.M{
 			{"contractCode": ""},
 			{"isToken": true, "totalSupply": ""},
 			{"isToken": false, "name": "", "symbol": ""},
+			{"creatorAddress": "Z"},
+			{"creatorAddress": ""},
 		},
 	}
 
@@ -402,7 +409,7 @@ func ReprocessIncompleteContracts() error {
 
 		// Restore original creation information to ensure it's not lost
 		// Only restore if the original had values and current values are empty
-		if creatorAddress != "" && contract.CreatorAddress == "" {
+		if creatorAddress != "" && creatorAddress != "Z" && contract.CreatorAddress == "" {
 			contract.CreatorAddress = creatorAddress
 		}
 		if creationTransaction != "" && contract.CreationTransaction == "" {
@@ -410,6 +417,33 @@ func ReprocessIncompleteContracts() error {
 		}
 		if creationBlockNumber != "" && contract.CreationBlockNumber == "" {
 			contract.CreationBlockNumber = creationBlockNumber
+		}
+
+		// Backfill missing creation transaction from the transfer collection
+		if contract.CreationTransaction == "" && contract.Address != "" {
+			creationTx := findCreationTransaction(contract.Address)
+			if creationTx != nil {
+				contract.CreationTransaction = creationTx.TxHash
+				contract.CreationBlockNumber = creationTx.BlockNumber
+				if creationTx.From != "" && creationTx.From != "Z" {
+					contract.CreatorAddress = creationTx.From
+					configs.Logger.Info("Backfilled creation info from transfer collection",
+						zap.String("contract", contract.Address),
+						zap.String("creator", contract.CreatorAddress),
+						zap.String("tx", contract.CreationTransaction))
+				}
+			}
+		}
+
+		// Backfill missing creator address from creation transaction via RPC
+		if (contract.CreatorAddress == "" || contract.CreatorAddress == "Z") && contract.CreationTransaction != "" {
+			txDetails, txErr := rpc.GetTxDetailsByHash(contract.CreationTransaction)
+			if txErr == nil && txDetails != nil && txDetails.From != "" {
+				contract.CreatorAddress = validation.ConvertToZAddress(txDetails.From)
+				configs.Logger.Info("Backfilled creator address from creation transaction",
+					zap.String("contract", contract.Address),
+					zap.String("creator", contract.CreatorAddress))
+			}
 		}
 
 		contract.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
@@ -438,6 +472,29 @@ func ReprocessIncompleteContracts() error {
 	configs.Logger.Info("Completed reprocessing incomplete contracts",
 		zap.Int("total_processed", processedCount))
 	return nil
+}
+
+// creationTxInfo holds the minimal info needed from a creation transaction
+type creationTxInfo struct {
+	TxHash      string `bson:"txHash"`
+	From        string `bson:"from"`
+	BlockNumber string `bson:"blockNumber"`
+}
+
+// findCreationTransaction looks up the contract creation transaction in the transfer collection.
+// Contract creation transactions have contractAddress set (and no "to" field).
+func findCreationTransaction(contractAddress string) *creationTxInfo {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var result creationTxInfo
+	err := configs.TransferCollections.FindOne(ctx, bson.M{
+		"contractAddress": contractAddress,
+	}).Decode(&result)
+	if err != nil {
+		return nil
+	}
+	return &result
 }
 
 // StartContractReprocessingJob starts a background job to periodically reprocess incomplete contracts

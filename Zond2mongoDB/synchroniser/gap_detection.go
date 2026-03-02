@@ -71,14 +71,16 @@ func detectGaps(fromBlock, toBlock string) []string {
 			zap.String("adjusted_from", fromBlock))
 	}
 
-	// Get all existing block numbers in the range
+	// Get all existing block numbers in the range.
+	// Query on blockNumberInt (int64) so the $gte/$lte comparison is numeric
+	// rather than lexicographic hex string ordering.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	filter := bson.M{
-		"result.number": bson.M{
-			"$gte": fromBlock,
-			"$lte": toBlock,
+		"blockNumberInt": bson.M{
+			"$gte": fromNum,
+			"$lte": toNum,
 		},
 	}
 

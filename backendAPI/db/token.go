@@ -18,7 +18,7 @@ func GetTokenBalancesByAddress(address string) ([]models.TokenBalance, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	// Search both Z-prefix and z-prefix variants (syncer stores lowercase z)
+	// Normalize address to canonical Z-prefix form
 	searchAddresses := normalizeAddressBoth(address)
 
 	collection := configs.GetCollection(configs.DB, "tokenBalances")
@@ -108,20 +108,22 @@ func GetTokenBalancesByAddress(address string) ([]models.TokenBalance, error) {
 	return results, nil
 }
 
-// normalizeAddress converts an address to lowercase z-prefix format (matching DB storage)
+// normalizeAddress converts any address format to the canonical Z-prefix
+// form that the syncer stores in MongoDB (uppercase Z + lowercase hex).
 func normalizeAddress(address string) string {
-	if strings.HasPrefix(strings.ToLower(address), "0x") {
-		return "z" + strings.ToLower(address[2:])
-	} else if strings.HasPrefix(strings.ToLower(address), "z") {
-		return "z" + strings.ToLower(address[1:])
+	if strings.HasPrefix(address, "0x") || strings.HasPrefix(address, "0X") {
+		return "Z" + strings.ToLower(address[2:])
 	}
-	return "z" + strings.ToLower(address)
+	if strings.HasPrefix(address, "Z") || strings.HasPrefix(address, "z") {
+		return "Z" + strings.ToLower(address[1:])
+	}
+	return "Z" + strings.ToLower(address)
 }
 
-// normalizeAddressBoth returns both Z and z prefix variants for querying
+// normalizeAddressBoth returns the canonical Z-prefix address as a slice.
+// The slice form is kept so callers using "$in" can remain unchanged.
 func normalizeAddressBoth(address string) []string {
-	hex := normalizeAddress(address)
-	return []string{hex, "Z" + hex[1:]}
+	return []string{normalizeAddress(address)}
 }
 
 // GetTokenHolders returns all holders of a specific token contract with pagination
@@ -264,42 +266,23 @@ func GetTokenInfo(contractAddress string) (*models.TokenInfo, error) {
 	}, nil
 }
 
-// GetTokenTransferByTxHash returns token transfer info for a given transaction hash
-// Returns nil if no token transfer is associated with this transaction
+// GetTokenTransferByTxHash returns token transfer info for a given transaction hash.
+// Returns nil, nil if no token transfer is associated with this transaction.
+// The syncer stores txHash with a lowercase 0x prefix; we normalize to that form.
 func GetTokenTransferByTxHash(txHash string) (*models.TokenTransfer, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	collection := configs.GetCollection(configs.DB, "tokenTransfers")
 
-	// Normalize the transaction hash - syncer stores with 0x prefix in lowercase
+	// Canonical storage format: lowercase with 0x prefix.
 	normalizedHash := strings.ToLower(txHash)
 	if !strings.HasPrefix(normalizedHash, "0x") {
 		normalizedHash = "0x" + normalizedHash
 	}
 
 	var transfer models.TokenTransfer
-	// First try with 0x prefix (standard storage format)
 	err := collection.FindOne(ctx, bson.M{"txHash": normalizedHash}).Decode(&transfer)
-	if err == nil {
-		return &transfer, nil
-	}
-	if err != mongo.ErrNoDocuments {
-		return nil, err
-	}
-
-	// Try without 0x prefix in case storage format varies
-	hashWithoutPrefix := strings.TrimPrefix(normalizedHash, "0x")
-	err = collection.FindOne(ctx, bson.M{"txHash": hashWithoutPrefix}).Decode(&transfer)
-	if err == nil {
-		return &transfer, nil
-	}
-	if err != mongo.ErrNoDocuments {
-		return nil, err
-	}
-
-	// Try with original hash as-is
-	err = collection.FindOne(ctx, bson.M{"txHash": txHash}).Decode(&transfer)
 	if err == nil {
 		return &transfer, nil
 	}

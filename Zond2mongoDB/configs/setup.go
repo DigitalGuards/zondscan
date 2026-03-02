@@ -353,6 +353,24 @@ func initializeCollections(db *mongo.Database) {
 
 	// Create and set up the rest of the collections
 	ensureCollection(db, "blocks", nil)
+
+	// Add index on blockNumberInt for efficient numeric range queries on blocks.
+	// This replaces the old pattern of doing hex string $gte/$lte which produced
+	// incorrect lexicographic ordering (e.g. "0x9" > "0x10").
+	blocksCollection := db.Collection("blocks")
+	_, err = blocksCollection.Indexes().CreateOne(
+		ctx,
+		mongo.IndexModel{
+			Keys:    bson.D{{Key: "blockNumberInt", Value: -1}},
+			Options: options.Index().SetName("blockNumberInt_desc_idx"),
+		},
+	)
+	if err != nil {
+		Logger.Error("Failed to create blockNumberInt index for blocks collection", zap.Error(err))
+	} else {
+		Logger.Info("Blocks collection initialized with blockNumberInt index")
+	}
+
 	ensureCollection(db, "validators", nil)
 	ensureCollection(db, "contractCode", nil)
 	ensureCollection(db, "transactionByAddress", nil)
@@ -363,6 +381,26 @@ func initializeCollections(db *mongo.Database) {
 	ensureCollection(db, "dailyTransactionsVolume", nil)
 	ensureCollection(db, "totalCirculatingSupply", nil)
 	ensureCollection(db, "sync_state", nil)
+
+	// Create indexes on the validators collection for per-document lookup.
+	validatorsCollection := db.Collection("validators")
+	_, err = validatorsCollection.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "publicKeyHex", Value: 1}},
+			Options: options.Index().SetName("validators_pubkey_idx"),
+		},
+		{
+			Keys:    bson.D{{Key: "status", Value: 1}},
+			Options: options.Index().SetName("validators_status_idx"),
+		},
+		{
+			Keys:    bson.D{{Key: "effectiveBalance", Value: -1}},
+			Options: options.Index().SetName("validators_balance_desc_idx"),
+		},
+	})
+	if err != nil {
+		Logger.Warn("Could not create validators collection indexes", zap.Error(err))
+	}
 
 	Logger.Info("All collections initialized successfully")
 }
@@ -403,10 +441,10 @@ func GetTokenTransfersCollection() *mongo.Collection {
 }
 
 func GetListCollectionNames(client *mongo.Client) []string {
-	result, err := client.Database("qrldata-z").ListCollectionNames(
-		context.TODO(),
-		bson.D{})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
+	result, err := client.Database("qrldata-z").ListCollectionNames(ctx, bson.D{})
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -59,7 +59,7 @@ func ConnectDB() *mongo.Client {
 func createIndexes(db *mongo.Database) {
 	ctx := context.Background()
 
-	// Define required indexes
+	// blocks collection indexes
 	blocksIndexes := []mongo.IndexModel{
 		{
 			Keys: bson.D{
@@ -76,26 +76,97 @@ func createIndexes(db *mongo.Database) {
 		},
 	}
 
-	// Transactions collection indexes
+	// transactionByAddress collection indexes
 	transactionsIndexes := []mongo.IndexModel{
 		{
-			Keys: bson.D{
-				{Key: "timeStamp", Value: -1},
-			},
+			Keys:    bson.D{{Key: "timeStamp", Value: -1}},
 			Options: options.Index().SetName("timestamp_desc"),
 		},
 		{
+			Keys:    bson.D{{Key: "txHash", Value: 1}},
+			Options: options.Index().SetName("tx_hash").SetUnique(true),
+		},
+		{
 			Keys: bson.D{
-				{Key: "txHash", Value: 1},
+				{Key: "from", Value: 1},
+				{Key: "timeStamp", Value: -1},
 			},
-			Options: options.Index().SetName("tx_hash"),
+			Options: options.Index().SetName("from_timestamp_desc"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "to", Value: 1},
+				{Key: "timeStamp", Value: -1},
+			},
+			Options: options.Index().SetName("to_timestamp_desc"),
 		},
 	}
 
-	// Check and create indexes if needed
+	// addresses collection indexes
+	addressesIndexes := []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "id", Value: 1}},
+			Options: options.Index().SetName("id_unique").SetUnique(true),
+		},
+		{
+			Keys:    bson.D{{Key: "balance", Value: -1}},
+			Options: options.Index().SetName("balance_desc"),
+		},
+	}
+
+	// internalTransactionByAddress collection indexes
+	internalTransactionsIndexes := []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "from", Value: 1}},
+			Options: options.Index().SetName("internal_from"),
+		},
+		{
+			Keys:    bson.D{{Key: "to", Value: 1}},
+			Options: options.Index().SetName("internal_to"),
+		},
+	}
+
+	// contractCode collection indexes
+	contractCodeIndexes := []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "address", Value: 1}},
+			Options: options.Index().SetName("contract_address_unique").SetUnique(true),
+		},
+	}
+
+	// transfer collection indexes
+	transferIndexes := []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "txHash", Value: 1}},
+			Options: options.Index().SetName("transfer_txhash_unique").SetUnique(true),
+		},
+	}
+
+	// validators collection indexes (per-document model)
+	validatorsIndexes := []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "publicKeyHex", Value: 1}},
+			Options: options.Index().SetName("validators_pubkey_idx"),
+		},
+		{
+			Keys:    bson.D{{Key: "status", Value: 1}},
+			Options: options.Index().SetName("validators_status_idx"),
+		},
+		{
+			Keys:    bson.D{{Key: "effectiveBalance", Value: -1}},
+			Options: options.Index().SetName("validators_balance_desc_idx"),
+		},
+	}
+
+	// Map of collection name -> indexes to create
 	collections := map[string][]mongo.IndexModel{
-		"blocks":               blocksIndexes,
-		"transactionByAddress": transactionsIndexes,
+		"blocks":                       blocksIndexes,
+		"transactionByAddress":         transactionsIndexes,
+		"addresses":                    addressesIndexes,
+		"internalTransactionByAddress": internalTransactionsIndexes,
+		"contractCode":                 contractCodeIndexes,
+		"transfer":                     transferIndexes,
+		"validators":                   validatorsIndexes,
 	}
 
 	for collName, indexes := range collections {
