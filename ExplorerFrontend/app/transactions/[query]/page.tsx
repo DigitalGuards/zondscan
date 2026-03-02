@@ -82,32 +82,17 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
 export default async function Page({ params }: PageProps): Promise<JSX.Element> {
   const resolvedParams = await params;
   const pageNumber = resolvedParams.query || '1';
+  const data = await getTransactions(pageNumber);
 
-  try {
-    const data = await getTransactions(pageNumber);
-
-    return (
-      <main>
-        <h1 className="sr-only">Transactions - Page {pageNumber}</h1>
-        <Suspense fallback={<LoadingUI />}>
-          <TransactionsClient 
-            initialData={data} 
-            pageNumber={pageNumber} 
-          />
-        </Suspense>
-      </main>
-    );
-  } catch (error) {
-    return (
-      <div role="alert" className="p-4">
-        <h1 className="text-xl font-bold mb-2">Error</h1>
-        <p>Failed to load transactions. Please try again later.</p>
-        {process.env.NODE_ENV === 'development' && (
-          <pre className="mt-2 text-sm text-red-500">
-            {error instanceof Error ? error.message : 'Unknown error'}
-          </pre>
-        )}
-      </div>
-    );
-  }
+  return (
+    <main>
+      <h1 className="sr-only">Transactions - Page {pageNumber}</h1>
+      <Suspense fallback={<LoadingUI />}>
+        <TransactionsClient
+          initialData={data}
+          pageNumber={pageNumber}
+        />
+      </Suspense>
+    </main>
+  );
 }

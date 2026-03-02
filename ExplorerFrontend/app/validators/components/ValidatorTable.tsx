@@ -42,6 +42,17 @@ const statusOrder: Record<string, number> = {
   slashed: 3,
 };
 
+function SortIcon({ field, sortField, sortDirection }: { field: SortField; sortField: SortField; sortDirection: SortDirection }) {
+  if (sortField !== field) {
+    return <span className="text-gray-600 ml-1">↕</span>;
+  }
+  return (
+    <span className="text-[#ffa729] ml-1">
+      {sortDirection === 'asc' ? '↑' : '↓'}
+    </span>
+  );
+}
+
 export default function ValidatorTable({ validators, loading }: ValidatorTableProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortField, setSortField] = useState<SortField>('index');
@@ -124,19 +135,6 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
     );
   };
 
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) {
-      return (
-        <span className="text-gray-600 ml-1">↕</span>
-      );
-    }
-    return (
-      <span className="text-[#ffa729] ml-1">
-        {sortDirection === 'asc' ? '↑' : '↓'}
-      </span>
-    );
-  };
-
   if (loading) {
     return (
       <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] overflow-hidden">
@@ -185,7 +183,7 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
                   onClick={() => handleSort('index')}
                   className="flex items-center hover:text-gray-200 focus:outline-none focus:underline"
                 >
-                  Index <SortIcon field="index" />
+                  Index <SortIcon field="index" sortField={sortField} sortDirection={sortDirection} />
                 </button>
               </th>
               <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
@@ -200,7 +198,7 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
                   onClick={() => handleSort('status')}
                   className="flex items-center hover:text-gray-200 focus:outline-none focus:underline"
                 >
-                  Status <SortIcon field="status" />
+                  Status <SortIcon field="status" sortField={sortField} sortDirection={sortDirection} />
                 </button>
               </th>
               <th
@@ -212,7 +210,7 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
                   onClick={() => handleSort('age')}
                   className="flex items-center hover:text-gray-200 focus:outline-none focus:underline"
                 >
-                  Age <SortIcon field="age" />
+                  Age <SortIcon field="age" sortField={sortField} sortDirection={sortDirection} />
                 </button>
               </th>
               <th
@@ -224,7 +222,7 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
                   onClick={() => handleSort('stakedAmount')}
                   className="flex items-center hover:text-gray-200 focus:outline-none focus:underline"
                 >
-                  Stake <SortIcon field="stakedAmount" />
+                  Stake <SortIcon field="stakedAmount" sortField={sortField} sortDirection={sortDirection} />
                 </button>
               </th>
             </tr>
