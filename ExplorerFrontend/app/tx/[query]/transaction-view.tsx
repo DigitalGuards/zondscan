@@ -46,11 +46,8 @@ const formatTimestamp = (timestamp: number): string => {
   return `${month} ${day}, ${year}, ${hours}:${minutes}:${seconds} UTC`;
 };
 
-const isZeroAddress = (addr: string): boolean => {
-  if (!addr) return false;
-  const stripped = addr.replace(/^[Zz]/, '').replace(/^0x/, '');
-  return /^0*$/.test(stripped);
-};
+const isZeroAddress = (addr: string): boolean =>
+  addr === 'Z0' || addr === 'Z' + '0'.repeat(40);
 
 const AddressDisplay = ({ address, isMobile }: { address: string, isMobile: boolean }): JSX.Element => {
   const displayAddress = isMobile ? `${address.slice(0, 8)}...${address.slice(-6)}` : address;
