@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect } from 'react'
 
 export default function Error({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
@@ -21,9 +22,9 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
           <button onClick={reset} className="px-4 py-2 text-sm font-medium rounded-lg bg-[#ffa729] text-black hover:bg-[#ffb952] transition-colors">
             Try again
           </button>
-          <a href="/" className="px-4 py-2 text-sm font-medium rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] hover:text-white transition-colors">
+          <Link href="/" className="px-4 py-2 text-sm font-medium rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] hover:text-white transition-colors">
             Go home
-          </a>
+          </Link>
         </div>
       </div>
     </div>
