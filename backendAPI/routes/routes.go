@@ -14,6 +14,30 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+// parseHexBlockNumber parses a "0x"-prefixed hex string into a uint64.
+func parseHexBlockNumber(hexStr string) (uint64, error) {
+	if !strings.HasPrefix(hexStr, "0x") {
+		return 0, fmt.Errorf("invalid hex prefix")
+	}
+	return strconv.ParseUint(hexStr[2:], 16, 64)
+}
+
+// getPaginationParams extracts page and limit query parameters with defaults and bounds.
+func getPaginationParams(c *gin.Context, defaultPage, defaultLimit int) (int, int) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", strconv.Itoa(defaultPage)))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", strconv.Itoa(defaultLimit)))
+	if page < 1 {
+		page = defaultPage
+	}
+	if limit < 1 {
+		limit = defaultLimit
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	return page, limit
+}
+
 func UserRoute(router *gin.Engine) {
 	// Health check endpoint for Kubernetes probes
 	router.GET("/health", func(c *gin.Context) {
@@ -22,12 +46,7 @@ func UserRoute(router *gin.Engine) {
 
 	// Add pending transactions endpoint with pagination
 	router.GET("/pending-transactions", func(c *gin.Context) {
-		// Parse pagination parameters
-		page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
-		if limit > 100 {
-			limit = 100
-		}
+		page, limit := getPaginationParams(c, 1, 10)
 
 		result, err := db.GetPendingTransactions(page, limit)
 		if err != nil {
@@ -248,15 +267,12 @@ func UserRoute(router *gin.Engine) {
 			return
 		}
 
-		var latestBlockNum uint64
-		if strings.HasPrefix(latestBlockNumber, "0x") {
-			latestBlockNum, err = strconv.ParseUint(latestBlockNumber[2:], 16, 64)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"error": fmt.Sprintf("Failed to parse block number: %v", err),
-				})
-				return
-			}
+		latestBlockNum, err := parseHexBlockNumber(latestBlockNumber)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to parse block number: %v", err),
+			})
+			return
 		}
 
 		// Return empty array instead of null if no transactions
@@ -275,11 +291,11 @@ func UserRoute(router *gin.Engine) {
 		value := c.Param("query")
 		wallets, err := strconv.ParseUint(value, 10, 64)
 		if err != nil {
-			fmt.Println(err)
+			log.Printf("error parsing wallet distribution query: %v", err)
 		}
 		query, err := db.ReturnWalletDistribution(wallets)
 		if err != nil {
-			fmt.Println(err)
+			log.Printf("error fetching wallet distribution: %v", err)
 		}
 		c.JSON(http.StatusOK, gin.H{"response": query})
 	})
@@ -298,31 +314,31 @@ func UserRoute(router *gin.Engine) {
 		// Transaction count for the address
 		countTransactions, err := db.CountTransactions(param)
 		if err != nil {
-			fmt.Printf("Error counting transactions: %v\n", err)
+			log.Printf("error counting transactions: %v", err)
 		}
 
 		// Rank of the address
 		rank, err := db.ReturnRankAddress(param)
 		if err != nil {
-			fmt.Printf("Error getting rank: %v\n", err)
+			log.Printf("error getting rank: %v", err)
 		}
 
 		// Get all transactions by the address
 		transactionsByAddress, err := db.ReturnAllTransactionsByAddress(param)
 		if err != nil {
-			fmt.Printf("Error getting transactions: %v\n", err)
+			log.Printf("error getting transactions: %v", err)
 		}
 
 		// Get all internal transactions by the address
 		internalTransactionsByAddress, err := db.ReturnAllInternalTransactionsByAddress(param)
 		if err != nil {
-			fmt.Printf("Error getting internal transactions: %v\n", err)
+			log.Printf("error getting internal transactions: %v", err)
 		}
 
 		// Get contract code data
 		contractCodeData, err := db.ReturnContractCode(param)
 		if err != nil {
-			fmt.Printf("Error getting contract code: %v\n", err)
+			log.Printf("error getting contract code: %v", err)
 		}
 
 		// Get latest block number
@@ -334,15 +350,12 @@ func UserRoute(router *gin.Engine) {
 			return
 		}
 
-		var latestBlockNum uint64
-		if strings.HasPrefix(latestBlockNumber, "0x") {
-			latestBlockNum, err = strconv.ParseUint(latestBlockNumber[2:], 16, 64)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"error": fmt.Sprintf("Failed to parse block number: %v", err),
-				})
-				return
-			}
+		latestBlockNum, err := parseHexBlockNumber(latestBlockNumber)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to parse block number: %v", err),
+			})
+			return
 		}
 
 		// Response aggregation
@@ -361,7 +374,7 @@ func UserRoute(router *gin.Engine) {
 		value := c.Param("query")
 		query, err := db.ReturnSingleTransfer(value)
 		if err != nil {
-			fmt.Println(err)
+			log.Printf("error fetching transfer %s: %v", value, err)
 		}
 
 		latestBlockNumber, err := db.GetLatestBlockFromSyncState()
@@ -372,15 +385,12 @@ func UserRoute(router *gin.Engine) {
 			return
 		}
 
-		var latestBlockNum uint64
-		if strings.HasPrefix(latestBlockNumber, "0x") {
-			latestBlockNum, err = strconv.ParseUint(latestBlockNumber[2:], 16, 64)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"error": fmt.Sprintf("Failed to parse block number: %v", err),
-				})
-				return
-			}
+		latestBlockNum, err := parseHexBlockNumber(latestBlockNumber)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to parse block number: %v", err),
+			})
+			return
 		}
 
 		// Check if this transaction created a contract
@@ -434,30 +444,24 @@ func UserRoute(router *gin.Engine) {
 			return
 		}
 
-		// Convert hex to decimal
-		if strings.HasPrefix(blockNumber, "0x") {
-			num, err := strconv.ParseUint(blockNumber[2:], 16, 64)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"error": fmt.Sprintf("Failed to parse block number: %v", err),
-				})
-				return
-			}
-			c.JSON(http.StatusOK, gin.H{
-				"blockNumber": num,
-			})
-		} else {
+		num, err := parseHexBlockNumber(blockNumber)
+		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "Invalid block number format in sync state",
 			})
+			return
 		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"blockNumber": num,
+		})
 	})
 
 	router.GET("/coinbase/:query", func(c *gin.Context) {
 		value := c.Param("query")
 		query, err := db.ReturnSingleTransfer(value)
 		if err != nil {
-			fmt.Println(err)
+			log.Printf("error fetching coinbase transfer %s: %v", value, err)
 		}
 		c.JSON(http.StatusOK, gin.H{"response": query})
 	})
@@ -467,18 +471,7 @@ func UserRoute(router *gin.Engine) {
 	})
 
 	router.GET("/blocks", func(c *gin.Context) {
-		pageStr := c.Query("page")
-		limitStr := c.Query("limit")
-
-		page, err := strconv.Atoi(pageStr)
-		if err != nil {
-			page = 1
-		}
-
-		limit, err := strconv.Atoi(limitStr)
-		if err != nil || limit <= 0 {
-			limit = 5 // Default to 5 blocks per page
-		}
+		page, limit := getPaginationParams(c, 1, 5)
 
 		blocks, err := db.ReturnLatestBlocks(page, limit)
 		if err != nil {
@@ -508,7 +501,7 @@ func UserRoute(router *gin.Engine) {
 	router.GET("/blocksizes", func(c *gin.Context) {
 		query, err := db.ReturnBlockSizes()
 		if err != nil {
-			fmt.Println(err)
+			log.Printf("error fetching block sizes: %v", err)
 		}
 		c.JSON(http.StatusOK, gin.H{"response": query})
 	})
@@ -540,14 +533,7 @@ func UserRoute(router *gin.Engine) {
 
 	// Get validator history for charts
 	router.GET("/validators/history", func(c *gin.Context) {
-		limitStr := c.DefaultQuery("limit", "100")
-		limit := 100
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
-			limit = l
-		}
-		if limit > 100 {
-			limit = 100
-		}
+		_, limit := getPaginationParams(c, 1, 100)
 
 		history, err := db.GetValidatorHistory(limit)
 		if err != nil {
@@ -587,18 +573,15 @@ func UserRoute(router *gin.Engine) {
 	router.GET("/transactions", func(c *gin.Context) {
 		query, err := db.ReturnLatestTransactions()
 		if err != nil {
-			fmt.Println(err)
+			log.Printf("error fetching latest transactions: %v", err)
 		}
 		c.JSON(http.StatusOK, gin.H{"response": query})
 	})
 
 	router.GET("/contracts", func(c *gin.Context) {
-		// Parse pagination parameters
-		page, _ := strconv.ParseInt(c.DefaultQuery("page", "0"), 10, 64)
-		limit, _ := strconv.ParseInt(c.DefaultQuery("limit", "10"), 10, 64)
-		if limit > 100 {
-			limit = 100
-		}
+		pageInt, limitInt := getPaginationParams(c, 0, 10)
+		page := int64(pageInt)
+		limit := int64(limitInt)
 		search := c.Query("search")
 
 		// Parse isToken filter (optional)
@@ -648,15 +631,12 @@ func UserRoute(router *gin.Engine) {
 			return
 		}
 
-		var latestBlockNum uint64
-		if strings.HasPrefix(latestBlockNumber, "0x") {
-			latestBlockNum, err = strconv.ParseUint(latestBlockNumber[2:], 16, 64)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"error": fmt.Sprintf("Failed to parse block number: %v", err),
-				})
-				return
-			}
+		latestBlockNum, err := parseHexBlockNumber(latestBlockNumber)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to parse block number: %v", err),
+			})
+			return
 		}
 
 		c.JSON(http.StatusOK, gin.H{
@@ -701,11 +681,7 @@ func UserRoute(router *gin.Engine) {
 	// Add a new endpoint to get limited non-zero transactions for an address
 	router.GET("/address/:address/transactions", func(c *gin.Context) {
 		address := c.Param("address")
-		page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "5")) // Default to 5
-		if limit > 100 {
-			limit = 100
-		}
+		page, limit := getPaginationParams(c, 1, 5)
 
 		transactions, err := db.ReturnNonZeroTransactions(address, page, limit)
 		if err != nil {
@@ -777,12 +753,7 @@ func UserRoute(router *gin.Engine) {
 	// Get token holders with pagination
 	router.GET("/token/:address/holders", func(c *gin.Context) {
 		address := c.Param("address")
-		page, _ := strconv.Atoi(c.DefaultQuery("page", "0"))
-		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "25"))
-
-		if limit > 100 {
-			limit = 100
-		}
+		page, limit := getPaginationParams(c, 0, 25)
 
 		holders, totalCount, err := db.GetTokenHolders(address, page, limit)
 		if err != nil {
@@ -805,12 +776,7 @@ func UserRoute(router *gin.Engine) {
 	// Get token transfers with pagination
 	router.GET("/token/:address/transfers", func(c *gin.Context) {
 		address := c.Param("address")
-		page, _ := strconv.Atoi(c.DefaultQuery("page", "0"))
-		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "25"))
-
-		if limit > 100 {
-			limit = 100
-		}
+		page, limit := getPaginationParams(c, 0, 25)
 
 		transfers, totalCount, err := db.GetTokenTransfers(address, page, limit)
 		if err != nil {

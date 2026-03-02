@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -97,14 +98,11 @@ func CountValidators() (int64, error) {
 	return count, nil
 }
 
-// Helper function to convert hex string to int64.
-func HexToInt(hex string) int64 {
-	if len(hex) > 2 && hex[0:2] == "0x" {
-		hex = hex[2:]
-	}
-	var result int64
-	fmt.Sscanf(hex, "%x", &result)
-	return result
+// HexToInt converts a hex string (with or without 0x prefix) to int64.
+func HexToInt(hexStr string) int64 {
+	hexStr = strings.TrimPrefix(hexStr, "0x")
+	num, _ := strconv.ParseInt(hexStr, 16, 64)
+	return num
 }
 
 // FAR_FUTURE_EPOCH represents a validator that hasn't exited.
