@@ -407,18 +407,22 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                     <div className="flex justify-between md:flex-col">
                                         <div className="text-xs md:text-sm text-gray-400">Transaction Fee</div>
                                         <div className="text-sm text-gray-300">
-                                            {creationTx?.GasUsed && creationTx?.GasPrice
-                                                ? `${formatAmount(`0x${(BigInt(creationTx.GasUsed) * BigInt(creationTx.GasPrice)).toString(16)}`)[0]} QRL`
-                                                : '-'}
+                                            {(() => {
+                                                if (!creationTx?.GasUsed || !creationTx?.GasPrice) return '-';
+                                                const [formattedFee] = formatAmount(`0x${(BigInt(creationTx.GasUsed) * BigInt(creationTx.GasPrice)).toString(16)}`);
+                                                return `${formattedFee} QRL`;
+                                            })()}
                                         </div>
                                     </div>
 
                                     <div className="flex justify-between md:flex-col">
                                         <div className="text-xs md:text-sm text-gray-400">Value</div>
                                         <div className="text-sm text-gray-300">
-                                            {creationTx?.Value
-                                                ? `${formatAmount(creationTx.Value)[0]} QRL`
-                                                : '0 QRL'}
+                                            {(() => {
+                                                if (!creationTx?.Value) return '0 QRL';
+                                                const [formattedValue] = formatAmount(creationTx.Value);
+                                                return `${formattedValue} QRL`;
+                                            })()}
                                         </div>
                                     </div>
                                 </div>

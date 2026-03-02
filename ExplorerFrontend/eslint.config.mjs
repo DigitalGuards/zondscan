@@ -21,7 +21,7 @@ export default [
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
       "@typescript-eslint/ban-ts-comment": "warn",
-      "@typescript-eslint/no-require-requires": "off",
+      "@typescript-eslint/no-var-requires": "off",
 
       // General
       "prefer-const": "warn",
