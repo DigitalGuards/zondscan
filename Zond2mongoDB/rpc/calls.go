@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/big"
 	"net/http"
 	"os"
@@ -224,11 +223,51 @@ func GetContractAddress(txHash string) (string, string, error) {
 	return ContractAddress.Result.ContractAddress, ContractAddress.Result.Status, nil
 }
 
-func CallDebugTraceTransaction(hash string) (transactionType string, callType string, from string, to string, input uint64, output uint64, traceAddress []int, value float32, gas uint64, gasUsed uint64, addressFunctionidentifier string, amountFunctionIdentifier uint64) {
+// DebugTraceResult holds all data returned by CallDebugTraceTransaction.
+// Using a struct avoids the fragility of 12 positional return values and
+// makes call-sites readable without relying on positional assignment.
+type DebugTraceResult struct {
+	// TransactionType is the EVM call type string (e.g. "CALL", "CREATE").
+	TransactionType string
+	// CallType is the sub-call type (e.g. "call", "delegatecall").
+	CallType string
+	// From is the caller address in Z-prefix format.
+	From string
+	// To is the callee address in Z-prefix format.
+	To string
+	// Input is always 0 in the current implementation (field reserved for future use).
+	Input uint64
+	// Output is a uint64 representation of the call output (1 = success/non-empty, 0 = empty/failure).
+	Output uint64
+	// TraceAddress is the call-tree position of this call frame.
+	TraceAddress []int
+	// Value is the ETH/QRL value transferred, scaled by QUANTA.
+	Value float32
+	// Gas is the gas supplied to the call frame.
+	Gas uint64
+	// GasUsed is the gas consumed by the call frame.
+	GasUsed uint64
+	// AddressFunctionIdentifier is the recipient address decoded from the transfer() input data.
+	AddressFunctionIdentifier string
+	// AmountFunctionIdentifier is the transfer amount decoded from the transfer() input data.
+	AmountFunctionIdentifier uint64
+	// Err is non-nil when the RPC call itself failed (network error, unmarshal error, etc.).
+	// A nil Err with empty TransactionType means the trace has no relevant call data.
+	Err error
+}
+
+// emptyTrace returns a zero-value DebugTraceResult, optionally carrying an error.
+func emptyTrace(err error) DebugTraceResult {
+	return DebugTraceResult{Err: err}
+}
+
+// CallDebugTraceTransaction calls debug_traceTransaction and returns the parsed
+// result as a DebugTraceResult struct.
+func CallDebugTraceTransaction(hash string) DebugTraceResult {
 	// Validate transaction hash
 	if err := validation.ValidateHexString(hash, validation.HashLength); err != nil {
 		zap.L().Error("Invalid transaction hash", zap.Error(err))
-		return "", "", "", "", 0, 0, nil, 0, 0, 0, "", 0
+		return emptyTrace(err)
 	}
 
 	var tracerResponse models.TraceResponse
@@ -248,46 +287,42 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 	b, err := json.Marshal(group)
 	if err != nil {
 		zap.L().Error("Failed JSON marshal", zap.Error(err))
-		return "", "", "", "", 0, 0, nil, 0, 0, 0, "", 0
+		return emptyTrace(err)
 	}
 
 	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
 	if err != nil {
 		zap.L().Error("Failed to create request", zap.Error(err))
-		return "", "", "", "", 0, 0, nil, 0, 0, 0, "", 0
+		return emptyTrace(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := GetHTTPClient().Do(req)
 	if err != nil {
 		zap.L().Error("Failed to execute request", zap.Error(err))
-		return "", "", "", "", 0, 0, nil, 0, 0, 0, "", 0
+		return emptyTrace(err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		zap.L().Error("Failed to read response body", zap.Error(err))
-		return "", "", "", "", 0, 0, nil, 0, 0, 0, "", 0
+		return emptyTrace(err)
 	}
 
-	err = json.Unmarshal([]byte(string(body)), &tracerResponse)
-	if err != nil {
+	if err = json.Unmarshal(body, &tracerResponse); err != nil {
 		zap.L().Error("Failed to unmarshal response", zap.Error(err))
-		return "", "", "", "", 0, 0, nil, 0, 0, 0, "", 0
+		return emptyTrace(err)
 	}
 
-	// Initialize default values for gas and gasUsed
-	gas = 0
-	gasUsed = 0
-	value = 0 // Initialize value to 0
+	var res DebugTraceResult
 
 	// Validate and parse gas values
 	if tracerResponse.Result.Gas != "" {
 		if !validation.IsValidHexString(tracerResponse.Result.Gas) {
 			zap.L().Error("Invalid gas format", zap.String("gas", tracerResponse.Result.Gas))
 		} else if parsed, err := strconv.ParseUint(tracerResponse.Result.Gas[2:], 16, 64); err == nil {
-			gas = parsed
+			res.Gas = parsed
 		} else {
 			zap.L().Warn("Failed to parse gas value", zap.Error(err))
 		}
@@ -297,7 +332,7 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 		if !validation.IsValidHexString(tracerResponse.Result.GasUsed) {
 			zap.L().Error("Invalid gasUsed format", zap.String("gasUsed", tracerResponse.Result.GasUsed))
 		} else if parsed, err := strconv.ParseUint(tracerResponse.Result.GasUsed[2:], 16, 64); err == nil {
-			gasUsed = parsed
+			res.GasUsed = parsed
 		} else {
 			zap.L().Warn("Failed to parse gasUsed value", zap.Error(err))
 		}
@@ -308,20 +343,18 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 		if !validation.IsValidHexString(tracerResponse.Result.Value) {
 			zap.L().Error("Invalid value format", zap.String("value", tracerResponse.Result.Value))
 		} else {
-			// Convert hex value to big.Int
 			valueBigInt := new(big.Int)
 			valueBigInt.SetString(tracerResponse.Result.Value[2:], 16)
 
-			// Convert to float32 (with proper scaling)
 			divisor := new(big.Float).SetFloat64(float64(configs.QUANTA))
 			bigIntAsFloat := new(big.Float).SetInt(valueBigInt)
 			resultBigFloat := new(big.Float).Quo(bigIntAsFloat, divisor)
 			valueFloat64, _ := resultBigFloat.Float64()
-			value = float32(valueFloat64)
+			res.Value = float32(valueFloat64)
 
 			zap.L().Debug("Parsed transaction value",
 				zap.String("hex_value", tracerResponse.Result.Value),
-				zap.Float32("parsed_value", value))
+				zap.Float32("parsed_value", res.Value))
 		}
 	}
 
@@ -334,61 +367,54 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 		tracerResponse.Result.Type == "CALL"
 
 	if !hasValidCallData {
-		return "", "", "", "", 0, 0, nil, 0, 0, 0, "", 0
+		return emptyTrace(nil)
 	}
 
 	// Validate addresses and convert to Z format
 	if tracerResponse.Result.From != "" {
 		if err := validation.ValidateAddress(tracerResponse.Result.From); err != nil {
 			zap.L().Error("Invalid from address", zap.Error(err))
-			// Continue processing despite error
 		}
-		from = validation.ConvertToZAddress(tracerResponse.Result.From)
+		res.From = validation.ConvertToZAddress(tracerResponse.Result.From)
 	}
 
 	if tracerResponse.Result.To != "" {
 		if err := validation.ValidateAddress(tracerResponse.Result.To); err != nil {
 			zap.L().Error("Invalid to address", zap.Error(err))
-			// Continue processing despite error
 		}
-		to = validation.ConvertToZAddress(tracerResponse.Result.To)
+		res.To = validation.ConvertToZAddress(tracerResponse.Result.To)
 	}
 
 	// Validate and process output
-	output = 1
+	res.Output = 1
 	if tracerResponse.Result.Output != "" {
 		if !validation.IsValidHexString(tracerResponse.Result.Output) {
 			zap.L().Error("Invalid output format", zap.String("output", tracerResponse.Result.Output))
-			output = 0
+			res.Output = 0
 		} else if tracerResponse.Result.Output != "0x" && len(tracerResponse.Result.Output) > 2 {
-			// Remove "0x" prefix and leading zeros
 			hexStr := strings.TrimPrefix(tracerResponse.Result.Output, "0x")
 			hexStr = strings.TrimLeft(hexStr, "0")
 
-			// If it's an address (40 characters), just store 1 to indicate success
-			if len(tracerResponse.Result.Output) == 42 { // "0x" + 40 chars
-				output = 1
+			if len(tracerResponse.Result.Output) == 42 { // "0x" + 40 chars — an address
+				res.Output = 1
 			} else if hexStr == "" {
-				output = 0
+				res.Output = 0
 			} else {
-				// Try to parse as uint64 if it's a small enough number
 				if parsed, err := strconv.ParseUint(hexStr, 16, 64); err == nil {
-					output = parsed
+					res.Output = parsed
 				} else {
-					// For larger numbers, just store 1 to indicate success
 					zap.L().Debug("Output value too large for uint64, storing 1",
 						zap.String("output", tracerResponse.Result.Output))
-					output = 1
+					res.Output = 1
 				}
 			}
 		}
 	}
 
 	// Safely handle TraceAddress
-	traceAddress = nil
 	if tracerResponse.Result.TraceAddress != nil {
-		traceAddress = make([]int, len(tracerResponse.Result.TraceAddress))
-		copy(traceAddress, tracerResponse.Result.TraceAddress)
+		res.TraceAddress = make([]int, len(tracerResponse.Result.TraceAddress))
+		copy(res.TraceAddress, tracerResponse.Result.TraceAddress)
 	}
 
 	// Process input data if it exists and has sufficient length
@@ -397,28 +423,21 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 	const addressLength = 64
 	const minimumLength = prefixLength + methodIDLength + addressLength
 
-	addressFunctionidentifier = ""
-	amountFunctionIdentifier = 0
-
 	if len(tracerResponse.Result.Input) > minimumLength {
-		// Validate input format
 		if !validation.IsValidHexString(tracerResponse.Result.Input) {
 			zap.L().Error("Invalid input format", zap.String("input", tracerResponse.Result.Input))
 		} else {
-			// Strip the '0x' prefix and method ID
+			// Strip the '0x' prefix and method ID (first 4 bytes = 8 hex chars)
 			data := tracerResponse.Result.Input[10:]
 
-			// Extract and validate address
 			if len(data) >= 64 {
 				extractedAddr := "0x" + data[24:64]
 				if err := validation.ValidateAddress(extractedAddr); err == nil {
-					// Convert to Z format before returning
-					addressFunctionidentifier = validation.ConvertToZAddress(extractedAddr)
+					res.AddressFunctionIdentifier = validation.ConvertToZAddress(extractedAddr)
 				} else {
 					zap.L().Error("Invalid extracted address", zap.Error(err))
 				}
 
-				// Extract and validate amount
 				if len(data) >= 128 {
 					amountHex := data[64:128]
 					if !validation.IsValidHexString("0x" + amountHex) {
@@ -428,7 +447,7 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 						return ok
 					}() {
 						if amountBigInt.IsUint64() {
-							amountFunctionIdentifier = amountBigInt.Uint64()
+							res.AmountFunctionIdentifier = amountBigInt.Uint64()
 						} else {
 							zap.L().Warn("Amount exceeds uint64 range")
 						}
@@ -440,18 +459,12 @@ func CallDebugTraceTransaction(hash string) (transactionType string, callType st
 		}
 	}
 
-	return tracerResponse.Result.Type,
-		tracerResponse.Result.CallType,
-		from,
-		to,
-		0, // input is not used in the current implementation
-		output,
-		traceAddress,
-		value, // Now using the parsed value instead of hardcoded 0
-		gas,
-		gasUsed,
-		addressFunctionidentifier,
-		amountFunctionIdentifier
+	res.TransactionType = tracerResponse.Result.Type
+	res.CallType = tracerResponse.Result.CallType
+	// Input field is reserved but not populated in the current implementation.
+	res.Input = 0
+
+	return res
 }
 
 func GetBalance(address string) (string, error) {
@@ -724,7 +737,7 @@ func ZondCall(contractAddress string) (*models.ZondResponse, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		zap.L().Info("Failed to read response body", zap.Error(err))
 		return nil, err

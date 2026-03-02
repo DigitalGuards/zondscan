@@ -1,11 +1,31 @@
 package models
 
-// ValidatorStorage represents the validator document in MongoDB
+// ValidatorStorage represents the legacy single mega-document in MongoDB.
+// Kept for backward-compatibility with any remaining code paths; new writes
+// use ValidatorDocument (one document per validator) instead.
 type ValidatorStorage struct {
 	ID         string            `bson:"_id" json:"_id"`
 	Epoch      string            `bson:"epoch" json:"epoch"`           // Stored as hex
 	Validators []ValidatorRecord `bson:"validators" json:"validators"` // All validator details
 	UpdatedAt  string            `bson:"updatedAt" json:"updatedAt"`   // Timestamp in hex
+}
+
+// ValidatorDocument is the per-validator MongoDB document written by the syncer.
+// _id is the validator index (decimal string).
+type ValidatorDocument struct {
+	ID                         string `bson:"_id" json:"_id"`
+	PublicKeyHex               string `bson:"publicKeyHex" json:"publicKeyHex"`
+	WithdrawalCredentialsHex   string `bson:"withdrawalCredentialsHex" json:"withdrawalCredentialsHex"`
+	EffectiveBalance           string `bson:"effectiveBalance" json:"effectiveBalance"`
+	Slashed                    bool   `bson:"slashed" json:"slashed"`
+	ActivationEligibilityEpoch string `bson:"activationEligibilityEpoch" json:"activationEligibilityEpoch"`
+	ActivationEpoch            string `bson:"activationEpoch" json:"activationEpoch"`
+	ExitEpoch                  string `bson:"exitEpoch" json:"exitEpoch"`
+	WithdrawableEpoch          string `bson:"withdrawableEpoch" json:"withdrawableEpoch"`
+	SlotNumber                 string `bson:"slotNumber" json:"slotNumber"`
+	IsLeader                   bool   `bson:"isLeader" json:"isLeader"`
+	Epoch                      string `bson:"epoch" json:"epoch"`
+	UpdatedAt                  string `bson:"updatedAt" json:"updatedAt"`
 }
 
 // ValidatorRecord represents a single validator's data

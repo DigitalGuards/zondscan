@@ -104,18 +104,16 @@ func StripAddressPrefix(address string) string {
 	return address
 }
 
-// ConvertToZAddress converts a 0x address to Z format if needed
+// ConvertToZAddress converts any address format to canonical Z-prefix form.
+// The canonical storage format is "Z" + lowercase hex.
 func ConvertToZAddress(address string) string {
-	// If already in Z format (uppercase or lowercase), return as is
 	if strings.HasPrefix(address, "Z") || strings.HasPrefix(address, "z") {
-		return address
+		return "Z" + strings.ToLower(address[1:])
 	}
 
-	// If in 0x format, convert to Z format
-	if strings.HasPrefix(address, "0x") {
-		return "Z" + address[2:]
+	if strings.HasPrefix(address, "0x") || strings.HasPrefix(address, "0X") {
+		return "Z" + strings.ToLower(address[2:])
 	}
 
-	// If no prefix, add Z prefix
-	return "Z" + address
+	return "Z" + strings.ToLower(address)
 }

@@ -4,10 +4,10 @@ import (
 	"Zond2mongoDB/configs"
 	"Zond2mongoDB/models"
 	"Zond2mongoDB/rpc"
+	"Zond2mongoDB/validation"
 	"context"
 	"fmt"
 	"math/big"
-	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -51,7 +51,8 @@ func QueuePotentialTokenContract(address string, tx *models.Transaction, blockTi
 		return
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
 	// Create the document to insert
 	doc := bson.M{
@@ -84,47 +85,40 @@ func QueuePotentialTokenContract(address string, tx *models.Transaction, blockTi
 }
 
 // ProcessTokenTransfersFromTransactions processes token transfers for queued contracts
-// This should be called after transaction processing is complete
+// This should be called after transaction processing is complete.
+// Uses FindOneAndUpdate to atomically claim each work item, preventing duplicate
+// processing if multiple goroutines call this function concurrently.
 func ProcessTokenTransfersFromTransactions() {
 	configs.Logger.Info("Processing of queued token contracts")
 
 	collection := configs.GetCollection(configs.DB, "pending_token_contracts")
-	ctx := context.Background()
 
-	// Find unprocessed contract addresses
-	filter := bson.M{"processed": false}
-
-	// Diagnostic logging - add timestamp to help identify potential race conditions
-	queryStartTime := time.Now().UnixNano()
-	configs.Logger.Debug("Querying for unprocessed contracts",
-		zap.Int64("queryTimestamp", queryStartTime))
-
-	count, err := collection.CountDocuments(ctx, filter)
+	// Count unprocessed items for logging
+	countCtx, countCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	count, err := collection.CountDocuments(countCtx, bson.M{"processed": false})
+	countCancel()
 	if err != nil {
 		configs.Logger.Error("Failed to count pending token contracts", zap.Error(err))
 		return
 	}
 
 	configs.Logger.Info("Found pending token contracts to process", zap.Int64("count", count))
-
 	if count == 0 {
 		configs.Logger.Info("No pending token contracts to process")
 		return
 	}
 
-	// Add find options to help reduce race conditions by sorting consistently
-	findOptions := options.Find().SetSort(bson.D{{Key: "contractAddress", Value: 1}, {Key: "txHash", Value: 1}})
-
-	cursor, err := collection.Find(ctx, filter, findOptions)
-	if err != nil {
-		configs.Logger.Error("Failed to query pending token contracts", zap.Error(err))
-		return
-	}
-	defer cursor.Close(ctx)
-
-	// Process each pending contract
+	// Process each item by atomically claiming it with FindOneAndUpdate.
+	// This prevents race conditions: only the goroutine that successfully flips
+	// processed=false→true will execute processTokenContract for that item.
 	processed := 0
-	for cursor.Next(ctx) {
+	claimFilter := bson.M{"processed": false}
+	claimUpdate := bson.M{"$set": bson.M{"processed": true}}
+	findOneOpts := options.FindOneAndUpdate().
+		SetSort(bson.D{{Key: "contractAddress", Value: 1}, {Key: "txHash", Value: 1}}).
+		SetReturnDocument(options.Before)
+
+	for {
 		var pending struct {
 			ContractAddress string `bson:"contractAddress"`
 			TxHash          string `bson:"txHash"`
@@ -132,51 +126,26 @@ func ProcessTokenTransfersFromTransactions() {
 			BlockTimestamp  string `bson:"blockTimestamp"`
 		}
 
-		if err := cursor.Decode(&pending); err != nil {
-			configs.Logger.Error("Failed to decode pending token contract", zap.Error(err))
-			continue
+		claimCtx, claimCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		err := collection.FindOneAndUpdate(claimCtx, claimFilter, claimUpdate, findOneOpts).Decode(&pending)
+		claimCancel()
+
+		if err == mongo.ErrNoDocuments {
+			// No more unprocessed items
+			break
+		}
+		if err != nil {
+			configs.Logger.Error("Failed to claim pending token contract", zap.Error(err))
+			break
 		}
 
-		// Process the token contract
-		configs.Logger.Info("Processing token contract",
+		configs.Logger.Debug("Processing token contract",
 			zap.String("address", pending.ContractAddress),
 			zap.String("txHash", pending.TxHash),
-			zap.String("blockNumber", pending.BlockNumber),
-			zap.Int64("processingTimestamp", time.Now().UnixNano()),
-			zap.Int64("queryTimestamp", queryStartTime))
+			zap.String("blockNumber", pending.BlockNumber))
 
 		processTokenContract(pending.ContractAddress, pending.TxHash, pending.BlockNumber, pending.BlockTimestamp)
 		processed++
-
-		// Mark as processed
-		updateFilter := bson.M{
-			"contractAddress": pending.ContractAddress,
-			"txHash":          pending.TxHash,
-		}
-
-		// Use an additional filter to ensure we only update if it's still unprocessed
-		// This helps detect race conditions
-		updateFilter["processed"] = false
-
-		result, err := collection.UpdateOne(ctx, updateFilter, bson.M{"$set": bson.M{"processed": true}})
-
-		if err != nil {
-			configs.Logger.Error("Failed to mark token contract as processed",
-				zap.String("address", pending.ContractAddress),
-				zap.String("txHash", pending.TxHash),
-				zap.Error(err))
-		} else if result.ModifiedCount == 0 {
-			// This indicates a potential race condition - another process marked it as processed already
-			configs.Logger.Warn("Race condition detected: contract was already marked as processed by another process",
-				zap.String("address", pending.ContractAddress),
-				zap.String("txHash", pending.TxHash),
-				zap.Int64("processingTimestamp", time.Now().UnixNano()),
-				zap.Int64("queryTimestamp", queryStartTime))
-		} else {
-			configs.Logger.Debug("Successfully marked contract as processed",
-				zap.String("address", pending.ContractAddress),
-				zap.String("txHash", pending.TxHash))
-		}
 	}
 
 	configs.Logger.Info("Completed batch processing of token contracts", zap.Int("processed", processed))
@@ -359,9 +328,24 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 		}
 	}
 
-	transactionType, callType, fromInternal, toInternal, inputInternal, outputInternal, InternalTracerAddress, valueInternal, gasInternal, gasUsedInternal, addressFunctionIdentifier, amountFunctionIdentifier := rpc.CallDebugTraceTransaction(tx.Hash)
-	if transactionType == "CALL" || InternalTracerAddress != nil {
-		InternalTransactionByAddressCollection(transactionType, callType, txHash, fromInternal, toInternal, fmt.Sprintf("0x%x", inputInternal), fmt.Sprintf("0x%x", outputInternal), InternalTracerAddress, float64(valueInternal), fmt.Sprintf("0x%x", gasInternal), fmt.Sprintf("0x%x", gasUsedInternal), addressFunctionIdentifier, fmt.Sprintf("0x%x", amountFunctionIdentifier), blockTimestamp)
+	trace := rpc.CallDebugTraceTransaction(tx.Hash)
+	if trace.TransactionType == "CALL" || trace.TraceAddress != nil {
+		InternalTransactionByAddressCollection(
+			trace.TransactionType,
+			trace.CallType,
+			txHash,
+			trace.From,
+			trace.To,
+			fmt.Sprintf("0x%x", trace.Input),
+			fmt.Sprintf("0x%x", trace.Output),
+			trace.TraceAddress,
+			float64(trace.Value),
+			fmt.Sprintf("0x%x", trace.Gas),
+			fmt.Sprintf("0x%x", trace.GasUsed),
+			trace.AddressFunctionIdentifier,
+			fmt.Sprintf("0x%x", trace.AmountFunctionIdentifier),
+			blockTimestamp,
+		)
 	}
 
 	// Calculate fees using hex strings
@@ -369,8 +353,8 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 	gasPriceBig.SetString(gasPrice[2:], 16)
 
 	gasUsedBig := new(big.Int)
-	// If gasUsedInternal is 0, try to use gasUsed from the transaction receipt
-	if gasUsedInternal == 0 {
+	// If trace.GasUsed is 0, try to use gasUsed from the transaction receipt
+	if trace.GasUsed == 0 {
 		// Get transaction receipt to obtain actual gas used
 		receipt, err := rpc.GetTransactionReceipt(txHash)
 		if err == nil && receipt != nil && receipt.Result.GasUsed != "" && len(receipt.Result.GasUsed) > 2 {
@@ -387,11 +371,11 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 					zap.String("txHash", txHash),
 					zap.String("gas", tx.Gas))
 			} else {
-				gasUsedBig.SetString(fmt.Sprintf("%x", gasUsedInternal), 16)
+				gasUsedBig.SetString(fmt.Sprintf("%x", trace.GasUsed), 16)
 			}
 		}
 	} else {
-		gasUsedBig.SetString(fmt.Sprintf("%x", gasUsedInternal), 16)
+		gasUsedBig.SetString(fmt.Sprintf("%x", trace.GasUsed), 16)
 	}
 
 	feesBig := new(big.Int).Mul(gasPriceBig, gasUsedBig)
@@ -414,10 +398,14 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 }
 
 func TransferCollection(blockNumber string, blockTimestamp string, from string, to string, hash string, pk string, signature string, nonce string, value float64, data string, contractAddress string, status string, size string, paidFees float64) (*mongo.InsertOneResult, error) {
-	// Normalize addresses to lowercase for consistent storage
-	from = strings.ToLower(from)
-	to = strings.ToLower(to)
-	contractAddress = strings.ToLower(contractAddress)
+	// Normalize addresses to canonical Z-prefix form
+	from = validation.ConvertToZAddress(from)
+	if to != "" {
+		to = validation.ConvertToZAddress(to)
+	}
+	if contractAddress != "" {
+		contractAddress = validation.ConvertToZAddress(contractAddress)
+	}
 
 	var doc bson.D
 
@@ -447,7 +435,10 @@ func TransferCollection(blockNumber string, blockTimestamp string, from string, 
 		}
 	}
 
-	result, err := configs.TransferCollections.InsertOne(context.TODO(), doc)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	result, err := configs.TransferCollections.InsertOne(ctx, doc)
 	if err != nil {
 		configs.Logger.Warn("Failed to insert in the transactionByAddress collection: ", zap.Error(err))
 	}
@@ -456,10 +447,16 @@ func TransferCollection(blockNumber string, blockTimestamp string, from string, 
 }
 
 func InternalTransactionByAddressCollection(transactionType string, callType string, hash string, from string, to string, input string, output string, traceAddress []int, value float64, gas string, gasUsed string, addressFunctionIdentifier string, amountFunctionIdentifier string, blockTimestamp string) (*mongo.InsertOneResult, error) {
-	// Normalize addresses to lowercase for consistent storage
-	from = strings.ToLower(from)
-	to = strings.ToLower(to)
-	addressFunctionIdentifier = strings.ToLower(addressFunctionIdentifier)
+	// Normalize addresses to canonical Z-prefix form
+	if from != "" {
+		from = validation.ConvertToZAddress(from)
+	}
+	if to != "" {
+		to = validation.ConvertToZAddress(to)
+	}
+	if addressFunctionIdentifier != "" {
+		addressFunctionIdentifier = validation.ConvertToZAddress(addressFunctionIdentifier)
+	}
 
 	doc := bson.D{
 		{Key: "type", Value: transactionType},
@@ -478,7 +475,10 @@ func InternalTransactionByAddressCollection(transactionType string, callType str
 		{Key: "blockTimestamp", Value: blockTimestamp},
 	}
 
-	result, err := configs.InternalTransactionByAddressCollections.InsertOne(context.TODO(), doc)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	result, err := configs.InternalTransactionByAddressCollections.InsertOne(ctx, doc)
 	if err != nil {
 		configs.Logger.Warn("Failed to insert in the internalTransactionByAddress collection:", zap.Error(err))
 		return nil, err
@@ -488,9 +488,11 @@ func InternalTransactionByAddressCollection(transactionType string, callType str
 }
 
 func TransactionByAddressCollection(timeStamp string, txType string, from string, to string, hash string, amount float64, paidFees float64, blockNumber string) (*mongo.InsertOneResult, error) {
-	// Normalize addresses to lowercase for consistent storage
-	from = strings.ToLower(from)
-	to = strings.ToLower(to)
+	// Normalize addresses to canonical Z-prefix form
+	from = validation.ConvertToZAddress(from)
+	if to != "" {
+		to = validation.ConvertToZAddress(to)
+	}
 
 	doc := bson.D{
 		{Key: "txType", Value: txType},
@@ -503,7 +505,10 @@ func TransactionByAddressCollection(timeStamp string, txType string, from string
 		{Key: "blockNumber", Value: blockNumber},
 	}
 
-	result, err := configs.TransactionByAddressCollections.InsertOne(context.TODO(), doc)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	result, err := configs.TransactionByAddressCollections.InsertOne(ctx, doc)
 	if err != nil {
 		configs.Logger.Warn("Failed to insert in the transactionByAddress collection: ", zap.Error(err))
 	}
@@ -512,10 +517,12 @@ func TransactionByAddressCollection(timeStamp string, txType string, from string
 }
 
 func UpsertTransactions(address string, value float64, isContract bool) (*mongo.UpdateResult, error) {
-	// Normalize address to lowercase to ensure consistent storage
-	// This matches the backend API's normalization in ReturnSingleAddress
-	address = strings.ToLower(address)
+	// Normalize address to canonical Z-prefix form
+	address = validation.ConvertToZAddress(address)
 	filter := bson.D{{Key: "id", Value: address}}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
 	// If this is flagged as a contract, update with that information
 	if isContract {
@@ -527,7 +534,7 @@ func UpsertTransactions(address string, value float64, isContract bool) (*mongo.
 			}},
 		}
 		opts := options.Update().SetUpsert(true)
-		result, err := configs.AddressesCollections.UpdateOne(context.TODO(), filter, update, opts)
+		result, err := configs.AddressesCollections.UpdateOne(ctx, filter, update, opts)
 		if err != nil {
 			configs.Logger.Warn("Failed to update address collection: ", zap.Error(err))
 		}
@@ -540,7 +547,7 @@ func UpsertTransactions(address string, value float64, isContract bool) (*mongo.
 		IsContract bool `bson:"isContract"`
 	}
 
-	err := configs.AddressesCollections.FindOne(context.TODO(), filter).Decode(&existingDoc)
+	err := configs.AddressesCollections.FindOne(ctx, filter).Decode(&existingDoc)
 	if err == nil && existingDoc.IsContract {
 		// It's already marked as a contract, so keep that information
 		update := bson.D{
@@ -551,7 +558,7 @@ func UpsertTransactions(address string, value float64, isContract bool) (*mongo.
 			}},
 		}
 		opts := options.Update().SetUpsert(true)
-		result, err := configs.AddressesCollections.UpdateOne(context.TODO(), filter, update, opts)
+		result, err := configs.AddressesCollections.UpdateOne(ctx, filter, update, opts)
 		if err != nil {
 			configs.Logger.Warn("Failed to update address collection: ", zap.Error(err))
 		}
@@ -567,7 +574,7 @@ func UpsertTransactions(address string, value float64, isContract bool) (*mongo.
 		}},
 	}
 	opts := options.Update().SetUpsert(true)
-	result, err := configs.AddressesCollections.UpdateOne(context.TODO(), filter, update, opts)
+	result, err := configs.AddressesCollections.UpdateOne(ctx, filter, update, opts)
 	if err != nil {
 		configs.Logger.Warn("Failed to update address collection: ", zap.Error(err))
 	}
@@ -577,21 +584,29 @@ func UpsertTransactions(address string, value float64, isContract bool) (*mongo.
 func GetContractByAddress(address string) *models.ContractInfo {
 	collection := configs.GetCollection(configs.DB, "contractCode")
 	var contract models.ContractInfo
-	err := collection.FindOne(context.Background(), bson.M{"address": address}).Decode(&contract)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	err := collection.FindOne(ctx, bson.M{"address": address}).Decode(&contract)
 	if err != nil {
 		return nil
 	}
 	return &contract
 }
 
-// InitializePendingTokenContractsCollection ensures the pending token contracts collection is set up with proper indexes
+// InitializePendingTokenContractsCollection ensures the pending token contracts collection is set up with proper indexes.
+// Uses CreateMany which is a no-op for indexes that already exist, avoiding destructive DropAll.
 func InitializePendingTokenContractsCollection() error {
 	collection := configs.GetCollection(configs.DB, "pending_token_contracts")
-	ctx := context.Background()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
 	configs.Logger.Info("Initializing pending_token_contracts collection and indexes")
 
-	// Create indexes for pending token contracts collection
+	// Create indexes for pending token contracts collection.
+	// CreateMany is a no-op if the index already exists, so this is safe to call on restart.
 	indexes := []mongo.IndexModel{
 		{
 			Keys: bson.D{
@@ -608,15 +623,7 @@ func InitializePendingTokenContractsCollection() error {
 		},
 	}
 
-	// First drop any existing indexes to avoid conflicts
-	_, err := collection.Indexes().DropAll(ctx)
-	if err != nil {
-		configs.Logger.Warn("Failed to drop existing indexes, attempting to continue",
-			zap.Error(err))
-	}
-
-	// Create the new indexes
-	_, err = collection.Indexes().CreateMany(ctx, indexes)
+	_, err := collection.Indexes().CreateMany(ctx, indexes)
 	if err != nil {
 		configs.Logger.Error("Failed to create indexes for pending token contracts",
 			zap.Error(err))

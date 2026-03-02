@@ -160,6 +160,24 @@ type ValidatorHistoryRecord struct {
 	TotalStaked     string `bson:"totalStaked" json:"totalStaked"` // Sum of effective balances
 }
 
+// ValidatorDocument is the per-validator MongoDB document.
+// Each validator is stored as its own document with _id == validator index.
+type ValidatorDocument struct {
+	ID                         string `bson:"_id" json:"_id"`
+	PublicKeyHex               string `bson:"publicKeyHex" json:"publicKeyHex"`
+	WithdrawalCredentialsHex   string `bson:"withdrawalCredentialsHex" json:"withdrawalCredentialsHex"`
+	EffectiveBalance           string `bson:"effectiveBalance" json:"effectiveBalance"`
+	Slashed                    bool   `bson:"slashed" json:"slashed"`
+	ActivationEligibilityEpoch string `bson:"activationEligibilityEpoch" json:"activationEligibilityEpoch"`
+	ActivationEpoch            string `bson:"activationEpoch" json:"activationEpoch"`
+	ExitEpoch                  string `bson:"exitEpoch" json:"exitEpoch"`
+	WithdrawableEpoch          string `bson:"withdrawableEpoch" json:"withdrawableEpoch"`
+	SlotNumber                 string `bson:"slotNumber" json:"slotNumber"`
+	IsLeader                   bool   `bson:"isLeader" json:"isLeader"`
+	Epoch                      string `bson:"epoch" json:"epoch"`
+	UpdatedAt                  string `bson:"updatedAt" json:"updatedAt"`
+}
+
 // GetValidatorStatus computes the validator status based on current epoch
 func GetValidatorStatus(activationEpoch, exitEpoch string, slashed bool, currentEpoch int64) string {
 	activation, _ := strconv.ParseInt(activationEpoch, 10, 64)

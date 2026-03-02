@@ -61,7 +61,7 @@ func RequestHandler() {
 		AllowMethods:     []string{"GET", "POST"},
 		AllowHeaders:     []string{"Origin", "Content-Length", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
+		AllowCredentials: false, // Must be false when AllowOrigins is wildcard (CORS spec)
 		MaxAge:           12 * time.Hour,
 	}))
 	log.Println("CORS configuration initialized successfully")

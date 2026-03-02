@@ -19,62 +19,62 @@ const (
 	SecondsPerSlot = 60
 )
 
+// ReturnValidators returns all validators with computed status and totals.
+// It queries the per-document validators collection directly instead of loading
+// a single mega-document and iterating in Go.
 func ReturnValidators(pageToken string) (*models.ValidatorResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Get the validator document
-	var storage models.ValidatorStorage
-	err := configs.ValidatorsCollections.FindOne(ctx, bson.M{"_id": "validators"}).Decode(&storage)
+	// Get current epoch from latest block once; reuse for all validators.
+	latestBlock, err := GetLatestBlockFromSyncState()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get latest block: %v", err)
+	}
+	currentEpoch := HexToInt(latestBlock) / 128
+
+	findOpts := options.Find().SetSort(bson.D{{Key: "_id", Value: 1}})
+
+	cursor, err := configs.ValidatorsCollections.Find(ctx, bson.M{}, findOpts)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			// Return empty response if no validators found
 			return &models.ValidatorResponse{
 				Validators:  make([]models.Validator, 0),
 				TotalStaked: "0",
 			}, nil
 		}
-		return nil, fmt.Errorf("failed to get validator document: %v", err)
+		return nil, fmt.Errorf("failed to query validators: %v", err)
+	}
+	defer cursor.Close(ctx)
+
+	var docs []models.ValidatorDocument
+	if err := cursor.All(ctx, &docs); err != nil {
+		return nil, fmt.Errorf("failed to decode validators: %v", err)
 	}
 
-	// Get current epoch from latest block
-	latestBlock, err := GetLatestBlockFromSyncState()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get latest block: %v", err)
-	}
-
-	// Convert hex block number to int for epoch calculation
-	currentEpoch := HexToInt(latestBlock) / 128 // Each epoch is 128 blocks
-
-	// Process validators
-	validators := make([]models.Validator, 0)
+	validators := make([]models.Validator, 0, len(docs))
 	totalStaked := int64(0)
 
-	for _, v := range storage.Validators {
-		// Calculate status
-		status := getValidatorStatus(v.ActivationEpoch, v.ExitEpoch, v.Slashed, currentEpoch)
+	for _, d := range docs {
+		status := getValidatorStatus(d.ActivationEpoch, d.ExitEpoch, d.Slashed, currentEpoch)
 		isActive := status == "active"
 
-		// Calculate age in epochs
-		activationEpoch := parseEpoch(v.ActivationEpoch)
+		activationEpoch := parseEpoch(d.ActivationEpoch)
 		age := int64(0)
 		if activationEpoch <= currentEpoch {
 			age = currentEpoch - activationEpoch
 		}
 
-		// Add validator to response
-		validator := models.Validator{
-			Index:        v.Index,
-			Address:      v.PublicKeyHex,
+		validators = append(validators, models.Validator{
+			Index:        d.ID,
+			Address:      d.PublicKeyHex,
 			Status:       status,
 			Age:          age,
-			StakedAmount: v.EffectiveBalance,
+			StakedAmount: d.EffectiveBalance,
 			IsActive:     isActive,
-		}
-		validators = append(validators, validator)
+		})
 
-		// Add to total staked (parse as decimal since syncer stores decimal)
-		if balance, err := strconv.ParseInt(v.EffectiveBalance, 10, 64); err == nil {
+		if balance, err := strconv.ParseInt(d.EffectiveBalance, 10, 64); err == nil {
 			totalStaked += balance
 		}
 	}
@@ -85,54 +85,43 @@ func ReturnValidators(pageToken string) (*models.ValidatorResponse, error) {
 	}, nil
 }
 
-// CountValidators returns the total number of validators
+// CountValidators returns the total number of validator documents in the collection.
 func CountValidators() (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	var storage models.ValidatorStorage
-	err := configs.ValidatorsCollections.FindOne(ctx, bson.M{"_id": "validators"}).Decode(&storage)
+	count, err := configs.ValidatorsCollections.CountDocuments(ctx, bson.M{})
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return 0, nil
-		}
-		return 0, fmt.Errorf("failed to get validator document: %v", err)
+		return 0, fmt.Errorf("failed to count validators: %v", err)
 	}
-
-	return int64(len(storage.Validators)), nil
+	return count, nil
 }
 
-// Helper function to convert hex string to int64
+// Helper function to convert hex string to int64.
 func HexToInt(hex string) int64 {
-	// Remove "0x" prefix if present
 	if len(hex) > 2 && hex[0:2] == "0x" {
 		hex = hex[2:]
 	}
-
-	// Parse hex string
 	var result int64
 	fmt.Sscanf(hex, "%x", &result)
 	return result
 }
 
-// parseEpoch parses epoch string (handles both hex and decimal formats)
-// FAR_FUTURE_EPOCH represents a validator that hasn't exited
+// FAR_FUTURE_EPOCH represents a validator that hasn't exited.
 const FAR_FUTURE_EPOCH = "18446744073709551615"
 
+// parseEpoch parses an epoch string (handles decimal format and FAR_FUTURE_EPOCH).
 func parseEpoch(epochStr string) int64 {
-	// FAR_FUTURE_EPOCH is special - return max int64 to indicate "never"
 	if epochStr == FAR_FUTURE_EPOCH {
 		return math.MaxInt64
 	}
-	// Try decimal first
 	if epoch, err := strconv.ParseInt(epochStr, 10, 64); err == nil {
 		return epoch
 	}
-	// Try hex
 	return HexToInt(epochStr)
 }
 
-// getValidatorStatus computes the validator status based on current epoch
+// getValidatorStatus computes the validator status based on current epoch.
 func getValidatorStatus(activationEpoch, exitEpoch string, slashed bool, currentEpoch int64) string {
 	activation := parseEpoch(activationEpoch)
 	exit := parseEpoch(exitEpoch)
@@ -149,7 +138,7 @@ func getValidatorStatus(activationEpoch, exitEpoch string, slashed bool, current
 	return "active"
 }
 
-// GetEpochInfo retrieves the current epoch information
+// GetEpochInfo retrieves the current epoch information.
 func GetEpochInfo() (*models.EpochInfoResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -163,7 +152,6 @@ func GetEpochInfo() (*models.EpochInfoResponse, error) {
 		return nil, fmt.Errorf("failed to get epoch info: %v", err)
 	}
 
-	// Calculate slot within epoch and time to next epoch
 	headSlot := parseEpoch(epochInfo.HeadSlot)
 	slotInEpoch := headSlot % SlotsPerEpoch
 	slotsRemaining := SlotsPerEpoch - slotInEpoch
@@ -182,7 +170,7 @@ func GetEpochInfo() (*models.EpochInfoResponse, error) {
 	}, nil
 }
 
-// GetValidatorHistory retrieves historical validator data
+// GetValidatorHistory retrieves historical validator data.
 func GetValidatorHistory(limit int) (*models.ValidatorHistoryResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -208,101 +196,179 @@ func GetValidatorHistory(limit int) (*models.ValidatorHistoryResponse, error) {
 	}, nil
 }
 
-// GetValidatorByID retrieves a validator by index or public key
+// GetValidatorByID retrieves a validator by index (decimal string) or public key hex.
+// Uses a direct document lookup instead of loading all validators into memory.
 func GetValidatorByID(id string) (*models.ValidatorDetailResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	var storage models.ValidatorStorage
-	err := configs.ValidatorsCollections.FindOne(ctx, bson.M{"_id": "validators"}).Decode(&storage)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("validators not found")
-		}
-		return nil, fmt.Errorf("failed to get validators: %v", err)
-	}
-
-	// Get current epoch
 	latestBlock, err := GetLatestBlockFromSyncState()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get latest block: %v", err)
 	}
 	currentEpoch := HexToInt(latestBlock) / 128
 
-	// Find validator by index or public key
-	for _, v := range storage.Validators {
-		if v.Index == id || v.PublicKeyHex == id {
-			status := getValidatorStatus(v.ActivationEpoch, v.ExitEpoch, v.Slashed, currentEpoch)
-			activationEpoch := parseEpoch(v.ActivationEpoch)
-			age := int64(0)
-			if activationEpoch <= currentEpoch {
-				age = currentEpoch - activationEpoch
-			}
+	// Try lookup by _id (index) first, then fall back to publicKeyHex.
+	filter := bson.M{"$or": []bson.M{
+		{"_id": id},
+		{"publicKeyHex": id},
+	}}
 
-			return &models.ValidatorDetailResponse{
-				Index:                      v.Index,
-				PublicKeyHex:               v.PublicKeyHex,
-				WithdrawalCredentialsHex:   v.WithdrawalCredentialsHex,
-				EffectiveBalance:           v.EffectiveBalance,
-				Slashed:                    v.Slashed,
-				ActivationEligibilityEpoch: v.ActivationEligibilityEpoch,
-				ActivationEpoch:            v.ActivationEpoch,
-				ExitEpoch:                  v.ExitEpoch,
-				WithdrawableEpoch:          v.WithdrawableEpoch,
-				Status:                     status,
-				Age:                        age,
-				CurrentEpoch:               fmt.Sprintf("%d", currentEpoch),
-			}, nil
+	var doc models.ValidatorDocument
+	err = configs.ValidatorsCollections.FindOne(ctx, filter).Decode(&doc)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("validator not found")
 		}
+		return nil, fmt.Errorf("failed to get validator: %v", err)
 	}
 
-	return nil, fmt.Errorf("validator not found")
+	status := getValidatorStatus(doc.ActivationEpoch, doc.ExitEpoch, doc.Slashed, currentEpoch)
+	activationEpoch := parseEpoch(doc.ActivationEpoch)
+	age := int64(0)
+	if activationEpoch <= currentEpoch {
+		age = currentEpoch - activationEpoch
+	}
+
+	return &models.ValidatorDetailResponse{
+		Index:                      doc.ID,
+		PublicKeyHex:               doc.PublicKeyHex,
+		WithdrawalCredentialsHex:   doc.WithdrawalCredentialsHex,
+		EffectiveBalance:           doc.EffectiveBalance,
+		Slashed:                    doc.Slashed,
+		ActivationEligibilityEpoch: doc.ActivationEligibilityEpoch,
+		ActivationEpoch:            doc.ActivationEpoch,
+		ExitEpoch:                  doc.ExitEpoch,
+		WithdrawableEpoch:          doc.WithdrawableEpoch,
+		Status:                     status,
+		Age:                        age,
+		CurrentEpoch:               fmt.Sprintf("%d", currentEpoch),
+	}, nil
 }
 
-// GetValidatorStats returns aggregated validator statistics
+// GetValidatorStats returns aggregated validator statistics using a MongoDB aggregation
+// pipeline instead of loading all validators into Go memory.
 func GetValidatorStats() (*models.ValidatorStatsResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	var storage models.ValidatorStorage
-	err := configs.ValidatorsCollections.FindOne(ctx, bson.M{"_id": "validators"}).Decode(&storage)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return &models.ValidatorStatsResponse{}, nil
-		}
-		return nil, fmt.Errorf("failed to get validators: %v", err)
-	}
-
-	// Get current epoch
 	latestBlock, err := GetLatestBlockFromSyncState()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get latest block: %v", err)
 	}
 	currentEpoch := HexToInt(latestBlock) / 128
 
+	// Check whether the collection has any documents at all.
+	totalCount, err := configs.ValidatorsCollections.CountDocuments(ctx, bson.M{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to count validators: %v", err)
+	}
+	if totalCount == 0 {
+		return &models.ValidatorStatsResponse{
+			CurrentEpoch: fmt.Sprintf("%d", currentEpoch),
+		}, nil
+	}
+
+	// Use aggregation to compute per-status counts and total staked in one pass.
+	// Status computation requires knowing currentEpoch, which MongoDB doesn't know,
+	// so we project the fields needed and compute buckets in a $group stage using
+	// $cond expressions that mirror getValidatorStatus logic.
+	currentEpochStr := fmt.Sprintf("%d", currentEpoch)
+
+	pipeline := mongo.Pipeline{
+		// Add a computed "status" field using the same rules as getValidatorStatus.
+		bson.D{{Key: "$addFields", Value: bson.M{
+			"_computedStatus": bson.M{
+				"$switch": bson.M{
+					"branches": []bson.M{
+						{
+							// slashed
+							"case":  bson.M{"$eq": []interface{}{"$slashed", true}},
+							"then":  "slashed",
+						},
+						{
+							// pending: activationEpoch > currentEpoch
+							"case": bson.M{"$gt": []interface{}{"$activationEpoch", currentEpochStr}},
+							"then": "pending",
+						},
+						{
+							// exited: exitEpoch <= currentEpoch AND exitEpoch != FAR_FUTURE_EPOCH
+							"case": bson.M{"$and": []bson.M{
+								{"$lte": []interface{}{"$exitEpoch", currentEpochStr}},
+								{"$ne": []interface{}{"$exitEpoch", FAR_FUTURE_EPOCH}},
+							}},
+							"then": "exited",
+						},
+					},
+					"default": "active",
+				},
+			},
+		}}},
+		bson.D{{Key: "$group", Value: bson.M{
+			"_id":          "$_computedStatus",
+			"count":        bson.M{"$sum": 1},
+			// We sum effective balance as strings; MongoDB can't do numeric sum on
+			// decimal-string fields, so we fall back to a cursor scan for totalStaked.
+		}}},
+	}
+
+	cursor, err := configs.ValidatorsCollections.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, fmt.Errorf("failed to aggregate validator stats: %v", err)
+	}
+	defer cursor.Close(ctx)
+
 	var activeCount, pendingCount, exitedCount, slashedCount int
-	totalStaked := int64(0)
-
-	for _, v := range storage.Validators {
-		status := getValidatorStatus(v.ActivationEpoch, v.ExitEpoch, v.Slashed, currentEpoch)
-		switch status {
-		case "active":
-			activeCount++
-		case "pending":
-			pendingCount++
-		case "exited":
-			exitedCount++
-		case "slashed":
-			slashedCount++
+	for cursor.Next(ctx) {
+		var row struct {
+			ID    string `bson:"_id"`
+			Count int    `bson:"count"`
 		}
+		if err := cursor.Decode(&row); err != nil {
+			continue
+		}
+		switch row.ID {
+		case "active":
+			activeCount = row.Count
+		case "pending":
+			pendingCount = row.Count
+		case "exited":
+			exitedCount = row.Count
+		case "slashed":
+			slashedCount = row.Count
+		}
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("cursor error while reading validator stats: %v", err)
+	}
 
-		if balance, err := strconv.ParseInt(v.EffectiveBalance, 10, 64); err == nil {
-			totalStaked += balance
+	// Compute total staked via a second aggregation (sum of effectiveBalance).
+	// MongoDB $sum works on numeric types; balances are stored as decimal strings,
+	// so we convert with $toLong inside the pipeline.
+	sumPipeline := mongo.Pipeline{
+		bson.D{{Key: "$group", Value: bson.M{
+			"_id": nil,
+			"totalStaked": bson.M{"$sum": bson.M{"$toLong": "$effectiveBalance"}},
+		}}},
+	}
+	sumCursor, err := configs.ValidatorsCollections.Aggregate(ctx, sumPipeline)
+	if err != nil {
+		return nil, fmt.Errorf("failed to aggregate total staked: %v", err)
+	}
+	defer sumCursor.Close(ctx)
+
+	totalStaked := int64(0)
+	if sumCursor.Next(ctx) {
+		var sumRow struct {
+			TotalStaked int64 `bson:"totalStaked"`
+		}
+		if err := sumCursor.Decode(&sumRow); err == nil {
+			totalStaked = sumRow.TotalStaked
 		}
 	}
 
 	return &models.ValidatorStatsResponse{
-		TotalValidators: len(storage.Validators),
+		TotalValidators: int(totalCount),
 		ActiveCount:     activeCount,
 		PendingCount:    pendingCount,
 		ExitedCount:     exitedCount,

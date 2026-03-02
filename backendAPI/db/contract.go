@@ -30,21 +30,15 @@ func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool
 
 	// Add search if provided, using correct field names
 	if search != "" {
-		// Normalize the search address to lowercase for case-insensitive lookup
-		normalizedSearch := strings.ToLower(search)
+		// Normalize the search address to canonical Z-prefix form
+		normalizedSearch := normalizeAddress(search)
 
-		// Also try with Z prefix in case user pastes address without it
-		searchWithZ := normalizedSearch
-		if !strings.HasPrefix(normalizedSearch, "z") {
-			searchWithZ = "z" + normalizedSearch
-		}
-
-		// Zond addresses start with 'Z'. Search for both with and without Z prefix.
+		// Zond addresses start with 'Z'. Search by normalized address or token name.
 		searchFilter := bson.D{
 			{Key: "$or", Value: bson.A{
-				bson.D{{Key: "address", Value: bson.M{"$in": bson.A{normalizedSearch, searchWithZ}}}},        // Match contract address
-				bson.D{{Key: "creatorAddress", Value: bson.M{"$in": bson.A{normalizedSearch, searchWithZ}}}}, // Match creator address
-				bson.D{{Key: "name", Value: bson.D{{Key: "$regex", Value: normalizedSearch}, {Key: "$options", Value: "i"}}}}, // Match token name
+				bson.D{{Key: "address", Value: normalizedSearch}},        // Match contract address
+				bson.D{{Key: "creatorAddress", Value: normalizedSearch}}, // Match creator address
+				bson.D{{Key: "name", Value: bson.D{{Key: "$regex", Value: search}, {Key: "$options", Value: "i"}}}}, // Match token name
 			}},
 		}
 		// Combine with existing filter
@@ -93,20 +87,17 @@ func ReturnContractCode(address string) (models.ContractInfo, error) {
 
 	var result models.ContractInfo
 
-	// Normalize address - try both Z and z prefixes since the syncer
-	// stores with lowercase z while URLs/API use uppercase Z
-	hexPart := strings.ToLower(strings.TrimPrefix(strings.TrimPrefix(address, "Z"), "z"))
-	upperAddr := "Z" + hexPart
-	lowerAddr := "z" + hexPart
+	// Normalize address to canonical Z-prefix form
+	normalizedAddr := normalizeAddress(address)
 
-	// Query for contract code trying both prefix cases
-	filter := bson.M{"address": bson.M{"$in": []string{upperAddr, lowerAddr}}}
+	// Query for contract code
+	filter := bson.M{"address": normalizedAddr}
 	err := configs.ContractInfoCollection.FindOne(ctx, filter).Decode(&result)
 
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			// Log that we couldn't find the contract
-			log.Printf("No contract found for address: %s (variants: %s, %s)", address, upperAddr, lowerAddr)
+			log.Printf("No contract found for address: %s (normalized: %s)", address, normalizedAddr)
 			// Return empty contract code with expected structure
 			return models.ContractInfo{
 				ContractAddress:        "",
