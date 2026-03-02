@@ -40,14 +40,15 @@ function Converter(): JSX.Element {
           <div className="space-y-6">
             {/* Quanta Input */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Quanta (QRL)</label>
+              <label htmlFor="quanta-input" className="block text-sm font-medium text-gray-300 mb-2">Quanta (QRL)</label>
               <div className="relative">
                 <input
+                  id="quanta-input"
                   type="text"
                   value={quanta}
                   onChange={handleChangeQuanta}
                   placeholder="Enter amount in Quanta"
-                  className="w-full px-4 py-3 bg-[#1a1b1e] text-white rounded-lg border border-[#3d3d3d] focus:outline-none focus:border-[#ffa729] transition-all duration-300"
+                  className="w-full px-4 py-3 bg-[#1a1a1a] text-white rounded-lg border border-[#3d3d3d] focus:outline-none focus:border-[#ffa729] transition-all duration-300"
                 />
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                   <span className="text-gray-400">QRL</span>
@@ -64,14 +65,15 @@ function Converter(): JSX.Element {
 
             {/* Shor Input */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Shor</label>
+              <label htmlFor="shor-input" className="block text-sm font-medium text-gray-300 mb-2">Shor</label>
               <div className="relative">
                 <input
+                  id="shor-input"
                   type="text"
                   value={shor}
                   onChange={handleChangeShors}
                   placeholder="Enter amount in Shor"
-                  className="w-full px-4 py-3 bg-[#1a1b1e] text-white rounded-lg border border-[#3d3d3d] focus:outline-none focus:border-[#ffa729] transition-all duration-300"
+                  className="w-full px-4 py-3 bg-[#1a1a1a] text-white rounded-lg border border-[#3d3d3d] focus:outline-none focus:border-[#ffa729] transition-all duration-300"
                 />
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                   <span className="text-gray-400">Shor</span>
@@ -81,7 +83,7 @@ function Converter(): JSX.Element {
 
             {/* Error Message */}
             {error && (
-              <div className="p-4 bg-[#1a1b1e] rounded-lg border border-red-500/50">
+              <div className="p-4 bg-[#1a1a1a] rounded-lg border border-red-500/50">
                 <div className="flex items-center text-red-400">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -92,7 +94,7 @@ function Converter(): JSX.Element {
             )}
 
             {/* Info Box */}
-            <div className="mt-6 p-4 bg-[#1a1b1e] rounded-lg border border-[#3d3d3d]">
+            <div className="mt-6 p-4 bg-[#1a1a1a] rounded-lg border border-[#3d3d3d]">
               <p className="text-sm text-gray-400">
                 1 QRL = 1,000,000,000,000,000,000 Shor (10^18)
               </p>

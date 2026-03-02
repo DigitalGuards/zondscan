@@ -69,12 +69,13 @@ export default function BalanceCheckTool(): JSX.Element {
                     >
                         <div className="relative w-full">
                             <input
+                                aria-label="QRL address"
                                 className="w-full px-4 py-3 bg-background text-white rounded-lg border border-border focus:outline-none focus:border-accent transition-all duration-300 pl-10"
-                                type="text" 
-                                value={address} 
-                                onChange={handleAddressChange} 
+                                type="text"
+                                value={address}
+                                onChange={handleAddressChange}
                                 placeholder="Enter QRL address"
-                                required 
+                                required
                             />
                             <svg
                                 className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-accent"
@@ -106,7 +107,7 @@ export default function BalanceCheckTool(): JSX.Element {
                         )}
 
                         {error && (
-                            <div className="w-full p-4 bg-background rounded-lg border border-red-500/50">
+                            <div role="alert" className="w-full p-4 bg-background rounded-lg border border-red-500/50">
                                 <div className="text-sm text-red-400">{error}</div>
                             </div>
                         )}

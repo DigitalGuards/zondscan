@@ -6,6 +6,9 @@ import axios from 'axios';
 import Link from 'next/link';
 import config from '../../../config';
 import { epochsToDays } from '../../lib/helpers';
+import Badge from '../../components/Badge';
+import CopyButton from '../../components/CopyButton';
+import EmptyState from '../../components/EmptyState';
 
 // Format staked amount (beacon chain stores effective balance in Shor, 1 QRL = 10^9 Shor)
 function formatValidatorBalance(amount: string): [string, string] {
@@ -46,7 +49,6 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
   const [validator, setValidator] = useState<ValidatorDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchValidator() {
@@ -66,32 +68,17 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
     fetchValidator();
   }, [id]);
 
-  const copyToClipboard = async (text: string, label: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(label);
-      setTimeout(() => setCopied(null), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
-  };
-
   const getStatusBadge = (status: string) => {
-    const styles: Record<string, string> = {
-      active: 'bg-green-900/30 text-green-400 border-green-800',
-      pending: 'bg-yellow-900/30 text-yellow-400 border-yellow-800',
-      exited: 'bg-gray-900/30 text-gray-400 border-gray-700',
-      slashed: 'bg-red-900/30 text-red-400 border-red-800',
+    const variantMap: Record<string, 'success' | 'warning' | 'neutral' | 'error'> = {
+      active: 'success',
+      pending: 'warning',
+      exited: 'neutral',
+      slashed: 'error',
     };
-
     return (
-      <span
-        className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${
-          styles[status] || styles.pending
-        }`}
-      >
+      <Badge variant={variantMap[status] || 'warning'} size="md" dot>
         {status.charAt(0).toUpperCase() + status.slice(1)}
-      </span>
+      </Badge>
     );
   };
 
@@ -133,7 +120,14 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
   }
 
   if (!validator) {
-    return null;
+    return (
+      <EmptyState
+        title="Validator not found"
+        description="This validator could not be found or may not exist."
+        actionLabel="Back to validators"
+        actionHref="/validators"
+      />
+    );
   }
 
   const [amount, unit] = formatValidatorBalance(validator.effectiveBalance);
@@ -164,9 +158,7 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
         <div className="flex items-center gap-4">
           {getStatusBadge(validator.status)}
           {validator.slashed && (
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-900/50 text-red-300 border border-red-700">
-              Slashed
-            </span>
+            <Badge variant="error" size="md" dot>Slashed</Badge>
           )}
         </div>
       </div>
@@ -214,21 +206,7 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
                 <code className="text-sm text-gray-300 font-mono break-all">
                   {validator.publicKeyHex}
                 </code>
-                <button
-                  onClick={() => copyToClipboard(validator.publicKeyHex, 'publicKey')}
-                  className="text-gray-400 hover:text-[#ffa729] p-1"
-                  title="Copy to clipboard"
-                >
-                  {copied === 'publicKey' ? (
-                    <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                  )}
-                </button>
+                <CopyButton value={validator.publicKeyHex} label="Copy public key" size="sm" />
               </div>
             </div>
           </div>
@@ -241,21 +219,7 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
                 <code className="text-sm text-gray-300 font-mono break-all">
                   {validator.withdrawalCredentialsHex}
                 </code>
-                <button
-                  onClick={() => copyToClipboard(validator.withdrawalCredentialsHex, 'withdrawal')}
-                  className="text-gray-400 hover:text-[#ffa729] p-1"
-                  title="Copy to clipboard"
-                >
-                  {copied === 'withdrawal' ? (
-                    <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                  )}
-                </button>
+                <CopyButton value={validator.withdrawalCredentialsHex} label="Copy withdrawal credentials" size="sm" />
               </div>
             </div>
           </div>

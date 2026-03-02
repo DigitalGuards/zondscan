@@ -20,12 +20,6 @@ const nextConfig = {
   },
   // Optimize bundle size by transforming barrel imports
   modularizeImports: {
-    '@mui/material': {
-      transform: '@mui/material/{{member}}',
-    },
-    '@mui/icons-material': {
-      transform: '@mui/icons-material/{{member}}',
-    },
     '@heroicons/react/24/outline': {
       transform: '@heroicons/react/24/outline/{{member}}',
     },
@@ -35,7 +29,16 @@ const nextConfig = {
   },
   // Enable experimental optimizations
   experimental: {
-    optimizePackageImports: ['@mui/material', '@mui/icons-material', '@visx/axis', '@visx/shape', '@visx/scale', '@visx/group'],
+    optimizePackageImports: ['@visx/axis', '@visx/shape', '@visx/scale', '@visx/group'],
+  },
+  // Proxy /api/* requests to the backend API server
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${process.env.HANDLER_URL || 'http://127.0.0.1:8081'}/:path*`,
+      },
+    ];
   },
 }
 
