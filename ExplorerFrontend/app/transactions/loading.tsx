@@ -1,6 +1,6 @@
 export default function Loading(): JSX.Element {
   return (
-    <div className="p-8">
+    <div role="status" aria-label="Loading" className="p-8">
       <h1 className="section-title mb-6">Transactions</h1>
       <div className="space-y-4">
         {[...Array(5)].map((_, i) => (

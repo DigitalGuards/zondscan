@@ -70,7 +70,8 @@ export function DownloadBtn({ data = [], fileName }: DownloadBtnProps): JSX.Elem
 
   return (
     <button
-      className="download-btn"
+      type="button"
+      className="px-4 py-2 text-sm font-medium rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] hover:text-white transition-colors"
       onClick={handleDownload}
     >
       Download
@@ -125,7 +126,8 @@ export function DownloadBtnInternal({ data = [], fileName }: DownloadBtnInternal
 
   return (
     <button
-      className="download-btn"
+      type="button"
+      className="px-4 py-2 text-sm font-medium rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] hover:text-white transition-colors"
       onClick={handleDownload}
     >
       Download

@@ -74,16 +74,16 @@ export default function RichlistClient({ richlist }: RichlistProps): JSX.Element
 
   const renderDesktopView = (): JSX.Element => (
     <div className="overflow-x-auto">
-      <table className="min-w-full">
+      <table aria-label="Top addresses by balance" className="min-w-full">
         <thead>
           <tr className="border-b border-[#3d3d3d]">
-            <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">
+            <th scope="col" className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">
               Rank
             </th>
-            <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">
+            <th scope="col" className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">
               Address
             </th>
-            <th className="px-3 md:px-6 py-3 md:py-4 text-right text-xs md:text-sm font-medium text-[#ffa729]">
+            <th scope="col" className="px-3 md:px-6 py-3 md:py-4 text-right text-xs md:text-sm font-medium text-[#ffa729]">
               Balance
             </th>
           </tr>

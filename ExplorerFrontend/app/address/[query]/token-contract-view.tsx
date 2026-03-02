@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import CopyAddressButton from "../../components/CopyAddressButton";
+import CopyButton from "../../components/CopyButton";
 import QRCodeButton from "../../components/QRCodeButton";
 import { formatAmount } from "../../lib/helpers";
+import Breadcrumbs from "../../components/Breadcrumbs";
 
 interface TokenInfo {
     contractAddress: string;
@@ -227,6 +228,10 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
 
     return (
         <div className="py-3 md:py-6 lg:py-8 px-3 md:px-6 lg:px-8 max-w-[1200px] mx-auto">
+            <Breadcrumbs items={[
+                { label: 'Contracts', href: '/contracts' },
+                { label: `${symbol || address.slice(0, 10) + '...' + address.slice(-6)}` },
+            ]} />
             {/* Token Header Card */}
             <div className="relative overflow-hidden rounded-xl md:rounded-2xl bg-card-gradient border border-border shadow-lg md:shadow-xl mb-4 md:mb-6">
                 <div className="p-4 md:p-6 lg:p-8">
@@ -246,7 +251,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                 </div>
                                 <div className="flex items-center gap-2 mt-1">
                                     <span className="text-xs md:text-sm text-gray-400 font-mono">{address}</span>
-                                    <CopyAddressButton address={address} />
+                                    <CopyButton value={address} label="Copy address" />
                                     <QRCodeButton address={address} />
                                 </div>
                             </div>
@@ -319,7 +324,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                     <div className="flex items-center gap-2">
                                         <AddressDisplay address={creatorAddress} />
                                         {creatorAddress && (
-                                            <CopyAddressButton address={creatorAddress} />
+                                            <CopyButton value={creatorAddress} label="Copy address" />
                                         )}
                                     </div>
                                 </div>
@@ -350,7 +355,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                             {creationTxHash || 'Unknown'}
                                         </Link>
                                         {creationTxHash && (
-                                            <CopyAddressButton address={creationTxHash} />
+                                            <CopyButton value={creationTxHash} label="Copy transaction hash" />
                                         )}
                                     </div>
                                 </div>
@@ -432,13 +437,13 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                         ) : (
                             <>
                                 <div className="overflow-x-auto">
-                                    <table className="w-full">
+                                    <table aria-label="Token holders" className="w-full">
                                         <thead className="bg-black/30">
                                             <tr>
-                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">#</th>
-                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Address</th>
-                                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Balance</th>
-                                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase hidden md:table-cell">Share</th>
+                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">#</th>
+                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Address</th>
+                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Balance</th>
+                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase hidden md:table-cell">Share</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-700/50">
@@ -478,6 +483,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                         </div>
                                         <div className="flex gap-2">
                                             <button
+                                                aria-label="Go to previous page"
                                                 onClick={() => setHoldersPage(p => Math.max(0, p - 1))}
                                                 disabled={holdersPage === 0}
                                                 className="px-3 py-1 rounded bg-gray-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600"
@@ -485,6 +491,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                 Previous
                                             </button>
                                             <button
+                                                aria-label="Go to next page"
                                                 onClick={() => setHoldersPage(p => p + 1)}
                                                 disabled={(holdersPage + 1) * limit >= holdersTotal}
                                                 className="px-3 py-1 rounded bg-gray-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600"
@@ -509,14 +516,14 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                         ) : (
                             <>
                                 <div className="overflow-x-auto">
-                                    <table className="w-full">
+                                    <table aria-label="Token transfers" className="w-full">
                                         <thead className="bg-black/30">
                                             <tr>
-                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Tx Hash</th>
-                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">From</th>
-                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">To</th>
-                                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Amount</th>
-                                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase hidden md:table-cell">Time</th>
+                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Tx Hash</th>
+                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">From</th>
+                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">To</th>
+                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Amount</th>
+                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase hidden md:table-cell">Time</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-700/50">
@@ -556,6 +563,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                         </div>
                                         <div className="flex gap-2">
                                             <button
+                                                aria-label="Go to previous page"
                                                 onClick={() => setTransfersPage(p => Math.max(0, p - 1))}
                                                 disabled={transfersPage === 0}
                                                 className="px-3 py-1 rounded bg-gray-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600"
@@ -563,6 +571,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                 Previous
                                             </button>
                                             <button
+                                                aria-label="Go to next page"
                                                 onClick={() => setTransfersPage(p => p + 1)}
                                                 disabled={(transfersPage + 1) * limit >= transfersTotal}
                                                 className="px-3 py-1 rounded bg-gray-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600"

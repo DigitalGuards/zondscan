@@ -22,7 +22,6 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
     throw new Error('Invalid transaction hash format');
   }
 
-  console.log('Fetching transaction:', txHash);
   const response = await fetch(`${config.handlerUrl}/tx/${txHash}`, {
     method: 'GET',
     headers: { Accept: 'application/json' },
@@ -37,16 +36,13 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
   }
 
   const data = await response.json();
-  console.log('Raw API response:', JSON.stringify(data, null, 2));
 
   // Check if we have a valid transaction response
   if (!data.response || isEmptyTransaction(data.response)) {
-    console.log('Invalid or missing transaction data');
     throw new Error('Transaction not found');
   }
 
   const txData = data.response;
-  console.log('Transaction data:', JSON.stringify(txData, null, 2));
 
   // Helper function to handle hex values
   const ensureHexString = (value: string | null | undefined): string => {
@@ -70,8 +66,6 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
     tokenTransfer: data.tokenTransfer || undefined
   };
 
-  console.log('Processed transaction:', JSON.stringify(transaction, null, 2));
-
   return transaction;
 }
 
@@ -82,7 +76,6 @@ export default async function TransactionPage({ params }: PageProps): Promise<JS
   try {
     resolvedParams = await params;
     txHash = resolvedParams.query;
-    console.log('Transaction hash from params:', txHash);
 
     // Validate transaction hash format
     const hashRegex = /^0x[0-9a-fA-F]{64}$/;

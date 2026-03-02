@@ -17,7 +17,7 @@ export default function Footer(): JSX.Element {
         </div>
 
         {/* Navigation */}
-        <div className="flex-1 flex flex-col sm:flex-row gap-8">
+        <nav aria-label="Footer navigation" className="flex-1 flex flex-col sm:flex-row gap-8">
           <div>
             <h3 className="text-sm font-semibold text-accent uppercase mb-4">Explore</h3>
             <ul className="space-y-2 text-sm">
@@ -44,11 +44,11 @@ export default function Footer(): JSX.Element {
           <div>
             <h3 className="text-sm font-semibold text-accent uppercase mb-4">Resources</h3>
             <ul className="space-y-2 text-sm">
-              <li><Link href="https://docs.theqrl.org" target="_blank" className="hover:text-accent transition">QRL Docs</Link></li>
-              <li><Link href="https://github.com/theQRL" target="_blank" className="hover:text-accent transition">GitHub</Link></li>
+              <li><Link href="https://docs.theqrl.org" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition">QRL Docs</Link></li>
+              <li><Link href="https://github.com/theQRL" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition">GitHub</Link></li>
             </ul>
           </div>
-        </div>
+        </nav>
       </div>
 
       <div className="border-t border-background-secondary py-6 px-6 text-sm text-gray-500 flex flex-col md:flex-row items-center justify-between">

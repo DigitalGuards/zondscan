@@ -4,11 +4,10 @@ import type { Metadata } from 'next';
 import TransactionsClient from './transactions-client';
 import type { TransactionsResponse } from '@/app/types';
 import config from '../../../config';
+import { sharedMetadata } from '../../lib/seo/metaData';
 
 async function getTransactions(page: string): Promise<TransactionsResponse> {
   try {
-    console.log(`Fetching transactions for page ${page}`);
-    
     const pageNum = parseInt(page, 10) || 1;
     
     const timestamp = Date.now();
@@ -32,8 +31,6 @@ async function getTransactions(page: string): Promise<TransactionsResponse> {
     }
 
     const data = await response.json();
-    console.log(`Received ${data.txs?.length || 0} transactions. Total reported: ${data.total || 0}`);
-    
     return data;
   } catch (error) {
     console.error('Error fetching transactions:', error);
@@ -59,17 +56,25 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
   const canonicalUrl = `https://zondscan.com/transactions`;
   
   return {
+    ...sharedMetadata,
     title: `Transactions - Page ${pageNumber} | ZondScan`,
     description: `View all transactions on the Zond blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
     alternates: {
+      ...sharedMetadata.alternates,
       canonical: canonicalUrl,
     },
     openGraph: {
+      ...sharedMetadata.openGraph,
       title: `Transactions - Page ${pageNumber} | ZondScan`,
       description: `View all transactions on the Zond blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
       url: `https://zondscan.com/transactions/${pageNumber}`,
       siteName: 'ZondScan',
       type: 'website',
+    },
+    twitter: {
+      ...sharedMetadata.twitter,
+      title: `Transactions - Page ${pageNumber} | ZondScan`,
+      description: `View all transactions on the Zond blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
     },
   };
 }
