@@ -15,147 +15,233 @@ import (
 	"go.uber.org/zap"
 )
 
-// StoreValidators stores validator data from the beacon chain response
+// StoreValidators stores validator data from the beacon chain response.
+// Each validator is written as its own MongoDB document keyed by its index.
 func StoreValidators(beaconResponse models.BeaconValidatorResponse, currentEpoch string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	if err := bulkUpsertValidators(beaconResponse, currentEpoch); err != nil {
+		return err
+	}
 
-	// Parse current epoch for status calculation
 	currentEpochInt, _ := strconv.ParseInt(currentEpoch, 10, 64)
-
-	// Convert each validator
-	newValidators := make([]models.ValidatorRecord, 0, len(beaconResponse.ValidatorList))
-	for _, v := range beaconResponse.ValidatorList {
-		// Determine if this validator is the leader for their slot (simplified: based on index mod)
-		slotNum, _ := strconv.ParseInt(v.Index, 10, 64)
-		isLeader := slotNum%128 == 0 // Simplified leader selection
-
-		record := models.ValidatorRecord{
-			Index:                      v.Index,
-			PublicKeyHex:               models.Base64ToHex(v.Validator.PublicKey),
-			WithdrawalCredentialsHex:   models.Base64ToHex(v.Validator.WithdrawalCredentials),
-			EffectiveBalance:           v.Validator.EffectiveBalance,
-			Slashed:                    v.Validator.Slashed,
-			ActivationEligibilityEpoch: v.Validator.ActivationEligibilityEpoch,
-			ActivationEpoch:            v.Validator.ActivationEpoch,
-			ExitEpoch:                  v.Validator.ExitEpoch,
-			WithdrawableEpoch:          v.Validator.WithdrawableEpoch,
-			SlotNumber:                 v.Index,
-			IsLeader:                   isLeader,
-		}
-		newValidators = append(newValidators, record)
-	}
-
-	// First try to get existing document
-	var storage models.ValidatorStorage
-	err := configs.GetValidatorCollection().FindOne(ctx, bson.M{"_id": "validators"}).Decode(&storage)
-	if err != nil && err != mongo.ErrNoDocuments {
-		configs.Logger.Error("Failed to get existing validator document", zap.Error(err))
-		return err
-	}
-
-	if err == mongo.ErrNoDocuments {
-		// Create new document if it doesn't exist
-		storage = models.ValidatorStorage{
-			ID:         "validators",
-			Epoch:      currentEpoch,
-			UpdatedAt:  fmt.Sprintf("%d", time.Now().Unix()),
-			Validators: newValidators,
-		}
-	} else {
-		// Update existing validators and add new ones
-		// Create a map of existing validators by public key for quick lookup
-		existingValidatorIndex := make(map[string]int)
-		for i, v := range storage.Validators {
-			existingValidatorIndex[v.PublicKeyHex] = i
-		}
-
-		// Update existing validators or append new ones
-		for _, v := range newValidators {
-			if idx, exists := existingValidatorIndex[v.PublicKeyHex]; exists {
-				// Update existing validator's mutable fields
-				storage.Validators[idx].EffectiveBalance = v.EffectiveBalance
-				storage.Validators[idx].Slashed = v.Slashed
-				storage.Validators[idx].ExitEpoch = v.ExitEpoch
-				storage.Validators[idx].WithdrawableEpoch = v.WithdrawableEpoch
-				storage.Validators[idx].SlotNumber = v.SlotNumber
-				storage.Validators[idx].IsLeader = v.IsLeader
-			} else {
-				// Add new validator
-				storage.Validators = append(storage.Validators, v)
-			}
-		}
-
-		// Update epoch and timestamp
-		storage.Epoch = currentEpoch
-		storage.UpdatedAt = fmt.Sprintf("%d", time.Now().Unix())
-	}
-
-	// Upsert the document
-	opts := options.Update().SetUpsert(true)
-	filter := bson.M{"_id": "validators"}
-	update := bson.M{"$set": storage}
-
-	_, err = configs.GetValidatorCollection().UpdateOne(ctx, filter, update, opts)
-	if err != nil {
-		configs.Logger.Error("Failed to update validator document", zap.Error(err))
-		return err
-	}
-
-	// Store validator history for this epoch AFTER updating storage
-	// Use the accumulated validators (storage.Validators) not just the new ones
-	if err := StoreValidatorHistory(storage.Validators, currentEpoch, currentEpochInt); err != nil {
+	if err := storeValidatorHistoryFromDB(currentEpoch, currentEpochInt); err != nil {
 		configs.Logger.Warn("Failed to store validator history", zap.Error(err))
-		// Don't fail the main operation
+		// Do not fail the main operation for history errors.
 	}
 
 	configs.Logger.Info("Successfully updated validators",
-		zap.Int("newCount", len(newValidators)),
-		zap.Int("totalCount", len(storage.Validators)),
+		zap.Int("count", len(beaconResponse.ValidatorList)),
 		zap.String("epoch", currentEpoch))
 	return nil
 }
 
-// GetValidators retrieves all validators from storage
-func GetValidators() (*models.ValidatorStorage, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+// bulkUpsertValidators writes each validator as its own document using BulkWrite upserts.
+func bulkUpsertValidators(beaconResponse models.BeaconValidatorResponse, currentEpoch string) error {
+	if len(beaconResponse.ValidatorList) == 0 {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	var storage models.ValidatorStorage
-	err := configs.GetValidatorCollection().FindOne(ctx, bson.M{"_id": "validators"}).Decode(&storage)
+	updatedAt := fmt.Sprintf("%d", time.Now().Unix())
+
+	writeModels := make([]mongo.WriteModel, 0, len(beaconResponse.ValidatorList))
+	for _, v := range beaconResponse.ValidatorList {
+		doc := buildValidatorDocument(v, currentEpoch, updatedAt)
+		filter := bson.M{"_id": doc.ID}
+		update := bson.M{"$set": doc}
+		writeModels = append(writeModels, mongo.NewUpdateOneModel().
+			SetFilter(filter).
+			SetUpdate(update).
+			SetUpsert(true))
+	}
+
+	opts := options.BulkWrite().SetOrdered(false)
+	result, err := configs.ValidatorsCollections.BulkWrite(ctx, writeModels, opts)
 	if err != nil {
-		configs.Logger.Error("Failed to get validator document", zap.Error(err))
+		configs.Logger.Error("Failed to bulk-write validator documents", zap.Error(err))
+		return err
+	}
+
+	configs.Logger.Info("Bulk-upserted validators",
+		zap.Int64("upserted", result.UpsertedCount),
+		zap.Int64("modified", result.ModifiedCount),
+		zap.String("epoch", currentEpoch))
+	return nil
+}
+
+// buildValidatorDocument converts a BeaconValidator into a ValidatorDocument.
+func buildValidatorDocument(v models.BeaconValidator, epoch, updatedAt string) models.ValidatorDocument {
+	var idx int64
+	fmt.Sscanf(v.Index, "%d", &idx)
+	isLeader := idx%128 == 0 // Simplified leader selection
+
+	return models.ValidatorDocument{
+		ID:                         v.Index,
+		PublicKeyHex:               models.Base64ToHex(v.Validator.PublicKey),
+		WithdrawalCredentialsHex:   models.Base64ToHex(v.Validator.WithdrawalCredentials),
+		EffectiveBalance:           v.Validator.EffectiveBalance,
+		Slashed:                    v.Validator.Slashed,
+		ActivationEligibilityEpoch: v.Validator.ActivationEligibilityEpoch,
+		ActivationEpoch:            v.Validator.ActivationEpoch,
+		ExitEpoch:                  v.Validator.ExitEpoch,
+		WithdrawableEpoch:          v.Validator.WithdrawableEpoch,
+		SlotNumber:                 v.Index,
+		IsLeader:                   isLeader,
+		Epoch:                      epoch,
+		UpdatedAt:                  updatedAt,
+	}
+}
+
+// storeValidatorHistoryFromDB computes validator statistics by scanning the
+// per-document collection and persists them to validator_history.
+func storeValidatorHistoryFromDB(epoch string, currentEpochInt int64) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	totalCount, err := configs.ValidatorsCollections.CountDocuments(ctx, bson.M{})
+	if err != nil {
+		return fmt.Errorf("count validators: %w", err)
+	}
+
+	// Project only the fields needed for status calculation and balance sum.
+	cursor, err := configs.ValidatorsCollections.Find(ctx, bson.M{},
+		options.Find().SetProjection(bson.M{
+			"slashed":          1,
+			"activationEpoch":  1,
+			"exitEpoch":        1,
+			"effectiveBalance": 1,
+		}))
+	if err != nil {
+		return fmt.Errorf("find validators for history: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var docs []models.ValidatorDocument
+	if err := cursor.All(ctx, &docs); err != nil {
+		return fmt.Errorf("decode validators for history: %w", err)
+	}
+
+	var activeCount, pendingCount, exitedCount, slashedCount int
+	totalStaked := big.NewInt(0)
+
+	for _, d := range docs {
+		status := models.GetValidatorStatus(d.ActivationEpoch, d.ExitEpoch, d.Slashed, currentEpochInt)
+		switch status {
+		case "active":
+			activeCount++
+		case "pending":
+			pendingCount++
+		case "exited":
+			exitedCount++
+		case "slashed":
+			slashedCount++
+		}
+		if balance, ok := new(big.Int).SetString(d.EffectiveBalance, 10); ok {
+			totalStaked.Add(totalStaked, balance)
+		}
+	}
+
+	record := &models.ValidatorHistoryRecord{
+		Epoch:           epoch,
+		Timestamp:       time.Now().Unix(),
+		ValidatorsCount: int(totalCount),
+		ActiveCount:     activeCount,
+		PendingCount:    pendingCount,
+		ExitedCount:     exitedCount,
+		SlashedCount:    slashedCount,
+		TotalStaked:     totalStaked.String(),
+	}
+
+	opts := options.Update().SetUpsert(true)
+	filter := bson.M{"epoch": record.Epoch}
+	update := bson.M{"$set": record}
+
+	_, err = configs.ValidatorHistoryCollections.UpdateOne(ctx, filter, update, opts)
+	if err != nil {
+		return fmt.Errorf("insert validator history: %w", err)
+	}
+
+	configs.Logger.Debug("Stored validator history",
+		zap.String("epoch", record.Epoch),
+		zap.Int("validatorsCount", record.ValidatorsCount))
+	return nil
+}
+
+// GetValidators retrieves all validators from the per-document collection
+// and returns them assembled in the legacy ValidatorStorage shape.
+func GetValidators() (*models.ValidatorStorage, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cursor, err := configs.ValidatorsCollections.Find(ctx, bson.M{})
+	if err != nil {
+		configs.Logger.Error("Failed to find validator documents", zap.Error(err))
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var docs []models.ValidatorDocument
+	if err := cursor.All(ctx, &docs); err != nil {
+		configs.Logger.Error("Failed to decode validator documents", zap.Error(err))
 		return nil, err
 	}
 
-	return &storage, nil
+	records := make([]models.ValidatorRecord, 0, len(docs))
+	epoch := ""
+	updatedAt := ""
+	for _, d := range docs {
+		records = append(records, validatorDocToRecord(d))
+		if epoch == "" {
+			epoch = d.Epoch
+			updatedAt = d.UpdatedAt
+		}
+	}
+
+	return &models.ValidatorStorage{
+		ID:        "validators",
+		Epoch:     epoch,
+		UpdatedAt: updatedAt,
+		Validators: records,
+	}, nil
 }
 
-// GetValidatorByPublicKey retrieves a specific validator by their public key
+// GetValidatorByPublicKey retrieves a specific validator by their public key hex.
 func GetValidatorByPublicKey(publicKeyHex string) (*models.ValidatorRecord, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	var storage models.ValidatorStorage
-	err := configs.GetValidatorCollection().FindOne(ctx, bson.M{
-		"validators.publicKeyHex": publicKeyHex,
-	}).Decode(&storage)
-
+	var doc models.ValidatorDocument
+	err := configs.ValidatorsCollections.FindOne(ctx, bson.M{"publicKeyHex": publicKeyHex}).Decode(&doc)
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("validator not found")
+		}
 		return nil, err
 	}
 
-	// Find the matching validator
-	for _, v := range storage.Validators {
-		if v.PublicKeyHex == publicKeyHex {
-			return &v, nil
-		}
-	}
-
-	return nil, fmt.Errorf("validator not found")
+	record := validatorDocToRecord(doc)
+	return &record, nil
 }
 
-// StoreEpochInfo stores the current epoch information from beacon chain head
+// validatorDocToRecord maps a ValidatorDocument to the legacy ValidatorRecord type.
+func validatorDocToRecord(d models.ValidatorDocument) models.ValidatorRecord {
+	return models.ValidatorRecord{
+		Index:                      d.ID,
+		PublicKeyHex:               d.PublicKeyHex,
+		WithdrawalCredentialsHex:   d.WithdrawalCredentialsHex,
+		EffectiveBalance:           d.EffectiveBalance,
+		Slashed:                    d.Slashed,
+		ActivationEligibilityEpoch: d.ActivationEligibilityEpoch,
+		ActivationEpoch:            d.ActivationEpoch,
+		ExitEpoch:                  d.ExitEpoch,
+		WithdrawableEpoch:          d.WithdrawableEpoch,
+		SlotNumber:                 d.SlotNumber,
+		IsLeader:                   d.IsLeader,
+	}
+}
+
+// StoreEpochInfo stores the current epoch information from beacon chain head.
 func StoreEpochInfo(chainHead *models.BeaconChainHeadResponse) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -188,6 +274,7 @@ func StoreEpochInfo(chainHead *models.BeaconChainHeadResponse) error {
 }
 
 // StoreValidatorHistory computes and stores validator statistics for the current epoch
+// from a supplied []ValidatorRecord slice (kept for callers that already have the data).
 func StoreValidatorHistory(validators []models.ValidatorRecord, epoch string, currentEpochInt int64) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -196,9 +283,7 @@ func StoreValidatorHistory(validators []models.ValidatorRecord, epoch string, cu
 	totalStaked := big.NewInt(0)
 
 	for _, v := range validators {
-		// Calculate status
 		status := models.GetValidatorStatus(v.ActivationEpoch, v.ExitEpoch, v.Slashed, currentEpochInt)
-
 		switch status {
 		case "active":
 			activeCount++
@@ -209,8 +294,6 @@ func StoreValidatorHistory(validators []models.ValidatorRecord, epoch string, cu
 		case "slashed":
 			slashedCount++
 		}
-
-		// Sum effective balance
 		if balance, ok := new(big.Int).SetString(v.EffectiveBalance, 10); ok {
 			totalStaked.Add(totalStaked, balance)
 		}
@@ -227,7 +310,6 @@ func StoreValidatorHistory(validators []models.ValidatorRecord, epoch string, cu
 		TotalStaked:     totalStaked.String(),
 	}
 
-	// Use epoch as unique identifier to prevent duplicate entries
 	opts := options.Update().SetUpsert(true)
 	filter := bson.M{"epoch": record.Epoch}
 	update := bson.M{"$set": record}

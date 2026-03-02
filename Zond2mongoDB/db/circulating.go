@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
 )
@@ -18,28 +17,12 @@ type Address struct {
 }
 
 func UpdateTotalBalance() {
-	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel() // Properly cancel the context
+	// Use the shared DB connection and collection references instead of opening
+	// a separate connection to localhost:27017.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-	client, err := mongo.Connect(ctx, clientOptions)
-	if err != nil {
-		configs.Logger.Error("Failed to connect to MongoDB", zap.Error(err))
-		return
-	}
-	defer func() {
-		if err := client.Disconnect(ctx); err != nil {
-			configs.Logger.Error("Failed to disconnect from MongoDB", zap.Error(err))
-		}
-	}()
-
-	// Check the connection
-	if err = client.Ping(ctx, nil); err != nil {
-		configs.Logger.Error("Failed to ping MongoDB", zap.Error(err))
-		return
-	}
-
-	destCollection := client.Database("qrldata-z").Collection("totalCirculatingSupply")
+	destCollection := configs.GetCollection(configs.DB, "totalCirculatingSupply")
 
 	// Get initial total balance
 	total := big.NewInt(0)

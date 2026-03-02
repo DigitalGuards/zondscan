@@ -46,18 +46,24 @@ const formatTimestamp = (timestamp: number): string => {
   return `${month} ${day}, ${year}, ${hours}:${minutes}:${seconds} UTC`;
 };
 
+const isZeroAddress = (addr: string): boolean => {
+  if (!addr) return false;
+  const stripped = addr.replace(/^[Zz]/, '').replace(/^0x/, '');
+  return /^0*$/.test(stripped);
+};
+
 const AddressDisplay = ({ address, isMobile }: { address: string, isMobile: boolean }): JSX.Element => {
   const displayAddress = isMobile ? `${address.slice(0, 8)}...${address.slice(-6)}` : address;
-  
+
   return (
     <div className="flex flex-col gap-2">
-      <a 
+      <a
         href={`/address/${address}`}
-        className="text-gray-300 hover:text-[#ffa729] break-all font-mono 
+        className="text-gray-300 hover:text-[#ffa729] break-all font-mono
                   transition-colors duration-300 group relative inline-block"
       >
         {displayAddress}
-        <div className="absolute -inset-2 rounded-lg bg-[#3d3d3d] opacity-0 
+        <div className="absolute -inset-2 rounded-lg bg-[#3d3d3d] opacity-0
                       group-hover:opacity-10 transition-opacity duration-300" />
       </a>
       <CopyButton value={address} label="Copy address" />
@@ -266,27 +272,46 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                       </div>
                       <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-2">
                         <span className="text-sm text-gray-400 min-w-[80px]">From:</span>
-                        <a
-                          href={`/address/${transaction.tokenTransfer.from}`}
-                          className="text-gray-300 hover:text-[#ffa729] font-mono text-sm transition-colors break-all"
-                        >
-                          {isMobile
-                            ? `${transaction.tokenTransfer.from.slice(0, 10)}...${transaction.tokenTransfer.from.slice(-8)}`
-                            : transaction.tokenTransfer.from
-                          }
-                        </a>
+                        {isZeroAddress(transaction.tokenTransfer.from) ? (
+                          <div className="flex items-center gap-2">
+                            <Badge variant="success">Mint</Badge>
+                            <span className="text-sm text-gray-400">
+                              via{' '}
+                              <a
+                                href={`/address/${transaction.tokenTransfer.contractAddress}`}
+                                className="text-[#ffa729] hover:text-[#ffb84d] transition-colors"
+                              >
+                                {transaction.tokenTransfer.tokenName} Contract
+                              </a>
+                            </span>
+                          </div>
+                        ) : (
+                          <a
+                            href={`/address/${transaction.tokenTransfer.from}`}
+                            className="text-gray-300 hover:text-[#ffa729] font-mono text-sm transition-colors break-all"
+                          >
+                            {isMobile
+                              ? `${transaction.tokenTransfer.from.slice(0, 10)}...${transaction.tokenTransfer.from.slice(-8)}`
+                              : transaction.tokenTransfer.from
+                            }
+                          </a>
+                        )}
                       </div>
                       <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-2">
                         <span className="text-sm text-gray-400 min-w-[80px]">To:</span>
-                        <a
-                          href={`/address/${transaction.tokenTransfer.to}`}
-                          className="text-gray-300 hover:text-[#ffa729] font-mono text-sm transition-colors break-all"
-                        >
-                          {isMobile
-                            ? `${transaction.tokenTransfer.to.slice(0, 10)}...${transaction.tokenTransfer.to.slice(-8)}`
-                            : transaction.tokenTransfer.to
-                          }
-                        </a>
+                        {isZeroAddress(transaction.tokenTransfer.to) ? (
+                          <Badge variant="error">Burn</Badge>
+                        ) : (
+                          <a
+                            href={`/address/${transaction.tokenTransfer.to}`}
+                            className="text-gray-300 hover:text-[#ffa729] font-mono text-sm transition-colors break-all"
+                          >
+                            {isMobile
+                              ? `${transaction.tokenTransfer.to.slice(0, 10)}...${transaction.tokenTransfer.to.slice(-8)}`
+                              : transaction.tokenTransfer.to
+                            }
+                          </a>
+                        )}
                       </div>
                     </div>
                   </div>

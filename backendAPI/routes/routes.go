@@ -25,6 +25,9 @@ func UserRoute(router *gin.Engine) {
 		// Parse pagination parameters
 		page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+		if limit > 100 {
+			limit = 100
+		}
 
 		result, err := db.GetPendingTransactions(page, limit)
 		if err != nil {
@@ -283,11 +286,7 @@ func UserRoute(router *gin.Engine) {
 
 	router.GET("/address/aggregate/:query", func(c *gin.Context) {
 		param := c.Param("query")
-
-		// Normalize address: convert lowercase z prefix to uppercase Z
-		if strings.HasPrefix(param, "z") && !strings.HasPrefix(param, "z0") {
-			param = "Z" + param[1:]
-		}
+		// db functions normalize the address to canonical lowercase z-prefix internally.
 
 		// Single Address data
 		addressData, err := db.ReturnSingleAddress(param)
@@ -546,6 +545,9 @@ func UserRoute(router *gin.Engine) {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 			limit = l
 		}
+		if limit > 100 {
+			limit = 100
+		}
 
 		history, err := db.GetValidatorHistory(limit)
 		if err != nil {
@@ -594,6 +596,9 @@ func UserRoute(router *gin.Engine) {
 		// Parse pagination parameters
 		page, _ := strconv.ParseInt(c.DefaultQuery("page", "0"), 10, 64)
 		limit, _ := strconv.ParseInt(c.DefaultQuery("limit", "10"), 10, 64)
+		if limit > 100 {
+			limit = 100
+		}
 		search := c.Query("search")
 
 		// Parse isToken filter (optional)
@@ -611,15 +616,8 @@ func UserRoute(router *gin.Engine) {
 			return
 		}
 
-		// Normalize addresses: ensure Z prefix is uppercase for display
-		for i := range query {
-			if strings.HasPrefix(query[i].ContractAddress, "z") {
-				query[i].ContractAddress = "Z" + query[i].ContractAddress[1:]
-			}
-			if strings.HasPrefix(query[i].ContractCreatorAddress, "z") {
-				query[i].ContractCreatorAddress = "Z" + query[i].ContractCreatorAddress[1:]
-			}
-		}
+		// Addresses are stored and returned as lowercase z-prefix (canonical form).
+		// No presentation-layer conversion needed.
 
 		c.JSON(http.StatusOK, gin.H{
 			"response": query,
@@ -627,6 +625,9 @@ func UserRoute(router *gin.Engine) {
 		})
 	})
 
+	// NOTE: /debug/blocks exposes internal sync state. In production this endpoint
+	// MUST be placed behind authentication middleware or removed entirely to prevent
+	// information disclosure to unauthenticated callers.
 	router.GET("/debug/blocks", func(c *gin.Context) {
 		count, err := db.CountBlocksNetwork()
 		if err != nil {
@@ -702,6 +703,9 @@ func UserRoute(router *gin.Engine) {
 		address := c.Param("address")
 		page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "5")) // Default to 5
+		if limit > 100 {
+			limit = 100
+		}
 
 		transactions, err := db.ReturnNonZeroTransactions(address, page, limit)
 		if err != nil {

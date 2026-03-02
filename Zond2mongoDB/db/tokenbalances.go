@@ -4,9 +4,9 @@ import (
 	"Zond2mongoDB/configs"
 	"Zond2mongoDB/models"
 	"Zond2mongoDB/rpc"
+	"Zond2mongoDB/validation"
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -16,24 +16,25 @@ import (
 
 // StoreTokenBalance updates the token balance for a given address
 func StoreTokenBalance(contractAddress string, holderAddress string, amount string, blockNumber string) error {
-	// Normalize contract address to lowercase to match contractCode collection
-	contractAddress = strings.ToLower(contractAddress)
+	// Normalize addresses to canonical Z-prefix form
+	contractAddress = validation.ConvertToZAddress(contractAddress)
 
-	configs.Logger.Info("Attempting to store token balance",
+	// Debug-level log for per-record operations; Info is reserved for batch summaries.
+	configs.Logger.Debug("Attempting to store token balance",
 		zap.String("contractAddress", contractAddress),
 		zap.String("holderAddress", holderAddress),
 		zap.String("transferAmount", amount),
 		zap.String("blockNumber", blockNumber))
 
-	// Normalize holder address to lowercase for consistent storage
-	holderAddress = strings.ToLower(holderAddress)
+	// Normalize holder address to canonical Z-prefix form
+	holderAddress = validation.ConvertToZAddress(holderAddress)
 
 	// Special handling for zero address (QRL uses Z prefix)
-	if holderAddress == "z0" ||
-		holderAddress == strings.ToLower(configs.QRLZeroAddress) ||
+	if holderAddress == "Z0" ||
+		holderAddress == configs.QRLZeroAddress ||
 		holderAddress == "0x0" ||
 		holderAddress == "0x0000000000000000000000000000000000000000" {
-		configs.Logger.Info("Skipping token balance update for zero address",
+		configs.Logger.Debug("Skipping token balance update for zero address",
 			zap.String("holderAddress", holderAddress))
 		return nil
 	}
@@ -54,10 +55,10 @@ func StoreTokenBalance(contractAddress string, holderAddress string, amount stri
 			zap.Error(err))
 		// Continue with a zero balance if we can't get the actual balance
 		// This allows us to at least record that we tried to update this token balance
-		configs.Logger.Info("Using default zero balance after RPC failure")
+		configs.Logger.Debug("Using default zero balance after RPC failure")
 		balance = "0"
 	} else {
-		configs.Logger.Info("Retrieved current token balance",
+		configs.Logger.Debug("Retrieved current token balance",
 			zap.String("contractAddress", contractAddress),
 			zap.String("holderAddress", holderAddress),
 			zap.String("balance", balance))
@@ -83,9 +84,11 @@ func StoreTokenBalance(contractAddress string, holderAddress string, amount stri
 		"holderAddress":   holderAddress,
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	// Perform upsert
-	configs.Logger.Debug("Performing upsert operation for token balance")
-	result, err := collection.UpdateOne(context.Background(), filter, update, opts)
+	result, err := collection.UpdateOne(ctx, filter, update, opts)
 	if err != nil {
 		configs.Logger.Error("Failed to update token balance in database",
 			zap.String("contractAddress", contractAddress),
@@ -94,7 +97,7 @@ func StoreTokenBalance(contractAddress string, holderAddress string, amount stri
 		return fmt.Errorf("failed to update token balance: %v", err)
 	}
 
-	configs.Logger.Info("Token balance update completed",
+	configs.Logger.Debug("Token balance update completed",
 		zap.String("contractAddress", contractAddress),
 		zap.String("holderAddress", holderAddress),
 		zap.Int64("matchedCount", result.MatchedCount),
@@ -114,7 +117,10 @@ func GetTokenBalance(contractAddress string, holderAddress string) (*models.Toke
 		"holderAddress":   holderAddress,
 	}
 
-	err := collection.FindOne(context.Background(), filter).Decode(&balance)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	err := collection.FindOne(ctx, filter).Decode(&balance)
 	if err != nil {
 		return nil, err
 	}
@@ -128,13 +134,17 @@ func GetTokenHolders(contractAddress string) ([]models.TokenBalance, error) {
 	var balances []models.TokenBalance
 
 	filter := bson.M{"contractAddress": contractAddress}
-	cursor, err := collection.Find(context.Background(), filter)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cursor, err := collection.Find(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(context.Background())
+	defer cursor.Close(ctx)
 
-	err = cursor.All(context.Background(), &balances)
+	err = cursor.All(ctx, &balances)
 	if err != nil {
 		return nil, err
 	}

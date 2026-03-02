@@ -24,6 +24,16 @@ type ZondDatabaseBlock struct {
 	Result  Result `json:"result"`
 }
 
+// ZondDatabaseBlockWithInt is a wrapper used when inserting blocks into MongoDB.
+// It adds a blockNumberInt field so range queries can use proper numeric comparison
+// instead of lexicographic hex string comparison (which sorts "0x9" after "0x10").
+type ZondDatabaseBlockWithInt struct {
+	Jsonrpc        string `json:"jsonrpc" bson:"jsonrpc"`
+	ID             int    `json:"id"      bson:"id"`
+	Result         Result `json:"result"  bson:"result"`
+	BlockNumberInt int64  `bson:"blockNumberInt"`
+}
+
 type Withdrawal struct {
 	Index          string   `json:"index"`
 	ValidatorIndex string   `json:"validatorIndex"`
