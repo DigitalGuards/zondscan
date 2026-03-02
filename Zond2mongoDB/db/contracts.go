@@ -4,10 +4,10 @@ import (
 	"Zond2mongoDB/configs"
 	"Zond2mongoDB/models"
 	"Zond2mongoDB/rpc"
+	"Zond2mongoDB/validation"
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -21,9 +21,9 @@ func StoreContract(contract models.ContractInfo) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	// Normalize addresses to lowercase for consistent storage
-	contract.Address = strings.ToLower(contract.Address)
-	contract.CreatorAddress = strings.ToLower(contract.CreatorAddress)
+	// Normalize addresses to canonical Z-prefix form
+	contract.Address = validation.ConvertToZAddress(contract.Address)
+	contract.CreatorAddress = validation.ConvertToZAddress(contract.CreatorAddress)
 
 	collection := configs.GetContractsCollection()
 	filter := bson.M{"address": contract.Address}
@@ -114,8 +114,8 @@ func GetContract(address string) (*models.ContractInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Normalize address to lowercase for consistent lookup
-	address = strings.ToLower(address)
+	// Normalize address to canonical Z-prefix form
+	address = validation.ConvertToZAddress(address)
 
 	var contract models.ContractInfo
 	err := configs.GetContractsCollection().FindOne(ctx, bson.M{"address": address}).Decode(&contract)
@@ -222,8 +222,8 @@ func processContracts(tx *models.Transaction) (string, string, string, bool) {
 // IsAddressContract checks if an address is a contract by querying the contractCode collection
 // and falling back to RPC getCode call if not found
 func IsAddressContract(address string) bool {
-	// Normalize address to lowercase for consistent lookup
-	address = strings.ToLower(address)
+	// Normalize address to canonical Z-prefix form
+	address = validation.ConvertToZAddress(address)
 
 	// First check our database
 	contract := getContractFromDB(address)
@@ -316,7 +316,11 @@ func getContractFromDB(address string) *models.ContractInfo {
 	// If not found in main collection, check the contractCode collection
 	collection := configs.GetCollection(configs.DB, "contractCode")
 	var contract models.ContractInfo
-	err = collection.FindOne(context.Background(), bson.M{"address": address}).Decode(&contract)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	err = collection.FindOne(ctx, bson.M{"address": address}).Decode(&contract)
 	if err != nil {
 		return nil
 	}

@@ -5,6 +5,7 @@ import (
 	"Zond2mongoDB/models"
 	"Zond2mongoDB/utils"
 	"context"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,6 +14,20 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
 )
+
+// HexToInt64 parses a hex block number string (e.g. "0x1a2b") to int64.
+// Returns 0 on any parse error.
+func HexToInt64(hex string) int64 {
+	s := strings.TrimPrefix(hex, "0x")
+	if s == "" {
+		return 0
+	}
+	n, err := strconv.ParseInt(s, 16, 64)
+	if err != nil {
+		return 0
+	}
+	return n
+}
 
 // Collection name constants for consistency
 const (
@@ -185,11 +200,14 @@ func StoreLastKnownBlockNumber(blockNumber string) error {
 
 	err := syncColl.FindOne(ctx, bson.M{"_id": lastSyncedBlockID}).Decode(&existingDoc)
 
+	blockNumberIntVal := HexToInt64(blockNumber)
+
 	if err == mongo.ErrNoDocuments {
 		// Document doesn't exist, create it
 		_, err = syncColl.InsertOne(ctx, bson.M{
-			"_id":          lastSyncedBlockID,
-			"block_number": blockNumber,
+			"_id":              lastSyncedBlockID,
+			"block_number":     blockNumber,
+			"block_number_int": blockNumberIntVal,
 		})
 
 		if err != nil {
@@ -217,15 +235,20 @@ func StoreLastKnownBlockNumber(blockNumber string) error {
 		}
 	}
 
-	// Document exists or was just created by another goroutine
-	// Only update if the new block number is higher
+	// Document exists or was just created by another goroutine.
+	// Use the integer field for the $lt guard so the comparison is numeric,
+	// not the lexicographic hex string comparison that would produce wrong
+	// ordering (e.g. "0x9" sorts after "0x10" lexicographically).
 	result, err := syncColl.UpdateOne(
 		ctx,
 		bson.M{
-			"_id":          lastSyncedBlockID,
-			"block_number": bson.M{"$lt": blockNumber},
+			"_id":              lastSyncedBlockID,
+			"block_number_int": bson.M{"$lt": blockNumberIntVal},
 		},
-		bson.M{"$set": bson.M{"block_number": blockNumber}},
+		bson.M{"$set": bson.M{
+			"block_number":     blockNumber,
+			"block_number_int": blockNumberIntVal,
+		}},
 	)
 
 	if err != nil {
@@ -370,11 +393,19 @@ func InsertBlockDocument(block models.ZondDatabaseBlock) {
 		return
 	}
 
-	// Block doesn't exist, insert it
+	// Block doesn't exist, insert it. Use the wrapper struct so blockNumberInt
+	// is written alongside the hex number field for efficient range queries.
 	ctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
 	defer cancel()
 
-	result, err := configs.BlocksCollections.InsertOne(ctx, block)
+	doc := models.ZondDatabaseBlockWithInt{
+		Jsonrpc:        block.Jsonrpc,
+		ID:             block.ID,
+		Result:         block.Result,
+		BlockNumberInt: HexToInt64(block.Result.Number),
+	}
+
+	result, err := configs.BlocksCollections.InsertOne(ctx, doc)
 	if err != nil {
 		configs.Logger.Warn("Failed to insert block",
 			zap.String("blockNumber", block.Result.Number),
@@ -386,8 +417,10 @@ func InsertBlockDocument(block models.ZondDatabaseBlock) {
 	}
 }
 
-// InsertManyBlockDocuments inserts multiple block documents into the database
-// Filters out blocks that already exist before inserting
+// InsertManyBlockDocuments inserts multiple block documents into the database.
+// Instead of calling BlockExists() for each block individually (N round-trips),
+// it issues a single Find with $in to identify all already-stored block numbers
+// and then performs one InsertMany for the remainder.
 func InsertManyBlockDocuments(blocks []interface{}) {
 	if len(blocks) == 0 {
 		return
@@ -396,55 +429,97 @@ func InsertManyBlockDocuments(blocks []interface{}) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Create a slice for unique blocks
-	var uniqueBlocks []interface{}
+	// --- Step 1: de-duplicate within the incoming batch ---
+	// Map block number → first occurrence to preserve insertion order.
+	seenInBatch := make(map[string]bool, len(blocks))
+	type entry struct {
+		number string
+		block  models.ZondDatabaseBlock
+	}
+	var candidates []entry
 
-	// Track which block numbers we've already processed
-	processedBlockNumbers := make(map[string]bool)
-
-	// For each block in the input
 	for _, blockInterface := range blocks {
-		// Cast to the correct type
 		block, ok := blockInterface.(models.ZondDatabaseBlock)
 		if !ok {
 			configs.Logger.Warn("Failed to cast block to ZondDatabaseBlock, skipping")
 			continue
 		}
-
-		blockNumber := block.Result.Number
-
-		// Skip if we've already processed this block number in this batch
-		if _, exists := processedBlockNumbers[blockNumber]; exists {
-			configs.Logger.Info("Skipping duplicate block in batch",
-				zap.String("blockNumber", blockNumber))
+		num := block.Result.Number
+		if seenInBatch[num] {
+			configs.Logger.Debug("Skipping duplicate block in batch",
+				zap.String("blockNumber", num))
 			continue
 		}
-
-		// Check if this block exists in the database
-		if BlockExists(blockNumber) {
-			configs.Logger.Info("Block already exists in DB, skipping insertion",
-				zap.String("blockNumber", blockNumber))
-			continue
-		}
-
-		// Block is unique, add it to our list
-		uniqueBlocks = append(uniqueBlocks, blockInterface)
-		processedBlockNumbers[blockNumber] = true
+		seenInBatch[num] = true
+		candidates = append(candidates, entry{number: num, block: block})
 	}
 
-	// Only insert if we have unique blocks
-	if len(uniqueBlocks) > 0 {
-		configs.Logger.Info("Inserting unique blocks",
-			zap.Int("originalCount", len(blocks)),
-			zap.Int("uniqueCount", len(uniqueBlocks)))
+	if len(candidates) == 0 {
+		return
+	}
 
-		_, err := configs.BlocksCollections.InsertMany(ctx, uniqueBlocks)
-		if err != nil {
-			configs.Logger.Warn("Failed to insert many block documents", zap.Error(err))
-		}
+	// --- Step 2: single $in query to find which block numbers already exist in DB ---
+	numbers := make([]string, len(candidates))
+	for i, c := range candidates {
+		numbers[i] = c.number
+	}
+
+	findOpts := options.Find().SetProjection(bson.M{"result.number": 1})
+	cursor, err := configs.BlocksCollections.Find(
+		ctx,
+		bson.M{"result.number": bson.M{"$in": numbers}},
+		findOpts,
+	)
+
+	existsInDB := make(map[string]bool)
+	if err != nil {
+		configs.Logger.Warn("Failed to query existing blocks, will attempt insertion anyway",
+			zap.Error(err))
 	} else {
+		defer cursor.Close(ctx)
+		var existing []struct {
+			Result struct {
+				Number string `bson:"number"`
+			} `bson:"result"`
+		}
+		if decodeErr := cursor.All(ctx, &existing); decodeErr != nil {
+			configs.Logger.Warn("Failed to decode existing block numbers", zap.Error(decodeErr))
+		}
+		for _, e := range existing {
+			existsInDB[e.Result.Number] = true
+		}
+	}
+
+	// --- Step 3: build the final insert list ---
+	var uniqueBlocks []interface{}
+	for _, c := range candidates {
+		if existsInDB[c.number] {
+			configs.Logger.Debug("Block already exists in DB, skipping insertion",
+				zap.String("blockNumber", c.number))
+			continue
+		}
+		doc := models.ZondDatabaseBlockWithInt{
+			Jsonrpc:        c.block.Jsonrpc,
+			ID:             c.block.ID,
+			Result:         c.block.Result,
+			BlockNumberInt: HexToInt64(c.number),
+		}
+		uniqueBlocks = append(uniqueBlocks, doc)
+	}
+
+	if len(uniqueBlocks) == 0 {
 		configs.Logger.Info("No unique blocks to insert",
 			zap.Int("originalCount", len(blocks)))
+		return
+	}
+
+	configs.Logger.Info("Inserting unique blocks",
+		zap.Int("originalCount", len(blocks)),
+		zap.Int("uniqueCount", len(uniqueBlocks)))
+
+	_, err = configs.BlocksCollections.InsertMany(ctx, uniqueBlocks)
+	if err != nil {
+		configs.Logger.Warn("Failed to insert many block documents", zap.Error(err))
 	}
 }
 
