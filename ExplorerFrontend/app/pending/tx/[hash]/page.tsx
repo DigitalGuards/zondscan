@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { redirect } from 'next/navigation';
 import config from '../../../../config';
 import type { PendingTransaction } from '@/app/types';
 import PendingTransactionView from './pending-transaction-view';
@@ -8,7 +9,7 @@ interface PageProps {
 }
 
 function validateTransactionHash(hash: string): boolean {
-  const hashRegex = /^0x[0-9a-fA-F]+$/;
+  const hashRegex = /^0x[0-9a-fA-F]{64}$/;
   return hashRegex.test(hash);
 }
 
@@ -20,7 +21,6 @@ async function getTransactionStatus(hash: string): Promise<{
   try {
     // First try pending transactions endpoint
     const response = await axios.get(`${config.handlerUrl}/pending-transaction/${hash}`);
-    console.log('Transaction status response:', response.data);
     
     if (!response.data?.transaction) {
       return { status: 'dropped', transaction: null };
@@ -78,7 +78,6 @@ export default async function PendingTransactionPage({ params }: PageProps): Pro
   try {
     const resolvedParams = await params;
     const hash = resolvedParams.hash;
-    console.log('Transaction hash:', hash);
 
     if (!validateTransactionHash(hash)) {
       return (
@@ -96,18 +95,9 @@ export default async function PendingTransactionPage({ params }: PageProps): Pro
 
     const { status, transaction } = await getTransactionStatus(hash);
 
-    // If transaction is mined, use window.location for client-side redirect
+    // If transaction is mined, redirect to the confirmed transaction page
     if (status === 'mined' && transaction) {
-      return (
-        <>
-          <script
-            dangerouslySetInnerHTML={{
-              __html: `window.location.href = '/tx/${hash}';`,
-            }}
-          />
-          <div>Redirecting to transaction page...</div>
-        </>
-      );
+      redirect(`/tx/${hash}`);
     }
 
     // If transaction is dropped

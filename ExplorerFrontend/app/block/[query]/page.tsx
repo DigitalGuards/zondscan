@@ -5,7 +5,7 @@ import { sharedMetadata } from '../../lib/seo/metaData';
 export async function generateMetadata({ params }: { params: Promise<{ query: string }> }): Promise<Metadata> {
   const resolvedParams = await params;
   const blockNumber = resolvedParams.query;
-  const canonicalUrl = `https://zondscan.com/block`;
+  const canonicalUrl = `https://zondscan.com/block/${blockNumber}`;
   
   return {
     ...sharedMetadata,

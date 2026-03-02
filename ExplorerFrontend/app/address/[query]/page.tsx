@@ -13,7 +13,7 @@ interface PageProps {
 export async function generateMetadata({ params }: { params: Promise<{ query: string }> }): Promise<Metadata> {
     const resolvedParams = await params;
     const address = resolvedParams.query;
-    const canonicalUrl = `https://zondscan.com/address`;
+    const canonicalUrl = `https://zondscan.com/address/${address}`;
 
     return {
         ...sharedMetadata,

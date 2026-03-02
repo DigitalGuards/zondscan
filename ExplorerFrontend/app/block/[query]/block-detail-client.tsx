@@ -6,6 +6,8 @@ import { useSearchParams } from 'next/navigation';
 import config from '../../../config';
 import Link from 'next/link';
 import { formatAmount } from '../../lib/helpers';
+import Breadcrumbs from '../../components/Breadcrumbs';
+import EmptyState from '../../components/EmptyState';
 
 // Back link component that uses useSearchParams
 function BackToBlocksLink(): JSX.Element | null {
@@ -181,10 +183,10 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
 
   return (
     <div className="p-8">
-      {/* Back Button - only shown when coming from Latest Blocks */}
-      <Suspense fallback={null}>
-        <BackToBlocksLink />
-      </Suspense>
+      <Breadcrumbs items={[
+        { label: 'Blocks', href: '/blocks/1' },
+        { label: `Block #${blockNumber}` },
+      ]} />
 
       <div className="relative overflow-hidden rounded-2xl
                     bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
@@ -291,7 +293,7 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
                     </div>
                   ))
                 ) : (
-                  <p className="text-gray-400">No transactions in this block</p>
+                  <EmptyState title="No transactions in this block" description="This block was mined without any transactions." />
                 )}
               </div>
             </div>

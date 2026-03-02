@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -10,10 +10,10 @@ function onlyNumbers(str: string): boolean {
 
 // Validates if the input is a valid address (either 0x or Z prefixed)
 function isValidAddress(address: string): boolean {
-  // Check for Z-prefixed address (Z + 40 hex chars)
-  if (address.startsWith('Z') && address.length === 41) {
+  // Check for Z-prefixed address (Z or z + 40 hex chars)
+  if ((address.startsWith('Z') || address.startsWith('z')) && address.length === 41) {
     // Check if the rest of the string is valid hex
-    return /^Z[0-9a-fA-F]{40}$/.test(address);
+    return /^[Zz][0-9a-fA-F]{40}$/.test(address);
   }
   
   // Check for 0x-prefixed address (0x + 40 hex chars)
@@ -28,6 +28,7 @@ export default function SearchBar(): JSX.Element {
   const [searchValue, setSearchValue] = useState<string>('');
   const [error, setError] = useState<string>('');
   const router = useRouter();
+  const inputRef = useRef<HTMLInputElement>(null);
 
   function handleInputChange(event: ChangeEvent<HTMLInputElement>): void {
     setSearchValue(event.target.value);
@@ -41,7 +42,8 @@ export default function SearchBar(): JSX.Element {
     } else if (searchValue.length === 66) {
       newPath = "/tx/" + searchValue;
     } else if (isValidAddress(searchValue)) {
-      newPath = "/address/" + searchValue;
+      const normalized = searchValue.startsWith('z') ? 'Z' + searchValue.slice(1) : searchValue;
+      newPath = "/address/" + normalized;
     } else {
       setError('Invalid input!');
       return;
@@ -51,16 +53,16 @@ export default function SearchBar(): JSX.Element {
 
   useEffect(() => {
     const listener = (event: KeyboardEvent): void => {
-      if (event.code === "Enter" || event.code === "NumpadEnter") {
+      if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
         event.preventDefault();
-        navigateHandler();
+        inputRef.current?.focus();
       }
     };
     window.addEventListener("keydown", listener);
     return () => {
       window.removeEventListener("keydown", listener);
     };
-  }, [navigateHandler]);
+  }, []);
 
   return (
     <div className="relative w-full">
@@ -73,7 +75,9 @@ export default function SearchBar(): JSX.Element {
           }}
           className="flex flex-col sm:flex-row gap-3 sm:gap-6">
           <input
+            ref={inputRef}
             type="text"
+            aria-label="Search by address, transaction hash, or block number"
             placeholder="Search by Address (Zxx) / Txn Hash / Block.."
             className="flex-1 py-3 sm:py-4 px-4 sm:px-6 text-sm sm:text-base text-gray-300
                      bg-background rounded-xl
