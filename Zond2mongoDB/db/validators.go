@@ -8,10 +8,12 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
 )
 
+// UpdateValidators updates the previousHash field on a block document.
 func UpdateValidators(blockNumber string, previousHash string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -25,99 +27,172 @@ func UpdateValidators(blockNumber string, previousHash string) {
 	}
 }
 
+// InsertValidators stores each validator as its own document using BulkWrite upserts.
+// The document _id is the validator index string. This replaces the legacy single
+// mega-document approach and avoids MongoDB's 16 MB document size limit.
 func InsertValidators(beaconResponse models.BeaconValidatorResponse, currentEpoch string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	if len(beaconResponse.ValidatorList) == 0 {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Convert beacon response to storage format
-	storage := models.ValidatorStorage{
-		ID:         "validators", // Single document ID for easy updates
-		Epoch:      currentEpoch,
-		UpdatedAt:  fmt.Sprintf("%d", time.Now().Unix()),
-		Validators: make([]models.ValidatorRecord, 0, len(beaconResponse.ValidatorList)),
-	}
+	updatedAt := fmt.Sprintf("%d", time.Now().Unix())
 
-	// Convert each validator
+	writeModels := make([]mongo.WriteModel, 0, len(beaconResponse.ValidatorList))
 	for _, v := range beaconResponse.ValidatorList {
-		record := models.ValidatorRecord{
-			Index:                      v.Index,
-			PublicKeyHex:               models.Base64ToHex(v.Validator.PublicKey),
-			WithdrawalCredentialsHex:   models.Base64ToHex(v.Validator.WithdrawalCredentials),
-			EffectiveBalance:           v.Validator.EffectiveBalance,
-			Slashed:                    v.Validator.Slashed,
-			ActivationEligibilityEpoch: v.Validator.ActivationEligibilityEpoch,
-			ActivationEpoch:            v.Validator.ActivationEpoch,
-			ExitEpoch:                  v.Validator.ExitEpoch,
-			WithdrawableEpoch:          v.Validator.WithdrawableEpoch,
-			SlotNumber:                 v.Index, // Using index as slot number
-			IsLeader:                   true,    // Set based on your leader selection logic
-		}
-		storage.Validators = append(storage.Validators, record)
+		doc := buildValidatorDocument(v, currentEpoch, updatedAt)
+		filter := bson.M{"_id": doc.ID}
+		update := bson.M{"$set": doc}
+		writeModels = append(writeModels, mongo.NewUpdateOneModel().
+			SetFilter(filter).
+			SetUpdate(update).
+			SetUpsert(true))
 	}
 
-	// Upsert the document
-	opts := options.Update().SetUpsert(true)
-	filter := bson.M{"_id": "validators"}
-	update := bson.M{"$set": storage}
-
-	_, err := configs.ValidatorsCollections.UpdateOne(ctx, filter, update, opts)
+	opts := options.BulkWrite().SetOrdered(false)
+	result, err := configs.ValidatorsCollections.BulkWrite(ctx, writeModels, opts)
 	if err != nil {
-		configs.Logger.Error("Failed to update validator document", zap.Error(err))
+		configs.Logger.Error("Failed to bulk-write validator documents", zap.Error(err))
 		return err
 	}
 
-	configs.Logger.Info("Successfully updated validators",
-		zap.Int("count", len(storage.Validators)),
+	configs.Logger.Info("Successfully upserted validators",
+		zap.Int64("upserted", result.UpsertedCount),
+		zap.Int64("modified", result.ModifiedCount),
 		zap.String("epoch", currentEpoch))
 	return nil
 }
 
+// buildValidatorDocument converts a BeaconValidator into a ValidatorDocument.
+func buildValidatorDocument(v models.BeaconValidator, epoch, updatedAt string) models.ValidatorDocument {
+	slotNum := v.Index
+	isLeader := false
+	// Simplified leader selection: every 128th index slot is a leader.
+	var idx int64
+	fmt.Sscanf(v.Index, "%d", &idx)
+	isLeader = idx%128 == 0
+
+	return models.ValidatorDocument{
+		ID:                         v.Index,
+		PublicKeyHex:               models.Base64ToHex(v.Validator.PublicKey),
+		WithdrawalCredentialsHex:   models.Base64ToHex(v.Validator.WithdrawalCredentials),
+		EffectiveBalance:           v.Validator.EffectiveBalance,
+		Slashed:                    v.Validator.Slashed,
+		ActivationEligibilityEpoch: v.Validator.ActivationEligibilityEpoch,
+		ActivationEpoch:            v.Validator.ActivationEpoch,
+		ExitEpoch:                  v.Validator.ExitEpoch,
+		WithdrawableEpoch:          v.Validator.WithdrawableEpoch,
+		SlotNumber:                 slotNum,
+		IsLeader:                   isLeader,
+		Epoch:                      epoch,
+		UpdatedAt:                  updatedAt,
+	}
+}
+
+// GetValidators retrieves all validator documents from the collection and assembles them
+// into the legacy ValidatorStorage shape so the rest of the syncer pipeline is unaffected.
 func GetValidators() (*models.ValidatorStorage, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	var storage models.ValidatorStorage
-	err := configs.ValidatorsCollections.FindOne(ctx, bson.M{"_id": "validators"}).Decode(&storage)
+	cursor, err := configs.ValidatorsCollections.Find(ctx, bson.M{})
 	if err != nil {
-		configs.Logger.Error("Failed to get validator document", zap.Error(err))
+		configs.Logger.Error("Failed to find validator documents", zap.Error(err))
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var docs []models.ValidatorDocument
+	if err := cursor.All(ctx, &docs); err != nil {
+		configs.Logger.Error("Failed to decode validator documents", zap.Error(err))
 		return nil, err
 	}
 
-	return &storage, nil
+	// Convert []ValidatorDocument → []ValidatorRecord for callers that still use ValidatorStorage.
+	records := make([]models.ValidatorRecord, 0, len(docs))
+	epoch := ""
+	updatedAt := ""
+	for _, d := range docs {
+		records = append(records, validatorDocToRecord(d))
+		if epoch == "" {
+			epoch = d.Epoch
+			updatedAt = d.UpdatedAt
+		}
+	}
+
+	return &models.ValidatorStorage{
+		ID:         "validators",
+		Epoch:      epoch,
+		UpdatedAt:  updatedAt,
+		Validators: records,
+	}, nil
 }
 
+// GetValidatorByPublicKey retrieves a single validator by its hex public key.
 func GetValidatorByPublicKey(publicKeyHex string) (*models.ValidatorRecord, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	var storage models.ValidatorStorage
-	err := configs.ValidatorsCollections.FindOne(ctx, bson.M{
-		"validators.publicKeyHex": publicKeyHex,
-	}).Decode(&storage)
-
+	var doc models.ValidatorDocument
+	err := configs.ValidatorsCollections.FindOne(ctx, bson.M{"publicKeyHex": publicKeyHex}).Decode(&doc)
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("validator not found")
+		}
 		return nil, err
 	}
 
-	// Find the matching validator
-	for _, v := range storage.Validators {
-		if v.PublicKeyHex == publicKeyHex {
-			return &v, nil
-		}
-	}
-
-	return nil, fmt.Errorf("validator not found")
+	record := validatorDocToRecord(doc)
+	return &record, nil
 }
 
+// GetValidatorByIndex retrieves a validator by its index string.
+func GetValidatorByIndex(index string) (*models.ValidatorRecord, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var doc models.ValidatorDocument
+	err := configs.ValidatorsCollections.FindOne(ctx, bson.M{"_id": index}).Decode(&doc)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("validator not found")
+		}
+		return nil, err
+	}
+
+	record := validatorDocToRecord(doc)
+	return &record, nil
+}
+
+// validatorDocToRecord maps a ValidatorDocument to the legacy ValidatorRecord type.
+func validatorDocToRecord(d models.ValidatorDocument) models.ValidatorRecord {
+	return models.ValidatorRecord{
+		Index:                      d.ID,
+		PublicKeyHex:               d.PublicKeyHex,
+		WithdrawalCredentialsHex:   d.WithdrawalCredentialsHex,
+		EffectiveBalance:           d.EffectiveBalance,
+		Slashed:                    d.Slashed,
+		ActivationEligibilityEpoch: d.ActivationEligibilityEpoch,
+		ActivationEpoch:            d.ActivationEpoch,
+		ExitEpoch:                  d.ExitEpoch,
+		WithdrawableEpoch:          d.WithdrawableEpoch,
+		SlotNumber:                 d.SlotNumber,
+		IsLeader:                   d.IsLeader,
+	}
+}
+
+// GetBlockNumberFromHash returns the block number for a given block hash.
 func GetBlockNumberFromHash(hash string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	filter := bson.M{"result.hash": hash}
-	options := options.FindOne().SetProjection(bson.M{"result.number": 1})
+	findOpts := options.FindOne().SetProjection(bson.M{"result.number": 1})
 
 	var block models.ZondDatabaseBlock
-	err := configs.BlocksCollections.FindOne(ctx, filter, options).Decode(&block)
+	err := configs.BlocksCollections.FindOne(ctx, filter, findOpts).Decode(&block)
 	if err != nil {
 		configs.Logger.Info("Failed to get block number from hash", zap.Error(err))
 		return "0x0"
@@ -126,7 +201,7 @@ func GetBlockNumberFromHash(hash string) string {
 	return block.Result.Number
 }
 
-// UpsertEpochInfo stores or updates the current epoch information
+// UpsertEpochInfo stores or updates the current epoch information.
 func UpsertEpochInfo(epochInfo *models.EpochInfo) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -150,7 +225,7 @@ func UpsertEpochInfo(epochInfo *models.EpochInfo) error {
 	return nil
 }
 
-// GetEpochInfo retrieves the current epoch information
+// GetEpochInfo retrieves the current epoch information.
 func GetEpochInfo() (*models.EpochInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -165,12 +240,11 @@ func GetEpochInfo() (*models.EpochInfo, error) {
 	return &epochInfo, nil
 }
 
-// InsertValidatorHistory inserts a validator history record for a specific epoch
+// InsertValidatorHistory inserts a validator history record for a specific epoch.
 func InsertValidatorHistory(record *models.ValidatorHistoryRecord) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Use epoch as unique identifier to prevent duplicate entries
 	opts := options.Update().SetUpsert(true)
 	filter := bson.M{"epoch": record.Epoch}
 	update := bson.M{"$set": record}
@@ -187,7 +261,7 @@ func InsertValidatorHistory(record *models.ValidatorHistoryRecord) error {
 	return nil
 }
 
-// GetValidatorHistory retrieves historical validator data, optionally limited
+// GetValidatorHistory retrieves historical validator data, optionally limited.
 func GetValidatorHistory(limit int) ([]models.ValidatorHistoryRecord, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -210,28 +284,4 @@ func GetValidatorHistory(limit int) ([]models.ValidatorHistoryRecord, error) {
 	}
 
 	return history, nil
-}
-
-// GetValidatorByIndex retrieves a validator by their index
-func GetValidatorByIndex(index string) (*models.ValidatorRecord, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	var storage models.ValidatorStorage
-	err := configs.ValidatorsCollections.FindOne(ctx, bson.M{
-		"validators.index": index,
-	}).Decode(&storage)
-
-	if err != nil {
-		return nil, err
-	}
-
-	// Find the matching validator
-	for _, v := range storage.Validators {
-		if v.Index == index {
-			return &v, nil
-		}
-	}
-
-	return nil, fmt.Errorf("validator not found")
 }

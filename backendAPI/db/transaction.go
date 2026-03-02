@@ -3,12 +3,10 @@ package db
 import (
 	"backendAPI/configs"
 	"backendAPI/models"
-	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
 	"math"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +16,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
+
 
 func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -39,7 +38,8 @@ func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
 
 	opts := options.Find().
 		SetProjection(projection).
-		SetSort(primitive.D{{Key: "timeStamp", Value: -1}})
+		SetSort(primitive.D{{Key: "timeStamp", Value: -1}}).
+		SetLimit(100)
 
 	results, err := configs.TransactionByAddressCollection.Find(ctx, primitive.D{}, opts)
 	if err != nil {
@@ -66,96 +66,56 @@ func ReturnAllInternalTransactionsByAddress(address string) ([]models.TraceResul
 
 	var transactions []models.TraceResult
 
-	// Format the address for query
-	formattedAddress := address
-	if !strings.HasPrefix(formattedAddress, "Z") {
-		formattedAddress = "Z" + formattedAddress
+	// Normalize to canonical Z-prefix format used by the syncer.
+	normalizedAddress := normalizeAddress(address)
+
+	filter := primitive.D{{Key: "$or", Value: []primitive.D{
+		{{Key: "from", Value: normalizedAddress}},
+		{{Key: "to", Value: normalizedAddress}},
+	}}}
+
+	projection := primitive.D{
+		{Key: "type", Value: 1},
+		{Key: "callType", Value: 1},
+		{Key: "hash", Value: 1},
+		{Key: "from", Value: 1},
+		{Key: "to", Value: 1},
+		{Key: "input", Value: 1},
+		{Key: "output", Value: 1},
+		{Key: "traceAddress", Value: 1},
+		{Key: "value", Value: 1},
+		{Key: "gas", Value: 1},
+		{Key: "gasUsed", Value: 1},
+		{Key: "addressFunctionIdentifier", Value: 1},
+		{Key: "amountFunctionIdentifier", Value: 1},
+		{Key: "blockTimestamp", Value: 1},
 	}
 
-	// For internal transactions, we need to strip the Z prefix
-	addressWithoutPrefix := strings.TrimPrefix(formattedAddress, "Z")
+	opts := options.Find().
+		SetProjection(projection).
+		SetSort(primitive.D{{Key: "blockTimestamp", Value: -1}}).
+		SetLimit(200)
 
-	// Try different case variants of the address
-	addressVariants := []string{
-		addressWithoutPrefix,
-		strings.ToLower(addressWithoutPrefix),
-		strings.ToUpper(addressWithoutPrefix),
+	results, err := configs.InternalTransactionByAddressCollection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
 	}
+	defer results.Close(ctx)
 
-	for _, addrVariant := range addressVariants {
-		decoded, err := hex.DecodeString(addrVariant)
-		if err != nil {
-			continue // Skip invalid variants
+	for results.Next(ctx) {
+		var singleTransaction models.TraceResult
+		if err := results.Decode(&singleTransaction); err != nil {
+			continue
 		}
 
-		filter := primitive.D{{Key: "$or", Value: []primitive.D{
-			{{Key: "from", Value: decoded}},
-			{{Key: "to", Value: decoded}},
-		}}}
-
-		projection := primitive.D{
-			{Key: "type", Value: 1},
-			{Key: "callType", Value: 1},
-			{Key: "hash", Value: 1},
-			{Key: "from", Value: 1},
-			{Key: "to", Value: 1},
-			{Key: "input", Value: 1},
-			{Key: "output", Value: 1},
-			{Key: "traceAddress", Value: 1},
-			{Key: "value", Value: 1},
-			{Key: "gas", Value: 1},
-			{Key: "gasUsed", Value: 1},
-			{Key: "addressFunctionIdentifier", Value: 1},
-			{Key: "amountFunctionIdentifier", Value: 1},
-			{Key: "blockTimestamp", Value: 1},
+		// Determine transaction direction based on matching from/to
+		if strings.EqualFold(string(singleTransaction.From), normalizedAddress) {
+			singleTransaction.InOut = 0 // Outgoing
+		} else {
+			singleTransaction.InOut = 1 // Incoming
 		}
 
-		opts := options.Find().
-			SetProjection(projection).
-			SetSort(primitive.D{{Key: "blockTimestamp", Value: -1}})
-
-		results, err := configs.InternalTransactionByAddressCollection.Find(ctx, filter, opts)
-		if err != nil {
-			continue // Try next variant
-		}
-
-		for results.Next(ctx) {
-			var singleTransaction models.TraceResult
-			if err := results.Decode(&singleTransaction); err != nil {
-				continue
-			}
-
-			from := hex.EncodeToString([]byte(singleTransaction.From))
-
-			// Determine transaction direction based on matching from/to
-			if strings.EqualFold(from, addressWithoutPrefix) {
-				singleTransaction.InOut = 0 // Outgoing
-				singleTransaction.Address = []byte(singleTransaction.To)
-			} else {
-				singleTransaction.InOut = 1 // Incoming
-				singleTransaction.Address = []byte(singleTransaction.From)
-			}
-
-			// Check if this transaction is already in our list (to avoid duplicates)
-			isDuplicate := false
-			for _, tx := range transactions {
-				// Use bytes.Equal to compare byte slices properly
-				if bytes.Equal(tx.Hash, singleTransaction.Hash) {
-					isDuplicate = true
-					break
-				}
-			}
-
-			if !isDuplicate {
-				transactions = append(transactions, singleTransaction)
-			}
-		}
-		results.Close(ctx)
-
-		// If we found transactions, no need to try other case variants
-		if len(transactions) > 0 {
-			break
-		}
+		transactions = append(transactions, singleTransaction)
 	}
 
 	return transactions, nil
@@ -167,21 +127,11 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 
 	var transactions []models.TransactionByAddress
 
-	// Ensure address has Z prefix
-	formattedAddress := address
-	if !strings.HasPrefix(formattedAddress, "Z") {
-		formattedAddress = "Z" + formattedAddress
-	}
-
-	// Use regex with case insensitivity for address matching
-	// This will find addresses regardless of case
-	fromRegex := primitive.Regex{Pattern: "^" + regexp.QuoteMeta(formattedAddress) + "$", Options: "i"}
-	toRegex := primitive.Regex{Pattern: "^" + regexp.QuoteMeta(formattedAddress) + "$", Options: "i"}
-
-	// Query for transactions where the address is either the sender or receiver
+	// Normalize to the canonical Z-prefix form stored by the syncer.
+	normalizedAddress := normalizeAddress(address)
 	filter := primitive.D{{Key: "$or", Value: []primitive.D{
-		{{Key: "from", Value: fromRegex}},
-		{{Key: "to", Value: toRegex}},
+		{{Key: "from", Value: normalizedAddress}},
+		{{Key: "to", Value: normalizedAddress}},
 	}}}
 
 	projection := primitive.D{
@@ -198,7 +148,8 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 
 	opts := options.Find().
 		SetProjection(projection).
-		SetSort(primitive.D{{Key: "timeStamp", Value: -1}})
+		SetSort(primitive.D{{Key: "timeStamp", Value: -1}}).
+		SetLimit(200)
 
 	results, err := configs.TransactionByAddressCollection.Find(ctx, filter, opts)
 	if err != nil {
@@ -214,8 +165,7 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 			continue
 		}
 
-		// Use case-insensitive comparison for determining transaction direction
-		if strings.EqualFold(singleTransaction.From, formattedAddress) {
+		if strings.EqualFold(singleTransaction.From, normalizedAddress) {
 			singleTransaction.InOut = 0 // Outgoing
 			singleTransaction.Address = singleTransaction.To
 		} else {
@@ -227,9 +177,9 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 	}
 
 	if len(transactions) == 0 {
-		fmt.Printf("No transactions found for address: %s\n", formattedAddress)
+		fmt.Printf("No transactions found for address: %s\n", normalizedAddress)
 	} else {
-		fmt.Printf("Found %d transactions for address: %s\n", len(transactions), formattedAddress)
+		fmt.Printf("Found %d transactions for address: %s\n", len(transactions), normalizedAddress)
 	}
 
 	return transactions, nil
@@ -350,19 +300,12 @@ func CountTransactions(address string) (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Ensure address has Z prefix
-	formattedAddress := address
-	if !strings.HasPrefix(formattedAddress, "Z") {
-		formattedAddress = "Z" + formattedAddress
-	}
-
-	// Use regex with case insensitivity for address matching
-	fromRegex := primitive.Regex{Pattern: "^" + regexp.QuoteMeta(formattedAddress) + "$", Options: "i"}
-	toRegex := primitive.Regex{Pattern: "^" + regexp.QuoteMeta(formattedAddress) + "$", Options: "i"}
+	// Normalize to canonical Z-prefix — matches syncer write format.
+	normalizedAddress := normalizeAddress(address)
 
 	filter := primitive.D{{Key: "$or", Value: []primitive.D{
-		{{Key: "from", Value: fromRegex}},
-		{{Key: "to", Value: toRegex}},
+		{{Key: "from", Value: normalizedAddress}},
+		{{Key: "to", Value: normalizedAddress}},
 	}}}
 
 	count, err := configs.TransactionByAddressCollection.CountDocuments(ctx, filter)
@@ -559,23 +502,14 @@ func ReturnNonZeroTransactions(address string, page, limit int) ([]models.Transa
 		SetProjection(projection).
 		SetSort(primitive.D{{Key: "timeStamp", Value: -1}})
 
-	// Format the address for query
-	formattedAddress := address
-	if !strings.HasPrefix(formattedAddress, "Z") {
-		formattedAddress = "Z" + formattedAddress
-	}
-
-	// Use regex with case insensitivity for address matching
-	fromRegex := primitive.Regex{Pattern: "^" + regexp.QuoteMeta(formattedAddress) + "$", Options: "i"}
-	toRegex := primitive.Regex{Pattern: "^" + regexp.QuoteMeta(formattedAddress) + "$", Options: "i"}
-
-	// Create a filter for both from and to with this address and non-zero amount
+	// Normalize to canonical Z-prefix form stored by the syncer.
+	normalizedAddress := normalizeAddress(address)
 	filter := bson.M{
 		"$and": []bson.M{
 			{
 				"$or": []bson.M{
-					{"from": fromRegex},
-					{"to": toRegex},
+					{"from": normalizedAddress},
+					{"to": normalizedAddress},
 				},
 			},
 			{"amount": bson.M{"$gt": 0}}, // Only return transactions with amount > 0
@@ -606,7 +540,7 @@ func ReturnNonZeroTransactions(address string, page, limit int) ([]models.Transa
 		}
 
 		// Set the inOut flag based on the address's relation to the transaction
-		if strings.EqualFold(singleTransaction.From, formattedAddress) {
+		if strings.EqualFold(singleTransaction.From, normalizedAddress) {
 			singleTransaction.InOut = 0 // Outgoing
 			singleTransaction.Address = singleTransaction.To
 		} else {
