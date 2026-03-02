@@ -481,20 +481,56 @@ type creationTxInfo struct {
 	BlockNumber string `bson:"blockNumber"`
 }
 
-// findCreationTransaction looks up the contract creation transaction in the transfer collection.
-// Contract creation transactions have contractAddress set (and no "to" field).
+// findCreationTransaction looks up the contract creation transaction.
+// It first checks the transfer collection (direct deployments have contractAddress set).
+// For factory-deployed contracts it falls back to the tokenTransfers collection,
+// finding the initial mint event (from zero address) and resolving the real tx sender.
 func findCreationTransaction(contractAddress string) *creationTxInfo {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// 1. Direct deployment: transfer collection has contractAddress field
 	var result creationTxInfo
 	err := configs.TransferCollections.FindOne(ctx, bson.M{
 		"contractAddress": contractAddress,
 	}).Decode(&result)
-	if err != nil {
+	if err == nil {
+		return &result
+	}
+
+	// 2. Factory deployment: find the initial mint in tokenTransfers
+	var mint struct {
+		TxHash      string `bson:"txHash"`
+		BlockNumber string `bson:"blockNumber"`
+	}
+	err = configs.GetTokenTransfersCollection().FindOne(ctx, bson.M{
+		"contractAddress": contractAddress,
+		"from":            "Z0",
+	}).Decode(&mint)
+	if err != nil || mint.TxHash == "" {
 		return nil
 	}
-	return &result
+
+	// Look up the actual transaction sender from the transfer collection
+	var tx struct {
+		From string `bson:"from"`
+	}
+	err = configs.TransferCollections.FindOne(ctx, bson.M{
+		"txHash": mint.TxHash,
+	}).Decode(&tx)
+	if err != nil {
+		// Still return what we have from the mint event
+		return &creationTxInfo{
+			TxHash:      mint.TxHash,
+			BlockNumber: mint.BlockNumber,
+		}
+	}
+
+	return &creationTxInfo{
+		TxHash:      mint.TxHash,
+		From:        tx.From,
+		BlockNumber: mint.BlockNumber,
+	}
 }
 
 // StartContractReprocessingJob starts a background job to periodically reprocess incomplete contracts
