@@ -130,3 +130,21 @@ type ValidatorStatsResponse struct {
 	TotalStaked     string `json:"totalStaked"`
 	CurrentEpoch    string `json:"currentEpoch"`
 }
+
+// EpochListItem represents a single epoch in the paginated listing
+type EpochListItem struct {
+	Epoch           string `json:"epoch"`
+	Timestamp       int64  `json:"timestamp"`
+	Status          string `json:"status"` // finalized, justified, pending
+	ValidatorsCount int    `json:"validatorsCount"`
+	ActiveCount     int    `json:"activeCount"`
+	TotalStaked     string `json:"totalStaked"`
+}
+
+// EpochsResponse represents the paginated epochs API response
+type EpochsResponse struct {
+	Epochs         []EpochListItem `json:"epochs"`
+	Total          int64           `json:"total"`
+	FinalizedEpoch string          `json:"finalizedEpoch"`
+	JustifiedEpoch string          `json:"justifiedEpoch"`
+}

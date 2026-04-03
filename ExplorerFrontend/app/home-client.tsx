@@ -203,7 +203,7 @@ function EpochTable({ epochs, loading }: { epochs: EpochRow[]; loading: boolean 
           <span className="text-[#ffa729]">{icons.epoch}</span>
           Latest Epochs
         </h2>
-        <Link href="/validators" className="text-xs text-[#ffa729] hover:text-[#ffb954] hover:underline transition-colors">
+        <Link href="/epochs/1" className="text-xs text-[#ffa729] hover:text-[#ffb954] hover:underline transition-colors">
           View all &rarr;
         </Link>
       </div>
@@ -238,7 +238,7 @@ function EpochTable({ epochs, loading }: { epochs: EpochRow[]; loading: boolean 
                   className="border-b border-[#2a2a2a] last:border-b-0 hover:bg-[#252525] transition-colors"
                 >
                   <td className="px-4 py-2.5">
-                    <Link href="/validators" className="text-[#ffa729] hover:text-[#ffb954] hover:underline font-medium tabular-nums">
+                    <Link href="/epochs/1" className="text-[#ffa729] hover:text-[#ffb954] hover:underline font-medium tabular-nums">
                       {formatNumberWithCommas(epoch.epoch.toString())}
                     </Link>
                   </td>
