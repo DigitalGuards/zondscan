@@ -199,8 +199,8 @@ function EpochTable({ epochs, loading }: { epochs: EpochRow[]; loading: boolean 
     <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2a2a]">
-        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-white">
-          <span className="text-[#ffa729]">{icons.epoch}</span>
+        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-[#ffa729]">
+          {icons.epoch}
           Latest Epochs
         </h2>
         <Link href="/epochs/1" className="text-xs text-[#ffa729] hover:text-[#ffb954] hover:underline transition-colors">
@@ -238,7 +238,7 @@ function EpochTable({ epochs, loading }: { epochs: EpochRow[]; loading: boolean 
                   className="border-b border-[#2a2a2a] last:border-b-0 hover:bg-[#252525] transition-colors"
                 >
                   <td className="px-4 py-2.5">
-                    <Link href="/epochs/1" className="text-[#ffa729] hover:text-[#ffb954] hover:underline font-medium tabular-nums">
+                    <Link href={`/epoch/${epoch.epoch}`} className="text-[#ffa729] hover:text-[#ffb954] hover:underline font-medium tabular-nums">
                       {formatNumberWithCommas(epoch.epoch.toString())}
                     </Link>
                   </td>
@@ -271,8 +271,8 @@ function BlockTable({ blocks, epochInfo, loading }: { blocks: BlockResult[]; epo
     <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2a2a]">
-        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-white">
-          <span className="text-[#ffa729]">{icons.block}</span>
+        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-[#ffa729]">
+          {icons.block}
           Latest Blocks
         </h2>
         <Link href="/blocks/1" className="text-xs text-[#ffa729] hover:text-[#ffb954] hover:underline transition-colors">

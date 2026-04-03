@@ -538,6 +538,23 @@ func UserRoute(router *gin.Engine) {
 		c.JSON(http.StatusOK, validatorResponse)
 	})
 
+	// Get epoch detail by ID
+	router.GET("/epoch/:id", func(c *gin.Context) {
+		epochId := c.Param("id")
+		epochDetail, err := db.GetEpochDetail(epochId)
+		if err != nil {
+			if strings.Contains(err.Error(), "not yet occurred") || strings.Contains(err.Error(), "invalid epoch") {
+				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to fetch epoch detail: %v", err),
+			})
+			return
+		}
+		c.JSON(http.StatusOK, epochDetail)
+	})
+
 	// Get current epoch information
 	router.GET("/epoch", func(c *gin.Context) {
 		epochInfo, err := db.GetEpochInfo()

@@ -315,6 +315,128 @@ func GetEpochs(page, limit int) (*models.EpochsResponse, error) {
 	}, nil
 }
 
+// GetEpochDetail returns full epoch information including all slots (proposed/missed).
+func GetEpochDetail(epochId string) (*models.EpochDetailResponse, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	epochNum, err := strconv.ParseInt(epochId, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid epoch number: %v", err)
+	}
+
+	startSlot := epochNum * SlotsPerEpoch
+	endSlot := (epochNum + 1) * SlotsPerEpoch
+
+	// Get epoch_info for chain head status
+	var epochInfo models.EpochInfo
+	err = configs.EpochInfoCollection.FindOne(ctx, bson.M{"_id": "current"}).Decode(&epochInfo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get epoch info: %v", err)
+	}
+
+	headEpoch := parseEpoch(epochInfo.HeadEpoch)
+	if epochNum > headEpoch {
+		return nil, fmt.Errorf("epoch %d has not yet occurred (head: %d)", epochNum, headEpoch)
+	}
+
+	finalizedEpoch := parseEpoch(epochInfo.FinalizedEpoch)
+	justifiedEpoch := parseEpoch(epochInfo.JustifiedEpoch)
+
+	var status string
+	if epochNum <= finalizedEpoch {
+		status = "finalized"
+	} else if epochNum <= justifiedEpoch {
+		status = "justified"
+	} else {
+		status = "pending"
+	}
+
+	// Get validator_history record (may not exist for very recent epochs)
+	var historyRecord models.ValidatorHistoryRecord
+	_ = configs.ValidatorHistoryCollection.FindOne(ctx, bson.M{"epoch": epochId}).Decode(&historyRecord)
+
+	// Get blocks in this epoch's slot range
+	blockFilter := bson.M{
+		"blockNumberInt": bson.M{"$gte": startSlot, "$lt": endSlot},
+	}
+	projection := bson.D{
+		{Key: "blockNumberInt", Value: 1},
+		{Key: "result.number", Value: 1},
+		{Key: "result.timestamp", Value: 1},
+		{Key: "result.miner", Value: 1},
+		{Key: "result.transactions", Value: 1},
+		{Key: "result.gasUsed", Value: 1},
+		{Key: "result.hash", Value: 1},
+	}
+	findOpts := options.Find().
+		SetProjection(projection).
+		SetSort(bson.D{{Key: "blockNumberInt", Value: 1}})
+
+	cursor, err := configs.BlocksCollection.Find(ctx, blockFilter, findOpts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query blocks: %v", err)
+	}
+	defer cursor.Close(ctx)
+
+	blockMap := make(map[int64]models.EpochDetailBlock)
+	for cursor.Next(ctx) {
+		var doc struct {
+			BlockNumberInt int64        `bson:"blockNumberInt"`
+			Result         models.Result `bson:"result"`
+		}
+		if err := cursor.Decode(&doc); err != nil {
+			continue
+		}
+		blockMap[doc.BlockNumberInt] = models.EpochDetailBlock{
+			Slot:         doc.BlockNumberInt,
+			Status:       "proposed",
+			Timestamp:    doc.Result.Timestamp,
+			Proposer:     doc.Result.Miner,
+			Transactions: len(doc.Result.Transactions),
+			GasUsed:      doc.Result.GasUsed,
+			BlockHash:    doc.Result.Hash,
+		}
+	}
+
+	// Build full 128-slot list
+	blocks := make([]models.EpochDetailBlock, 0, SlotsPerEpoch)
+	proposedCount := 0
+	missedCount := 0
+	for slot := startSlot; slot < endSlot; slot++ {
+		if b, ok := blockMap[slot]; ok {
+			blocks = append(blocks, b)
+			proposedCount++
+		} else {
+			blocks = append(blocks, models.EpochDetailBlock{
+				Slot:   slot,
+				Status: "missed",
+			})
+			missedCount++
+		}
+	}
+
+	return &models.EpochDetailResponse{
+		Epoch:           epochId,
+		Timestamp:       historyRecord.Timestamp,
+		Status:          status,
+		ValidatorsCount: historyRecord.ValidatorsCount,
+		ActiveCount:     historyRecord.ActiveCount,
+		PendingCount:    historyRecord.PendingCount,
+		ExitedCount:     historyRecord.ExitedCount,
+		SlashedCount:    historyRecord.SlashedCount,
+		TotalStaked:     historyRecord.TotalStaked,
+		StartSlot:       startSlot,
+		EndSlot:         endSlot,
+		Blocks:          blocks,
+		FinalizedEpoch:  epochInfo.FinalizedEpoch,
+		JustifiedEpoch:  epochInfo.JustifiedEpoch,
+		HeadEpoch:       epochInfo.HeadEpoch,
+		ProposedCount:   proposedCount,
+		MissedCount:     missedCount,
+	}, nil
+}
+
 // GetValidatorStats returns aggregated validator statistics using a MongoDB aggregation
 // pipeline instead of loading all validators into Go memory.
 func GetValidatorStats() (*models.ValidatorStatsResponse, error) {
