@@ -247,10 +247,10 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
                     className="text-gray-300 hover:text-[#ffa729] font-mono"
                   >
                     <span className="hidden md:inline">
-                      Z{validator.address.slice(0, 16)}...{validator.address.slice(-8)}
+                      Q{validator.address.slice(0, 16)}...{validator.address.slice(-8)}
                     </span>
                     <span className="md:hidden">
-                      Z{validator.address.slice(0, 8)}...
+                      Q{validator.address.slice(0, 8)}...
                     </span>
                   </Link>
                 </td>

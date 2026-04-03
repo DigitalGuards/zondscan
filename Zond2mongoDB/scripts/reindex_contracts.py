@@ -51,11 +51,11 @@ def make_rpc_call(method, params):
 
 def get_contract_code(address):
     """Get contract bytecode from the node."""
-    return make_rpc_call("zond_getCode", [address, "latest"])
+    return make_rpc_call("qrl_getCode", [address, "latest"])
 
 def get_transaction_receipt(tx_hash):
     """Get transaction receipt from the node."""
-    return make_rpc_call("zond_getTransactionReceipt", [tx_hash])
+    return make_rpc_call("qrl_getTransactionReceipt", [tx_hash])
 
 def call_contract_method(contract_address, method_signature):
     """Call a contract method using eth_call."""
@@ -63,7 +63,7 @@ def call_contract_method(contract_address, method_signature):
         "to": contract_address,
         "data": method_signature
     }
-    return make_rpc_call("zond_call", [data, "latest"])
+    return make_rpc_call("qrl_call", [data, "latest"])
 
 def get_token_info(contract_address):
     """Get ERC20 token information from a contract."""
@@ -144,7 +144,7 @@ def process_contract_creation(transfer_doc, contracts_collection):
         return False
         
     contract_address = receipt['contractAddress'].lower()  # Store as lowercase hex
-    creator_address = ("Z" + transfer_doc['from'].hex() if isinstance(transfer_doc['from'], bytes) else transfer_doc['from']).lower()
+    creator_address = ("Q" + transfer_doc['from'].hex() if isinstance(transfer_doc['from'], bytes) else transfer_doc['from']).lower()
     
     # Get contract code
     contract_code = get_contract_code(contract_address)
@@ -233,9 +233,9 @@ def main():
             
             # Convert bytes to hex strings if needed
             if isinstance(contract_address, bytes):
-                contract_address = "Z" + contract_address.hex()
+                contract_address = "Q" + contract_address.hex()
             if isinstance(creator_address, bytes):
-                creator_address = "Z" + creator_address.hex()
+                creator_address = "Q" + creator_address.hex()
                 
             contract_address = contract_address.lower()
             creator_address = creator_address.lower()

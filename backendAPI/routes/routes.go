@@ -302,7 +302,7 @@ func UserRoute(router *gin.Engine) {
 
 	router.GET("/address/aggregate/:query", func(c *gin.Context) {
 		param := c.Param("query")
-		// db functions normalize the address to canonical lowercase z-prefix internally.
+		// db functions normalize the address to canonical q-prefix internally.
 
 		// Single Address data
 		addressData, err := db.ReturnSingleAddress(param)
@@ -599,7 +599,7 @@ func UserRoute(router *gin.Engine) {
 			return
 		}
 
-		// Addresses are stored and returned as lowercase z-prefix (canonical form).
+		// Addresses are stored and returned as q-prefix (canonical form).
 		// No presentation-layer conversion needed.
 
 		c.JSON(http.StatusOK, gin.H{

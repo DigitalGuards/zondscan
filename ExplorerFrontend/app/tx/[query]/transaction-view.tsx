@@ -47,7 +47,7 @@ const formatTimestamp = (timestamp: number): string => {
 };
 
 const isZeroAddress = (addr: string): boolean =>
-  addr === 'Z0' || addr === 'Z' + '0'.repeat(40);
+  addr === 'Q0' || addr === 'Q' + '0'.repeat(40);
 
 const AddressDisplay = ({ address, isMobile }: { address: string, isMobile: boolean }): JSX.Element => {
   const displayAddress = isMobile ? `${address.slice(0, 8)}...${address.slice(-6)}` : address;
