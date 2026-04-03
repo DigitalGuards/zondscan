@@ -102,7 +102,7 @@ The `Sync()` function performs the initial catch-up:
 
 2. **Store initial sync start**: Records `0x1` in `sync_initial_state` collection (used later for token processing range).
 
-3. **Get chain head**: Calls `zond_blockNumber` to get the latest block on the network (with retry up to 5 times with exponential backoff).
+3. **Get chain head**: Calls `qrl_blockNumber` to get the latest block on the network (with retry up to 5 times with exponential backoff).
 
 4. **Batch processing**: Uses a producer/consumer pattern to process blocks in parallel:
    - Batch size: **64** blocks (normal) or **128** blocks (when >1000 blocks behind)
@@ -229,12 +229,12 @@ Stores complete block data as fetched from the Zond node.
       {
         "blockHash": "0x...",
         "blockNumber": "0x1a",
-        "from": "Z...",
+        "from": "Q...",
         "gas": "0x...",
         "gasPrice": "0x...",
         "hash": "0x...",
         "nonce": "0x...",
-        "to": "Z...",
+        "to": "Q...",
         "transactionIndex": "0x0",
         "type": "0x0",
         "value": "0x...",
@@ -299,8 +299,8 @@ Internal transactions from `debug_traceTransaction` calls.
 | `type` | string | Transaction type (e.g., "CALL") |
 | `callType` | string | Call type (e.g., "delegatecall") |
 | `hash` | string | Transaction hash |
-| `from` | string | Internal caller (lowercase, Z-prefix) |
-| `to` | string | Internal callee (lowercase, Z-prefix) |
+| `from` | string | Internal caller (lowercase, Q-prefix) |
+| `to` | string | Internal callee (lowercase, Q-prefix) |
 | `input` | string | Input data (hex) |
 | `output` | string | Output data (hex) |
 | `traceAddress` | []int | Trace position |
@@ -580,14 +580,14 @@ All calls go through a shared HTTP client with connection pooling (100 max idle 
 
 | RPC Method | File | Purpose |
 |------------|------|---------|
-| `zond_blockNumber` | `rpc/calls.go` | Get latest block number |
-| `zond_getBlockByNumber` | `rpc/calls.go` | Fetch full block with transactions (`true` for full tx objects) |
-| `zond_getTransactionReceipt` | `rpc/calls.go`, `rpc/tokenscalls.go` | Get tx receipt (contract address, status, logs) |
-| `zond_getBalance` | `rpc/calls.go` | Get address balance |
-| `zond_getCode` | `rpc/calls.go` | Get contract bytecode |
-| `zond_call` | `rpc/calls.go`, `rpc/tokenscalls.go` | Call contract method (read-only) |
-| `zond_getLogs` | `rpc/calls.go` | Get event logs for a block (Transfer events) |
-| `zond_getTransactionByHash` | `rpc/calls.go` | Get transaction details by hash |
+| `qrl_blockNumber` | `rpc/calls.go` | Get latest block number |
+| `qrl_getBlockByNumber` | `rpc/calls.go` | Fetch full block with transactions (`true` for full tx objects) |
+| `qrl_getTransactionReceipt` | `rpc/calls.go`, `rpc/tokenscalls.go` | Get tx receipt (contract address, status, logs) |
+| `qrl_getBalance` | `rpc/calls.go` | Get address balance |
+| `qrl_getCode` | `rpc/calls.go` | Get contract bytecode |
+| `qrl_call` | `rpc/calls.go`, `rpc/tokenscalls.go` | Call contract method (read-only) |
+| `qrl_getLogs` | `rpc/calls.go` | Get event logs for a block (Transfer events) |
+| `qrl_getTransactionByHash` | `rpc/calls.go` | Get transaction details by hash |
 | `debug_traceTransaction` | `rpc/calls.go` | Trace internal calls (callTracer) |
 | `txpool_content` | `rpc/pending.go` | Get mempool pending/queued transactions |
 
@@ -595,8 +595,8 @@ All calls go through a shared HTTP client with connection pooling (100 max idle 
 
 | Endpoint | File | Purpose |
 |----------|------|---------|
-| `GET /zond/v1alpha1/validators` | `rpc/calls.go` | Fetch validator list (paginated, up to 3 pages) |
-| `GET /zond/v1alpha1/beacon/chainhead` | `rpc/calls.go` | Get current chain head (epoch, slot, finality) |
+| `GET /qrl/v1alpha1/validators` | `rpc/calls.go` | Fetch validator list (paginated, up to 3 pages) |
+| `GET /qrl/v1alpha1/beacon/chainhead` | `rpc/calls.go` | Get current chain head (epoch, slot, finality) |
 
 ### 4.3 CoinGecko API
 
@@ -606,7 +606,7 @@ All calls go through a shared HTTP client with connection pooling (100 max idle 
 
 ### 4.4 ERC20 Token Method Calls (`rpc/tokenscalls.go`)
 
-These are made via `zond_call` to detect and query ERC20 tokens:
+These are made via `qrl_call` to detect and query ERC20 tokens:
 
 | Method Signature | Function | Purpose |
 |-----------------|----------|---------|
@@ -648,7 +648,7 @@ During `ProcessTransactions()` for each block:
 ### 5.3 Block-Level Token Transfer Processing
 
 `ProcessBlockTokenTransfers()` takes a different approach for bulk processing:
-1. Calls `zond_getLogs` for the block with the Transfer event signature topic filter.
+1. Calls `qrl_getLogs` for the block with the Transfer event signature topic filter.
 2. For each log with 3 topics (standard Transfer event):
    - Extracts the contract address from `log.Address`.
    - Calls `EnsureTokenInDatabase()` to verify/create the token in `contractCode`.
@@ -684,8 +684,8 @@ After the initial block sync completes, `ProcessTokensAfterInitialSync()`:
 ### 6.1 New Contract Detection (`db/contracts.go`)
 
 When a transaction has an empty `to` field (contract creation):
-1. Calls `zond_getTransactionReceipt` to get the deployed contract address and status.
-2. Calls `zond_getCode` to fetch the contract bytecode.
+1. Calls `qrl_getTransactionReceipt` to get the deployed contract address and status.
+2. Calls `qrl_getCode` to fetch the contract bytecode.
 3. Calls `GetTokenInfo()` which sequentially tries `name()`, `symbol()`, and `decimals()`. If all three succeed, the contract is flagged as an ERC20 token.
 4. If it's a token, fetches `totalSupply()`.
 5. Stores everything in the `contractCode` collection via `StoreContract()`.
@@ -694,7 +694,7 @@ When a transaction has an empty `to` field (contract creation):
 
 When a transaction targets an existing address, `IsAddressContract()`:
 1. Checks the `contractCode` collection in MongoDB.
-2. If not found, calls `zond_getCode` via RPC.
+2. If not found, calls `qrl_getCode` via RPC.
 3. If code exists (not `0x` or empty), it's a contract - stores it with token detection.
 
 ### 6.3 Contract Reprocessing (`db/contracts.go`)
@@ -728,9 +728,9 @@ func DetectToken(contractAddress string) TokenDetectionResult {
 
 Every 6 hours (`updateValidatorsPeriodically`):
 
-1. **Get chain head**: `GET /zond/v1alpha1/beacon/chainhead` returns current epoch, slot, and finality info. Stored in the `epoch_info` collection.
+1. **Get chain head**: `GET /qrl/v1alpha1/beacon/chainhead` returns current epoch, slot, and finality info. Stored in the `epoch_info` collection.
 
-2. **Fetch validators**: `GET /zond/v1alpha1/validators` with pagination (up to 3 pages). Each page contains a list of validators with their details.
+2. **Fetch validators**: `GET /qrl/v1alpha1/validators` with pagination (up to 3 pages). Each page contains a list of validators with their details.
 
 3. **Store validators** (`services/validator_service.go`):
    - Converts base64-encoded public keys and withdrawal credentials to hex.
@@ -863,7 +863,7 @@ When a new block is processed (`UpdatePendingTransactionsInBlock`):
 | Constant | Value | Description |
 |----------|-------|-------------|
 | `QUANTA` | 1e18 | Wei-to-QRL divisor |
-| `QRLZeroAddress` | `Z000...000` | Zero address (40 hex chars + Z) |
+| `QRLZeroAddress` | `Q000...000` | Zero address (40 hex chars + Q) |
 | `LOG_FILENAME` | `zond_sync.log` | Log file name (in `logs/` directory) |
 
 ---
@@ -952,7 +952,7 @@ Located in `scripts/`, these Python scripts are used for one-time reindexing ope
 1. Connects to MongoDB and the Zond RPC node.
 2. Queries `transfer` collection for documents with `contractAddress`.
 3. For each contract creation:
-   - Gets the contract bytecode via `zond_getCode`.
+   - Gets the contract bytecode via `qrl_getCode`.
    - Calls `name()`, `symbol()`, `decimals()` to detect ERC20 tokens.
    - Upserts the contract data into `contractCode`.
 
@@ -1031,12 +1031,12 @@ In `processSubsequentBlocks()`:
 
 QRL Zond uses two address formats:
 - **Legacy**: `0x` prefix (standard Ethereum format)
-- **Zond native**: `Z` prefix
+- **Zond native**: `Q` prefix
 
 The synchronizer normalizes addresses:
 - Stored in MongoDB as **lowercase** (via `strings.ToLower()`).
 - The `validation` package handles both formats.
-- `ConvertToZAddress()` converts `0x` to `Z` prefix.
+- `ConvertToQAddress()` converts `0x` to `Q` prefix.
 
 ### 12.6 Hex Number Handling
 
