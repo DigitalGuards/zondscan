@@ -167,7 +167,7 @@ export default function EpochsClient({ initialData, initialPage }: EpochsClientP
                     className="border-b border-[#2a2a2a] last:border-b-0 hover:bg-[#252525] transition-colors"
                   >
                     <td className="px-4 py-3">
-                      <Link href="/validators" className="text-[#ffa729] hover:text-[#ffb954] hover:underline font-medium tabular-nums">
+                      <Link href={`/epoch/${epoch.epoch}`} className="text-[#ffa729] hover:text-[#ffb954] hover:underline font-medium tabular-nums">
                         {formatNumberWithCommas(epoch.epoch)}
                       </Link>
                     </td>
