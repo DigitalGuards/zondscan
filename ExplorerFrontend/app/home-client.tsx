@@ -2,370 +2,449 @@
 
 import * as React from 'react';
 import dynamic from 'next/dynamic';
-import axios from "axios";
-import { formatNumberWithCommas, toFixed } from "./lib/helpers";
-import config from "../config.js"
-import SearchBar from "./components/SearchBar"
-import SeoTextSection from "./components/SeoTextSection";
+import Link from 'next/link';
+import axios from 'axios';
+import { formatNumberWithCommas, truncateHash, formatAddress } from './lib/helpers';
+import config from '../config.js';
+import SearchBar from './components/SearchBar';
 
-// Lazy load Charts component since it's below the fold and includes heavy TradingView widget
-const Charts = dynamic(() => import("./components/Charts"), {
+const Charts = dynamic(() => import('./components/Charts'), {
   loading: () => (
-    <div className="h-[400px] bg-[#1f1f1f] rounded-2xl border border-[#3d3d3d] animate-pulse flex items-center justify-center">
+    <div className="h-[400px] bg-[#1e1e1e] rounded-xl border border-[#2a2a2a] animate-pulse flex items-center justify-center">
       <span className="text-gray-500">Loading chart...</span>
     </div>
   ),
-  ssr: false // TradingView requires browser APIs
+  ssr: false,
 });
 
-interface StatsData {
-  value: string;
-  isLoading: boolean;
-  error: boolean;
+// ── Types ────────────────────────────────────────────────────────────────────
+
+interface EpochInfo {
+  headEpoch: string;
+  headSlot: string;
+  finalizedEpoch: string;
+  justifiedEpoch: string;
+  slotsPerEpoch: number;
+  secondsPerSlot: number;
+  slotInEpoch: number;
+  timeToNextEpoch: number;
+  updatedAt: number;
 }
 
-interface StatItem {
-  data: string;
-  title: string;
+interface BlockResult {
+  number: string;
+  timestamp: string;
+  hash: string;
+  miner: string;
+  transactions: any[];
+}
+
+interface HomeData {
+  blockHeight: number;
+  totalTransactions: number;
+  validatorCount: number;
+  epochInfo: EpochInfo | null;
+  blocks: BlockResult[];
+  totalStaked: string;
   loading: boolean;
   error: boolean;
-  icon: React.ReactNode;
-}
-
-const StatCard = ({ item }: { item: StatItem }): JSX.Element => (
-  <div className={`relative overflow-hidden rounded-2xl
-                 bg-gradient-to-br from-[#2d2d2d]/80 to-[#1f1f1f]/80
-                 border border-[#3d3d3d] shadow-xl
-                 hover:border-[#ffa729] transition-all duration-300
-                 group`}>
-    <div className="relative p-2 sm:p-6 text-center min-h-[90px] sm:min-h-[160px] flex flex-col justify-center">
-      {item.loading ? (
-        <div className="flex flex-col items-center justify-center space-y-2">
-          <div className="w-16 sm:w-32 h-4 sm:h-8 bg-gray-700/50 rounded animate-pulse"></div>
-          <div className="w-12 sm:w-24 h-2 sm:h-4 bg-gray-700/50 rounded animate-pulse"></div>
-        </div>
-      ) : item.error ? (
-        <div className="flex flex-col items-center justify-center text-red-400">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 sm:h-8 w-4 sm:w-8 mb-1 sm:mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span className="text-xs">Failed to load data</span>
-        </div>
-      ) : (
-        <>
-          <div className="flex justify-center items-center mb-1 sm:mb-2">
-            <div className="h-4 w-4 sm:h-6 sm:w-6 text-[#ffa729] [&>svg]:h-full [&>svg]:w-full">
-              {item.icon}
-            </div>
-          </div>
-          <p className="text-base sm:text-3xl font-bold mb-1 sm:mb-3 text-[#ffa729]
-                      group-hover:scale-110 transition-transform duration-300 break-words">
-            {item.data}
-          </p>
-          <p className="text-[10px] sm:text-sm text-gray-300 font-medium">
-            {item.title}
-          </p>
-        </>
-      )}
-    </div>
-  </div>
-);
-
-interface DashboardData {
-  walletCount: StatsData;
-  volume: StatsData;
-  blockHeight: StatsData;
-  totalTransactions: StatsData;
-  marketCap: StatsData;
-  currentPrice: StatsData;
-  validatorCount: StatsData;
-  contractCount: StatsData;
-  syncing: boolean;
   dataInitialized: boolean;
 }
 
-export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.Element {
-  const [data, setData] = React.useState<DashboardData>({
-    walletCount: { value: "0", isLoading: true, error: false },
-    volume: { value: "0", isLoading: true, error: false },
-    blockHeight: { value: "0", isLoading: true, error: false },
-    totalTransactions: { value: "0", isLoading: true, error: false },
-    marketCap: { value: "0", isLoading: true, error: false },
-    currentPrice: { value: "0", isLoading: true, error: false },
-    validatorCount: { value: "0", isLoading: true, error: false },
-    contractCount: { value: "0", isLoading: true, error: false },
-    syncing: true,
-    dataInitialized: false
-  });
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-  React.useEffect(() => {
-    async function fetchData(): Promise<void> {
-      try {
-        if (config.handlerUrl) {
-          const [overviewResponse, latestBlockResponse, txsResponse] = await Promise.allSettled([
-            axios.get(config.handlerUrl + "/overview"),
-            axios.get(config.handlerUrl + "/latestblock"),
-            axios.get(config.handlerUrl + "/txs?page=1")
-          ]);
+const SLOTS_PER_EPOCH = 128;
+const SECONDS_PER_SLOT = 60;
 
-          setData(prevData => {
-            const newData = { ...prevData };
+function timeAgo(unixSeconds: number): string {
+  const now = Math.floor(Date.now() / 1000);
+  const diff = now - unixSeconds;
+  if (diff < 0) return 'just now';
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
 
-            // Handle overview response
-            if (overviewResponse.status === 'fulfilled') {
-              newData.walletCount = { value: overviewResponse.value.data.countwallets.toString(), isLoading: false, error: false };
-              newData.volume = { value: overviewResponse.value.data.volume.toString(), isLoading: false, error: false };
-              newData.marketCap = { value: overviewResponse.value.data.marketcap.toString(), isLoading: false, error: false };
-              newData.currentPrice = { value: overviewResponse.value.data.currentPrice.toString(), isLoading: false, error: false };
-              newData.validatorCount = { value: overviewResponse.value.data.validatorCount.toString(), isLoading: false, error: false };
-              newData.contractCount = { value: overviewResponse.value.data.contractCount.toString(), isLoading: false, error: false };
-              newData.syncing = overviewResponse.value.data.status.syncing;
-              newData.dataInitialized = overviewResponse.value.data.status.dataInitialized;
-            } else {
-              newData.walletCount = { value: "0", isLoading: false, error: true };
-              newData.volume = { value: "0", isLoading: false, error: true };
-              newData.marketCap = { value: "0", isLoading: false, error: true };
-              newData.currentPrice = { value: "0", isLoading: false, error: true };
-              newData.validatorCount = { value: "0", isLoading: false, error: true };
-              newData.contractCount = { value: "0", isLoading: false, error: true };
-            }
+function parseHex(hex: string): number {
+  if (!hex) return 0;
+  if (hex.startsWith('0x')) return parseInt(hex, 16);
+  return parseInt(hex, 10) || 0;
+}
 
-            // Handle latest block response
-            if (latestBlockResponse.status === 'fulfilled') {
-              newData.blockHeight.value = latestBlockResponse.value.data.blockNumber?.toString() || "0";
-              newData.blockHeight.isLoading = false;
-              newData.blockHeight.error = false;
-            } else {
-              newData.blockHeight.error = true;
-            }
+/** Derive recent epoch rows from epoch info */
+function deriveEpochs(epochInfo: EpochInfo | null): EpochRow[] {
+  if (!epochInfo) return [];
+  const head = parseInt(epochInfo.headEpoch);
+  const finalized = parseInt(epochInfo.finalizedEpoch);
+  const justified = parseInt(epochInfo.justifiedEpoch);
+  const now = Math.floor(Date.now() / 1000);
+  const epochDuration = SLOTS_PER_EPOCH * SECONDS_PER_SLOT; // 7680s
 
-            // Handle transactions response
-            if (txsResponse.status === 'fulfilled') {
-              newData.totalTransactions.value = txsResponse.value.data.total?.toString() || "0";
-              newData.totalTransactions.isLoading = false;
-              newData.totalTransactions.error = false;
-            } else {
-              newData.totalTransactions.error = true;
-            }
+  // Current epoch start time estimate
+  const slotInEpoch = epochInfo.slotInEpoch || 0;
+  const currentEpochStartTime = now - slotInEpoch * SECONDS_PER_SLOT;
 
-            return newData;
-          });
-        }
-      } catch (error) {
-        console.error("Failed to fetch overview data:", error);
-      }
-    }
+  const rows: EpochRow[] = [];
+  const count = Math.min(head + 1, 10);
+  for (let i = 0; i < count; i++) {
+    const epoch = head - i;
+    if (epoch < 0) break;
+    const epochStartTime = currentEpochStartTime - i * epochDuration;
+    let status: 'finalized' | 'justified' | 'pending';
+    if (epoch <= finalized) status = 'finalized';
+    else if (epoch <= justified) status = 'justified';
+    else status = 'pending';
+    rows.push({ epoch, time: epochStartTime, status });
+  }
+  return rows;
+}
 
-    fetchData();
-  }, []);
+interface EpochRow {
+  epoch: number;
+  time: number;
+  status: 'finalized' | 'justified' | 'pending';
+}
 
-  const blockchainStats = [
-    {
-      data: formatNumberWithCommas(data.walletCount.value),
-      title: "Wallet Count",
-      loading: data.walletCount.isLoading,
-      error: data.walletCount.error,
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mb-2 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-        </svg>
-      )
-    },
-    {
-      data: toFixed(parseFloat(data.volume.value)) + " QRL",
-      title: "Daily Transactions Volume",
-      loading: data.volume.isLoading,
-      error: data.volume.error,
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mb-2 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-        </svg>
-      )
-    },
-    {
-      data: formatNumberWithCommas(data.blockHeight.value),
-      title: "Block Height",
-      loading: data.blockHeight.isLoading,
-      error: data.blockHeight.error,
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mb-2 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-        </svg>
-      )
-    },
-    {
-      data: formatNumberWithCommas(data.totalTransactions.value),
-      title: "Total Transactions",
-      loading: data.totalTransactions.isLoading,
-      error: data.totalTransactions.error,
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mb-2 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-        </svg>
-      )
-    },
-    {
-      data: formatNumberWithCommas(data.validatorCount.value),
-      title: "Active Validators",
-      loading: data.validatorCount.isLoading,
-      error: data.validatorCount.error,
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mb-2 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      )
-    },
-    {
-      data: formatNumberWithCommas(data.contractCount.value),
-      title: "Smart Contracts",
-      loading: data.contractCount.isLoading,
-      error: data.contractCount.error,
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mb-2 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-        </svg>
-      )
-    }
+// ── Icons ────────────────────────────────────────────────────────────────────
+
+const icons = {
+  epoch: (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  ),
+  slot: (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+    </svg>
+  ),
+  block: (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+    </svg>
+  ),
+  validators: (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+    </svg>
+  ),
+  transactions: (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+    </svg>
+  ),
+};
+
+// ── Stat Bar ─────────────────────────────────────────────────────────────────
+
+function StatBar({ data }: { data: HomeData }) {
+  const stats = [
+    { label: 'Epoch', value: data.epochInfo ? data.epochInfo.headEpoch : '—', icon: icons.epoch },
+    { label: 'Slot', value: data.epochInfo ? formatNumberWithCommas(data.epochInfo.headSlot) : '—', icon: icons.slot },
+    { label: 'Block Height', value: formatNumberWithCommas(data.blockHeight.toString()), icon: icons.block },
+    { label: 'Validators', value: formatNumberWithCommas(data.validatorCount.toString()), icon: icons.validators },
+    { label: 'Transactions', value: formatNumberWithCommas(data.totalTransactions.toString()), icon: icons.transactions },
   ];
 
-  const financialStats = [
-    {
-      data: "$" + formatNumberWithCommas(data.marketCap.value),
-      title: "Market Cap",
-      loading: data.marketCap.isLoading,
-      error: data.marketCap.error,
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mb-2 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      )
-    },
-    {
-      data: "$" + parseFloat(data.currentPrice.value).toFixed(4),
-      title: "Current Price",
-      loading: data.currentPrice.isLoading,
-      error: data.currentPrice.error,
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mb-2 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      )
-    }
-  ];
-
-  const videoContainerStyle: React.CSSProperties = {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    zIndex: -1,
-    overflow: 'hidden',
-  };
-
-  const videoStyle: React.CSSProperties = {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-    opacity: 0.5, // Adjust this value to make the video more or less visible
-  };
-
-  const overlayStyle: React.CSSProperties = {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Semi-transparent black overlay
-    zIndex: -1,
-  };
-
-  const seoTextItems = [
-    {
-      title: "What is ZondScan?",
-      text: "ZondScan is an independent blockchain explorer for QRL Zond, an EVM compatible blockchain secured by quantum resistant cryptography. Track blocks, transactions, smart contracts, and validators on a fast proof of stake network."
-    },
-    {
-      title: "What is QRL Zond?",
-      text: "QRL Zond is an EVM compatible blockchain built by the Quantum Resistant Ledger project with post quantum cryptography at its core. Most blockchains use cryptographic algorithms vulnerable to future quantum computers. QRL Zond uses SPHINCS+ instead, a NIST standardized signature scheme that provides security against both current and quantum era threats. Since it's EVM compatible, developers can deploy smart contracts using familiar Ethereum tools, libraries, and wallets. You get Ethereum compatibility plus quantum resistant security."
-    },
-    {
-      title: "Why Quantum Resistance Matters",
-      text: "Quantum computers will eventually break the cryptographic signatures that protect most blockchains today. When that happens, digital assets and identities on those chains become vulnerable. QRL Zond solves this with post quantum cryptography like SPHINCS+, ensuring your assets, contracts, and identity stay secure even when quantum computers arrive."
-    },
-    {
-      title: "Why SPHINCS+?",
-      text: "QRL Zond uses SPHINCS+, a stateless hash based signature scheme recently standardized by NIST. Unlike stateful schemes that require tracking signature usage, SPHINCS+ eliminates state management risks entirely. This makes development simpler and removes a major security headache for developers and enterprises. The tradeoff is slightly larger signatures and more computation, but that's manageable compared to the systemic risks of state tracking."
-    }
-  ];
   return (
-    <div className="relative">
-      {/* Video Background */}
-      <div style={videoContainerStyle}>
-        <video
-          autoPlay
-          loop
-          muted
-          playsInline
-          preload="metadata"
-          style={videoStyle}
-        >
-          <source src="/tree3.mp4" type="video/mp4" />
-          Your browser does not support the video tag.
-        </video>
-        <div style={overlayStyle}></div>
+    <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+        {stats.map((stat, i) => (
+          <div
+            key={stat.label}
+            className={`px-4 py-4 sm:py-5 flex flex-col items-center justify-center text-center
+                        ${i < stats.length - 1 ? 'border-b lg:border-b-0 lg:border-r border-[#2a2a2a]' : ''}
+                        ${i % 2 === 0 && i < stats.length - 1 ? 'border-r sm:border-r border-[#2a2a2a]' : ''}
+                        `}
+          >
+            {data.loading ? (
+              <div className="h-7 w-20 bg-[#2a2a2a] rounded animate-pulse" />
+            ) : (
+              <span className="text-lg sm:text-xl font-semibold text-white tabular-nums">
+                {stat.value}
+              </span>
+            )}
+            <span className="flex items-center gap-1.5 text-[11px] text-gray-500 mt-1.5 uppercase tracking-wider">
+              <span className="text-gray-600">{stat.icon}</span>
+              {stat.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Status Badge ─────────────────────────────────────────────────────────────
+
+function StatusBadge({ status }: { status: 'finalized' | 'justified' | 'pending' | 'proposed' }) {
+  const styles: Record<string, string> = {
+    finalized: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
+    justified: 'bg-blue-500/15 text-blue-400 border-blue-500/20',
+    pending: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/20',
+    proposed: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
+  };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border ${styles[status]}`}>
+      {status.charAt(0).toUpperCase() + status.slice(1)}
+    </span>
+  );
+}
+
+// ── Epoch Table ──────────────────────────────────────────────────────────────
+
+function EpochTable({ epochs, loading }: { epochs: EpochRow[]; loading: boolean }) {
+  return (
+    <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2a2a]">
+        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-white">
+          <span className="text-[#ffa729]">{icons.epoch}</span>
+          Latest Epochs
+        </h2>
+        <Link href="/validators" className="text-xs text-[#ffa729] hover:text-[#ffb954] hover:underline transition-colors">
+          View all &rarr;
+        </Link>
       </div>
 
-      {/* Main Content */}
-      <div className="relative z-10 px-4 lg:px-8 pt-6.81 lg:pt-8">
+      {/* Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-[#2a2a2a]">
+              <th className="text-left px-4 py-2.5 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Epoch</th>
+              <th className="text-left px-4 py-2.5 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Time</th>
+              <th className="text-left px-4 py-2.5 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              Array.from({ length: 8 }).map((_, i) => (
+                <tr key={i} className="border-b border-[#2a2a2a] last:border-b-0">
+                  <td className="px-4 py-2.5"><div className="h-4 w-12 bg-[#2a2a2a] rounded animate-pulse" /></td>
+                  <td className="px-4 py-2.5"><div className="h-4 w-16 bg-[#2a2a2a] rounded animate-pulse" /></td>
+                  <td className="px-4 py-2.5"><div className="h-4 w-16 bg-[#2a2a2a] rounded animate-pulse" /></td>
+                </tr>
+              ))
+            ) : epochs.length === 0 ? (
+              <tr>
+                <td colSpan={3} className="px-4 py-8 text-center text-gray-500">No epoch data available</td>
+              </tr>
+            ) : (
+              epochs.map((epoch) => (
+                <tr
+                  key={epoch.epoch}
+                  className="border-b border-[#2a2a2a] last:border-b-0 hover:bg-[#252525] transition-colors"
+                >
+                  <td className="px-4 py-2.5">
+                    <Link href="/validators" className="text-[#ffa729] hover:text-[#ffb954] hover:underline font-medium tabular-nums">
+                      {formatNumberWithCommas(epoch.epoch.toString())}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-2.5 text-gray-400 tabular-nums">{timeAgo(epoch.time)}</td>
+                  <td className="px-4 py-2.5">
+                    <StatusBadge status={epoch.status} />
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Block Table ──────────────────────────────────────────────────────────────
+
+function BlockTable({ blocks, epochInfo, loading }: { blocks: BlockResult[]; epochInfo: EpochInfo | null; loading: boolean }) {
+  function getSlotFromBlock(blockNumber: string): number {
+    return parseHex(blockNumber);
+  }
+
+  function getEpochFromSlot(slot: number): number {
+    return Math.floor(slot / SLOTS_PER_EPOCH);
+  }
+
+  return (
+    <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2a2a]">
+        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-white">
+          <span className="text-[#ffa729]">{icons.block}</span>
+          Latest Blocks
+        </h2>
+        <Link href="/blocks/1" className="text-xs text-[#ffa729] hover:text-[#ffb954] hover:underline transition-colors">
+          View all &rarr;
+        </Link>
+      </div>
+
+      {/* Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-[#2a2a2a]">
+              <th className="text-left px-4 py-2.5 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Block</th>
+              <th className="text-left px-4 py-2.5 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden sm:table-cell">Epoch</th>
+              <th className="text-left px-4 py-2.5 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Time</th>
+              <th className="text-left px-4 py-2.5 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Txns</th>
+              <th className="text-left px-4 py-2.5 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden md:table-cell">Proposer</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              Array.from({ length: 8 }).map((_, i) => (
+                <tr key={i} className="border-b border-[#2a2a2a] last:border-b-0">
+                  <td className="px-4 py-2.5"><div className="h-4 w-14 bg-[#2a2a2a] rounded animate-pulse" /></td>
+                  <td className="px-4 py-2.5 hidden sm:table-cell"><div className="h-4 w-10 bg-[#2a2a2a] rounded animate-pulse" /></td>
+                  <td className="px-4 py-2.5"><div className="h-4 w-14 bg-[#2a2a2a] rounded animate-pulse" /></td>
+                  <td className="px-4 py-2.5"><div className="h-4 w-6 bg-[#2a2a2a] rounded animate-pulse" /></td>
+                  <td className="px-4 py-2.5 hidden md:table-cell"><div className="h-4 w-24 bg-[#2a2a2a] rounded animate-pulse" /></td>
+                </tr>
+              ))
+            ) : blocks.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center text-gray-500">No blocks found</td>
+              </tr>
+            ) : (
+              blocks.map((block) => {
+                const blockNum = parseHex(block.number);
+                const slot = getSlotFromBlock(block.number);
+                const epoch = getEpochFromSlot(slot);
+                const timestamp = parseHex(block.timestamp);
+                const txCount = block.transactions?.length || 0;
+                const proposer = formatAddress(block.miner);
+
+                return (
+                  <tr
+                    key={block.hash}
+                    className="border-b border-[#2a2a2a] last:border-b-0 hover:bg-[#252525] transition-colors"
+                  >
+                    <td className="px-4 py-2.5">
+                      <Link href={`/block/${blockNum}`} className="text-[#ffa729] hover:text-[#ffb954] hover:underline font-medium tabular-nums">
+                        {formatNumberWithCommas(blockNum.toString())}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-2.5 text-gray-400 tabular-nums hidden sm:table-cell">
+                      {formatNumberWithCommas(epoch.toString())}
+                    </td>
+                    <td className="px-4 py-2.5 text-gray-400 tabular-nums">{timeAgo(timestamp)}</td>
+                    <td className="px-4 py-2.5 text-gray-300 tabular-nums">{txCount}</td>
+                    <td className="px-4 py-2.5 hidden md:table-cell">
+                      <Link href={`/address/${proposer}`} className="text-gray-400 hover:text-[#ffa729] hover:underline font-mono text-xs transition-colors">
+                        {truncateHash(proposer, 8, 6)}
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Component ───────────────────────────────────────────────────────────
+
+export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.Element {
+  const [data, setData] = React.useState<HomeData>({
+    blockHeight: 0,
+    totalTransactions: 0,
+    validatorCount: 0,
+    epochInfo: null,
+    blocks: [],
+    totalStaked: '0',
+    loading: true,
+    error: false,
+    dataInitialized: false,
+  });
+
+  const fetchData = React.useCallback(async () => {
+    try {
+      if (!config.handlerUrl) return;
+
+      const [overviewRes, latestBlockRes, txsRes, epochRes, blocksRes] = await Promise.allSettled([
+        axios.get(config.handlerUrl + '/overview'),
+        axios.get(config.handlerUrl + '/latestblock'),
+        axios.get(config.handlerUrl + '/txs?page=1'),
+        axios.get(config.handlerUrl + '/epoch'),
+        axios.get(config.handlerUrl + '/blocks?page=1&limit=10'),
+      ]);
+
+      setData((prev) => {
+        const next = { ...prev, loading: false };
+
+        if (overviewRes.status === 'fulfilled') {
+          next.validatorCount = overviewRes.value.data.validatorCount || 0;
+          next.dataInitialized = overviewRes.value.data.status?.dataInitialized ?? false;
+        }
+        if (latestBlockRes.status === 'fulfilled') {
+          next.blockHeight = latestBlockRes.value.data.blockNumber || 0;
+        }
+        if (txsRes.status === 'fulfilled') {
+          next.totalTransactions = txsRes.value.data.total || 0;
+        }
+        if (epochRes.status === 'fulfilled' && epochRes.value.data) {
+          next.epochInfo = epochRes.value.data;
+        }
+        if (blocksRes.status === 'fulfilled') {
+          next.blocks = blocksRes.value.data.blocks || [];
+        }
+
+        return next;
+      });
+    } catch (err) {
+      console.error('Failed to fetch homepage data:', err);
+      setData((prev) => ({ ...prev, loading: false, error: true }));
+    }
+  }, []);
+
+  React.useEffect(() => {
+    fetchData();
+    // Refresh every 30s (approx half a slot)
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
+  const epochs = React.useMemo(() => deriveEpochs(data.epochInfo), [data.epochInfo]);
+
+  return (
+    <div className="px-4 lg:px-8 pt-4 lg:pt-6">
+      <div className="max-w-6xl mx-auto">
         {/* Search Bar */}
-        <div className="max-w-6xl mx-auto mt-4">
-          <h1 className="text-base sm:text-xl font-bold mb-2 sm:mb-4 text-[#ffa729]">{pageTitle}</h1>
-          <div className="mb-4 sm:mb-10">
-            <SearchBar />
-          </div>
-
-          {!data.dataInitialized && (
-            <div className="mb-4 sm:mb-8 p-2 sm:p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-500">
-              <div className="flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 sm:h-5 w-4 sm:w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span className="text-xs sm:text-sm">Initializing explorer data... This may take a few minutes.</span>
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-4 sm:space-y-8">
-            {/* Blockchain Stats */}
-            <div>
-              <h2 className="text-base sm:text-xl font-bold mb-2 sm:mb-4 text-[#ffa729]">Blockchain Statistics</h2>
-              <div className={`grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4 ${!data.dataInitialized ? 'opacity-50' : ''}`}>
-                {blockchainStats.map((item, idx) => (
-                  <StatCard key={idx} item={item} />
-                ))}
-              </div>
-            </div>
-
-            {/* Financial Stats */}
-            <div>
-              <h2 className="text-base sm:text-xl font-bold mb-2 sm:mb-4 text-[#ffa729]">Financial Statistics</h2>
-              <div className={`grid grid-cols-2 gap-2 sm:gap-4 mb-4 ${!data.dataInitialized ? 'opacity-50' : ''}`}>
-                {financialStats.map((item, idx) => (
-                  <StatCard key={idx} item={item} />
-                ))}
-              </div>
-              <div className="max-w-6xl mx-auto">
-                <Charts />
-              </div>
-              
-            </div>
-          </div>
+        <h1 className="text-base sm:text-lg font-semibold mb-2 text-white">{pageTitle}</h1>
+        <div className="mb-6">
+          <SearchBar />
         </div>
-        <div className="max-w-6xl mx-auto px-4">
-        <SeoTextSection items={seoTextItems} />
+
+        {/* Init Warning */}
+        {!data.loading && !data.dataInitialized && (
+          <div className="mb-4 px-3 py-2.5 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 text-xs sm:text-sm flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Initializing explorer data... This may take a few minutes.
+          </div>
+        )}
+
+        {/* Stats Bar */}
+        <div className="mb-6">
+          <StatBar data={data} />
         </div>
-        
+
+        {/* Side-by-Side Tables */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+          <EpochTable epochs={epochs} loading={data.loading} />
+          <BlockTable blocks={data.blocks} epochInfo={data.epochInfo} loading={data.loading} />
+        </div>
+
+        {/* TradingView Chart */}
+        <div className="mb-8">
+          <Charts />
+        </div>
       </div>
     </div>
   );
