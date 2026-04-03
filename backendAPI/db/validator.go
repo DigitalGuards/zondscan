@@ -246,6 +246,75 @@ func GetValidatorByID(id string) (*models.ValidatorDetailResponse, error) {
 	}, nil
 }
 
+// GetEpochs returns a paginated list of epochs from validator_history,
+// augmented with finalized/justified status from epoch_info.
+func GetEpochs(page, limit int) (*models.EpochsResponse, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Get current epoch state for finalized/justified status
+	var epochInfo models.EpochInfo
+	err := configs.EpochInfoCollection.FindOne(ctx, bson.M{"_id": "current"}).Decode(&epochInfo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get epoch info: %v", err)
+	}
+	finalizedEpoch := parseEpoch(epochInfo.FinalizedEpoch)
+	justifiedEpoch := parseEpoch(epochInfo.JustifiedEpoch)
+
+	// Count total epoch records
+	total, err := configs.ValidatorHistoryCollection.CountDocuments(ctx, bson.M{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to count epochs: %v", err)
+	}
+
+	// Query with pagination, sorted newest first
+	skip := int64((page - 1) * limit)
+	findOpts := options.Find().
+		SetSort(bson.D{{Key: "epoch", Value: -1}}).
+		SetSkip(skip).
+		SetLimit(int64(limit))
+
+	cursor, err := configs.ValidatorHistoryCollection.Find(ctx, bson.M{}, findOpts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query epochs: %v", err)
+	}
+	defer cursor.Close(ctx)
+
+	var records []models.ValidatorHistoryRecord
+	if err := cursor.All(ctx, &records); err != nil {
+		return nil, fmt.Errorf("failed to decode epochs: %v", err)
+	}
+
+	epochs := make([]models.EpochListItem, 0, len(records))
+	for _, r := range records {
+		epochNum := parseEpoch(r.Epoch)
+		var status string
+		if epochNum <= finalizedEpoch {
+			status = "finalized"
+		} else if epochNum <= justifiedEpoch {
+			status = "justified"
+		} else {
+			status = "pending"
+		}
+
+		epochs = append(epochs, models.EpochListItem{
+			Epoch:           r.Epoch,
+			Timestamp:       r.Timestamp,
+			Status:          status,
+			ValidatorsCount: r.ValidatorsCount,
+			ActiveCount:     r.ActiveCount,
+			TotalStaked:     r.TotalStaked,
+		})
+	}
+
+	return &models.EpochsResponse{
+		Epochs:         epochs,
+		Total:          total,
+		FinalizedEpoch: epochInfo.FinalizedEpoch,
+		JustifiedEpoch: epochInfo.JustifiedEpoch,
+	}, nil
+}
+
 // GetValidatorStats returns aggregated validator statistics using a MongoDB aggregation
 // pipeline instead of loading all validators into Go memory.
 func GetValidatorStats() (*models.ValidatorStatsResponse, error) {

@@ -506,6 +506,25 @@ func UserRoute(router *gin.Engine) {
 		c.JSON(http.StatusOK, gin.H{"response": query})
 	})
 
+	// Paginated epochs listing
+	router.GET("/epochs", func(c *gin.Context) {
+		page, limit := getPaginationParams(c, 1, 15)
+
+		result, err := db.GetEpochs(page, limit)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to fetch epochs: %v", err),
+			})
+			return
+		}
+
+		if result.Epochs == nil {
+			result.Epochs = make([]models.EpochListItem, 0)
+		}
+
+		c.JSON(http.StatusOK, result)
+	})
+
 	router.GET("/validators", func(c *gin.Context) {
 		pageToken := c.Query("page_token")
 		validatorResponse, err := db.ReturnValidators(pageToken)
