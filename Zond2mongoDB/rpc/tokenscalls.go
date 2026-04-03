@@ -47,11 +47,7 @@ func CallContractMethod(contractAddress string, methodSig string) (string, error
 		zap.String("methodSig", methodSig[:10]+"...")) // Log just the beginning of the signature for brevity
 
 	// Ensure contract address has Q prefix for QRL RPC
-	if strings.HasPrefix(contractAddress, "0x") {
-		contractAddress = "Q" + contractAddress[2:]
-	} else if !strings.HasPrefix(contractAddress, "Q") {
-		contractAddress = "Q" + contractAddress
-	}
+	contractAddress = validation.ConvertToQAddress(contractAddress)
 
 	group := models.JsonRPC{
 		Jsonrpc: "2.0",
@@ -339,23 +335,14 @@ func GetTokenBalance(contractAddress string, holderAddress string) (string, erro
 	}
 
 	// Ensure contract address has Q prefix for QRL RPC
-	if strings.HasPrefix(contractAddress, "0x") {
-		contractAddress = "Q" + contractAddress[2:]
-	} else if !strings.HasPrefix(contractAddress, "Q") {
-		contractAddress = "Q" + contractAddress
-	}
+	contractAddress = validation.ConvertToQAddress(contractAddress)
 
 	// Ensure holder address has Q prefix for RPC
 	originalHolderAddress := holderAddress // Keep original for logging
-
-	if strings.HasPrefix(holderAddress, "0x") {
-		holderAddress = "Q" + holderAddress[2:]
-	} else if !strings.HasPrefix(holderAddress, "Q") {
-		holderAddress = "Q" + holderAddress
-	}
+	holderAddress = validation.ConvertToQAddress(holderAddress)
 
 	// Extract the raw address (without prefix) for padding
-	rawAddress := strings.TrimPrefix(holderAddress, "Q")
+	rawAddress := validation.StripAddressPrefix(holderAddress)
 
 	// Pad address to 32 bytes (64 hex chars) for ABI encoding
 	paddedAddress := rawAddress
@@ -434,8 +421,8 @@ func DecodeTransferEvent(data string) (string, string, string) {
 			return "", "", ""
 		}
 
-		// Extract recipient address (remove leading zeros), canonical Q-prefix form
-		recipient := "Q" + strings.ToLower(TrimLeftZeros(data[34:74]))
+		// Extract recipient address, canonical Q-prefix form
+		recipient := "Q" + strings.ToLower(data[34:74])
 		if len(recipient) != 41 { // Check if it's a valid address length (Z + 40 hex chars)
 			return "", "", ""
 		}
@@ -551,9 +538,9 @@ func IsValidRecipient(recipient string) bool {
 // ParseTransferEvent parses a transfer event log.
 // Addresses are returned in canonical Q-prefix form.
 func ParseTransferEvent(log models.Log) (string, string, *big.Int, error) {
-	// Extract addresses from topics (32-byte padded, strip leading zeros)
-	from := "Q" + strings.ToLower(TrimLeftZeros(log.Topics[1][26:]))
-	to := "Q" + strings.ToLower(TrimLeftZeros(log.Topics[2][26:]))
+	// Extract addresses from topics (32-byte padded, take last 40 hex chars)
+	from := "Q" + strings.ToLower(log.Topics[1][26:])
+	to := "Q" + strings.ToLower(log.Topics[2][26:])
 
 	// Validate addresses
 	if !validation.IsValidAddress(from) {
