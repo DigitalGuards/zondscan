@@ -55,7 +55,7 @@ type ContractInfo struct {
 	MaxTxLimit      string `bson:"maxTxLimit,omitempty" json:"maxTxLimit,omitempty"`
 }
 
-// LogsResponse represents the response from zond_getLogs
+// LogsResponse represents the response from qrl_getLogs
 type LogsResponse struct {
 	Jsonrpc string     `json:"jsonrpc"`
 	ID      int        `json:"id"`
@@ -66,7 +66,7 @@ type LogsResponse struct {
 	} `json:"error,omitempty"`
 }
 
-// LogEntry represents a single log entry from zond_getLogs
+// LogEntry represents a single log entry from qrl_getLogs
 type LogEntry struct {
 	Address          string   `json:"address"`
 	Topics           []string `json:"topics"`
