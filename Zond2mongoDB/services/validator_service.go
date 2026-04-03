@@ -142,19 +142,20 @@ func storeValidatorHistoryFromDB(epoch string, currentEpochInt int64) error {
 		}
 	}
 
-	record := &models.ValidatorHistoryRecord{
-		Epoch:           epoch,
-		Timestamp:       time.Now().Unix(),
-		ValidatorsCount: int(totalCount),
-		ActiveCount:     activeCount,
-		PendingCount:    pendingCount,
-		ExitedCount:     exitedCount,
-		SlashedCount:    slashedCount,
-		TotalStaked:     totalStaked.String(),
+	record := bson.M{
+		"epoch":           epoch,
+		"epochInt":        currentEpochInt,
+		"timestamp":       time.Now().Unix(),
+		"validatorsCount": int(totalCount),
+		"activeCount":     activeCount,
+		"pendingCount":    pendingCount,
+		"exitedCount":     exitedCount,
+		"slashedCount":    slashedCount,
+		"totalStaked":     totalStaked.String(),
 	}
 
 	opts := options.Update().SetUpsert(true)
-	filter := bson.M{"epoch": record.Epoch}
+	filter := bson.M{"epoch": epoch}
 	update := bson.M{"$set": record}
 
 	_, err = configs.ValidatorHistoryCollections.UpdateOne(ctx, filter, update, opts)
@@ -163,8 +164,8 @@ func storeValidatorHistoryFromDB(epoch string, currentEpochInt int64) error {
 	}
 
 	configs.Logger.Debug("Stored validator history",
-		zap.String("epoch", record.Epoch),
-		zap.Int("validatorsCount", record.ValidatorsCount))
+		zap.String("epoch", epoch),
+		zap.Int("validatorsCount", int(totalCount)))
 	return nil
 }
 
@@ -270,6 +271,145 @@ func StoreEpochInfo(chainHead *models.BeaconChainHeadResponse) error {
 	configs.Logger.Debug("Stored epoch info",
 		zap.String("headEpoch", epochInfo.HeadEpoch),
 		zap.String("headSlot", epochInfo.HeadSlot))
+	return nil
+}
+
+// BackfillValidatorHistory fills in missing epoch records in validator_history.
+// currentEpoch is the current epoch number derived from the latest block.
+// Since all validators on this chain have been active since genesis with unchanged
+// balances, we use the current validator state for all past epochs and compute
+// timestamps from genesis time + epoch duration.
+func BackfillValidatorHistory(currentEpoch int64) error {
+	if currentEpoch <= 0 {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	const slotsPerEpoch = 128
+	const secondsPerSlot = 60
+	const epochDuration = int64(slotsPerEpoch * secondsPerSlot) // 7680s
+
+	// Find which epochs already have records
+	cursor, err := configs.ValidatorHistoryCollections.Find(ctx, bson.M{},
+		options.Find().SetProjection(bson.M{"epoch": 1}))
+	if err != nil {
+		return fmt.Errorf("query existing history: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	existingEpochs := make(map[string]bool)
+	for cursor.Next(ctx) {
+		var rec struct {
+			Epoch string `bson:"epoch"`
+		}
+		if err := cursor.Decode(&rec); err == nil {
+			existingEpochs[rec.Epoch] = true
+		}
+	}
+
+	// If all epochs exist, nothing to do
+	if int64(len(existingEpochs)) >= currentEpoch {
+		configs.Logger.Debug("Validator history is complete, no backfill needed",
+			zap.Int64("currentEpoch", currentEpoch),
+			zap.Int("existingRecords", len(existingEpochs)))
+		return nil
+	}
+
+	// Get current validator data
+	totalCount, err := configs.ValidatorsCollections.CountDocuments(ctx, bson.M{})
+	if err != nil || totalCount == 0 {
+		return fmt.Errorf("no validators to backfill from: %w", err)
+	}
+
+	valCursor, err := configs.ValidatorsCollections.Find(ctx, bson.M{},
+		options.Find().SetProjection(bson.M{
+			"slashed": 1, "activationEpoch": 1, "exitEpoch": 1, "effectiveBalance": 1,
+		}))
+	if err != nil {
+		return fmt.Errorf("find validators for backfill: %w", err)
+	}
+	defer valCursor.Close(ctx)
+
+	var docs []models.ValidatorDocument
+	if err := valCursor.All(ctx, &docs); err != nil {
+		return fmt.Errorf("decode validators for backfill: %w", err)
+	}
+
+	// Get genesis time from block 0
+	var block0 struct {
+		Result struct {
+			Timestamp string `bson:"timestamp"`
+		} `bson:"result"`
+	}
+	err = configs.BlocksCollections.FindOne(ctx, bson.M{"blockNumberInt": int64(0)}).Decode(&block0)
+	genesisTime := int64(0)
+	if err == nil && block0.Result.Timestamp != "" {
+		genesisTime, _ = strconv.ParseInt(block0.Result.Timestamp, 0, 64)
+	}
+	if genesisTime == 0 {
+		genesisTime = time.Now().Unix() - currentEpoch*epochDuration
+	}
+
+	// Build batch of missing epoch records
+	writeModels := make([]mongo.WriteModel, 0)
+	for epoch := int64(0); epoch < currentEpoch; epoch++ {
+		epochStr := strconv.FormatInt(epoch, 10)
+		if existingEpochs[epochStr] {
+			continue
+		}
+
+		var activeCount, pendingCount, exitedCount, slashedCount int
+		totalStaked := big.NewInt(0)
+		for _, d := range docs {
+			status := models.GetValidatorStatus(d.ActivationEpoch, d.ExitEpoch, d.Slashed, epoch)
+			switch status {
+			case "active":
+				activeCount++
+			case "pending":
+				pendingCount++
+			case "exited":
+				exitedCount++
+			case "slashed":
+				slashedCount++
+			}
+			if balance, ok := new(big.Int).SetString(d.EffectiveBalance, 10); ok {
+				totalStaked.Add(totalStaked, balance)
+			}
+		}
+
+		doc := bson.M{
+			"epoch":           epochStr,
+			"epochInt":        epoch,
+			"timestamp":       genesisTime + epoch*epochDuration,
+			"validatorsCount": int(totalCount),
+			"activeCount":     activeCount,
+			"pendingCount":    pendingCount,
+			"exitedCount":     exitedCount,
+			"slashedCount":    slashedCount,
+			"totalStaked":     totalStaked.String(),
+		}
+
+		filter := bson.M{"epoch": epochStr}
+		update := bson.M{"$set": doc}
+		writeModels = append(writeModels, mongo.NewUpdateOneModel().
+			SetFilter(filter).SetUpdate(update).SetUpsert(true))
+	}
+
+	if len(writeModels) == 0 {
+		return nil
+	}
+
+	result, err := configs.ValidatorHistoryCollections.BulkWrite(ctx, writeModels, options.BulkWrite().SetOrdered(false))
+	if err != nil {
+		return fmt.Errorf("bulk write backfill: %w", err)
+	}
+
+	configs.Logger.Info("Backfilled validator history",
+		zap.Int64("upserted", result.UpsertedCount),
+		zap.Int64("modified", result.ModifiedCount),
+		zap.Int64("currentEpoch", currentEpoch))
 	return nil
 }
 

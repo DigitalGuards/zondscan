@@ -267,10 +267,10 @@ func GetEpochs(page, limit int) (*models.EpochsResponse, error) {
 		return nil, fmt.Errorf("failed to count epochs: %v", err)
 	}
 
-	// Query with pagination, sorted newest first
+	// Query with pagination, sorted newest first by numeric epoch
 	skip := int64((page - 1) * limit)
 	findOpts := options.Find().
-		SetSort(bson.D{{Key: "epoch", Value: -1}}).
+		SetSort(bson.D{{Key: "epochInt", Value: -1}}).
 		SetSkip(skip).
 		SetLimit(int64(limit))
 
