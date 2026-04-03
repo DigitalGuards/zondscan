@@ -45,8 +45,10 @@ type ValidatorRecord struct {
 
 // ValidatorResponse represents the API response format
 type ValidatorResponse struct {
-	Validators  []Validator `json:"validators"`
-	TotalStaked string      `json:"totalStaked"` // Total amount staked in hex
+	Validators     []Validator `json:"validators"`
+	ValidatorCount int         `json:"validatorCount"`
+	Epoch          string      `json:"epoch"`
+	TotalStaked    string      `json:"totalStaked"`
 }
 
 // Validator represents a single validator in the API response

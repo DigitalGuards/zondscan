@@ -81,8 +81,10 @@ func ReturnValidators(pageToken string) (*models.ValidatorResponse, error) {
 	}
 
 	return &models.ValidatorResponse{
-		Validators:  validators,
-		TotalStaked: fmt.Sprintf("%d", totalStaked),
+		Validators:     validators,
+		ValidatorCount: len(validators),
+		Epoch:          fmt.Sprintf("%d", currentEpoch),
+		TotalStaked:    fmt.Sprintf("%d", totalStaked),
 	}, nil
 }
 
