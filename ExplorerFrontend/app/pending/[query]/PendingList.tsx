@@ -5,7 +5,7 @@ import React, { useState } from 'react';
 import config from '../../../config';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { formatAmount } from '../../lib/helpers';
+import { formatAmount, formatGasPrice } from '../../lib/helpers';
 import type { PendingTransaction } from '@/app/types';
 import Badge from '../../components/Badge';
 
@@ -83,7 +83,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({ transaction }) => {
           </div>
           <div>
             <p className="text-gray-400 text-sm">Gas Price</p>
-            <p className="text-white">{formatAmount(transaction.gasPrice)[0]} Shor</p>
+            <p className="text-white">{formatGasPrice(transaction.gasPrice)} Gwei</p>
           </div>
           <div>
             <p className="text-gray-400 text-sm">Time</p>
