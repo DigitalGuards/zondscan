@@ -33,6 +33,7 @@ const navGroups: NavGroup[] = [
       { name: 'Latest Transactions', description: 'View all Transactions', href: '/transactions/1', imgSrc: PartnerHandshakeIcon },
       { name: 'Pending Transactions', description: 'View pending transactions', href: '/pending/1', imgSrc: PartnerHandshakeIcon },
       { name: 'Latest Blocks', description: 'View all Blocks', href: '/blocks/1', imgSrc: BlockchainIcon },
+      { name: 'Epochs', description: 'View all Epochs', href: '/epochs/1', imgSrc: BlockchainIcon },
       { name: 'Validators', description: 'Network Validators', href: '/validators', imgSrc: ContractIcon },
     ],
   },
@@ -63,6 +64,7 @@ function isActive(pathname: string, href: string): boolean {
   if (basePath !== href && pathname.startsWith(basePath + '/')) return true
   // Match parent paths for detail pages (e.g., /block/123 matches /blocks/1)
   if (href.startsWith('/blocks') && pathname.startsWith('/block/')) return true
+  if (href.startsWith('/epochs') && pathname.startsWith('/epochs/')) return true
   if (href.startsWith('/transactions') && pathname.startsWith('/tx/')) return true
   if (href === '/contracts' && pathname.startsWith('/contracts')) return true
   return false

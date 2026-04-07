@@ -130,3 +130,53 @@ type ValidatorStatsResponse struct {
 	TotalStaked     string `json:"totalStaked"`
 	CurrentEpoch    string `json:"currentEpoch"`
 }
+
+// EpochDetailBlock represents a single slot within an epoch detail view
+type EpochDetailBlock struct {
+	Slot         int64  `json:"slot"`
+	Status       string `json:"status"` // proposed or missed
+	Timestamp    string `json:"timestamp,omitempty"`
+	Proposer     string `json:"proposer,omitempty"`
+	Transactions int    `json:"transactions"`
+	GasUsed      string `json:"gasUsed,omitempty"`
+	BlockHash    string `json:"blockHash,omitempty"`
+}
+
+// EpochDetailResponse represents the full epoch detail API response
+type EpochDetailResponse struct {
+	Epoch           string             `json:"epoch"`
+	Timestamp       int64              `json:"timestamp"`
+	Status          string             `json:"status"`
+	ValidatorsCount int                `json:"validatorsCount"`
+	ActiveCount     int                `json:"activeCount"`
+	PendingCount    int                `json:"pendingCount"`
+	ExitedCount     int                `json:"exitedCount"`
+	SlashedCount    int                `json:"slashedCount"`
+	TotalStaked     string             `json:"totalStaked"`
+	StartSlot       int64              `json:"startSlot"`
+	EndSlot         int64              `json:"endSlot"`
+	Blocks          []EpochDetailBlock `json:"blocks"`
+	FinalizedEpoch  string             `json:"finalizedEpoch"`
+	JustifiedEpoch  string             `json:"justifiedEpoch"`
+	HeadEpoch       string             `json:"headEpoch"`
+	ProposedCount   int                `json:"proposedCount"`
+	MissedCount     int                `json:"missedCount"`
+}
+
+// EpochListItem represents a single epoch in the paginated listing
+type EpochListItem struct {
+	Epoch           string `json:"epoch"`
+	Timestamp       int64  `json:"timestamp"`
+	Status          string `json:"status"` // finalized, justified, pending
+	ValidatorsCount int    `json:"validatorsCount"`
+	ActiveCount     int    `json:"activeCount"`
+	TotalStaked     string `json:"totalStaked"`
+}
+
+// EpochsResponse represents the paginated epochs API response
+type EpochsResponse struct {
+	Epochs         []EpochListItem `json:"epochs"`
+	Total          int64           `json:"total"`
+	FinalizedEpoch string          `json:"finalizedEpoch"`
+	JustifiedEpoch string          `json:"justifiedEpoch"`
+}
