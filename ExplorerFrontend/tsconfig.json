@@ -27,7 +27,7 @@
       "node",
       "jest"
     ],
-    "ignoreDeprecations": "5.0",
+    "ignoreDeprecations": "6.0",
     "skipDefaultLibCheck": true,
     "target": "ES2017",
     "baseUrl": ".",

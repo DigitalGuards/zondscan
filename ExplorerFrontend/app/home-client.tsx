@@ -4,7 +4,7 @@ import * as React from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import axios from 'axios';
-import { formatNumberWithCommas, truncateHash, formatAddress } from './lib/helpers';
+import { formatNumberWithCommas } from './lib/helpers';
 import config from '../config.js';
 import SearchBar from './components/SearchBar';
 
@@ -194,9 +194,16 @@ function StatusBadge({ status }: { status: 'finalized' | 'justified' | 'pending'
 
 // ── Epoch Table ──────────────────────────────────────────────────────────────
 
+const TABLE_ROWS = 10;
+
+const ROW_CLASS = 'flex items-center px-4 h-[38px] border-b border-[#2a2a2a] last:border-b-0 text-sm';
+const HEAD_CLASS = 'flex items-center px-4 py-2 border-b border-[#2a2a2a] text-[11px] font-normal text-gray-600 uppercase tracking-wider';
+
 function EpochTable({ epochs, loading }: { epochs: EpochRow[]; loading: boolean }) {
+  const padCount = loading ? 0 : Math.max(0, TABLE_ROWS - epochs.length);
+
   return (
-    <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden flex flex-col">
+    <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2a2a]">
         <h2 className="flex items-center gap-2 text-[15px] font-semibold text-[#ffa729]">
@@ -208,49 +215,58 @@ function EpochTable({ epochs, loading }: { epochs: EpochRow[]; loading: boolean 
         </Link>
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[#2a2a2a]">
-              <th className="text-left px-4 py-2.5 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Epoch</th>
-              <th className="text-left px-4 py-2.5 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Time</th>
-              <th className="text-left px-4 py-2.5 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              Array.from({ length: 8 }).map((_, i) => (
-                <tr key={i} className="border-b border-[#2a2a2a] last:border-b-0">
-                  <td className="px-4 py-2.5"><div className="h-4 w-12 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                  <td className="px-4 py-2.5"><div className="h-4 w-16 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                  <td className="px-4 py-2.5"><div className="h-4 w-16 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                </tr>
-              ))
-            ) : epochs.length === 0 ? (
-              <tr>
-                <td colSpan={3} className="px-4 py-8 text-center text-gray-500">No epoch data available</td>
-              </tr>
-            ) : (
-              epochs.map((epoch) => (
-                <tr
-                  key={epoch.epoch}
-                  className="border-b border-[#2a2a2a] last:border-b-0 hover:bg-[#252525] transition-colors"
-                >
-                  <td className="px-4 py-2.5">
-                    <Link href={`/epoch/${epoch.epoch}`} className="text-[#ffa729] hover:text-[#ffb954] hover:underline font-medium tabular-nums">
-                      {formatNumberWithCommas(epoch.epoch.toString())}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2.5 text-gray-400 tabular-nums">{timeAgo(epoch.time)}</td>
-                  <td className="px-4 py-2.5">
-                    <StatusBadge status={epoch.status} />
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      {/* Column headers */}
+      <div className={HEAD_CLASS}>
+        <span className="w-20">Epoch</span>
+        <span className="flex-1">Time</span>
+        <span className="w-24 text-right">Status</span>
+      </div>
+
+      {/* Rows */}
+      <div>
+        {loading ? (
+          Array.from({ length: TABLE_ROWS }).map((_, i) => (
+            <div key={i} className={ROW_CLASS}>
+              <span className="w-20"><div className="h-4 w-12 bg-[#2a2a2a] rounded animate-pulse" /></span>
+              <span className="flex-1"><div className="h-4 w-16 bg-[#2a2a2a] rounded animate-pulse" /></span>
+              <span className="w-24 flex justify-end"><div className="h-4 w-16 bg-[#2a2a2a] rounded animate-pulse" /></span>
+            </div>
+          ))
+        ) : epochs.length === 0 ? (
+          Array.from({ length: TABLE_ROWS }).map((_, i) => (
+            <div key={i} className={ROW_CLASS}>
+              <span className="w-20 text-transparent select-none">—</span>
+              <span className="flex-1" />
+              <span className="w-24" />
+            </div>
+          ))
+        ) : (
+          <>
+            {epochs.map((epoch) => (
+              <div
+                key={epoch.epoch}
+                className={`${ROW_CLASS} hover:bg-[#252525] transition-colors`}
+              >
+                <span className="w-20">
+                  <Link href={`/epoch/${epoch.epoch}`} className="text-[#ffa729] hover:text-[#ffb954] hover:underline font-medium tabular-nums">
+                    {formatNumberWithCommas(epoch.epoch.toString())}
+                  </Link>
+                </span>
+                <span className="flex-1 text-gray-400 tabular-nums">{timeAgo(epoch.time)}</span>
+                <span className="w-24 flex justify-end">
+                  <StatusBadge status={epoch.status} />
+                </span>
+              </div>
+            ))}
+            {Array.from({ length: padCount }).map((_, i) => (
+              <div key={`pad-${i}`} className={ROW_CLASS}>
+                <span className="w-20 text-transparent select-none">—</span>
+                <span className="flex-1" />
+                <span className="w-24" />
+              </div>
+            ))}
+          </>
+        )}
       </div>
     </div>
   );
@@ -258,7 +274,7 @@ function EpochTable({ epochs, loading }: { epochs: EpochRow[]; loading: boolean 
 
 // ── Block Table ──────────────────────────────────────────────────────────────
 
-function BlockTable({ blocks, epochInfo, loading }: { blocks: BlockResult[]; epochInfo: EpochInfo | null; loading: boolean }) {
+function BlockTable({ blocks, loading }: { blocks: BlockResult[]; loading: boolean }) {
   function getSlotFromBlock(blockNumber: string): number {
     return parseHex(blockNumber);
   }
@@ -268,7 +284,7 @@ function BlockTable({ blocks, epochInfo, loading }: { blocks: BlockResult[]; epo
   }
 
   return (
-    <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden flex flex-col">
+    <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2a2a]">
         <h2 className="flex items-center gap-2 text-[15px] font-semibold text-[#ffa729]">
@@ -280,68 +296,61 @@ function BlockTable({ blocks, epochInfo, loading }: { blocks: BlockResult[]; epo
         </Link>
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[#2a2a2a]">
-              <th className="text-left px-4 py-2.5 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Block</th>
-              <th className="text-left px-4 py-2.5 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden sm:table-cell">Epoch</th>
-              <th className="text-left px-4 py-2.5 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Time</th>
-              <th className="text-left px-4 py-2.5 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Txns</th>
-              <th className="text-left px-4 py-2.5 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden md:table-cell">Proposer</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              Array.from({ length: 8 }).map((_, i) => (
-                <tr key={i} className="border-b border-[#2a2a2a] last:border-b-0">
-                  <td className="px-4 py-2.5"><div className="h-4 w-14 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                  <td className="px-4 py-2.5 hidden sm:table-cell"><div className="h-4 w-10 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                  <td className="px-4 py-2.5"><div className="h-4 w-14 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                  <td className="px-4 py-2.5"><div className="h-4 w-6 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                  <td className="px-4 py-2.5 hidden md:table-cell"><div className="h-4 w-24 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                </tr>
-              ))
-            ) : blocks.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-gray-500">No blocks found</td>
-              </tr>
-            ) : (
-              blocks.map((block) => {
-                const blockNum = parseHex(block.number);
-                const slot = getSlotFromBlock(block.number);
-                const epoch = getEpochFromSlot(slot);
-                const timestamp = parseHex(block.timestamp);
-                const txCount = block.transactions?.length || 0;
-                const proposer = formatAddress(block.miner);
+      {/* Column headers */}
+      <div className={HEAD_CLASS}>
+        <span className="w-20">Block</span>
+        <span className="w-16 hidden sm:block">Epoch</span>
+        <span className="flex-1">Time</span>
+        <span className="w-12 text-right">Txns</span>
+      </div>
 
-                return (
-                  <tr
-                    key={block.hash}
-                    className="border-b border-[#2a2a2a] last:border-b-0 hover:bg-[#252525] transition-colors"
-                  >
-                    <td className="px-4 py-2.5">
-                      <Link href={`/block/${blockNum}`} className="text-[#ffa729] hover:text-[#ffb954] hover:underline font-medium tabular-nums">
-                        {formatNumberWithCommas(blockNum.toString())}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5 text-gray-400 tabular-nums hidden sm:table-cell">
-                      {formatNumberWithCommas(epoch.toString())}
-                    </td>
-                    <td className="px-4 py-2.5 text-gray-400 tabular-nums">{timeAgo(timestamp)}</td>
-                    <td className="px-4 py-2.5 text-gray-300 tabular-nums">{txCount}</td>
-                    <td className="px-4 py-2.5 hidden md:table-cell">
-                      <Link href={`/address/${proposer}`} className="text-gray-400 hover:text-[#ffa729] hover:underline font-mono text-xs transition-colors">
-                        {truncateHash(proposer, 8, 6)}
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+      {/* Rows */}
+      <div>
+        {loading ? (
+          Array.from({ length: TABLE_ROWS }).map((_, i) => (
+            <div key={i} className={ROW_CLASS}>
+              <span className="w-20"><div className="h-4 w-14 bg-[#2a2a2a] rounded animate-pulse" /></span>
+              <span className="w-16 hidden sm:block"><div className="h-4 w-10 bg-[#2a2a2a] rounded animate-pulse" /></span>
+              <span className="flex-1"><div className="h-4 w-14 bg-[#2a2a2a] rounded animate-pulse" /></span>
+              <span className="w-12 flex justify-end"><div className="h-4 w-6 bg-[#2a2a2a] rounded animate-pulse" /></span>
+            </div>
+          ))
+        ) : blocks.length === 0 ? (
+          Array.from({ length: TABLE_ROWS }).map((_, i) => (
+            <div key={i} className={ROW_CLASS}>
+              <span className="w-20 text-transparent select-none">—</span>
+              <span className="w-16 hidden sm:block" />
+              <span className="flex-1" />
+              <span className="w-12" />
+            </div>
+          ))
+        ) : (
+          blocks.slice(0, TABLE_ROWS).map((block) => {
+            const blockNum = parseHex(block.number);
+            const slot = getSlotFromBlock(block.number);
+            const epoch = getEpochFromSlot(slot);
+            const timestamp = parseHex(block.timestamp);
+            const txCount = block.transactions?.length || 0;
+
+            return (
+              <div
+                key={block.hash}
+                className={`${ROW_CLASS} hover:bg-[#252525] transition-colors`}
+              >
+                <span className="w-20">
+                  <Link href={`/block/${blockNum}`} className="text-[#ffa729] hover:text-[#ffb954] hover:underline font-medium tabular-nums">
+                    {formatNumberWithCommas(blockNum.toString())}
+                  </Link>
+                </span>
+                <span className="w-16 text-gray-400 tabular-nums hidden sm:block">
+                  {formatNumberWithCommas(epoch.toString())}
+                </span>
+                <span className="flex-1 text-gray-400 tabular-nums">{timeAgo(timestamp)}</span>
+                <span className="w-12 text-right text-gray-300 tabular-nums">{txCount}</span>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );
@@ -438,11 +447,11 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
         {/* Side-by-Side Tables */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
           <EpochTable epochs={epochs} loading={data.loading} />
-          <BlockTable blocks={data.blocks} epochInfo={data.epochInfo} loading={data.loading} />
+          <BlockTable blocks={data.blocks} loading={data.loading} />
         </div>
 
         {/* TradingView Chart */}
-        <div className="mb-8">
+        <div className="mb-2">
           <Charts />
         </div>
       </div>
