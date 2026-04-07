@@ -4,8 +4,9 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
 import config from '../../../config';
-import { formatNumberWithCommas, truncateHash, formatAddress, formatTimestamp } from '../../lib/helpers';
+import { formatNumberWithCommas, truncateHash, formatAddress, formatTimestamp, timeAgo, formatStaked } from '../../lib/helpers';
 import SearchBar from '../../components/SearchBar';
+import StatusBadge from '../../components/StatusBadge';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -47,49 +48,9 @@ function parseHex(hex: string): number {
   return parseInt(hex, 10) || 0;
 }
 
-function timeAgo(unixSeconds: number): string {
-  const now = Math.floor(Date.now() / 1000);
-  const diff = now - unixSeconds;
-  if (diff < 0) return 'just now';
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
-}
-
-function formatStaked(gwei: string): string {
-  try {
-    const val = BigInt(gwei || '0');
-    const qrlBase = val / BigInt(1_000_000_000);
-    const remainder = val % BigInt(1_000_000_000);
-    const decimalStr = remainder.toString().padStart(9, '0').replace(/0+$/, '');
-    const result = formatNumberWithCommas(qrlBase.toString());
-    return decimalStr.length > 0 ? `${result}.${decimalStr} QRL` : `${result} QRL`;
-  } catch {
-    return '0 QRL';
-  }
-}
-
 function formatGasUsed(hex: string): string {
   const val = parseHex(hex);
   return formatNumberWithCommas(val.toString());
-}
-
-// ── Status Badge ─────────────────────────────────────────────────────────────
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    finalized: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
-    justified: 'bg-blue-500/15 text-blue-400 border-blue-500/20',
-    pending: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/20',
-    proposed: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
-    missed: 'bg-red-500/15 text-red-400 border-red-500/20',
-  };
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border ${styles[status] || styles.pending}`}>
-      {status.charAt(0).toUpperCase() + status.slice(1)}
-    </span>
-  );
 }
 
 // ── Summary Row ──────────────────────────────────────────────────────────────
