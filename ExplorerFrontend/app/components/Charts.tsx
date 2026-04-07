@@ -7,7 +7,7 @@ export default function Charts(): JSX.Element {
     <div className="w-full mb-4">
       <div className="bg-[#1e1e1e] border border-[#2a2a2a] rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-[#2a2a2a]">
-          <h2 className="text-sm font-semibold text-white">
+          <h2 className="text-[15px] font-semibold text-[#ffa729]">
             QRL/USDT Chart
           </h2>
         </div>

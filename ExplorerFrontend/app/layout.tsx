@@ -8,19 +8,19 @@ import Footer from './components/Footer';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'QRL Zond Blockchain Explorer',
+  title: 'ZondScan - QRL v2 Explorer',
   description:
     'Blockchain explorer for QRL Zond, an EVM-compatible blockchain secured with post-quantum cryptography. Track transactions, smart contracts, blocks, and validators.',
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'QRL Zond Blockchain Explorer',
+    title: 'ZondScan - QRL v2 Explorer',
     description:
       'Blockchain explorer for QRL Zond. Track smart contracts, blocks, and transactions on a quantum-resistant EVM-compatible chain.',
     url: 'https://zondscan.com',
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'QRL Zond Blockchain Explorer',
+    title: 'ZondScan - QRL v2 Explorer',
     description:
       'Blockchain explorer for QRL Zond. Track transactions, blocks, smart contracts, and validators on a post-quantum EVM chain.',
   },
