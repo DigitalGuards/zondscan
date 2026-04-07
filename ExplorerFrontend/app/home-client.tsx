@@ -46,6 +46,7 @@ interface HomeData {
   epochInfo: EpochInfo | null;
   blocks: BlockResult[];
   totalStaked: string;
+  marketCap: number;
   loading: boolean;
   error: boolean;
   dataInitialized: boolean;
@@ -70,6 +71,16 @@ function parseHex(hex: string): number {
   if (!hex) return 0;
   if (hex.startsWith('0x')) return parseInt(hex, 16);
   return parseInt(hex, 10) || 0;
+}
+
+function formatStaked(gwei: string): string {
+  try {
+    const val = BigInt(gwei || '0');
+    const qrlBase = val / BigInt(1_000_000_000);
+    return formatNumberWithCommas(qrlBase.toString()) + ' QRL';
+  } catch {
+    return '0 QRL';
+  }
 }
 
 /** Derive recent epoch rows from epoch info */
@@ -134,6 +145,16 @@ const icons = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
     </svg>
   ),
+  staked: (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  ),
+  marketCap: (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+    </svg>
+  ),
 };
 
 // ── Stat Bar ─────────────────────────────────────────────────────────────────
@@ -144,12 +165,14 @@ function StatBar({ data }: { data: HomeData }) {
     { label: 'Slot', value: data.epochInfo ? formatNumberWithCommas(data.epochInfo.headSlot) : '—', icon: icons.slot },
     { label: 'Block Height', value: formatNumberWithCommas(data.blockHeight.toString()), icon: icons.block },
     { label: 'Validators', value: formatNumberWithCommas(data.validatorCount.toString()), icon: icons.validators },
+    { label: 'Staked QRL', value: data.totalStaked !== '0' ? formatStaked(data.totalStaked) : '—', icon: icons.staked },
     { label: 'Transactions', value: formatNumberWithCommas(data.totalTransactions.toString()), icon: icons.transactions },
+    { label: 'Market Cap', value: data.marketCap > 0 ? '$' + formatNumberWithCommas(data.marketCap.toString()) : '—', icon: icons.marketCap },
   ];
 
   return (
     <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7">
         {stats.map((stat, i) => (
           <div
             key={stat.label}
@@ -366,6 +389,7 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
     epochInfo: null,
     blocks: [],
     totalStaked: '0',
+    marketCap: 0,
     loading: true,
     error: false,
     dataInitialized: false,
@@ -375,12 +399,13 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
     try {
       if (!config.handlerUrl) return;
 
-      const [overviewRes, latestBlockRes, txsRes, epochRes, blocksRes] = await Promise.allSettled([
+      const [overviewRes, latestBlockRes, txsRes, epochRes, blocksRes, epochsRes] = await Promise.allSettled([
         axios.get(config.handlerUrl + '/overview'),
         axios.get(config.handlerUrl + '/latestblock'),
         axios.get(config.handlerUrl + '/txs?page=1'),
         axios.get(config.handlerUrl + '/epoch'),
         axios.get(config.handlerUrl + '/blocks?page=1&limit=10'),
+        axios.get(config.handlerUrl + '/epochs?page=1&limit=1'),
       ]);
 
       setData((prev) => {
@@ -389,6 +414,7 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
         if (overviewRes.status === 'fulfilled') {
           next.validatorCount = overviewRes.value.data.validatorCount || 0;
           next.dataInitialized = overviewRes.value.data.status?.dataInitialized ?? false;
+          next.marketCap = overviewRes.value.data.marketcap || 0;
         }
         if (latestBlockRes.status === 'fulfilled') {
           next.blockHeight = latestBlockRes.value.data.blockNumber || 0;
@@ -401,6 +427,12 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
         }
         if (blocksRes.status === 'fulfilled') {
           next.blocks = blocksRes.value.data.blocks || [];
+        }
+        if (epochsRes.status === 'fulfilled') {
+          const latestEpoch = epochsRes.value.data.epochs?.[0];
+          if (latestEpoch?.totalStaked) {
+            next.totalStaked = latestEpoch.totalStaked;
+          }
         }
 
         return next;

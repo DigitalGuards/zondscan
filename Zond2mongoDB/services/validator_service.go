@@ -349,7 +349,28 @@ func BackfillValidatorHistory(currentEpoch int64) error {
 		genesisTime, _ = strconv.ParseInt(block0.Result.Timestamp, 0, 64)
 	}
 	if genesisTime == 0 {
-		genesisTime = time.Now().Unix() - currentEpoch*epochDuration
+		return fmt.Errorf("cannot backfill: block 0 not yet synced, genesis timestamp unavailable")
+	}
+
+	// Pre-parse validator balances to avoid repeated string→BigInt parsing in the loop
+	type parsedValidator struct {
+		ActivationEpoch string
+		ExitEpoch       string
+		Slashed         bool
+		Balance         *big.Int
+	}
+	parsed := make([]parsedValidator, 0, len(docs))
+	for _, d := range docs {
+		bal := big.NewInt(0)
+		if b, ok := new(big.Int).SetString(d.EffectiveBalance, 10); ok {
+			bal = b
+		}
+		parsed = append(parsed, parsedValidator{
+			ActivationEpoch: d.ActivationEpoch,
+			ExitEpoch:       d.ExitEpoch,
+			Slashed:         d.Slashed,
+			Balance:         bal,
+		})
 	}
 
 	// Build batch of missing epoch records
@@ -362,8 +383,8 @@ func BackfillValidatorHistory(currentEpoch int64) error {
 
 		var activeCount, pendingCount, exitedCount, slashedCount int
 		totalStaked := big.NewInt(0)
-		for _, d := range docs {
-			status := models.GetValidatorStatus(d.ActivationEpoch, d.ExitEpoch, d.Slashed, epoch)
+		for _, v := range parsed {
+			status := models.GetValidatorStatus(v.ActivationEpoch, v.ExitEpoch, v.Slashed, epoch)
 			switch status {
 			case "active":
 				activeCount++
@@ -374,9 +395,7 @@ func BackfillValidatorHistory(currentEpoch int64) error {
 			case "slashed":
 				slashedCount++
 			}
-			if balance, ok := new(big.Int).SetString(d.EffectiveBalance, 10); ok {
-				totalStaked.Add(totalStaked, balance)
-			}
+			totalStaked.Add(totalStaked, v.Balance)
 		}
 
 		doc := bson.M{

@@ -43,9 +43,12 @@ function timeAgo(unixSeconds: number): string {
 
 function formatStaked(gwei: string): string {
   try {
-    const val = BigInt(gwei);
-    const qrl = val / BigInt(1_000_000_000);
-    return formatNumberWithCommas(qrl.toString()) + ' QRL';
+    const val = BigInt(gwei || '0');
+    const qrlBase = val / BigInt(1_000_000_000);
+    const remainder = val % BigInt(1_000_000_000);
+    const decimalStr = remainder.toString().padStart(9, '0').replace(/0+$/, '');
+    const result = formatNumberWithCommas(qrlBase.toString());
+    return decimalStr.length > 0 ? `${result}.${decimalStr} QRL` : `${result} QRL`;
   } catch {
     return '0 QRL';
   }
