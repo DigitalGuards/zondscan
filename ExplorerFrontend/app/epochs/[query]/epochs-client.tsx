@@ -9,8 +9,7 @@ import { useRouter } from 'next/navigation';
 import { formatNumberWithCommas, timeAgo, formatStaked } from '../../lib/helpers';
 import SearchBar from '../../components/SearchBar';
 import StatusBadge from '../../components/StatusBadge';
-
-// ── Types ────────────────────────────────────────────────────────────────────
+import Pagination from '../../components/Pagination';
 
 interface EpochItem {
   epoch: string;
@@ -28,18 +27,12 @@ interface EpochsData {
   justifiedEpoch: string;
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
 const ITEMS_PER_PAGE = 15;
-
-// ── Data Fetching ────────────────────────────────────────────────────────────
 
 const fetchEpochs = async (page: string): Promise<EpochsData> => {
   const response = await axios.get<EpochsData>(`${config.handlerUrl}/epochs?page=${page}&limit=${ITEMS_PER_PAGE}`);
   return response.data;
 };
-
-// ── Component ────────────────────────────────────────────────────────────────
 
 interface EpochsClientProps {
   initialData: EpochsData;
@@ -83,18 +76,12 @@ export default function EpochsClient({ initialData, initialPage }: EpochsClientP
 
   return (
     <div className="p-4 sm:p-8 max-w-6xl mx-auto">
-      <h1 className="flex items-center gap-2 text-xl sm:text-2xl font-bold mb-4 text-[#ffa729]">
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        Epochs
-      </h1>
+      <h1 className="text-xl sm:text-2xl font-bold mb-4 text-[#ffa729]">Epochs</h1>
 
       <div className="mb-6">
         <SearchBar />
       </div>
 
-      {/* Epochs Table */}
       <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden mb-6">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -158,28 +145,12 @@ export default function EpochsClient({ initialData, initialPage }: EpochsClientP
         </div>
       </div>
 
-      {/* Pagination */}
-      <div className="flex justify-center items-center gap-3 text-sm text-gray-300">
-        <button
-          onClick={goToPreviousPage}
-          disabled={currentPage === 1}
-          className="px-4 py-2 rounded-lg bg-[#1e1e1e] text-gray-300 border border-[#2a2a2a]
-                     hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#2a2a2a]
-                     transition-colors"
-        >
-          Previous
-        </button>
-        <span className="tabular-nums">Page {currentPage} of {totalPages}</span>
-        <button
-          onClick={goToNextPage}
-          disabled={currentPage >= totalPages}
-          className="px-4 py-2 rounded-lg bg-[#1e1e1e] text-gray-300 border border-[#2a2a2a]
-                     hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#2a2a2a]
-                     transition-colors"
-        >
-          Next
-        </button>
-      </div>
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPrevious={goToPreviousPage}
+        onNext={goToNextPage}
+      />
     </div>
   );
 }

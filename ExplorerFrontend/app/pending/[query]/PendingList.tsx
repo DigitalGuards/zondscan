@@ -1,16 +1,16 @@
-"use client";
+'use client';
 
 import axios from 'axios';
 import React, { useState } from 'react';
 import config from '../../../config';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { formatAmount, formatGasPrice } from '../../lib/helpers';
+import { formatAmount, formatGasPrice, timeAgo, truncateHash } from '../../lib/helpers';
 import type { PendingTransaction } from '@/app/types';
 import Badge from '../../components/Badge';
+import Pagination from '../../components/Pagination';
 
 interface PaginatedResponse {
-  // New format fields
   jsonrpc?: string;
   id?: number;
   result?: {
@@ -21,7 +21,6 @@ interface PaginatedResponse {
     };
     queued: Record<string, unknown>;
   };
-  // Old format fields
   transactions?: PendingTransaction[];
   total?: number;
   page?: number;
@@ -29,92 +28,41 @@ interface PaginatedResponse {
   totalPages?: number;
 }
 
-interface TransactionCardProps {
-  transaction: PendingTransaction;
-}
+const ITEMS_PER_PAGE = 10;
 
-const TransactionCard: React.FC<TransactionCardProps> = ({ transaction }) => {
-  // Use UTC to avoid hydration mismatch
-  const formatDateUTC = (timestamp: number): string => {
-    const d = new Date(timestamp * 1000);
-    const day = d.getUTCDate().toString().padStart(2, '0');
-    const month = (d.getUTCMonth() + 1).toString().padStart(2, '0');
-    const year = d.getUTCFullYear();
-    const hours = d.getUTCHours().toString().padStart(2, '0');
-    const minutes = d.getUTCMinutes().toString().padStart(2, '0');
-    const seconds = d.getUTCSeconds().toString().padStart(2, '0');
-    return `${day}/${month}/${year}, ${hours}:${minutes}:${seconds}`;
-  };
-  const date = transaction.createdAt ? formatDateUTC(transaction.createdAt) : 'Pending';
-
-  const truncateHash = (hash: string | undefined): string =>
-    hash ? `${hash.slice(0, 10)}...${hash.slice(-8)}` : '';
-
-  return (
-    <div className="bg-gradient-to-r from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] rounded-xl p-6 shadow-lg hover:border-[#ffa729] transition-colors">
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <Link
-            href={`/pending/tx/${transaction.hash}`}
-            title={transaction.hash}
-            className="text-[#ffa729] hover:text-[#ffb952] font-mono"
-          >
-            {truncateHash(transaction.hash)}
-          </Link>
-          <Badge
-            variant={transaction.status === 'pending' ? 'warning' : transaction.status === 'dropped' ? 'error' : 'success'}
-            dot
-          >
-            {transaction.status}
-          </Badge>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <p className="text-gray-400 text-sm">From</p>
-            <p className="text-white font-mono truncate" title={transaction.from}>{truncateHash(transaction.from)}</p>
-          </div>
-          <div>
-            <p className="text-gray-400 text-sm">To</p>
-            <p className="text-white font-mono truncate" title={transaction.to}>{truncateHash(transaction.to)}</p>
-          </div>
-          <div>
-            <p className="text-gray-400 text-sm">Value</p>
-            <p className="text-white">{formatAmount(transaction.value)[0]} QRL</p>
-          </div>
-          <div>
-            <p className="text-gray-400 text-sm">Gas Price</p>
-            <p className="text-white">{formatGasPrice(transaction.gasPrice)} Gwei</p>
-          </div>
-          <div>
-            <p className="text-gray-400 text-sm">Time</p>
-            <p className="text-white">{date}</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+const fetchPendingTransactions = async (page: number): Promise<PaginatedResponse> => {
+  const response = await axios.get<PaginatedResponse>(`${config.handlerUrl}/pending-transactions`, {
+    params: { page, limit: ITEMS_PER_PAGE },
+  });
+  return response.data;
 };
 
-const ITEMS_PER_PAGE = 10;
+function flattenTransactions(data: PaginatedResponse | undefined): PendingTransaction[] {
+  const transactions: PendingTransaction[] = [];
+  try {
+    if (data?.result?.pending) {
+      Object.entries(data.result.pending).forEach(([_address, nonceMap]) => {
+        Object.entries(nonceMap).forEach(([_nonce, tx]) => {
+          transactions.push(tx as PendingTransaction);
+        });
+      });
+    } else if (Array.isArray(data?.transactions)) {
+      transactions.push(...data.transactions);
+    }
+  } catch (err) {
+    console.error('Error processing transactions:', err);
+  }
+  transactions.sort((a, b) => b.createdAt - a.createdAt);
+  return transactions;
+}
 
 interface PendingListProps {
   initialData: PaginatedResponse;
   currentPage: number;
 }
 
-const fetchPendingTransactions = async (page: number): Promise<PaginatedResponse> => {
-  const response = await axios.get<PaginatedResponse>(`${config.handlerUrl}/pending-transactions`, {
-    params: {
-      page,
-      limit: ITEMS_PER_PAGE
-    }
-  });
-  return response.data;
-};
-
 export default function PendingList({ initialData, currentPage }: PendingListProps): JSX.Element {
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastChecked, setLastChecked] = useState<Date | null>(null);
   const { data, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['pending-transactions', currentPage],
     queryFn: () => fetchPendingTransactions(currentPage),
@@ -125,133 +73,128 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
   const handleRefresh = async (): Promise<void> => {
     setIsRefreshing(true);
     await refetch();
-    setLastChecked(new Date());
     setTimeout(() => setIsRefreshing(false), 500);
   };
 
   if (isError) {
-    console.error('Error fetching pending transactions:', error);
     return (
-      <div className="px-4 sm:px-6 lg:px-8">
-        <div className="max-w-[1200px] mx-auto">
-          <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg">
-            <h2 className="text-red-500 font-semibold mb-2">Error Loading Transactions</h2>
-            <p className="text-gray-300">Failed to load pending transactions. Please try again later.</p>
-          </div>
+      <div className="p-4 sm:p-8 max-w-6xl mx-auto">
+        <h1 className="text-xl sm:text-2xl font-bold mb-4 text-[#ffa729]">Pending Transactions</h1>
+        <div className="bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-xl">
+          <p className="font-bold">Error:</p>
+          <p className="text-sm">{error instanceof Error ? error.message : 'Failed to load pending transactions'}</p>
         </div>
       </div>
     );
   }
 
-  // Convert the nested structure to a flat array
-  const transactions: PendingTransaction[] = [];
-  try {
-    // Handle both old and new response formats
-    if (data?.result?.pending) {
-      // New format
-      Object.entries(data.result.pending).forEach(([_address, nonceMap]) => {
-        Object.entries(nonceMap).forEach(([_nonce, tx]) => {
-          transactions.push(tx as PendingTransaction);
-        });
-      });
-    } else if (Array.isArray(data?.transactions)) {
-      // Old format
-      transactions.push(...data.transactions);
-    } else {
-      console.warn('Unexpected response format:', data);
-    }
-  } catch (err) {
-    console.error('Error processing transactions:', err);
-    return (
-      <div className="px-4 sm:px-6 lg:px-8">
-        <div className="max-w-[1200px] mx-auto">
-          <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg">
-            <h2 className="text-red-500 font-semibold mb-2">Error Processing Transactions</h2>
-            <p className="text-gray-300">Failed to process transaction data. Please try again later.</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const transactions = flattenTransactions(data);
+  const totalPages = data?.totalPages ?? Math.max(1, Math.ceil((data?.total ?? 0) / ITEMS_PER_PAGE));
 
-  // Sort by createdAt descending
-  transactions.sort((a, b) => (b.createdAt - a.createdAt));
-
-  if (transactions.length === 0) {
-    return (
-      <div className="px-4 sm:px-6 lg:px-8">
-        <div className="max-w-[1200px] mx-auto">
-          <div className="bg-gradient-to-r from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] rounded-xl p-6 shadow-lg">
-            <h2 className="text-[#ffa729] font-semibold text-lg mb-2">No Pending Transactions</h2>
-            <p className="text-gray-300 mb-4">There are currently no pending transactions in the mempool.</p>
-            {lastChecked && !isRefreshing && !isFetching && (
-              <div className="mb-4 text-sm">
-                <span className="text-green-400">✓ Confirmed empty at {lastChecked.toLocaleTimeString()}</span>
-              </div>
-            )}
-            <button 
-              onClick={handleRefresh}
-              disabled={isRefreshing || isFetching}
-              className={`px-6 py-2 bg-[#ffa729] hover:bg-[#ffb952] text-black font-medium rounded-lg transition-all
-                         flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed
-                         ${isRefreshing || isFetching ? 'animate-pulse' : ''}`}
-            >
-              {isRefreshing || isFetching ? (
-                <>
-                  <svg className="animate-spin h-4 w-4 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Checking Mempool...
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Check Again
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const statusVariant = (status: string): 'warning' | 'error' | 'success' => {
+    if (status === 'dropped') return 'error';
+    if (status === 'mined') return 'success';
+    return 'warning';
+  };
 
   return (
-    <div className="px-4 sm:px-6 lg:px-8">
-      <div className="max-w-[1200px] mx-auto space-y-4">
-        {transactions.map((transaction) => (
-          <TransactionCard key={transaction.hash} transaction={transaction} />
-        ))}
-        <div className="mt-4 text-center">
-          <button 
-            onClick={handleRefresh}
-            disabled={isRefreshing || isFetching}
-            className={`px-6 py-2 bg-[#ffa729] hover:bg-[#ffb952] text-black font-medium rounded-lg transition-all
-                       flex items-center gap-2 mx-auto disabled:opacity-50 disabled:cursor-not-allowed
-                       ${isRefreshing || isFetching ? 'animate-pulse' : ''}`}
+    <div className="p-4 sm:p-8 max-w-6xl mx-auto">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl sm:text-2xl font-bold text-[#ffa729]">Pending Transactions</h1>
+        <button
+          onClick={handleRefresh}
+          disabled={isRefreshing || isFetching}
+          className="flex items-center gap-2 px-4 py-2 text-sm rounded-lg bg-[#1e1e1e] text-gray-300 border border-[#2a2a2a]
+                     hover:border-[#ffa729] disabled:opacity-50 transition-colors"
+        >
+          <svg
+            className={`w-4 h-4 ${isRefreshing || isFetching ? 'animate-spin' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
           >
-            {isRefreshing || isFetching ? (
-              <>
-                <svg className="animate-spin h-4 w-4 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Checking Mempool...
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Check Again
-              </>
-            )}
-          </button>
-        </div>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          {isRefreshing || isFetching ? 'Checking...' : 'Refresh'}
+        </button>
       </div>
+
+      {transactions.length === 0 ? (
+        <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] px-4 py-12 text-center">
+          <p className="text-gray-400">No pending transactions in the mempool.</p>
+        </div>
+      ) : (
+        <>
+          <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden mb-6">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a]">
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Hash</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden sm:table-cell">From</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden sm:table-cell">To</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Value</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Status</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden md:table-cell">Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transactions.map((tx) => {
+                    const [formattedValue] = formatAmount(tx.value);
+                    return (
+                      <tr
+                        key={tx.hash}
+                        className="border-b border-[#2a2a2a] last:border-b-0 hover:bg-[#252525] transition-colors"
+                      >
+                        <td className="px-4 py-3">
+                          <Link
+                            href={`/pending/tx/${tx.hash}`}
+                            className="text-[#ffa729] hover:text-[#ffb954] hover:underline font-mono text-xs"
+                            title={tx.hash}
+                          >
+                            {truncateHash(tx.hash, 10, 6)}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3 hidden sm:table-cell">
+                          <span className="text-gray-400 font-mono text-xs" title={tx.from}>
+                            {truncateHash(tx.from, 8, 6)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 hidden sm:table-cell">
+                          <span className="text-gray-400 font-mono text-xs" title={tx.to}>
+                            {tx.to ? truncateHash(tx.to, 8, 6) : 'Contract Create'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-300 tabular-nums whitespace-nowrap">
+                          {formattedValue}
+                          <span className="text-gray-500 text-xs ml-1">QRL</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge variant={statusVariant(tx.status)} dot>
+                            {tx.status}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 text-gray-400 tabular-nums hidden md:table-cell">
+                          {tx.createdAt ? timeAgo(tx.createdAt) : '-'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {totalPages > 1 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPrevious={() => window.location.href = `/pending/${Math.max(currentPage - 1, 1)}`}
+              onNext={() => window.location.href = `/pending/${Math.min(currentPage + 1, totalPages)}`}
+            />
+          )}
+        </>
+      )}
     </div>
   );
 }
