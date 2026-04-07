@@ -313,7 +313,7 @@ function BlockTable({ blocks, loading }: { blocks: BlockResult[]; loading: boole
             </div>
           ))
         ) : (
-          blocks.slice(0, TABLE_ROWS).map((block) => {
+          blocks.slice(0, TABLE_ROWS).map((block, idx) => {
             const blockNum = parseHex(block.number);
             const slot = getSlotFromBlock(block.number);
             const epoch = getEpochFromSlot(slot);
@@ -322,7 +322,7 @@ function BlockTable({ blocks, loading }: { blocks: BlockResult[]; loading: boole
 
             return (
               <div
-                key={block.hash}
+                key={`${block.number}-${idx}`}
                 className={`${ROW_CLASS} hover:bg-[#252525] transition-colors`}
               >
                 <span className="w-20">

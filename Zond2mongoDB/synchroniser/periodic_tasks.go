@@ -51,7 +51,7 @@ func runTaskWithRetry(task func(), taskName string) {
 	attempt := 1
 
 	for attempt <= maxAttempts {
-		configs.Logger.Info("Running periodic task",
+		configs.Logger.Debug("Running periodic task",
 			zap.String("task", taskName),
 			zap.Int("attempt", attempt))
 
@@ -65,7 +65,7 @@ func runTaskWithRetry(task func(), taskName string) {
 			}()
 			task()
 			// Only mark as complete if no panic occurred
-			configs.Logger.Info("Completed periodic task",
+			configs.Logger.Debug("Completed periodic task",
 				zap.String("task", taskName),
 				zap.Int("attempt", attempt))
 			attempt = maxAttempts + 1 // Exit loop on success
