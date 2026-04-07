@@ -6,6 +6,7 @@
         "@ethereumjs/tx": "^5.1.0",
         "@headlessui/react": "^2.2.0",
         "@heroicons/react": "^2.0.18",
+        "@tailwindcss/postcss": "^4.2.2",
         "@tanstack/react-query": "^5.90.16",
         "@testing-library/jest-dom": "^6.6.3",
         "@testing-library/react": "^16.2.0",
@@ -38,7 +39,7 @@
         "react-tabs": "^6.1.0"
     },
     "scripts": {
-        "dev": "next dev",
+        "dev": "next dev --webpack",
         "build": "next build",
         "start": "next start",
         "lint": "eslint ."
@@ -80,13 +81,12 @@
         "@types/node": "^20.19.27",
         "@types/react": "^19.2.7",
         "@types/react-dom": "^19.2.3",
-        "autoprefixer": "^10.4.23",
         "cypress": "^13.4.0",
-        "eslint": "^9.0.0",
+        "eslint": "^10.2.0",
         "postcss": "^8.5.8",
-        "tailwindcss": "^3.4.19",
+        "tailwindcss": "^4.2.2",
         "ts-node": "^10.9.1",
-        "typescript": "^5.2.0"
+        "typescript": "^6.0.2"
     },
     "optionalDependencies": {
         "bufferutil": "^4.0.8",
