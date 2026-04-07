@@ -302,7 +302,7 @@ func UserRoute(router *gin.Engine) {
 
 	router.GET("/address/aggregate/:query", func(c *gin.Context) {
 		param := c.Param("query")
-		// db functions normalize the address to canonical lowercase z-prefix internally.
+		// db functions normalize the address to canonical q-prefix internally.
 
 		// Single Address data
 		addressData, err := db.ReturnSingleAddress(param)
@@ -506,6 +506,25 @@ func UserRoute(router *gin.Engine) {
 		c.JSON(http.StatusOK, gin.H{"response": query})
 	})
 
+	// Paginated epochs listing
+	router.GET("/epochs", func(c *gin.Context) {
+		page, limit := getPaginationParams(c, 1, 15)
+
+		result, err := db.GetEpochs(page, limit)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to fetch epochs: %v", err),
+			})
+			return
+		}
+
+		if result.Epochs == nil {
+			result.Epochs = make([]models.EpochListItem, 0)
+		}
+
+		c.JSON(http.StatusOK, result)
+	})
+
 	router.GET("/validators", func(c *gin.Context) {
 		pageToken := c.Query("page_token")
 		validatorResponse, err := db.ReturnValidators(pageToken)
@@ -517,6 +536,23 @@ func UserRoute(router *gin.Engine) {
 		}
 
 		c.JSON(http.StatusOK, validatorResponse)
+	})
+
+	// Get epoch detail by ID
+	router.GET("/epoch/:id", func(c *gin.Context) {
+		epochId := c.Param("id")
+		epochDetail, err := db.GetEpochDetail(epochId)
+		if err != nil {
+			if strings.Contains(err.Error(), "not yet occurred") || strings.Contains(err.Error(), "invalid epoch") {
+				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to fetch epoch detail: %v", err),
+			})
+			return
+		}
+		c.JSON(http.StatusOK, epochDetail)
 	})
 
 	// Get current epoch information
@@ -599,7 +635,7 @@ func UserRoute(router *gin.Engine) {
 			return
 		}
 
-		// Addresses are stored and returned as lowercase z-prefix (canonical form).
+		// Addresses are stored and returned as q-prefix (canonical form).
 		// No presentation-layer conversion needed.
 
 		c.JSON(http.StatusOK, gin.H{

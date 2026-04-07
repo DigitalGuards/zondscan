@@ -25,7 +25,7 @@ func GetLatestBlock() (string, error) {
 
 	group := models.JsonRPC{
 		Jsonrpc: "2.0",
-		Method:  "zond_blockNumber",
+		Method:  "qrl_blockNumber",
 		Params:  []interface{}{},
 		ID:      1,
 	}
@@ -102,7 +102,7 @@ func GetBlockByNumberMainnet(blockNumber string) (*models.ZondDatabaseBlock, err
 
 	group := models.JsonRPC{
 		Jsonrpc: "2.0",
-		Method:  "zond_getBlockByNumber",
+		Method:  "qrl_getBlockByNumber",
 		Params:  []interface{}{blockNumber, true},
 		ID:      1,
 	}
@@ -171,7 +171,7 @@ func GetContractAddress(txHash string) (string, string, error) {
 	}
 	group := models.JsonRPC{
 		Jsonrpc: "2.0",
-		Method:  "zond_getTransactionReceipt",
+		Method:  "qrl_getTransactionReceipt",
 		Params:  []interface{}{txHash},
 		ID:      1,
 	}
@@ -231,9 +231,9 @@ type DebugTraceResult struct {
 	TransactionType string
 	// CallType is the sub-call type (e.g. "call", "delegatecall").
 	CallType string
-	// From is the caller address in Z-prefix format.
+	// From is the caller address in Q-prefix format.
 	From string
-	// To is the callee address in Z-prefix format.
+	// To is the callee address in Q-prefix format.
 	To string
 	// Input is always 0 in the current implementation (field reserved for future use).
 	Input uint64
@@ -263,7 +263,14 @@ func emptyTrace(err error) DebugTraceResult {
 
 // CallDebugTraceTransaction calls debug_traceTransaction and returns the parsed
 // result as a DebugTraceResult struct.
+// On Testnet V2+, debug_ APIs are not available. Set ENABLE_DEBUG_TRACE=true to
+// re-enable if the node supports it.
 func CallDebugTraceTransaction(hash string) DebugTraceResult {
+	// Skip debug tracing when disabled (default for V2 nodes without debug_ API)
+	if os.Getenv("ENABLE_DEBUG_TRACE") != "true" {
+		return emptyTrace(nil)
+	}
+
 	// Validate transaction hash
 	if err := validation.ValidateHexString(hash, validation.HashLength); err != nil {
 		zap.L().Error("Invalid transaction hash", zap.Error(err))
@@ -370,19 +377,19 @@ func CallDebugTraceTransaction(hash string) DebugTraceResult {
 		return emptyTrace(nil)
 	}
 
-	// Validate addresses and convert to Z format
+	// Validate addresses and convert to Q format
 	if tracerResponse.Result.From != "" {
 		if err := validation.ValidateAddress(tracerResponse.Result.From); err != nil {
 			zap.L().Error("Invalid from address", zap.Error(err))
 		}
-		res.From = validation.ConvertToZAddress(tracerResponse.Result.From)
+		res.From = validation.ConvertToQAddress(tracerResponse.Result.From)
 	}
 
 	if tracerResponse.Result.To != "" {
 		if err := validation.ValidateAddress(tracerResponse.Result.To); err != nil {
 			zap.L().Error("Invalid to address", zap.Error(err))
 		}
-		res.To = validation.ConvertToZAddress(tracerResponse.Result.To)
+		res.To = validation.ConvertToQAddress(tracerResponse.Result.To)
 	}
 
 	// Validate and process output
@@ -433,7 +440,7 @@ func CallDebugTraceTransaction(hash string) DebugTraceResult {
 			if len(data) >= 64 {
 				extractedAddr := "0x" + data[24:64]
 				if err := validation.ValidateAddress(extractedAddr); err == nil {
-					res.AddressFunctionIdentifier = validation.ConvertToZAddress(extractedAddr)
+					res.AddressFunctionIdentifier = validation.ConvertToQAddress(extractedAddr)
 				} else {
 					zap.L().Error("Invalid extracted address", zap.Error(err))
 				}
@@ -475,7 +482,7 @@ func GetBalance(address string) (string, error) {
 
 	group := models.JsonRPC{
 		Jsonrpc: "2.0",
-		Method:  "zond_getBalance",
+		Method:  "qrl_getBalance",
 		Params:  []interface{}{address, "latest"},
 		ID:      1,
 	}
@@ -531,7 +538,7 @@ func GetValidators() error {
 	}
 
 	// Base URL for the validators endpoint
-	baseURL := strings.TrimRight(beaconchainURL, "/") + "/zond/v1alpha1/validators"
+	baseURL := strings.TrimRight(beaconchainURL, "/") + "/qrl/v1alpha1/validators"
 	client := GetHTTPClient()
 
 	// Get current epoch from latest block
@@ -607,7 +614,7 @@ func GetBeaconChainHead() (*models.BeaconChainHeadResponse, error) {
 		return nil, fmt.Errorf("BEACONCHAIN_API environment variable not set")
 	}
 
-	url := strings.TrimRight(beaconchainURL, "/") + "/zond/v1alpha1/beacon/chainhead"
+	url := strings.TrimRight(beaconchainURL, "/") + "/qrl/v1alpha1/beacon/chainhead"
 	client := GetHTTPClient()
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -651,7 +658,7 @@ func GetCode(address string, blockNrOrHash string) (string, error) {
 
 	group := models.JsonRPC{
 		Jsonrpc: "2.0",
-		Method:  "zond_getCode",
+		Method:  "qrl_getCode",
 		Params:  []interface{}{address, "latest"},
 		ID:      1,
 	}
@@ -704,8 +711,8 @@ func ZondCall(contractAddress string) (*models.ZondResponse, error) {
 	}
 
 	data := map[string]interface{}{
-		"from":     "0x20748ad4e06597dbca756e2731cd26094c05273a",
-		"chainId":  "0x0",
+		"from":     "Q20748ad4e06597dbca756e2731cd26094c05273a",
+		"chainId":  "0x7e7e",
 		"nonce":    "0x0",
 		"gas":      "0x61184",
 		"gasPrice": "0x2710",
@@ -720,7 +727,7 @@ func ZondCall(contractAddress string) (*models.ZondResponse, error) {
 	payload := models.ZondCallPayload{
 		Jsonrpc: "2.0",
 		Id:      1,
-		Method:  "zond_call",
+		Method:  "qrl_call",
 		Params:  []interface{}{data, blockData},
 	}
 
@@ -777,7 +784,7 @@ func ZondGetBlockLogs(blockNumber string, topics []string) (*models.ZondLogsResp
 
 	group := models.JsonRPC{
 		Jsonrpc: "2.0",
-		Method:  "zond_getLogs",
+		Method:  "qrl_getLogs",
 		Params:  []interface{}{filter},
 		ID:      1,
 	}
@@ -832,7 +839,7 @@ func GetTxDetailsByHash(txHash string) (*models.TransactionResult, error) {
 
 	group := models.JsonRPC{
 		Jsonrpc: "2.0",
-		Method:  "zond_getTransactionByHash",
+		Method:  "qrl_getTransactionByHash",
 		Params:  []interface{}{txHash},
 		ID:      1,
 	}

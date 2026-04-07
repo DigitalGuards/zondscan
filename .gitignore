@@ -44,3 +44,8 @@ backendAPI/backendAPI.log
 *.cert
 *.key
 
+backendAPI/backendAPI
+Zond2mongoDB/syncer
+Zond2mongoDB/backendAPI
+backendAPI/handler/main
+ExplorerFrontend/tsconfig.tsbuildinfo

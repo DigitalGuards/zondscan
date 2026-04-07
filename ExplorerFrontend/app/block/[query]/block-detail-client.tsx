@@ -47,16 +47,11 @@ type Block = {
     value: string;
   }>;
   transactionsRoot: string;
-  difficulty: string;
   extraData: string;
   logsBloom: string;
   miner: string;
-  mixHash: string;
-  nonce: string;
-  sha3Uncles: string;
   size: string;
-  totalDifficulty: string;
-  uncles: string[];
+  prevRandao: string;
   withdrawals: any[];
   withdrawalsRoot: string;
 };
@@ -123,16 +118,11 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
           timestamp: block.timestamp || '0x0',
           transactions: block.transactions || [],
           transactionsRoot: block.transactionsRoot || '',
-          difficulty: block.difficulty || '0x0',
           extraData: block.extraData || '',
           logsBloom: block.logsBloom || '',
           miner: block.miner || '',
-          mixHash: block.mixHash || '',
-          nonce: block.nonce || '',
-          sha3Uncles: block.sha3Uncles || '',
           size: block.size || '0x0',
-          totalDifficulty: block.totalDifficulty || '0x0',
-          uncles: block.uncles || [],
+          prevRandao: block.prevRandao || '',
           withdrawals: block.withdrawals || [],
           withdrawalsRoot: block.withdrawalsRoot || ''
         };

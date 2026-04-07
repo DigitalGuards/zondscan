@@ -18,7 +18,7 @@ func GetTokenBalancesByAddress(address string) ([]models.TokenBalance, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	// Normalize address to canonical Z-prefix form
+	// Normalize address to canonical Q-prefix form
 	searchAddresses := normalizeAddressBoth(address)
 
 	collection := configs.GetCollection(configs.DB, "tokenBalances")
@@ -108,19 +108,19 @@ func GetTokenBalancesByAddress(address string) ([]models.TokenBalance, error) {
 	return results, nil
 }
 
-// normalizeAddress converts any address format to the canonical Z-prefix
-// form that the syncer stores in MongoDB (uppercase Z + lowercase hex).
+// normalizeAddress converts any address format to the canonical Q-prefix
+// form that the syncer stores in MongoDB (uppercase Q + lowercase hex).
 func normalizeAddress(address string) string {
 	if strings.HasPrefix(address, "0x") || strings.HasPrefix(address, "0X") {
-		return "Z" + strings.ToLower(address[2:])
+		return "Q" + strings.ToLower(address[2:])
 	}
-	if strings.HasPrefix(address, "Z") || strings.HasPrefix(address, "z") {
-		return "Z" + strings.ToLower(address[1:])
+	if strings.HasPrefix(address, "Q") || strings.HasPrefix(address, "q") {
+		return "Q" + strings.ToLower(address[1:])
 	}
-	return "Z" + strings.ToLower(address)
+	return "Q" + strings.ToLower(address)
 }
 
-// normalizeAddressBoth returns the canonical Z-prefix address as a slice.
+// normalizeAddressBoth returns the canonical Q-prefix address as a slice.
 // The slice form is kept so callers using "$in" can remain unchanged.
 func normalizeAddressBoth(address string) []string {
 	return []string{normalizeAddress(address)}
