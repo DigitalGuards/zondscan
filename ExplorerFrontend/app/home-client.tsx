@@ -4,9 +4,10 @@ import * as React from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import axios from 'axios';
-import { formatNumberWithCommas } from './lib/helpers';
+import { formatNumberWithCommas, timeAgo, formatStaked } from './lib/helpers';
 import config from '../config.js';
 import SearchBar from './components/SearchBar';
+import StatusBadge from './components/StatusBadge';
 
 const Charts = dynamic(() => import('./components/Charts'), {
   loading: () => (
@@ -57,30 +58,10 @@ interface HomeData {
 const SLOTS_PER_EPOCH = 128;
 const SECONDS_PER_SLOT = 60;
 
-function timeAgo(unixSeconds: number): string {
-  const now = Math.floor(Date.now() / 1000);
-  const diff = now - unixSeconds;
-  if (diff < 0) return 'just now';
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
-}
-
 function parseHex(hex: string): number {
   if (!hex) return 0;
   if (hex.startsWith('0x')) return parseInt(hex, 16);
   return parseInt(hex, 10) || 0;
-}
-
-function formatStaked(gwei: string): string {
-  try {
-    const val = BigInt(gwei || '0');
-    const qrlBase = val / BigInt(1_000_000_000);
-    return formatNumberWithCommas(qrlBase.toString()) + ' QRL';
-  } catch {
-    return '0 QRL';
-  }
 }
 
 /** Derive recent epoch rows from epoch info */
@@ -196,22 +177,6 @@ function StatBar({ data }: { data: HomeData }) {
         ))}
       </div>
     </div>
-  );
-}
-
-// ── Status Badge ─────────────────────────────────────────────────────────────
-
-function StatusBadge({ status }: { status: 'finalized' | 'justified' | 'pending' | 'proposed' }) {
-  const styles: Record<string, string> = {
-    finalized: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
-    justified: 'bg-blue-500/15 text-blue-400 border-blue-500/20',
-    pending: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/20',
-    proposed: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
-  };
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border ${styles[status]}`}>
-      {status.charAt(0).toUpperCase() + status.slice(1)}
-    </span>
   );
 }
 

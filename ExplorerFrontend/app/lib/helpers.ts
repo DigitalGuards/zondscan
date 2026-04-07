@@ -1,3 +1,26 @@
+export function timeAgo(unixSeconds: number): string {
+  const now = Math.floor(Date.now() / 1000);
+  const diff = now - unixSeconds;
+  if (diff < 0) return 'just now';
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+export function formatStaked(gwei: string): string {
+  try {
+    const val = BigInt(gwei || '0');
+    const qrlBase = val / BigInt(1_000_000_000);
+    const remainder = val % BigInt(1_000_000_000);
+    const decimalStr = remainder.toString().padStart(9, '0').replace(/0+$/, '');
+    const result = formatNumberWithCommas(qrlBase.toString());
+    return decimalStr.length > 0 ? `${result}.${decimalStr} QRL` : `${result} QRL`;
+  } catch {
+    return '0 QRL';
+  }
+}
+
 export function decodeToHex(input: string, format?: string): string {
   const decoded = atob(input);
   let hex = '';
