@@ -388,6 +388,12 @@ func syncValidators() error {
 		return err
 	}
 
+	// Backfill any missing epoch history records
+	currentEpochInt, _ := strconv.ParseInt(currentEpoch, 10, 64)
+	if err := services.BackfillValidatorHistory(currentEpochInt); err != nil {
+		configs.Logger.Warn("Failed to backfill validator history", zap.Error(err))
+	}
+
 	configs.Logger.Info("Successfully synced validators", zap.String("epoch", currentEpoch))
 	return nil
 }
