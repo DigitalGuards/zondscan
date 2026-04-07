@@ -81,8 +81,10 @@ func ReturnValidators(pageToken string) (*models.ValidatorResponse, error) {
 	}
 
 	return &models.ValidatorResponse{
-		Validators:  validators,
-		TotalStaked: fmt.Sprintf("%d", totalStaked),
+		Validators:     validators,
+		ValidatorCount: len(validators),
+		Epoch:          fmt.Sprintf("%d", currentEpoch),
+		TotalStaked:    fmt.Sprintf("%d", totalStaked),
 	}, nil
 }
 
@@ -241,6 +243,197 @@ func GetValidatorByID(id string) (*models.ValidatorDetailResponse, error) {
 		Status:                     status,
 		Age:                        age,
 		CurrentEpoch:               fmt.Sprintf("%d", currentEpoch),
+	}, nil
+}
+
+// GetEpochs returns a paginated list of epochs from validator_history,
+// augmented with finalized/justified status from epoch_info.
+func GetEpochs(page, limit int) (*models.EpochsResponse, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Get current epoch state for finalized/justified status
+	var epochInfo models.EpochInfo
+	err := configs.EpochInfoCollection.FindOne(ctx, bson.M{"_id": "current"}).Decode(&epochInfo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get epoch info: %v", err)
+	}
+	finalizedEpoch := parseEpoch(epochInfo.FinalizedEpoch)
+	justifiedEpoch := parseEpoch(epochInfo.JustifiedEpoch)
+
+	// Count total epoch records
+	total, err := configs.ValidatorHistoryCollection.CountDocuments(ctx, bson.M{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to count epochs: %v", err)
+	}
+
+	// Query with pagination, sorted newest first by numeric epoch
+	skip := int64((page - 1) * limit)
+	findOpts := options.Find().
+		SetSort(bson.D{{Key: "epochInt", Value: -1}}).
+		SetSkip(skip).
+		SetLimit(int64(limit))
+
+	cursor, err := configs.ValidatorHistoryCollection.Find(ctx, bson.M{}, findOpts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query epochs: %v", err)
+	}
+	defer cursor.Close(ctx)
+
+	var records []models.ValidatorHistoryRecord
+	if err := cursor.All(ctx, &records); err != nil {
+		return nil, fmt.Errorf("failed to decode epochs: %v", err)
+	}
+
+	epochs := make([]models.EpochListItem, 0, len(records))
+	for _, r := range records {
+		epochNum := parseEpoch(r.Epoch)
+		var status string
+		if epochNum <= finalizedEpoch {
+			status = "finalized"
+		} else if epochNum <= justifiedEpoch {
+			status = "justified"
+		} else {
+			status = "pending"
+		}
+
+		epochs = append(epochs, models.EpochListItem{
+			Epoch:           r.Epoch,
+			Timestamp:       r.Timestamp,
+			Status:          status,
+			ValidatorsCount: r.ValidatorsCount,
+			ActiveCount:     r.ActiveCount,
+			TotalStaked:     r.TotalStaked,
+		})
+	}
+
+	return &models.EpochsResponse{
+		Epochs:         epochs,
+		Total:          total,
+		FinalizedEpoch: epochInfo.FinalizedEpoch,
+		JustifiedEpoch: epochInfo.JustifiedEpoch,
+	}, nil
+}
+
+// GetEpochDetail returns full epoch information including all slots (proposed/missed).
+func GetEpochDetail(epochId string) (*models.EpochDetailResponse, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	epochNum, err := strconv.ParseInt(epochId, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid epoch number: %v", err)
+	}
+
+	startSlot := epochNum * SlotsPerEpoch
+	endSlot := (epochNum + 1) * SlotsPerEpoch
+
+	// Get epoch_info for chain head status
+	var epochInfo models.EpochInfo
+	err = configs.EpochInfoCollection.FindOne(ctx, bson.M{"_id": "current"}).Decode(&epochInfo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get epoch info: %v", err)
+	}
+
+	headEpoch := parseEpoch(epochInfo.HeadEpoch)
+	if epochNum > headEpoch {
+		return nil, fmt.Errorf("epoch %d has not yet occurred (head: %d)", epochNum, headEpoch)
+	}
+
+	finalizedEpoch := parseEpoch(epochInfo.FinalizedEpoch)
+	justifiedEpoch := parseEpoch(epochInfo.JustifiedEpoch)
+
+	var status string
+	if epochNum <= finalizedEpoch {
+		status = "finalized"
+	} else if epochNum <= justifiedEpoch {
+		status = "justified"
+	} else {
+		status = "pending"
+	}
+
+	// Get validator_history record (may not exist for very recent epochs)
+	var historyRecord models.ValidatorHistoryRecord
+	_ = configs.ValidatorHistoryCollection.FindOne(ctx, bson.M{"epoch": epochId}).Decode(&historyRecord)
+
+	// Get blocks in this epoch's slot range
+	blockFilter := bson.M{
+		"blockNumberInt": bson.M{"$gte": startSlot, "$lt": endSlot},
+	}
+	projection := bson.D{
+		{Key: "blockNumberInt", Value: 1},
+		{Key: "result.number", Value: 1},
+		{Key: "result.timestamp", Value: 1},
+		{Key: "result.miner", Value: 1},
+		{Key: "result.transactions", Value: 1},
+		{Key: "result.gasUsed", Value: 1},
+		{Key: "result.hash", Value: 1},
+	}
+	findOpts := options.Find().
+		SetProjection(projection).
+		SetSort(bson.D{{Key: "blockNumberInt", Value: 1}})
+
+	cursor, err := configs.BlocksCollection.Find(ctx, blockFilter, findOpts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query blocks: %v", err)
+	}
+	defer cursor.Close(ctx)
+
+	blockMap := make(map[int64]models.EpochDetailBlock)
+	for cursor.Next(ctx) {
+		var doc struct {
+			BlockNumberInt int64        `bson:"blockNumberInt"`
+			Result         models.Result `bson:"result"`
+		}
+		if err := cursor.Decode(&doc); err != nil {
+			continue
+		}
+		blockMap[doc.BlockNumberInt] = models.EpochDetailBlock{
+			Slot:         doc.BlockNumberInt,
+			Status:       "proposed",
+			Timestamp:    doc.Result.Timestamp,
+			Proposer:     doc.Result.Miner,
+			Transactions: len(doc.Result.Transactions),
+			GasUsed:      doc.Result.GasUsed,
+			BlockHash:    doc.Result.Hash,
+		}
+	}
+
+	// Build full 128-slot list
+	blocks := make([]models.EpochDetailBlock, 0, SlotsPerEpoch)
+	proposedCount := 0
+	missedCount := 0
+	for slot := startSlot; slot < endSlot; slot++ {
+		if b, ok := blockMap[slot]; ok {
+			blocks = append(blocks, b)
+			proposedCount++
+		} else {
+			blocks = append(blocks, models.EpochDetailBlock{
+				Slot:   slot,
+				Status: "missed",
+			})
+			missedCount++
+		}
+	}
+
+	return &models.EpochDetailResponse{
+		Epoch:           epochId,
+		Timestamp:       historyRecord.Timestamp,
+		Status:          status,
+		ValidatorsCount: historyRecord.ValidatorsCount,
+		ActiveCount:     historyRecord.ActiveCount,
+		PendingCount:    historyRecord.PendingCount,
+		ExitedCount:     historyRecord.ExitedCount,
+		SlashedCount:    historyRecord.SlashedCount,
+		TotalStaked:     historyRecord.TotalStaked,
+		StartSlot:       startSlot,
+		EndSlot:         endSlot,
+		Blocks:          blocks,
+		FinalizedEpoch:  epochInfo.FinalizedEpoch,
+		JustifiedEpoch:  epochInfo.JustifiedEpoch,
+		HeadEpoch:       epochInfo.HeadEpoch,
+		ProposedCount:   proposedCount,
+		MissedCount:     missedCount,
 	}, nil
 }
 

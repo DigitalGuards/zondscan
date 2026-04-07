@@ -5,9 +5,9 @@ import (
 	"strings"
 )
 
-// hasZPrefix reports whether s begins with 'Z' or 'z'.
-func hasZPrefix(s string) bool {
-	return len(s) > 0 && (s[0] == 'Z' || s[0] == 'z')
+// hasQPrefix reports whether s begins with 'Q' or 'q'.
+func hasQPrefix(s string) bool {
+	return len(s) > 0 && (s[0] == 'Q' || s[0] == 'q')
 }
 
 // hasHexPrefix reports whether s begins with "0x" or "0X".
@@ -16,7 +16,7 @@ func hasHexPrefix(s string) bool {
 }
 
 const (
-	AddressLength = 40 // Length of address without prefix (0x or Z)
+	AddressLength = 40 // Length of address without prefix (0x or Q)
 	HashLength    = 64 // Length of transaction/block hash without 0x prefix
 )
 
@@ -35,18 +35,18 @@ func IsValidHexString(hex string) bool {
 	return true
 }
 
-// IsValidAddress checks if a string is a valid Zond address
-// Supports both legacy 0x format and new Z format (case-insensitive Z prefix)
+// IsValidAddress checks if a string is a valid QRL address
+// Supports both legacy 0x format and new Q format (case-insensitive Q prefix)
 func IsValidAddress(address string) bool {
-	// Check for new Z-prefix format (uppercase or lowercase)
-	if hasZPrefix(address) {
+	// Check for new Q-prefix format (uppercase or lowercase)
+	if hasQPrefix(address) {
 		// Validate the rest of the address is hex
 		for _, c := range address[1:] {
 			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
 				return false
 			}
 		}
-		return len(address) == AddressLength+1 // +1 for "Z" or "z" prefix
+		return len(address) == AddressLength+1 // +1 for "Q" or "q" prefix
 	}
 
 	// Check for legacy 0x format
@@ -87,7 +87,7 @@ func ValidateHexString(hex string, expectedLength int) error {
 }
 
 // ValidateAddress validates an address string and returns an error if invalid
-// Supports both legacy 0x format and new Z format
+// Supports both legacy 0x format and new Q format
 func ValidateAddress(address string) error {
 	if !IsValidAddress(address) {
 		return fmt.Errorf("invalid address format: %s", address)
@@ -103,32 +103,32 @@ func StripHexPrefix(hex string) string {
 	return hex
 }
 
-// StripAddressPrefix removes "0x", "Z", or "z" prefix if present
+// StripAddressPrefix removes "0x", "Q", or "q" prefix if present
 func StripAddressPrefix(address string) string {
 	if hasHexPrefix(address) {
 		return address[2:]
 	}
-	if hasZPrefix(address) {
+	if hasQPrefix(address) {
 		return address[1:]
 	}
 	return address
 }
 
-// ConvertToZAddress converts any address format to canonical Z-prefix form.
-// The canonical storage format is "Z" + lowercase hex.
-// Returns empty string for empty input to avoid producing bare "Z".
-func ConvertToZAddress(address string) string {
+// ConvertToQAddress converts any address format to canonical Q-prefix form.
+// The canonical storage format is "Q" + lowercase hex.
+// Returns empty string for empty input to avoid producing bare "Q".
+func ConvertToQAddress(address string) string {
 	if address == "" {
 		return ""
 	}
 
-	if hasZPrefix(address) {
-		return "Z" + strings.ToLower(address[1:])
+	if hasQPrefix(address) {
+		return "Q" + strings.ToLower(address[1:])
 	}
 
 	if hasHexPrefix(address) {
-		return "Z" + strings.ToLower(address[2:])
+		return "Q" + strings.ToLower(address[2:])
 	}
 
-	return "Z" + strings.ToLower(address)
+	return "Q" + strings.ToLower(address)
 }

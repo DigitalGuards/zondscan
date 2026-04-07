@@ -32,10 +32,10 @@ func StoreTokenTransfer(transfer models.TokenTransfer) error {
 		transfer.To = configs.QRLZeroAddress // Normalize empty to address to zero address
 	}
 
-	// Normalize addresses to canonical Z-prefix form
-	transfer.From = validation.ConvertToZAddress(transfer.From)
-	transfer.To = validation.ConvertToZAddress(transfer.To)
-	transfer.ContractAddress = validation.ConvertToZAddress(transfer.ContractAddress)
+	// Normalize addresses to canonical Q-prefix form
+	transfer.From = validation.ConvertToQAddress(transfer.From)
+	transfer.To = validation.ConvertToQAddress(transfer.To)
+	transfer.ContractAddress = validation.ConvertToQAddress(transfer.ContractAddress)
 
 	// Debug-level log for per-record operations; Info is reserved for batch summaries.
 	configs.Logger.Debug("Inserting token transfer document",
@@ -199,11 +199,11 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 			continue
 		}
 
-		// Extract from and to addresses using canonical Z-prefix form.
+		// Extract from and to addresses using canonical Q-prefix form.
 		// topics[1] and topics[2] are 32-byte padded addresses; strip the 12-byte
 		// zero-padding (24 hex chars) to recover the 20-byte address.
-		from := "Z" + strings.ToLower(rpc.TrimLeftZeros(log.Topics[1][26:]))
-		to := "Z" + strings.ToLower(rpc.TrimLeftZeros(log.Topics[2][26:]))
+		from := "Q" + strings.ToLower(rpc.TrimLeftZeros(log.Topics[1][26:]))
+		to := "Q" + strings.ToLower(rpc.TrimLeftZeros(log.Topics[2][26:]))
 
 		configs.Logger.Debug("Token transfer details",
 			zap.String("from", from),
@@ -230,11 +230,11 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 		}
 
 		// Normalize addresses to ensure consistency.
-		if from == "" || from == "z" || from == "Z" {
+		if from == "" || from == "q" || from == "Q" {
 			from = configs.QRLZeroAddress
 		}
 
-		if to == "" || to == "z" || to == "Z" {
+		if to == "" || to == "q" || to == "Q" {
 			to = configs.QRLZeroAddress
 		}
 

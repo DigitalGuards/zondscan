@@ -1,3 +1,26 @@
+export function timeAgo(unixSeconds: number): string {
+  const now = Math.floor(Date.now() / 1000);
+  const diff = now - unixSeconds;
+  if (diff < 0) return 'just now';
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+export function formatStaked(gwei: string): string {
+  try {
+    const val = BigInt(gwei || '0');
+    const qrlBase = val / BigInt(1_000_000_000);
+    const remainder = val % BigInt(1_000_000_000);
+    const decimalStr = remainder.toString().padStart(9, '0').replace(/0+$/, '');
+    const result = formatNumberWithCommas(qrlBase.toString());
+    return decimalStr.length > 0 ? `${result}.${decimalStr} QRL` : `${result} QRL`;
+  } catch {
+    return '0 QRL';
+  }
+}
+
 export function decodeToHex(input: string, format?: string): string {
   const decoded = atob(input);
   let hex = '';
@@ -143,8 +166,8 @@ export function normalizeHexString(hexData: string | undefined | null): string {
     return hexData.slice(2);
   }
 
-  // If it starts with Z or z, remove the prefix
-  if (typeof hexData === 'string' && (hexData.startsWith('Z') || hexData.startsWith('z'))) {
+  // If it starts with Q or q, remove the prefix
+  if (typeof hexData === 'string' && (hexData.startsWith('Q') || hexData.startsWith('q'))) {
     return hexData.slice(1);
   }
 
@@ -219,14 +242,14 @@ export function truncateHash(hash: string | undefined | null, startLength = 6, e
 }
 
 /**
- * Formats an address to ensure it has the correct prefix (Z for QRL addresses, 0x for contract addresses)
+ * Formats an address to ensure it has the correct prefix (Q for QRL addresses, 0x for contract addresses)
  */
 export function formatAddress(address: string | undefined | null): string {
   if (!address) return '';
 
-  // If already has Z/z prefix, normalize to uppercase Z
-  if (address.startsWith('Z') || address.startsWith('z')) {
-    return 'Z' + address.slice(1);
+  // If already has Q/q prefix, normalize to uppercase Q
+  if (address.startsWith('Q') || address.startsWith('q')) {
+    return 'Q' + address.slice(1);
   }
 
   // If has 0x prefix
@@ -235,13 +258,13 @@ export function formatAddress(address: string | undefined | null): string {
     if (address.startsWith('0x7')) {
       return address;
     }
-    // For regular addresses, convert to Z prefix
-    return 'Z' + address.slice(2);
+    // For regular addresses, convert to Q prefix
+    return 'Q' + address.slice(2);
   }
 
-  // If no prefix but is a valid hex string, add Z prefix
+  // If no prefix but is a valid hex string, add Q prefix
   if (/^[0-9a-fA-F]+$/.test(address)) {
-    return 'Z' + address;
+    return 'Q' + address;
   }
 
   // If invalid format, return as is
@@ -283,7 +306,7 @@ export function decodeTokenTransferInput(inputData: string | undefined | null): 
     try {
       // Extract recipient address (bytes 10-74, last 40 chars are the address)
       const toAddressPadded = data.slice(10, 74);
-      const toAddress = 'Z' + toAddressPadded.slice(-40);
+      const toAddress = 'Q' + toAddressPadded.slice(-40);
 
       // Extract amount (bytes 74-138)
       const amountHex = '0x' + data.slice(74);
@@ -311,11 +334,11 @@ export function decodeTokenTransferInput(inputData: string | undefined | null): 
     try {
       // Extract from address (bytes 10-74)
       const fromAddressPadded = data.slice(10, 74);
-      const fromAddress = 'Z' + fromAddressPadded.slice(-40);
+      const fromAddress = 'Q' + fromAddressPadded.slice(-40);
 
       // Extract to address (bytes 74-138)
       const toAddressPadded = data.slice(74, 138);
-      const toAddress = 'Z' + toAddressPadded.slice(-40);
+      const toAddress = 'Q' + toAddressPadded.slice(-40);
 
       // Extract amount (bytes 138-202)
       const amountHex = '0x' + data.slice(138);

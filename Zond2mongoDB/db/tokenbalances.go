@@ -16,8 +16,8 @@ import (
 
 // StoreTokenBalance updates the token balance for a given address
 func StoreTokenBalance(contractAddress string, holderAddress string, amount string, blockNumber string) error {
-	// Normalize addresses to canonical Z-prefix form
-	contractAddress = validation.ConvertToZAddress(contractAddress)
+	// Normalize addresses to canonical Q-prefix form
+	contractAddress = validation.ConvertToQAddress(contractAddress)
 
 	// Debug-level log for per-record operations; Info is reserved for batch summaries.
 	configs.Logger.Debug("Attempting to store token balance",
@@ -26,11 +26,11 @@ func StoreTokenBalance(contractAddress string, holderAddress string, amount stri
 		zap.String("transferAmount", amount),
 		zap.String("blockNumber", blockNumber))
 
-	// Normalize holder address to canonical Z-prefix form
-	holderAddress = validation.ConvertToZAddress(holderAddress)
+	// Normalize holder address to canonical Q-prefix form
+	holderAddress = validation.ConvertToQAddress(holderAddress)
 
-	// Special handling for zero address (QRL uses Z prefix)
-	if holderAddress == "Z0" ||
+	// Special handling for zero address (QRL uses Q prefix)
+	if holderAddress == "Q0" ||
 		holderAddress == configs.QRLZeroAddress ||
 		holderAddress == "0x0" ||
 		holderAddress == "0x0000000000000000000000000000000000000000" {

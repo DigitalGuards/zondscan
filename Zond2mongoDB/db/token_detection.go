@@ -105,7 +105,7 @@ func EnsureTokenInDatabase(contractAddress string, blockNumber string, txHash st
 		if creationTx := findCreationTransaction(contractAddress); creationTx != nil {
 			contractInfo.CreationTransaction = creationTx.TxHash
 			contractInfo.CreationBlockNumber = creationTx.BlockNumber
-			if creationTx.From != "" && creationTx.From != "Z" {
+			if creationTx.From != "" && creationTx.From != "Q" {
 				contractInfo.CreatorAddress = creationTx.From
 			}
 		}

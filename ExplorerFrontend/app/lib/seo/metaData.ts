@@ -4,7 +4,7 @@ import { Metadata } from 'next';
 export const sharedMetadata: Partial<Metadata> = {
   metadataBase: new URL('https://zondscan.com'),
   keywords:
-    'QRL, Proof of Stake, ZOND, blockchain explorer, Web3, EVM, quantum resistant, cryptocurrency, blockchain, smart contracts, validators, transactions, blocks',
+    'QRL, Proof of Stake, Zond, QRL v2 blockchain explorer, Web3, EVM, quantum resistant, cryptocurrency, blockchain, smart contracts, validators, transactions, blocks',
   alternates: {
     languages: {
       'en-US': 'https://zondscan.com',

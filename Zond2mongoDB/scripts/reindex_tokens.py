@@ -65,7 +65,7 @@ def get_token_balance(contract_address, holder_address):
     """Get token balance for a specific address."""
     # balanceOf(address) signature
     method_sig = "0x70a08231000000000000000000000000" + holder_address[2:].lower().zfill(40)
-    result = make_rpc_call("zond_call", [{
+    result = make_rpc_call("qrl_call", [{
         "to": contract_address,
         "data": method_sig
     }, "latest"])
@@ -76,7 +76,7 @@ def get_token_balance(contract_address, holder_address):
 
 def get_logs(contract_address, from_block, to_block):
     """Get Transfer event logs for a contract."""
-    return make_rpc_call("zond_getLogs", [{
+    return make_rpc_call("qrl_getLogs", [{
         "address": contract_address,
         "topics": [TRANSFER_EVENT_SIGNATURE],
         "fromBlock": hex(from_block),
@@ -92,14 +92,14 @@ def process_transfer_logs(logs, contract_address, token_balances_collection, tok
             continue
         
         try:
-            from_addr = 'Z' + topics[1][-40:]  # Remove padding
-            to_addr = 'Z' + topics[2][-40:]  # Remove padding
+            from_addr = 'Q' + topics[1][-40:]  # Remove padding
+            to_addr = 'Q' + topics[2][-40:]  # Remove padding
             amount = int(log.get('data', '0x0'), 16)
             block_number = log.get('blockNumber')
             tx_hash = log.get('transactionHash')
             
             # Get block timestamp
-            block = make_rpc_call("zond_getBlockByNumber", [block_number, False])
+            block = make_rpc_call("qrl_getBlockByNumber", [block_number, False])
             if not block:
                 logger.error(f"Could not get block {block_number}")
                 continue
@@ -130,7 +130,7 @@ def process_transfer_logs(logs, contract_address, token_balances_collection, tok
                     logger.error(f"Failed to store transfer {tx_hash}: {e}")
             
             # Update balances as strings to avoid integer overflow
-            if from_addr != '0x0000000000000000000000000000000000000000' and from_addr != 'Z0000000000000000000000000000000000000000':
+            if from_addr != '0x0000000000000000000000000000000000000000' and from_addr != 'Q0000000000000000000000000000000000000000':
                 # Get current balance
                 current_from_balance_doc = token_balances_collection.find_one(
                     {'contractAddress': contract_address, 'holderAddress': from_addr}
@@ -155,7 +155,7 @@ def process_transfer_logs(logs, contract_address, token_balances_collection, tok
                     upsert=True
                 )
             
-            if to_addr != '0x0000000000000000000000000000000000000000' and to_addr != 'Z0000000000000000000000000000000000000000':
+            if to_addr != '0x0000000000000000000000000000000000000000' and to_addr != 'Q0000000000000000000000000000000000000000':
                 # Get current balance
                 current_to_balance_doc = token_balances_collection.find_one(
                     {'contractAddress': contract_address, 'holderAddress': to_addr}
@@ -206,8 +206,8 @@ def get_last_processed_block(token_balances_collection, contract_address):
 
 # Helper function to validate address format
 def is_valid_address(address):
-    # Check for Z-prefix format
-    if address.startswith('Z'):
+    # Check for Q-prefix format
+    if address.startswith('Q'):
         # Check if the rest is valid hex
         try:
             int(address[1:], 16)
@@ -266,7 +266,7 @@ def update_missing_creation_blocks(contracts_collection):
             tx_hash = contract['creationTransaction']
             try:
                 # Get transaction receipt to find the block number
-                receipt = make_rpc_call("zond_getTransactionReceipt", [tx_hash])
+                receipt = make_rpc_call("qrl_getTransactionReceipt", [tx_hash])
                 if receipt and receipt.get('blockNumber'):
                     block_number = receipt['blockNumber']
                     
@@ -319,7 +319,7 @@ def main():
     
     # Get latest block number
     logger.info("\nGetting latest block number...")
-    latest_block = int(make_rpc_call("zond_blockNumber", []), 16)
+    latest_block = int(make_rpc_call("qrl_blockNumber", []), 16)
     logger.info(f"Latest block: {latest_block}")
     
     for i, contract in enumerate(token_contracts, 1):

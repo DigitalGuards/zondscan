@@ -26,7 +26,7 @@ func ReturnSingleAddress(query string) (models.Address, error) {
 	var result models.Address
 	defer cancel()
 
-	// Normalize address to canonical Z-prefix form
+	// Normalize address to canonical Q-prefix form
 	addressHex := normalizeAddress(query)
 
 	// Try to find existing address
@@ -95,7 +95,7 @@ func ReturnRankAddress(address string) (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Normalize address to canonical Z-prefix form (matches storage format)
+	// Normalize address to canonical Q-prefix form (matches storage format)
 	addressHex := normalizeAddress(address)
 
 	// Look up the target address to get its balance
@@ -121,17 +121,17 @@ func ReturnRankAddress(address string) (int64, error) {
 func GetBalance(address string) (float64, string) {
 	var result models.Balance
 
-	// Ensure address has Z prefix for RPC calls
+	// Ensure address has Q prefix for RPC calls
 	rpcAddress := address
 	if strings.HasPrefix(rpcAddress, "0x") {
-		rpcAddress = "Z" + rpcAddress[2:]
-	} else if !strings.HasPrefix(rpcAddress, "Z") {
-		rpcAddress = "Z" + rpcAddress
+		rpcAddress = "Q" + rpcAddress[2:]
+	} else if !strings.HasPrefix(rpcAddress, "Q") {
+		rpcAddress = "Q" + rpcAddress
 	}
 
 	group := models.JsonRPC{
 		Jsonrpc: "2.0",
-		Method:  "zond_getBalance",
+		Method:  "qrl_getBalance",
 		Params:  []interface{}{rpcAddress, "latest"},
 		ID:      1,
 	}

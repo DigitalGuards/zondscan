@@ -67,7 +67,7 @@ func ReturnAllInternalTransactionsByAddress(address string) ([]models.TraceResul
 
 	var transactions []models.TraceResult
 
-	// Normalize to canonical Z-prefix format used by the syncer.
+	// Normalize to canonical Q-prefix format used by the syncer.
 	normalizedAddress := normalizeAddress(address)
 
 	filter := primitive.D{{Key: "$or", Value: []primitive.D{
@@ -128,7 +128,7 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 
 	var transactions []models.TransactionByAddress
 
-	// Normalize to the canonical Z-prefix form stored by the syncer.
+	// Normalize to the canonical Q-prefix form stored by the syncer.
 	normalizedAddress := normalizeAddress(address)
 	filter := primitive.D{{Key: "$or", Value: []primitive.D{
 		{{Key: "from", Value: normalizedAddress}},
@@ -260,8 +260,8 @@ func ReturnTransactions(address string, page, limit int) ([]models.TransactionBy
 		opts.SetLimit(int64(limit))
 	}
 
-	// Normalize address to handle both uppercase and lowercase Z prefix
-	normalizedAddress := strings.TrimPrefix(strings.TrimPrefix(address, "Z"), "z")
+	// Normalize address to handle both uppercase and lowercase Q prefix
+	normalizedAddress := strings.TrimPrefix(strings.TrimPrefix(address, "Q"), "q")
 	decoded, err := hex.DecodeString(normalizedAddress)
 	if err != nil {
 		log.Printf("error decoding address hex: %v", err)
@@ -301,7 +301,7 @@ func CountTransactions(address string) (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Normalize to canonical Z-prefix — matches syncer write format.
+	// Normalize to canonical Q-prefix — matches syncer write format.
 	normalizedAddress := normalizeAddress(address)
 
 	filter := primitive.D{{Key: "$or", Value: []primitive.D{
@@ -503,7 +503,7 @@ func ReturnNonZeroTransactions(address string, page, limit int) ([]models.Transa
 		SetProjection(projection).
 		SetSort(primitive.D{{Key: "timeStamp", Value: -1}})
 
-	// Normalize to canonical Z-prefix form stored by the syncer.
+	// Normalize to canonical Q-prefix form stored by the syncer.
 	normalizedAddress := normalizeAddress(address)
 	filter := bson.M{
 		"$and": []bson.M{
