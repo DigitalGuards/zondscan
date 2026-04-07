@@ -337,19 +337,27 @@ func BackfillValidatorHistory(currentEpoch int64) error {
 		return fmt.Errorf("decode validators for backfill: %w", err)
 	}
 
-	// Get genesis time from block 0
-	var block0 struct {
+	// Get genesis time from block 0, falling back to block 1 minus one slot
+	var blockDoc struct {
 		Result struct {
 			Timestamp string `bson:"timestamp"`
 		} `bson:"result"`
 	}
-	err = configs.BlocksCollections.FindOne(ctx, bson.M{"blockNumberInt": int64(0)}).Decode(&block0)
 	genesisTime := int64(0)
-	if err == nil && block0.Result.Timestamp != "" {
-		genesisTime, _ = strconv.ParseInt(block0.Result.Timestamp, 0, 64)
+	err = configs.BlocksCollections.FindOne(ctx, bson.M{"blockNumberInt": int64(0)}).Decode(&blockDoc)
+	if err == nil && blockDoc.Result.Timestamp != "" {
+		genesisTime, _ = strconv.ParseInt(blockDoc.Result.Timestamp, 0, 64)
 	}
 	if genesisTime == 0 {
-		return fmt.Errorf("cannot backfill: block 0 not yet synced, genesis timestamp unavailable")
+		// Block 0 not in DB — derive genesis from block 1 (timestamp - 1 slot)
+		err = configs.BlocksCollections.FindOne(ctx, bson.M{"blockNumberInt": int64(1)}).Decode(&blockDoc)
+		if err == nil && blockDoc.Result.Timestamp != "" {
+			t, _ := strconv.ParseInt(blockDoc.Result.Timestamp, 0, 64)
+			genesisTime = t - secondsPerSlot
+		}
+	}
+	if genesisTime == 0 {
+		return fmt.Errorf("cannot backfill: neither block 0 nor block 1 found in database")
 	}
 
 	// Pre-parse validator balances to avoid repeated string→BigInt parsing in the loop
