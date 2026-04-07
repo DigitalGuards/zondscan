@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import type { PendingTransaction } from '@/app/types';
-import { formatAmount, decodeTokenTransferInput, formatTokenAmount } from '../../../lib/helpers';
+import { formatAmount, formatGasPrice, decodeTokenTransferInput, formatTokenAmount } from '../../../lib/helpers';
 import Badge from '../../../components/Badge';
 
 interface PendingTransactionViewProps {
@@ -11,7 +11,7 @@ interface PendingTransactionViewProps {
 
 export default function PendingTransactionView({ pendingTx }: PendingTransactionViewProps): JSX.Element {
   const [formattedValue, unit] = formatAmount(pendingTx.value);
-  const [formattedGasPrice] = formatAmount(pendingTx.gasPrice);
+  const formattedGasPrice = formatGasPrice(pendingTx.gasPrice);
 
   // Decode token transfer from input data
   const decodedTransfer = useMemo(() => {

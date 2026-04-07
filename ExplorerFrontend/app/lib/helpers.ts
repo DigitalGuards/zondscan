@@ -97,6 +97,19 @@ export function formatGas(amount: number | string | undefined | null): [string, 
   }
 }
 
+export function formatGasPrice(wei: number | string | undefined | null): string {
+  if (wei === undefined || wei === null || wei === 0 || wei === '0' || wei === '0x0') {
+    return '0';
+  }
+  try {
+    const value = typeof wei === 'string' && wei.startsWith('0x') ? BigInt(wei) : BigInt(String(wei));
+    const gwei = Number(value) / 1e9;
+    return gwei < 0.001 ? gwei.toExponential(2) : parseFloat(gwei.toFixed(9)).toString();
+  } catch {
+    return '0';
+  }
+}
+
 export function formatAmount(amount: number | string | undefined | null): [string, string] {
   // Handle undefined or null
   if (amount === undefined || amount === null) {
