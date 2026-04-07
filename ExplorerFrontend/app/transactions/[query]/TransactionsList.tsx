@@ -2,46 +2,43 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import TransactionCard from './TransactionCard';
+import Link from 'next/link';
+import { formatAmount, timeAgo, truncateHash } from '../../lib/helpers';
 import SearchBar from '../../components/SearchBar';
-import type { TransactionsListProps } from '@/app/types';
+import Pagination from '../../components/Pagination';
+import CopyButton from '../../components/CopyButton';
+import Badge from '../../components/Badge';
 import EmptyState from '../../components/EmptyState';
+import type { TransactionsListProps } from '@/app/types';
 
-export default function TransactionsList({ 
-  initialData, 
-  currentPage 
+const ITEMS_PER_PAGE = 10;
+
+export default function TransactionsList({
+  initialData,
+  currentPage,
 }: TransactionsListProps): JSX.Element {
   const router = useRouter();
   const [transactions, setTransactions] = useState(initialData.txs);
-  const ITEMS_PER_PAGE = 5;
   const [totalPages] = useState(Math.max(1, Math.ceil(initialData.total / ITEMS_PER_PAGE)));
 
   useEffect(() => {
     setTransactions(initialData.txs);
   }, [initialData]);
 
-  const navigateToPage = (page: number): void => {
-    router.push(`/transactions/${page}`);
-  };
-
   const goToNextPage = (): void => {
-    const nextPage = Math.min(currentPage + 1, totalPages);
-    navigateToPage(nextPage);
+    router.push(`/transactions/${Math.min(currentPage + 1, totalPages)}`);
   };
 
   const goToPreviousPage = (): void => {
-    const prevPage = Math.max(currentPage - 1, 1);
-    navigateToPage(prevPage);
+    router.push(`/transactions/${Math.max(currentPage - 1, 1)}`);
   };
 
   return (
-    <div className="space-y-4 px-4 sm:px-6 lg:px-8 mt-4 sm:mt-6">
-      <div className="max-w-[900px] mx-auto mb-6 sm:mb-8">
+    <div className="p-4 sm:p-8 max-w-6xl mx-auto">
+      <h1 className="text-xl sm:text-2xl font-bold mb-4 text-[#ffa729]">Transactions</h1>
+
+      <div className="mb-6">
         <SearchBar />
-      </div>
-      
-      <div className="max-w-[900px] mx-auto mb-4">
-        <h2 className="text-lg font-medium text-[#ffa729]">Latest Transactions</h2>
       </div>
 
       {transactions.length === 0 ? (
@@ -52,42 +49,70 @@ export default function TransactionsList({
           actionHref="/transactions/1"
         />
       ) : (
-        <div className="max-w-[900px] mx-auto mb-8">
-          {transactions.map(transaction => (
-            <TransactionCard
-              key={transaction.TxHash}
-              transaction={transaction}
-              currentPage={currentPage}
-            />
-          ))}
-        </div>
+        <>
+          <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden mb-6">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[#2a2a2a]">
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Hash</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden sm:table-cell">Type</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Amount</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transactions.map((tx) => {
+                    const [formattedAmount, unit] = formatAmount(tx.Amount);
+                    const isContractCall = parseFloat(String(tx.Amount)) === 0;
+
+                    return (
+                      <tr
+                        key={tx.TxHash}
+                        className="border-b border-[#2a2a2a] last:border-b-0 hover:bg-[#252525] transition-colors"
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1.5">
+                            <Link
+                              href={`/tx/${tx.TxHash}?from=transactions&page=${currentPage}`}
+                              className="text-[#ffa729] hover:text-[#ffb954] hover:underline font-mono text-xs"
+                              title={tx.TxHash}
+                            >
+                              {truncateHash(tx.TxHash, 10, 6)}
+                            </Link>
+                            <CopyButton value={tx.TxHash} label="Copy hash" size="sm" stopPropagation />
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 hidden sm:table-cell">
+                          {isContractCall ? (
+                            <Badge variant="neutral">Contract Call</Badge>
+                          ) : (
+                            <Badge variant="brand">Transfer</Badge>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-gray-300 tabular-nums whitespace-nowrap">
+                          {formattedAmount}
+                          <span className="text-gray-500 text-xs ml-1">{unit}</span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-400 tabular-nums">
+                          {timeAgo(tx.TimeStamp)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPrevious={goToPreviousPage}
+            onNext={goToNextPage}
+          />
+        </>
       )}
-      
-      <div className="flex justify-center items-center gap-4 text-gray-300">
-        <button
-          aria-label="Go to previous page"
-          onClick={goToPreviousPage}
-          disabled={currentPage === 1}
-          className="px-3 sm:px-4 py-2 rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d]
-                   hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d]
-                   transition-colors text-sm sm:text-base"
-        >
-          Previous
-        </button>
-
-        <span className="text-sm sm:text-base">Page {currentPage} of {totalPages}</span>
-
-        <button
-          aria-label="Go to next page"
-          onClick={goToNextPage}
-          disabled={currentPage === totalPages}
-          className="px-3 sm:px-4 py-2 rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d]
-                   hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d]
-                   transition-colors text-sm sm:text-base"
-        >
-          Next
-        </button>
-      </div>
     </div>
   );
 }
