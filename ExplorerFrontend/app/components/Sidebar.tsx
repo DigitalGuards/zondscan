@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { Disclosure } from '@headlessui/react'
-import { ChevronDownIcon, Bars3Icon, XMarkIcon, QuestionMarkCircleIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/20/solid'
+import { ChevronDownIcon, Bars3Icon, XMarkIcon, QuestionMarkCircleIcon, ArrowTopRightOnSquareIcon, CodeBracketIcon } from '@heroicons/react/20/solid'
 import LookUpIcon from '../../public/lookup.svg'
 import TokenIcon from '../../public/token.svg'
 import PartnerHandshakeIcon from '../../public/partner-handshake-icon.svg'
@@ -327,6 +327,21 @@ export default function Sidebar(): JSX.Element {
               <span className="truncate">QRL Zond Wallet</span>
               <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5 text-gray-500 ml-auto flex-shrink-0" />
             </a>
+            <Link
+              href="/api-explorer"
+              aria-current={pathname === '/api-explorer' ? 'page' : undefined}
+              className={`flex w-full items-center gap-2 px-3 py-2.5 text-sm rounded-md
+                         transition-all duration-200 group whitespace-nowrap
+                         ${pathname === '/api-explorer'
+                           ? 'bg-[#ffa729]/10 text-[#ffa729] border-l-2 border-[#ffa729]'
+                           : 'text-gray-300 hover:bg-[#2d2d2d] hover:text-[#ffa729]'
+                         }`}
+            >
+              <CodeBracketIcon className={`w-5 h-5 flex-shrink-0 ${
+                pathname === '/api-explorer' ? 'text-[#ffa729]' : 'text-gray-500 group-hover:text-[#ffa729]'
+              } transition-colors`} />
+              <span className="truncate">API Explorer</span>
+            </Link>
             <Link
               href="/faq"
               aria-current={pathname === '/faq' ? 'page' : undefined}
