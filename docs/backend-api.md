@@ -22,7 +22,7 @@ Comprehensive documentation for the ZondScan backend API server -- a Go + Gin RE
                                     │   http://localhost:8545   │
                                     └────────────┬─────────────┘
                                                  │
-                                    (zond_getBalance calls)
+                                    (qrl_getBalance calls)
                                                  │
 ┌──────────────┐    REST API     ┌───────────────▼──────────────┐     Reads      ┌───────────────┐
 │  Frontend    │◀───────────────▶│     backendAPI (Go + Gin)    │◀──────────────▶│   MongoDB     │
@@ -244,8 +244,8 @@ Paginated network-wide transactions list.
     {
       "InOut": 0,
       "TxType": "transfer",
-      "From": "Z2019ea...",
-      "To": "Z5a330c...",
+      "From": "Q2019ea...",
+      "To": "Q5a330c...",
       "TxHash": "0xabc...",
       "TimeStamp": "1706123456",
       "Amount": "1.500000000000000000",
@@ -272,8 +272,8 @@ Single transaction by hash.
   "response": {
     "blockNumber": "0x1a4",
     "blockTimestamp": "0x65abc123",
-    "from": "Z2019ea...",
-    "to": "Z5a330c...",
+    "from": "Q2019ea...",
+    "to": "Q5a330c...",
     "txHash": "0xabc...",
     "value": "0x1bc16d674ec80000",
     "gasUsed": "0x5208",
@@ -284,16 +284,16 @@ Single transaction by hash.
   },
   "latestBlock": 420,
   "contractCreated": {
-    "address": "Z5a330c...",
+    "address": "Q5a330c...",
     "isToken": true,
     "name": "MyToken",
     "symbol": "MTK",
     "decimals": 18
   },
   "tokenTransfer": {
-    "contractAddress": "Z5a330c...",
-    "from": "Z2019ea...",
-    "to": "Zaaabbb...",
+    "contractAddress": "Q5a330c...",
+    "from": "Q2019ea...",
+    "to": "Qaaabbb...",
     "amount": "1000000000000000000",
     "tokenName": "MyToken",
     "tokenSymbol": "MTK",
@@ -343,13 +343,13 @@ Coinbase transaction lookup (uses the same `ReturnSingleTransfer` function as `/
 #### `GET /address/aggregate/:query`
 Aggregated address data: balance, rank, transactions, internal transactions, and contract code.
 
-**Path Parameter:** Address with `Z` prefix (e.g., `Z2019ea08f4e24201b98f9154906da4b924a04892`)
+**Path Parameter:** Address with `Q` prefix (e.g., `Q2019ea08f4e24201b98f9154906da4b924a04892`)
 
 **Response:**
 ```json
 {
   "address": {
-    "id": "z2019ea08f4e24201b98f9154906da4b924a04892",
+    "id": "q2019ea08f4e24201b98f9154906da4b924a04892",
     "balance": 100.5,
     "nonce": 42
   },
@@ -359,8 +359,8 @@ Aggregated address data: balance, rank, transactions, internal transactions, and
     {
       "InOut": 0,
       "TxType": "transfer",
-      "From": "Z2019ea...",
-      "To": "Z5a330c...",
+      "From": "Q2019ea...",
+      "To": "Q5a330c...",
       "TxHash": "0xabc...",
       "TimeStamp": "1706123456",
       "Amount": "1.500000000000000000",
@@ -370,8 +370,8 @@ Aggregated address data: balance, rank, transactions, internal transactions, and
   ],
   "internal_transactions_by_address": [...],
   "contract_code": {
-    "address": "Z2019ea...",
-    "creatorAddress": "Z5a330c...",
+    "address": "Q2019ea...",
+    "creatorAddress": "Q5a330c...",
     "contractCode": "0x606060...",
     "isToken": false
   },
@@ -380,8 +380,8 @@ Aggregated address data: balance, rank, transactions, internal transactions, and
 ```
 
 **Notes:**
-- Normalizes `z` prefix to `Z` on input.
-- If the address is not found in the `addresses` collection, it queries the Zond node RPC (`zond_getBalance`) and creates a new entry.
+- Normalizes `q` prefix to `Q` on input.
+- If the address is not found in the `addresses` collection, it queries the Zond node RPC (`qrl_getBalance`) and creates a new entry.
 - Transaction queries use case-insensitive regex matching.
 - Internal transactions query the `internalTransactionByAddress` collection using hex-decoded byte-level matching.
 
@@ -412,11 +412,11 @@ All ERC20 token balances held by an address. Designed for wallet integration (e.
 **Response:**
 ```json
 {
-  "address": "Z2019ea...",
+  "address": "Q2019ea...",
   "tokens": [
     {
-      "contractAddress": "Z5a330c...",
-      "holderAddress": "Z2019ea...",
+      "contractAddress": "Q5a330c...",
+      "holderAddress": "Q2019ea...",
       "balance": "1000000000000000000",
       "blockNumber": "0x1a4",
       "name": "MyToken",
@@ -431,14 +431,14 @@ All ERC20 token balances held by an address. Designed for wallet integration (e.
 **Notes:**
 - Uses MongoDB aggregation pipeline with `$lookup` to join `tokenBalances` with `contractCode` for metadata.
 - Sorted by balance descending (highest value tokens first).
-- Searches both `Z` and `z` prefix variants of the address.
+- Searches both `Q` and `q` prefix variants of the address.
 
 #### `POST /getBalance`
 Get balance for an address directly from the Zond node RPC.
 
 **Request Body (form-encoded):**
 ```
-address=Z2019ea08f4e24201b98f9154906da4b924a04892
+address=Q2019ea08f4e24201b98f9154906da4b924a04892
 ```
 
 **Response:**
@@ -446,7 +446,7 @@ address=Z2019ea08f4e24201b98f9154906da4b924a04892
 { "balance": 100.5 }
 ```
 
-**Notes:** Makes a live `zond_getBalance` RPC call to the Zond node. Balance is returned in QRL (divided by 1e18 from wei).
+**Notes:** Makes a live `qrl_getBalance` RPC call to the Zond node. Balance is returned in QRL (divided by 1e18 from wei).
 
 #### `GET /walletdistribution/:query`
 Count wallets with balance greater than the specified threshold (in units of 1e12 wei).
@@ -465,7 +465,7 @@ Top 50 addresses by balance.
 ```json
 {
   "richlist": [
-    { "id": "z2019ea...", "balance": 1000000.5, "nonce": 100 }
+    { "id": "q2019ea...", "balance": 1000000.5, "nonce": 100 }
   ]
 }
 ```
@@ -490,8 +490,8 @@ Paginated list of deployed smart contracts.
 {
   "response": [
     {
-      "address": "Z5a330c...",
-      "creatorAddress": "Z2019ea...",
+      "address": "Q5a330c...",
+      "creatorAddress": "Q2019ea...",
       "contractCode": "0x606060...",
       "creationTransaction": "0xabc...",
       "creationBlockNumber": "0x1a4",
@@ -509,7 +509,7 @@ Paginated list of deployed smart contracts.
 
 **Notes:**
 - Search is case-insensitive.
-- Addresses in the response are normalized to uppercase `Z` prefix.
+- Addresses in the response are normalized to uppercase `Q` prefix.
 - Sorted by `_id` descending (latest first).
 
 ---
@@ -522,14 +522,14 @@ Summary information about a specific ERC20 token.
 **Response:**
 ```json
 {
-  "contractAddress": "Z5a330c...",
+  "contractAddress": "Q5a330c...",
   "name": "MyToken",
   "symbol": "MTK",
   "decimals": 18,
   "totalSupply": "1000000000000000000000",
   "holderCount": 42,
   "transferCount": 150,
-  "creatorAddress": "Z2019ea...",
+  "creatorAddress": "Q2019ea...",
   "creationTxHash": "0xabc...",
   "creationBlock": "0x1a4"
 }
@@ -547,11 +547,11 @@ Paginated token holder list sorted by balance descending.
 **Response:**
 ```json
 {
-  "contractAddress": "Z5a330c...",
+  "contractAddress": "Q5a330c...",
   "holders": [
     {
-      "contractAddress": "Z5a330c...",
-      "holderAddress": "Z2019ea...",
+      "contractAddress": "Q5a330c...",
+      "holderAddress": "Q2019ea...",
       "balance": "500000000000000000000"
     }
   ],
@@ -575,12 +575,12 @@ Paginated token transfer history.
 **Response:**
 ```json
 {
-  "contractAddress": "Z5a330c...",
+  "contractAddress": "Q5a330c...",
   "transfers": [
     {
-      "contractAddress": "Z5a330c...",
-      "from": "Z2019ea...",
-      "to": "Zaaabbb...",
+      "contractAddress": "Q5a330c...",
+      "from": "Q2019ea...",
+      "to": "Qaaabbb...",
       "amount": "1000000000000000000",
       "blockNumber": "0x1a4",
       "txHash": "0xabc...",
@@ -735,8 +735,8 @@ Paginated list of pending (mempool) transactions.
   "transactions": [
     {
       "hash": "0xabc...",
-      "from": "Z2019ea...",
-      "to": "Z5a330c...",
+      "from": "Q2019ea...",
+      "to": "Q5a330c...",
       "value": "0x1bc16d674ec80000",
       "gas": "0x5208",
       "gasPrice": "0x3b9aca00",
@@ -784,7 +784,7 @@ All collections are in the `qrldata-z` database. Collection references are initi
 
 | Collection | Purpose | Key Query Patterns |
 |------------|---------|-------------------|
-| `contractCode` | Smart contract deployments & token metadata | Find by `address` (both Z/z prefix); search by `name` regex; filter by `isToken` |
+| `contractCode` | Smart contract deployments & token metadata | Find by `address` (both Q/q prefix); search by `name` regex; filter by `isToken` |
 | `tokenBalances` | Token holder balances per contract | Find by `holderAddress` or `contractAddress` (both prefix variants); aggregation with `$lookup` to `contractCode` |
 | `tokenTransfers` | ERC20 transfer events | Find by `contractAddress` or `txHash`; sorted by `blockNumber` desc |
 
@@ -835,7 +835,7 @@ On startup, `initializeCollections()` creates default documents (via `$setOnInse
 ```go
 type Address struct {
     ObjectId primitive.ObjectID `bson:"_id"`
-    ID       string             `json:"id"`       // Lowercase hex with z prefix
+    ID       string             `json:"id"`       // Lowercase hex with q prefix
     Balance  float64            `json:"balance"`   // QRL units (not wei)
     Nonce    uint64             `json:"nonce"`
 }
@@ -1038,7 +1038,7 @@ type PendingTransaction struct {
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `MONGOURI` | Yes | -- | MongoDB connection string (e.g., `mongodb://localhost:27017`) |
-| `NODE_URL` | No | `http://127.0.0.1:8545` | Zond node RPC endpoint (used for `zond_getBalance`) |
+| `NODE_URL` | No | `http://127.0.0.1:8545` | Zond node RPC endpoint (used for `qrl_getBalance`) |
 | `APP_ENV` | No | `development` | Environment mode. Set to `production` for HTTPS. |
 | `HTTP_PORT` | No | `:8080` | HTTP listen port (development mode) |
 | `HTTPS_PORT` | No* | -- | HTTPS listen port (production mode; required if `APP_ENV=production`) |
@@ -1127,13 +1127,13 @@ MONGOURI=mongodb://localhost:27017 \
 
 ### Address Normalization
 
-QRL Zond addresses use a `Z` prefix (instead of Ethereum's `0x`). The codebase handles multiple address formats:
+QRL Zond addresses use a `Q` prefix (instead of Ethereum's `0x`). The codebase handles multiple address formats:
 
-- **Storage in MongoDB:** Most addresses are stored with lowercase `z` prefix by the synchronizer.
-- **API input:** Accepts both `Z` and `z` prefixes. Routes normalize `z` to `Z` on input.
-- **Database queries:** Use both variants via `normalizeAddressBoth()` which returns `["z...", "Z..."]`.
+- **Storage in MongoDB:** Most addresses are stored with lowercase `q` prefix by the synchronizer.
+- **API input:** Accepts both `Q` and `q` prefixes. Routes normalize `q` to `Q` on input.
+- **Database queries:** Use both variants via `normalizeAddressBoth()` which returns `["q...", "Q..."]`.
 - **Case-insensitive matching:** Transaction lookups use MongoDB regex with the `i` option.
-- **RPC calls:** `GetBalance` ensures uppercase `Z` prefix for Zond node RPC.
+- **RPC calls:** `GetBalance` ensures uppercase `Q` prefix for Zond node RPC.
 
 ### Pagination Patterns
 

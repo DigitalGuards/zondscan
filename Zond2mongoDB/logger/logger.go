@@ -34,7 +34,7 @@ func FileLogger(filename string) *zap.Logger {
 	cfg.Encoding = "console"
 	cfg.OutputPaths = []string{fullpath, "stdout"}
 	cfg.ErrorOutputPaths = []string{fullpath, "stderr"}
-	cfg.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
+	cfg.Level = zap.NewAtomicLevelAt(zapcore.InfoLevel)
 	cfg.EncoderConfig.EncodeTime = SyslogTimeEncoder
 	cfg.EncoderConfig.EncodeLevel = CustomLevelEncoder
 

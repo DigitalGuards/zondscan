@@ -1,8 +1,6 @@
 package models
 
 import (
-	"math/big"
-
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -13,10 +11,10 @@ type ZondDatabaseBlock struct {
 }
 
 type Withdrawal struct {
-	Index          string   `json:"index"`
-	ValidatorIndex string   `json:"validatorIndex"`
-	Address        string   `json:"address"`
-	Amount         *big.Int `json:"amount"`
+	Index          string `json:"index"`
+	ValidatorIndex string `json:"validatorIndex"`
+	Address        string `json:"address"`
+	Amount         string `json:"amount"`
 }
 
 type Transaction struct {
@@ -85,16 +83,11 @@ type ResultOld struct {
 	Timestamp        string        `json:"timestamp"`
 	Transactions     []Transaction `json:"transactions"`
 	TransactionsRoot string        `json:"transactionsRoot"`
-	Difficulty       string        `json:"difficulty"`
 	ExtraData        string        `json:"extraData"`
 	LogsBloom        string        `json:"logsBloom"`
 	Miner            string        `json:"miner"`
-	MixHash          string        `json:"mixHash"`
-	Nonce            string        `json:"nonce"`
-	Sha3Uncles       string        `json:"sha3Uncles"`
 	Size             string        `json:"size"`
-	TotalDifficulty  string        `json:"totalDifficulty"`
-	Uncles           []interface{} `json:"uncles"`
+	PrevRandao       string        `json:"prevRandao"`
 	Withdrawals      []Withdrawal  `json:"withdrawals"`
 	WithdrawalsRoot  string        `json:"withdrawalsRoot"`
 }
@@ -111,16 +104,11 @@ type Result struct {
 	Timestamp        string        `json:"timestamp"`
 	Transactions     []Transaction `json:"transactions"`
 	TransactionsRoot string        `json:"transactionsRoot"`
-	Difficulty       string        `json:"difficulty"`
 	ExtraData        string        `json:"extraData"`
 	LogsBloom        string        `json:"logsBloom"`
 	Miner            string        `json:"miner"`
-	MixHash          string        `json:"mixHash"`
-	Nonce            string        `json:"nonce"`
-	Sha3Uncles       string        `json:"sha3Uncles"`
 	Size             string        `json:"size"`
-	TotalDifficulty  string        `json:"totalDifficulty"`
-	Uncles           []interface{} `json:"uncles"`
+	PrevRandao       string        `json:"prevRandao"`
 	Withdrawals      []Withdrawal  `json:"withdrawals"`
 	WithdrawalsRoot  string        `json:"withdrawalsRoot"`
 }

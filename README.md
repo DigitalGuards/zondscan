@@ -73,7 +73,7 @@ cd zondscan/ExplorerFrontend
 
 Create the environment files:
 ```
-touch .env && touch .env.local
+touch .env
 ```
 
 #### .env fields
@@ -81,16 +81,9 @@ touch .env && touch .env.local
 | VARIABLE | VALUE |
 | ------ | ------ |
 | DATABASE_URL | mongodb://localhost:27017/qrldata-z?readPreference=primary |
-| NEXT_PUBLIC_DOMAIN_NAME | http://localhost:3000 (dev) OR http://your_domain_name.io (prod) |
-| NEXT_PUBLIC_HANDLER_URL | http://localhost:8080 (dev) OR http://your_domain_name.io:8443 (prod) |
-
-#### .env.local fields 
-
-| VARIABLE | VALUE |
-| ------ | ------ |
-| DATABASE_URL | mongodb://localhost:27017/qrldata-z?readPreference=primary |
 | DOMAIN_NAME | http://localhost:3000 (dev) OR http://your_domain_name.io (prod) |
-| HANDLER_URL | http://localhost:8080 (dev) OR http://your_domain_name.io:8443 (prod) |
+| HANDLER_URL | http://127.0.0.1:8082 (dev) OR http://your_domain_name.io:8443 (prod) |
+| NEXT_PUBLIC_HANDLER_URL | http://localhost:3000/api (dev) OR http://your_domain_name.io/api (prod) |
 
 Build and start the frontend:
 ```

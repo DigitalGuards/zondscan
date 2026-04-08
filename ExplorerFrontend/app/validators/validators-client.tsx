@@ -98,10 +98,10 @@ export default function ValidatorsWrapper(): JSX.Element {
         axios.get(`${config.handlerUrl}/validators/history?limit=100`).catch((err) => { console.error('Failed to fetch validator history:', err); return { data: { history: [] } }; }),
       ]);
 
-      // Process validators - add Z prefix to addresses
+      // Process validators - add Q prefix to addresses
       const processedValidators = (validatorsRes.data.validators || []).map((v: any) => ({
         ...v,
-        address: v.address.startsWith('Z') ? v.address : 'Z' + v.address,
+        address: v.address.startsWith('Q') ? v.address : 'Q' + v.address,
       }));
 
       setValidators(processedValidators);

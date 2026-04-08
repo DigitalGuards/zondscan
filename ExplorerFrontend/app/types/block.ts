@@ -6,13 +6,12 @@ export interface Block {
   timestamp: number;
   hash: string;
   parentHash: string;
-  nonce: string;
-  difficulty: string;
   gasLimit: string;
   gasUsed: string;
   miner: string;
   extraData: string;
   transactions: string[];
+  prevRandao: string;
 }
 
 /**

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math/big"
 	"net/http"
 	"os"
@@ -25,7 +26,7 @@ func ReturnSingleAddress(query string) (models.Address, error) {
 	var result models.Address
 	defer cancel()
 
-	// Normalize address to canonical Z-prefix form
+	// Normalize address to canonical Q-prefix form
 	addressHex := normalizeAddress(query)
 
 	// Try to find existing address
@@ -75,14 +76,14 @@ func ReturnRichlist() []models.Address {
 
 	results, err := configs.AddressesCollections.Find(ctx, bson.D{}, opts)
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("error querying richlist: %v", err)
 	}
 
 	defer results.Close(ctx)
 	for results.Next(ctx) {
 		var singleAddress models.Address
 		if err = results.Decode(&singleAddress); err != nil {
-			fmt.Println(err)
+			log.Printf("error decoding richlist address: %v", err)
 		}
 		addresses = append(addresses, singleAddress)
 	}
@@ -94,7 +95,7 @@ func ReturnRankAddress(address string) (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Normalize address to canonical Z-prefix form (matches storage format)
+	// Normalize address to canonical Q-prefix form (matches storage format)
 	addressHex := normalizeAddress(address)
 
 	// Look up the target address to get its balance
@@ -120,23 +121,23 @@ func ReturnRankAddress(address string) (int64, error) {
 func GetBalance(address string) (float64, string) {
 	var result models.Balance
 
-	// Ensure address has Z prefix for RPC calls
+	// Ensure address has Q prefix for RPC calls
 	rpcAddress := address
 	if strings.HasPrefix(rpcAddress, "0x") {
-		rpcAddress = "Z" + rpcAddress[2:]
-	} else if !strings.HasPrefix(rpcAddress, "Z") {
-		rpcAddress = "Z" + rpcAddress
+		rpcAddress = "Q" + rpcAddress[2:]
+	} else if !strings.HasPrefix(rpcAddress, "Q") {
+		rpcAddress = "Q" + rpcAddress
 	}
 
 	group := models.JsonRPC{
 		Jsonrpc: "2.0",
-		Method:  "zond_getBalance",
+		Method:  "qrl_getBalance",
 		Params:  []interface{}{rpcAddress, "latest"},
 		ID:      1,
 	}
 	b, err := json.Marshal(group)
 	if err != nil {
-		fmt.Println("error:", err)
+		log.Printf("error marshaling RPC request: %v", err)
 	}
 
 	nodeURL := os.Getenv("NODE_URL")
@@ -144,9 +145,9 @@ func GetBalance(address string) (float64, string) {
 		nodeURL = "http://127.0.0.1:8545" // fallback to default if not set
 	}
 
-	req, err := http.NewRequest("POST", nodeURL, bytes.NewBuffer([]byte(b)))
+	req, err := http.NewRequest("POST", nodeURL, bytes.NewBuffer(b))
 	if err != nil {
-		fmt.Println("Error creating request:", err)
+		log.Printf("error creating balance request: %v", err)
 		return 0, "Error connecting to node"
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -154,33 +155,30 @@ func GetBalance(address string) (float64, string) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Println("Error making request:", err)
+		log.Printf("error making balance request: %v", err)
 		return 0, "Error connecting to node"
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println("Error reading response:", err)
+		log.Printf("error reading balance response: %v", err)
 		return 0, "Error reading node response"
 	}
-	fmt.Println(string(body))
 
-	err = json.Unmarshal([]byte(string(body)), &result)
+	err = json.Unmarshal(body, &result)
 	if err != nil {
-		fmt.Println("Error unmarshaling response:", err)
+		log.Printf("error unmarshaling balance response: %v", err)
 		return 0, "Error parsing node response"
 	}
 
 	if result.Error.Message != "" {
 		return 0, result.Error.Message
 	} else {
-		fmt.Println(result.Result[2:])
-
 		balance := new(big.Int)
 		balance, success := balance.SetString(result.Result[2:], 16)
 		if !success {
-			fmt.Println("Error converting hexadecimal string to big.Int")
+			log.Printf("error converting hex balance to big.Int for address %s", address)
 		}
 
 		balanceFloat := new(big.Float).SetInt(balance)
@@ -201,7 +199,7 @@ func ReturnWalletDistribution(query uint64) (int64, error) {
 
 	results, err := configs.AddressesCollections.CountDocuments(ctx, filter)
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("error counting wallet distribution: %v", err)
 	}
 
 	return results, err
@@ -214,7 +212,7 @@ func GetWalletCount() int64 {
 	var result models.WalletCount
 	err := configs.WalletCountCollections.FindOne(ctx, bson.M{"_id": "current_count"}).Decode(&result)
 	if err != nil {
-		fmt.Printf("Error getting wallet count: %v\n", err)
+		log.Printf("error getting wallet count: %v", err)
 		return 0
 	}
 

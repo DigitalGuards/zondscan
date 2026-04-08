@@ -1,6 +1,180 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-background: #1a1a1a;
+  --color-background-secondary: #2d2d2d;
+  --color-background-tertiary: #1f1f1f;
+
+  --color-border: #3d3d3d;
+  --color-border-hover: #4d4d4d;
+
+  --color-accent: #ffa729;
+  --color-accent-hover: #ffb954;
+  --color-accent-dark: #ff9709;
+
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #a0aec0;
+  --color-text-muted: #9ca3af;
+
+  --color-primary-dark: #1a1a1a;
+
+  --color-secondary-dark: #2d2d2d;
+
+  --background-image-card-gradient: linear-gradient(
+    to bottom right,
+    #2d2d2d,
+    #1f1f1f
+  );
+  --background-image-sidebar-gradient: linear-gradient(
+    to bottom,
+    #1a1a1a,
+    #1a1a1a,
+    #1f1f1f
+  );
+
+  --shadow-card:
+    0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.15);
+  --shadow-sidebar: 4px 0 24px rgba(0, 0, 0, 0.2);
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@utility card {
+  /* Card components */
+  @apply bg-card-gradient rounded-xl border border-border shadow-card;
+}
+
+@utility card-simple {
+  @apply bg-background-secondary rounded-xl border border-border;
+}
+
+@utility stats-card {
+  /* Stats card used on home page */
+  @apply bg-card-gradient rounded-xl border border-border p-4 md:p-6
+           hover:border-accent/50 transition-all duration-300;
+}
+
+@utility nav-link {
+  /* Navigation link */
+  @apply text-gray-300 hover:text-accent transition-colors;
+}
+
+@utility btn-primary {
+  /* Primary button */
+  @apply bg-accent text-white px-4 py-2 rounded-lg
+           hover:bg-accent-dark transition-colors;
+}
+
+@utility btn-secondary {
+  /* Secondary/outline button */
+  @apply bg-card-gradient text-white px-4 py-2 rounded-lg
+           border border-border hover:border-accent
+           disabled:opacity-50 disabled:hover:border-border
+           transition-all duration-300;
+}
+
+@utility input {
+  /* Form input */
+  @apply bg-background-secondary text-text-primary
+           border border-border rounded-lg px-4 py-2
+           hover:border-border-hover
+           focus:ring-1 focus:ring-accent focus:border-accent
+           placeholder-gray-500 outline-hidden transition-colors;
+}
+
+@utility table-header {
+  /* Table styles */
+  @apply px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm
+           font-medium text-accent;
+}
+
+@utility table-cell {
+  @apply px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300;
+}
+
+@utility table-row {
+  @apply border-b border-border hover:bg-accent/5 transition-colors;
+}
+
+@utility link-accent {
+  /* Link styles */
+  @apply text-accent hover:text-accent-hover transition-colors;
+}
+
+@utility page-container {
+  /* Page container */
+  @apply w-full min-h-screen;
+}
+
+@utility page-content {
+  @apply max-w-[1200px] mx-auto px-4;
+}
+
+@utility section-title {
+  /* Section header */
+  @apply text-xl md:text-2xl font-bold text-accent;
+}
+
+@utility flex-container {
+  /* Flex containers (legacy support) */
+  @apply flex flex-row text-center w-full max-w-full
+           bg-background-secondary rounded-lg shadow-lg;
+}
+
+@utility flex-item-left {
+  @apply flex flex-col p-4 flex-[25%]
+           bg-background-secondary rounded-lg;
+}
+
+@utility flex-item-center {
+  @apply p-4 flex-[50%] overflow-hidden
+           bg-background-secondary rounded-lg;
+}
+
+@utility flex-item-right {
+  @apply p-4 flex-[25%]
+           bg-background-secondary rounded-lg;
+}
+
+@utility skeleton {
+  /* Skeleton loading animation */
+  @apply bg-gray-700 animate-pulse rounded-sm;
+}
+
+/* Custom scrollbar for dark mode */
+@utility scrollbar-dark {
+  scrollbar-color: #2d2d2d #1a1a1a;
+
+  &::-webkit-scrollbar {
+    @apply w-3;
+  }
+
+  &::-webkit-scrollbar-track {
+    @apply bg-background;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    @apply bg-background-secondary rounded-md border-2 border-background;
+  }
+}
 
 @layer base {
   body {
@@ -8,131 +182,10 @@
   }
 }
 
-/* Default dark theme */
-:root {
-  color-scheme: dark;
-}
-
-@layer components {
-  /* Card components */
-  .card {
-    @apply bg-card-gradient rounded-xl border border-border shadow-card;
-  }
-
-  .card-simple {
-    @apply bg-background-secondary rounded-xl border border-border;
-  }
-
-  /* Stats card used on home page */
-  .stats-card {
-    @apply bg-card-gradient rounded-xl border border-border p-4 md:p-6
-           hover:border-accent/50 transition-all duration-300;
-  }
-
-  /* Navigation link */
-  .nav-link {
-    @apply text-gray-300 hover:text-accent transition-colors;
-  }
-
-  /* Primary button */
-  .btn-primary {
-    @apply bg-accent text-white px-4 py-2 rounded-lg
-           hover:bg-accent-dark transition-colors;
-  }
-
-  /* Secondary/outline button */
-  .btn-secondary {
-    @apply bg-card-gradient text-white px-4 py-2 rounded-lg
-           border border-border hover:border-accent
-           disabled:opacity-50 disabled:hover:border-border
-           transition-all duration-300;
-  }
-
-  /* Form input */
-  .input {
-    @apply bg-background-secondary text-text-primary
-           border border-border rounded-lg px-4 py-2
-           hover:border-border-hover
-           focus:ring-1 focus:ring-accent focus:border-accent
-           placeholder-gray-500 outline-none transition-colors;
-  }
-
-  /* Table styles */
-  .table-header {
-    @apply px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm
-           font-medium text-accent;
-  }
-
-  .table-cell {
-    @apply px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300;
-  }
-
-  .table-row {
-    @apply border-b border-border hover:bg-accent/5 transition-colors;
-  }
-
-  /* Link styles */
-  .link-accent {
-    @apply text-accent hover:text-accent-hover transition-colors;
-  }
-
-  /* Page container */
-  .page-container {
-    @apply w-full min-h-screen;
-  }
-
-  .page-content {
-    @apply max-w-[1200px] mx-auto px-4;
-  }
-
-  /* Section header */
-  .section-title {
-    @apply text-xl md:text-2xl font-bold text-accent;
-  }
-
-  /* Flex containers (legacy support) */
-  .flex-container {
-    @apply flex flex-row text-center w-full max-w-full
-           bg-background-secondary rounded-lg shadow-lg;
-  }
-
-  .flex-item-left {
-    @apply flex flex-col p-4 flex-[25%]
-           bg-background-secondary rounded-lg;
-  }
-
-  .flex-item-center {
-    @apply p-4 flex-[50%] overflow-hidden
-           bg-background-secondary rounded-lg;
-  }
-
-  .flex-item-right {
-    @apply p-4 flex-[25%]
-           bg-background-secondary rounded-lg;
-  }
-
-  /* Skeleton loading animation */
-  .skeleton {
-    @apply bg-gray-700 animate-pulse rounded;
-  }
-}
-
-/* Custom scrollbar for dark mode */
 @layer utilities {
-  .scrollbar-dark {
-    scrollbar-color: #2d2d2d #1a1a1a;
-  }
-
-  .scrollbar-dark::-webkit-scrollbar {
-    @apply w-3;
-  }
-
-  .scrollbar-dark::-webkit-scrollbar-track {
-    @apply bg-background;
-  }
-
-  .scrollbar-dark::-webkit-scrollbar-thumb {
-    @apply bg-background-secondary rounded-md border-2 border-background;
+  /* Default dark theme */
+  :root {
+    color-scheme: dark;
   }
 }
 

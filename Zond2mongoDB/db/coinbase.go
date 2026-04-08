@@ -22,8 +22,8 @@ func InsertManyCoinbase(doc []interface{}) {
 }
 
 func InsertCoinbaseDocument(blockHash string, blockNumber uint64, from string, hash string, nonce uint64, transactionIndex uint64, blockproposerReward uint64, attestorReward uint64, feeReward uint64, txType uint8, chainId uint8, signature string, pk string) (*mongo.InsertOneResult, error) {
-	// Normalize address to canonical Z-prefix form
-	from = validation.ConvertToZAddress(from)
+	// Normalize address to canonical Q-prefix form
+	from = validation.ConvertToQAddress(from)
 
 	doc := primitive.D{
 		{Key: "blockhash", Value: blockHash},

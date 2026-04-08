@@ -74,32 +74,22 @@ func getSyncConfig() SyncConfig {
 	return config
 }
 
-// getRPCDelay returns the configured delay duration with jitter
-func getRPCDelay() time.Duration {
+// getRPCDelay returns the configured delay duration with jitter.
+// When bulkSync is true, the delay and jitter are reduced to 1/10th
+// (with minimums of 5ms delay and 2ms jitter) to avoid overwhelming
+// the node during batch block fetches.
+func getRPCDelay(bulkSync bool) time.Duration {
 	config := getSyncConfig()
-	if config.RPCDelayJitter > 0 {
-		return time.Duration(config.RPCDelayMs+rand.Intn(config.RPCDelayJitter)) * time.Millisecond
+	delay := config.RPCDelayMs
+	jitter := config.RPCDelayJitter
+	if bulkSync {
+		delay = max(delay/10, 5)
+		jitter = max(jitter/10, 2)
 	}
-	return time.Duration(config.RPCDelayMs) * time.Millisecond
-}
-
-// getRPCDelayForBulkSync returns a reduced delay for bulk sync operations
-// When syncing many blocks, we want to go faster but still avoid overwhelming the node
-func getRPCDelayForBulkSync() time.Duration {
-	config := getSyncConfig()
-	// Use 1/10th of the normal delay for bulk sync
-	reducedDelay := config.RPCDelayMs / 10
-	if reducedDelay < 5 {
-		reducedDelay = 5 // Minimum 5ms to avoid completely overwhelming the node
+	if jitter > 0 {
+		delay += rand.Intn(jitter)
 	}
-	if config.RPCDelayJitter > 0 {
-		jitter := config.RPCDelayJitter / 10
-		if jitter < 2 {
-			jitter = 2
-		}
-		return time.Duration(reducedDelay+rand.Intn(jitter)) * time.Millisecond
-	}
-	return time.Duration(reducedDelay) * time.Millisecond
+	return time.Duration(delay) * time.Millisecond
 }
 
 // Sync starts the synchronization process
@@ -108,38 +98,34 @@ func Sync() {
 	var nextBlock string
 	var maxHex string
 
-	// Retry getting initial sync points with exponential backoff
-	for retries := 0; retries < 5; retries++ {
-		// Try to get the last synced block
-		nextBlock = db.GetLastKnownBlockNumber()
+	// DB queries — no retry needed, these are local and don't fail transiently.
+	nextBlock = db.GetLastKnownBlockNumber()
+	if nextBlock == "0x0" {
+		nextBlock = db.GetLatestBlockNumberFromDB()
 		if nextBlock == "0x0" {
-			// If no last known block, try getting latest from DB
-			nextBlock = db.GetLatestBlockNumberFromDB()
-			if nextBlock == "0x0" {
-				// If no blocks in DB, start from genesis
-				nextBlock = "0x0"
-				configs.Logger.Info("No existing blocks found, starting from genesis")
-			} else {
-				configs.Logger.Info("Starting from latest block in DB",
-					zap.String("block", nextBlock))
-			}
+			configs.Logger.Info("No existing blocks found, starting from genesis")
 		} else {
-			configs.Logger.Info("Continuing from last known block",
+			configs.Logger.Info("Starting from latest block in DB",
 				zap.String("block", nextBlock))
 		}
+	} else {
+		configs.Logger.Info("Continuing from last known block",
+			zap.String("block", nextBlock))
+	}
 
-		// Store the initial sync starting point for later token processing
-		// Only set if no existing start block is stored, to avoid redundant
-		// full re-scans on every restart. Uses block 1 to ensure all tokens
-		// are detected, including those created by factory contracts.
-		existingStart := db.GetLastKnownBlockNumberFromInitialSync()
-		if existingStart == "0x0" || existingStart == "" {
-			StoreInitialSyncStartBlock("0x1")
-		}
+	// Store the initial sync starting point for later token processing.
+	// Only set if no existing start block is stored, to avoid redundant
+	// full re-scans on every restart. Uses block 1 to ensure all tokens
+	// are detected, including those created by factory contracts.
+	existingStart := db.GetLastKnownBlockNumberFromInitialSync()
+	if existingStart == "0x0" || existingStart == "" {
+		StoreInitialSyncStartBlock("0x1")
+	}
 
-		nextBlock = utils.AddHexNumbers(nextBlock, "0x1")
+	nextBlock = utils.AddHexNumbers(nextBlock, "0x1")
 
-		// Get latest block from network
+	// Only the RPC call can fail transiently — retry with exponential backoff.
+	for retries := 0; retries < 5; retries++ {
 		maxHex, err = rpc.GetLatestBlock()
 		if err == nil {
 			break
