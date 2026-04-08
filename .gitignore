@@ -43,6 +43,7 @@ zond-contract-example*
 backendAPI/backendAPI.log
 *.cert
 *.key
+*.tsbuildinfo
 
 backendAPI/backendAPI
 Zond2mongoDB/syncer
