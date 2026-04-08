@@ -43,4 +43,4 @@ zond-contract-example*
 backendAPI/backendAPI.log
 *.cert
 *.key
-
+*.tsbuildinfo
