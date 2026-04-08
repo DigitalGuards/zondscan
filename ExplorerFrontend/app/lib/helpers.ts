@@ -336,6 +336,37 @@ export function decodeTokenTransferInput(inputData: string | undefined | null): 
 }
 
 /**
+ * Converts a smallest-unit integer string to a decimal string using BigInt (no floating-point).
+ * E.g. smallestUnitToDecimal("200000000000", 18) => "0.0000002"
+ */
+export function smallestUnitToDecimal(amount: string, decimals: number = 18): string {
+  if (!amount || amount === '0') return '0';
+  try {
+    const raw = BigInt(amount);
+    if (raw === BigInt(0)) return '0';
+    const divisor = BigInt(10) ** BigInt(decimals);
+    const wholePart = raw / divisor;
+    const fractionalPart = raw % divisor;
+    let fracStr = fractionalPart.toString().padStart(decimals, '0').replace(/0+$/, '');
+    return fracStr ? `${wholePart}.${fracStr}` : wholePart.toString();
+  } catch {
+    return '0';
+  }
+}
+
+/**
+ * Converts a decimal string to a smallest-unit integer string using string manipulation (no floating-point).
+ * E.g. decimalToSmallestUnit("0.0000002", 18) => "200000000000"
+ */
+export function decimalToSmallestUnit(value: string, decimals: number = 18): string {
+  if (!value || value === '0') return '0';
+  const parts = value.split('.');
+  const intPart = parts[0] || '0';
+  const fracPart = (parts[1] || '').slice(0, decimals).padEnd(decimals, '0');
+  return (intPart + fracPart).replace(/^0+/, '') || '0';
+}
+
+/**
  * Formats a token amount with proper decimals
  * @param amount - The raw token amount (as string)
  * @param decimals - The number of decimals for the token

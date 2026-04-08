@@ -1,35 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-
-const SHOR_DECIMALS = 18;
-
-// Convert Shor (integer string) to Quanta (decimal string) without floating-point math
-function shorToQuanta(shorStr: string): string {
-  if (!shorStr || shorStr === '0') return '0';
-  // Remove any leading zeros
-  shorStr = shorStr.replace(/^0+/, '') || '0';
-  if (shorStr === '0') return '0';
-
-  // Pad with leading zeros so we have at least SHOR_DECIMALS + 1 characters
-  const padded = shorStr.padStart(SHOR_DECIMALS + 1, '0');
-  const intPart = padded.slice(0, padded.length - SHOR_DECIMALS);
-  const fracPart = padded.slice(padded.length - SHOR_DECIMALS).replace(/0+$/, '');
-
-  return fracPart ? `${intPart}.${fracPart}` : intPart;
-}
-
-// Convert Quanta (decimal string) to Shor (integer string) without floating-point math
-function quantaToShor(quantaStr: string): string {
-  if (!quantaStr || quantaStr === '0') return '0';
-
-  const parts = quantaStr.split('.');
-  const intPart = parts[0] || '0';
-  const fracPart = (parts[1] || '').slice(0, SHOR_DECIMALS).padEnd(SHOR_DECIMALS, '0');
-
-  const result = (intPart + fracPart).replace(/^0+/, '') || '0';
-  return result;
-}
+import { smallestUnitToDecimal, decimalToSmallestUnit } from '../lib/helpers';
 
 function Converter(): JSX.Element {
   const [quanta, setQuanta] = useState("");
@@ -49,7 +21,7 @@ function Converter(): JSX.Element {
     } else {
       setError('');
       setShor(value);
-      setQuanta(shorToQuanta(value));
+      setQuanta(smallestUnitToDecimal(value, 18));
     }
   };
 
@@ -66,7 +38,7 @@ function Converter(): JSX.Element {
     } else {
       setError('');
       setQuanta(value);
-      setShor(quantaToShor(value));
+      setShor(decimalToSmallestUnit(value, 18));
     }
   };
 
