@@ -311,20 +311,7 @@ setup_frontend() {
         cat > .env << EOL
 DATABASE_URL=mongodb://localhost:27017/qrldata-z?readPreference=primary
 DOMAIN_NAME=$PUBLIC_URL
-HANDLER_URL=http://127.0.0.1:8081
-NEXT_PUBLIC_HANDLER_URL=$PUBLIC_URL/api
-EOL
-    fi
-
-    # Create .env.local file only if it doesn't exist
-    if [ -f ".env.local" ]; then
-        print_status ".env.local file already exists, skipping creation"
-    else
-        print_status "Creating .env.local file..."
-        cat > .env.local << EOL
-DATABASE_URL=mongodb://localhost:27017/qrldata-z?readPreference=primary
-DOMAIN_NAME=$PUBLIC_URL
-HANDLER_URL=http://127.0.0.1:8081
+HANDLER_URL=http://127.0.0.1:8082
 NEXT_PUBLIC_HANDLER_URL=$PUBLIC_URL/api
 EOL
     fi

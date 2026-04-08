@@ -377,6 +377,21 @@ func initializeCollections(db *mongo.Database) {
 	ensureCollection(db, "internalTransactionByAddress", nil)
 	ensureCollection(db, "contracts", nil)
 	ensureCollection(db, "addresses", nil)
+
+	// Create unique index on addresses.id to prevent duplicate entries from concurrent upserts
+	addressesCollection := db.Collection("addresses")
+	_, err = addressesCollection.Indexes().CreateOne(
+		ctx,
+		mongo.IndexModel{
+			Keys:    bson.D{{Key: "id", Value: 1}},
+			Options: options.Index().SetName("addresses_id_unique_idx").SetUnique(true),
+		},
+	)
+	if err != nil {
+		Logger.Warn("Could not create unique index on addresses.id (duplicates may exist — run dedup)", zap.Error(err))
+	} else {
+		Logger.Info("Addresses collection initialized with unique id index")
+	}
 	ensureCollection(db, "walletCount", nil)
 	ensureCollection(db, "dailyTransactionsVolume", nil)
 	ensureCollection(db, "totalCirculatingSupply", nil)

@@ -51,12 +51,6 @@ const (
 
 	// GenesisBlockHex is the genesis block number in hex
 	GenesisBlockHex = "0x0"
-
-	// Internal constants (not exported)
-	dbTimeout          = DBTimeout
-	lastSyncedBlockID  = LastSyncedBlockID
-	initialSyncStartID = InitialSyncStartID
-	genesisBlockHex    = GenesisBlockHex
 )
 
 // GetLatestBlockFromDB returns the latest block from the database
@@ -66,7 +60,7 @@ func GetLatestBlockFromDB() *models.ZondDatabaseBlock {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), DBTimeout)
 	defer cancel()
 
 	// Query for the latest block by sorting on timestamp (more reliable than hex string sorting)
@@ -86,7 +80,7 @@ func GetLatestBlockFromDB() *models.ZondDatabaseBlock {
 
 // GetBlockFromDB retrieves a block by its number from the database
 func GetBlockFromDB(blockNumber string) *models.ZondDatabaseBlock {
-	ctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), DBTimeout)
 	defer cancel()
 
 	var block models.ZondDatabaseBlock
@@ -109,13 +103,13 @@ func GetLatestBlockNumberFromDB() string {
 	}
 
 	// If that fails, return "0x0"
-	return genesisBlockHex
+	return GenesisBlockHex
 }
 
 // GetLatestBlockHashHeaderFromDB returns the hash of a block with the given number
 // Returns empty string if the block doesn't exist or if there's an error
 func GetLatestBlockHashHeaderFromDB(blockNumber string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), DBTimeout)
 	defer cancel()
 
 	// Query for the block by number, only retrieving the hash field
@@ -141,7 +135,7 @@ func GetLatestBlockHashHeaderFromDB(blockNumber string) string {
 // GetLastKnownBlockNumber retrieves the last known block number from the sync state
 // Returns "0x0" if no sync state exists or if there's an error
 func GetLastKnownBlockNumber() string {
-	ctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), DBTimeout)
 	defer cancel()
 
 	var result struct {
@@ -150,7 +144,7 @@ func GetLastKnownBlockNumber() string {
 
 	syncColl := configs.GetCollection(configs.DB, SyncStateCollection)
 	err := syncColl.FindOne(ctx, bson.M{
-		"_id": lastSyncedBlockID,
+		"_id": LastSyncedBlockID,
 	}).Decode(&result)
 
 	if err != nil {
@@ -159,12 +153,12 @@ func GetLastKnownBlockNumber() string {
 		} else {
 			configs.Logger.Warn("Failed to get last known block number", zap.Error(err))
 		}
-		return genesisBlockHex
+		return GenesisBlockHex
 	}
 
 	if result.BlockNumber == "" {
 		configs.Logger.Warn("Found sync state but block number is empty")
-		return genesisBlockHex
+		return GenesisBlockHex
 	}
 
 	configs.Logger.Info("Found last known block in sync state",
@@ -188,7 +182,7 @@ func GetLastSyncedBlock() (*models.ZondDatabaseBlock, error) {
 // StoreLastKnownBlockNumber updates the sync state with the given block number
 // Only updates if the new block number is higher than the existing one
 func StoreLastKnownBlockNumber(blockNumber string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), DBTimeout)
 	defer cancel()
 
 	syncColl := configs.GetCollection(configs.DB, SyncStateCollection)
@@ -198,14 +192,14 @@ func StoreLastKnownBlockNumber(blockNumber string) error {
 		BlockNumber string `bson:"block_number"`
 	}
 
-	err := syncColl.FindOne(ctx, bson.M{"_id": lastSyncedBlockID}).Decode(&existingDoc)
+	err := syncColl.FindOne(ctx, bson.M{"_id": LastSyncedBlockID}).Decode(&existingDoc)
 
 	blockNumberIntVal := HexToInt64(blockNumber)
 
 	if err == mongo.ErrNoDocuments {
 		// Document doesn't exist, create it
 		_, err = syncColl.InsertOne(ctx, bson.M{
-			"_id":              lastSyncedBlockID,
+			"_id":              LastSyncedBlockID,
 			"block_number":     blockNumber,
 			"block_number_int": blockNumberIntVal,
 		})
@@ -242,7 +236,7 @@ func StoreLastKnownBlockNumber(blockNumber string) error {
 	result, err := syncColl.UpdateOne(
 		ctx,
 		bson.M{
-			"_id":              lastSyncedBlockID,
+			"_id":              LastSyncedBlockID,
 			"block_number_int": bson.M{"$lt": blockNumberIntVal},
 		},
 		bson.M{"$set": bson.M{
@@ -273,7 +267,7 @@ func StoreLastKnownBlockNumber(blockNumber string) error {
 // during the initial sync. Used for token transfer processing after initial sync.
 func GetLastKnownBlockNumberFromInitialSync() string {
 	// If we have a record of the first synced block, use that
-	ctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), DBTimeout)
 	defer cancel()
 
 	var result struct {
@@ -282,7 +276,7 @@ func GetLastKnownBlockNumberFromInitialSync() string {
 
 	syncColl := configs.GetCollection(configs.DB, InitialSyncStateCollection)
 	err := syncColl.FindOne(ctx, bson.M{
-		"_id": initialSyncStartID,
+		"_id": InitialSyncStartID,
 	}).Decode(&result)
 
 	if err == nil && result.BlockNumber != "" {
@@ -300,7 +294,7 @@ func GetLastKnownBlockNumberFromInitialSync() string {
 		// Store this for future reference
 		_, _ = syncColl.UpdateOne(
 			ctx,
-			bson.M{"_id": initialSyncStartID},
+			bson.M{"_id": InitialSyncStartID},
 			bson.M{"$set": bson.M{"block_number": block.Result.Number}},
 			options.Update().SetUpsert(true),
 		)
@@ -312,13 +306,13 @@ func GetLastKnownBlockNumberFromInitialSync() string {
 
 	// If all else fails, start from genesis
 	configs.Logger.Info("No initial sync start point found, starting from genesis")
-	return genesisBlockHex
+	return GenesisBlockHex
 }
 
 // StoreInitialSyncStartBlock stores the block number that was used as the starting point
 // for the initial sync. This is used for token transfer processing after initial sync.
 func StoreInitialSyncStartBlock(blockNumber string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), DBTimeout)
 	defer cancel()
 
 	syncColl := configs.GetCollection(configs.DB, InitialSyncStateCollection)
@@ -326,7 +320,7 @@ func StoreInitialSyncStartBlock(blockNumber string) error {
 	// Update or insert the initial sync start block
 	_, err := syncColl.UpdateOne(
 		ctx,
-		bson.M{"_id": initialSyncStartID},
+		bson.M{"_id": InitialSyncStartID},
 		bson.M{"$set": bson.M{"block_number": blockNumber}},
 		options.Update().SetUpsert(true),
 	)
@@ -395,7 +389,7 @@ func InsertBlockDocument(block models.ZondDatabaseBlock) {
 
 	// Block doesn't exist, insert it. Use the wrapper struct so blockNumberInt
 	// is written alongside the hex number field for efficient range queries.
-	ctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), DBTimeout)
 	defer cancel()
 
 	doc := models.ZondDatabaseBlockWithInt{

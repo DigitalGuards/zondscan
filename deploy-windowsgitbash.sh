@@ -186,14 +186,8 @@ setup_frontend() {
     cat > .env << EOL
 DATABASE_URL=mongodb://localhost:27017/qrldata-z?readPreference=primary
 DOMAIN_NAME=http://localhost:3000
-HANDLER_URL=http://127.0.0.1:8081
-EOL
-
-    # Create .env.local file
-    cat > .env.local << EOL
-DATABASE_URL=mongodb://localhost:27017/qrldata-z?readPreference=primary
-DOMAIN_NAME=http://localhost:3000
-HANDLER_URL=http://127.0.0.1:8081
+HANDLER_URL=http://127.0.0.1:8082
+NEXT_PUBLIC_HANDLER_URL=http://localhost:3000/api
 EOL
 
     # Install dependencies

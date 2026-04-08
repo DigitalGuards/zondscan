@@ -40,22 +40,18 @@ const (
 // Transfer event signature: keccak256("Transfer(address,address,uint256)")
 const TransferEventSignature = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
-// CallContractMethod makes a zond_call to a contract method and returns the result
+// CallContractMethod makes a qrl_call to a contract method and returns the result
 func CallContractMethod(contractAddress string, methodSig string) (string, error) {
 	zap.L().Debug("Calling contract method",
 		zap.String("contractAddress", contractAddress),
 		zap.String("methodSig", methodSig[:10]+"...")) // Log just the beginning of the signature for brevity
 
-	// Ensure contract address has Z prefix for Zond RPC
-	if strings.HasPrefix(contractAddress, "0x") {
-		contractAddress = "Z" + contractAddress[2:]
-	} else if !strings.HasPrefix(contractAddress, "Z") {
-		contractAddress = "Z" + contractAddress
-	}
+	// Ensure contract address has Q prefix for QRL RPC
+	contractAddress = validation.ConvertToQAddress(contractAddress)
 
 	group := models.JsonRPC{
 		Jsonrpc: "2.0",
-		Method:  "zond_call",
+		Method:  "qrl_call",
 		Params: []interface{}{
 			map[string]string{
 				"to":   contractAddress,
@@ -78,7 +74,7 @@ func CallContractMethod(contractAddress string, methodSig string) (string, error
 	nodeUrl := os.Getenv("NODE_URL")
 	zap.L().Debug("Sending RPC request",
 		zap.String("url", nodeUrl),
-		zap.String("method", "zond_call"))
+		zap.String("method", "qrl_call"))
 
 	req, err := http.NewRequest("POST", nodeUrl, bytes.NewBuffer(b))
 	if err != nil {
@@ -328,8 +324,8 @@ func GetTokenBalance(contractAddress string, holderAddress string) (string, erro
 
 	// Special handling for zero address (common in mint events)
 	// Handle multiple formats of zero address
-	if holderAddress == "Z0" ||
-		holderAddress == "Z0000000000000000000000000000000000000000" ||
+	if holderAddress == "Q0" ||
+		holderAddress == "Q0000000000000000000000000000000000000000" ||
 		holderAddress == "0x0" ||
 		holderAddress == "0x0000000000000000000000000000000000000000" {
 		zap.L().Info("Zero address detected, returning zero balance",
@@ -338,24 +334,15 @@ func GetTokenBalance(contractAddress string, holderAddress string) (string, erro
 		return "0", nil
 	}
 
-	// Ensure contract address has Z prefix for Zond RPC
-	if strings.HasPrefix(contractAddress, "0x") {
-		contractAddress = "Z" + contractAddress[2:]
-	} else if !strings.HasPrefix(contractAddress, "Z") {
-		contractAddress = "Z" + contractAddress
-	}
+	// Ensure contract address has Q prefix for QRL RPC
+	contractAddress = validation.ConvertToQAddress(contractAddress)
 
-	// Ensure holder address has Z prefix for RPC
+	// Ensure holder address has Q prefix for RPC
 	originalHolderAddress := holderAddress // Keep original for logging
-
-	if strings.HasPrefix(holderAddress, "0x") {
-		holderAddress = "Z" + holderAddress[2:]
-	} else if !strings.HasPrefix(holderAddress, "Z") {
-		holderAddress = "Z" + holderAddress
-	}
+	holderAddress = validation.ConvertToQAddress(holderAddress)
 
 	// Extract the raw address (without prefix) for padding
-	rawAddress := strings.TrimPrefix(holderAddress, "Z")
+	rawAddress := validation.StripAddressPrefix(holderAddress)
 
 	// Pad address to 32 bytes (64 hex chars) for ABI encoding
 	paddedAddress := rawAddress
@@ -434,8 +421,8 @@ func DecodeTransferEvent(data string) (string, string, string) {
 			return "", "", ""
 		}
 
-		// Extract recipient address (remove leading zeros), canonical Z-prefix form
-		recipient := "Z" + strings.ToLower(TrimLeftZeros(data[34:74]))
+		// Extract recipient address, canonical Q-prefix form
+		recipient := "Q" + strings.ToLower(data[34:74])
 		if len(recipient) != 41 { // Check if it's a valid address length (Z + 40 hex chars)
 			return "", "", ""
 		}
@@ -461,7 +448,7 @@ func GetTransactionReceipt(txHash string) (*models.TransactionReceipt, error) {
 
 	group := models.JsonRPC{
 		Jsonrpc: "2.0",
-		Method:  "zond_getTransactionReceipt",
+		Method:  "qrl_getTransactionReceipt",
 		Params:  []interface{}{txHash},
 		ID:      1,
 	}
@@ -549,11 +536,11 @@ func IsValidRecipient(recipient string) bool {
 }
 
 // ParseTransferEvent parses a transfer event log.
-// Addresses are returned in canonical Z-prefix form.
+// Addresses are returned in canonical Q-prefix form.
 func ParseTransferEvent(log models.Log) (string, string, *big.Int, error) {
-	// Extract addresses from topics (32-byte padded, strip leading zeros)
-	from := "Z" + strings.ToLower(TrimLeftZeros(log.Topics[1][26:]))
-	to := "Z" + strings.ToLower(TrimLeftZeros(log.Topics[2][26:]))
+	// Extract addresses from topics (32-byte padded, take last 40 hex chars)
+	from := "Q" + strings.ToLower(log.Topics[1][26:])
+	to := "Q" + strings.ToLower(log.Topics[2][26:])
 
 	// Validate addresses
 	if !validation.IsValidAddress(from) {
@@ -615,9 +602,9 @@ func GetCustomTokenInfo(contractAddress string) (map[string]string, error) {
 	if err == nil && owner != "" && owner != "0x" && len(owner) >= 42 {
 		// Extract address - typically format is 0x + 32 bytes (64 chars) with address in last 20 bytes
 		if len(owner) >= 66 {
-			// Extract the address from the last 40 characters (20 bytes), canonical Z-prefix
+			// Extract the address from the last 40 characters (20 bytes), canonical Q-prefix
 			addressHex := strings.ToLower(owner[len(owner)-40:])
-			result["tokenOwner"] = "Z" + addressHex
+			result["tokenOwner"] = "Q" + addressHex
 		}
 	}
 

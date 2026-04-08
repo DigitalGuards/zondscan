@@ -85,9 +85,9 @@ async function fetchAddressData(address: string): Promise<AddressData | null> {
 
 export default async function Page({ params }: PageProps): Promise<JSX.Element> {
     const resolvedParams = await params;
-    // Normalize lowercase z prefix to uppercase Z
-    const address = resolvedParams.query.startsWith('z') && !resolvedParams.query.startsWith('0x')
-        ? 'Z' + resolvedParams.query.slice(1)
+    // Normalize lowercase q prefix to uppercase Q
+    const address = resolvedParams.query.startsWith('q') && !resolvedParams.query.startsWith('0x')
+        ? 'Q' + resolvedParams.query.slice(1)
         : resolvedParams.query;
     const addressData = await fetchAddressData(address);
     const handlerUrl = process.env.NEXT_PUBLIC_HANDLER_URL || process.env.HANDLER_URL || 'http://127.0.0.1:8080';

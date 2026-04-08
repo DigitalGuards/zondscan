@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 async function getBlocks(page: string): Promise<BlocksResponse> {
   try {
-    const response = await fetch(`${config.handlerUrl}/blocks?page=${page}`, {
+    const response = await fetch(`${config.handlerUrl}/blocks?page=${page}&limit=10`, {
       method: 'GET',
       headers: {
         'Accept': 'application/json'

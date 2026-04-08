@@ -30,10 +30,10 @@ func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool
 
 	// Add search if provided, using correct field names
 	if search != "" {
-		// Normalize the search address to canonical Z-prefix form
+		// Normalize the search address to canonical Q-prefix form
 		normalizedSearch := normalizeAddress(search)
 
-		// Zond addresses start with 'Z'. Search by normalized address or token name.
+		// Zond addresses start with 'Q'. Search by normalized address or token name.
 		searchFilter := bson.D{
 			{Key: "$or", Value: bson.A{
 				bson.D{{Key: "address", Value: normalizedSearch}},        // Match contract address
@@ -87,7 +87,7 @@ func ReturnContractCode(address string) (models.ContractInfo, error) {
 
 	var result models.ContractInfo
 
-	// Normalize address to canonical Z-prefix form
+	// Normalize address to canonical Q-prefix form
 	normalizedAddr := normalizeAddress(address)
 
 	// Query for contract code
