@@ -1,34 +1,44 @@
 'use client';
 
 import React, { useState } from 'react';
-import { toFixed } from '../lib/helpers';
+import { smallestUnitToDecimal, decimalToSmallestUnit } from '../lib/helpers';
 
 function Converter(): JSX.Element {
   const [quanta, setQuanta] = useState("");
   const [shor, setShor] = useState("");
   const [error, setError] = useState("");
 
-  const DECIMALS = 1e18; // QRL heeft 18 decimalen zoals Ethereum
-
   const handleChangeShors = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const value = e.target.value;
-    if (isNaN(Number(value))) {
-      setError("Invalid Input: Enter a number");
+    if (value === '') {
+      setError('');
+      setShor('');
+      setQuanta('');
+      return;
+    }
+    if (!/^\d+$/.test(value)) {
+      setError("Invalid Input: Enter a whole number (Shor is indivisible)");
     } else {
       setError('');
-      setQuanta(toFixed(Number(value) / DECIMALS).toString());
       setShor(value);
+      setQuanta(smallestUnitToDecimal(value, 18));
     }
   };
 
   const handleChangeQuanta = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const value = e.target.value;
-    if (isNaN(Number(value))) {
-      setError("Invalid Input: Enter a number");
+    if (value === '') {
+      setError('');
+      setShor('');
+      setQuanta('');
+      return;
+    }
+    if (!/^\d*\.?\d*$/.test(value) || value === '.') {
+      setError("Invalid Input: Enter a valid number");
     } else {
       setError('');
-      setShor(toFixed(Number(value) * DECIMALS).toString());
       setQuanta(value);
+      setShor(decimalToSmallestUnit(value, 18));
     }
   };
 
