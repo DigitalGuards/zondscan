@@ -8,13 +8,13 @@ export const metadata: Metadata = {
   description: 'Explore the free Zondscan REST API. Access blockchain data, transactions, blocks, addresses, validators, and token information for the QRL Zond network.',
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: 'https://zondscan.com/api-explorer',
+    canonical: '/api-explorer',
   },
   openGraph: {
     ...sharedMetadata.openGraph,
     title: 'API Explorer | QRL Explorer',
     description: 'Explore the free Zondscan REST API. Access blockchain data, transactions, blocks, addresses, validators, and token information for the QRL Zond network.',
-    url: 'https://zondscan.com/api-explorer',
+    url: '/api-explorer',
   },
   twitter: {
     ...sharedMetadata.twitter,

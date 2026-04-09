@@ -231,21 +231,7 @@ const endpointGroups: EndpointGroup[] = [
 
 const BASE_URL = 'https://zondscan.com/api'
 
-function classNames(...classes: string[]): string {
-  return classes.filter(Boolean).join(' ')
-}
-
-function MethodBadge({ method }: { method: string }) {
-  const colors: Record<string, string> = {
-    GET: 'bg-green-900/50 text-green-400 border-green-700',
-    POST: 'bg-blue-900/50 text-blue-400 border-blue-700',
-  }
-  return (
-    <span className={`inline-block px-2 py-0.5 text-xs font-mono font-bold rounded border ${colors[method] || 'bg-gray-700 text-gray-300 border-gray-600'}`}>
-      {method}
-    </span>
-  )
-}
+import MethodBadge from '../components/MethodBadge'
 
 export default function ApiExplorerClient(): JSX.Element {
   return (
@@ -279,10 +265,7 @@ export default function ApiExplorerClient(): JSX.Element {
                       </span>
                     </span>
                     <ChevronDownIcon
-                      className={classNames(
-                        open ? 'rotate-180' : '',
-                        'h-5 w-5 text-[#ffa729] transition-transform duration-200'
-                      )}
+                      className={(open ? 'rotate-180' : '') + ' h-5 w-5 text-[#ffa729] transition-transform duration-200'}
                     />
                   </Disclosure.Button>
                   <Disclosure.Panel className="mt-1 space-y-2">
