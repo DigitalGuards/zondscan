@@ -38,10 +38,7 @@ export {
   type DownloadBtnProps,
   type DownloadBtnInternalProps,
   type TableProps,
-  type TableData,
   type TransactionsListProps,
   type TransactionCardProps,
-  type PaginationProps,
-  type NavigationHandlers,
   type PageProps,
 } from './components';

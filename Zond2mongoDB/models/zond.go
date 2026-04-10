@@ -2,20 +2,12 @@ package models
 
 import (
 	"math/big"
-
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type RPC struct {
 	Jsonrpc string `json:"jsonrpc"`
 	ID      int    `json:"id"`
 	Result  string `json:"result"`
-}
-
-type Zond struct {
-	Jsonrpc   string    `json:"jsonrpc"`
-	ID        int       `json:"id"`
-	PreResult PreResult `json:"result"`
 }
 
 type ZondDatabaseBlock struct {
@@ -58,32 +50,6 @@ type Transaction struct {
 	PublicKey        string `json:"publicKey"`
 	Data             string `json:"data"`
 	Status           string `json:"status"`
-}
-
-type PreResult struct {
-	BaseFeePerGas    string        `json:"baseFeePerGas"`
-	GasLimit         string        `json:"gasLimit"`
-	GasUsed          string        `json:"gasUsed"`
-	Hash             string        `json:"hash"`
-	Number           string        `json:"number"`
-	ParentHash       string        `json:"parentHash"`
-	ReceiptsRoot     string        `json:"receiptsRoot"`
-	StateRoot        string        `json:"stateRoot"`
-	Timestamp        string        `json:"timestamp"`
-	Transactions     []Transaction `json:"transactions"`
-	TransactionsRoot string        `json:"transactionsRoot"`
-	Difficulty       string        `json:"difficulty"`
-	ExtraData        string        `json:"extraData"`
-	LogsBloom        string        `json:"logsBloom"`
-	Miner            string        `json:"miner"`
-	MixHash          string        `json:"mixHash"`
-	Nonce            string        `json:"nonce"`
-	Sha3Uncles       string        `json:"sha3Uncles"`
-	Size             string        `json:"size"`
-	TotalDifficulty  string        `json:"totalDifficulty"`
-	Uncles           []interface{} `json:"uncles"`
-	Withdrawals      []Withdrawal  `json:"withdrawals"`
-	WithdrawalsRoot  string        `json:"withdrawalsRoot"`
 }
 
 type Result struct {
@@ -150,10 +116,4 @@ type ZondLogsResponse struct {
 	Id      int    `json:"id"`
 	Jsonrpc string `json:"jsonrpc"`
 	Result  []Log  `json:"result"`
-}
-
-type Vote struct {
-	ID     primitive.ObjectID `bson:"_id,omitempty"`
-	Option string             `bson:"option"`
-	Count  *big.Int           `bson:"count"`
 }

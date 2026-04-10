@@ -25,14 +25,6 @@ export interface TableProps {
 }
 
 /**
- * Data structure for table component
- */
-export interface TableData {
-  transactions: Transaction[];
-  internalTransactions: InternalTransaction[];
-}
-
-/**
  * Props for transactions list component
  */
 export interface TransactionsListProps {
@@ -48,25 +40,6 @@ export interface TransactionsListProps {
  */
 export interface TransactionCardProps {
   transaction: Transaction;
-}
-
-/**
- * Props for pagination component
- */
-export interface PaginationProps {
-  currentPage: number;
-  totalPages: number;
-  onNextPage: () => void;
-  onPreviousPage: () => void;
-}
-
-/**
- * Navigation handler functions
- */
-export interface NavigationHandlers {
-  navigateToPage: (page: number) => void;
-  goToNextPage: () => void;
-  goToPreviousPage: () => void;
 }
 
 /**

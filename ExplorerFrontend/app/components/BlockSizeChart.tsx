@@ -131,21 +131,6 @@ function BrushChart({
 );
 
 
-  // console.log('blocks:', blocks);
-  // console.log('blocks[0]:', blocks[0]);
-  // console.log('Type of blocks:', typeof blocks);
-  // console.log('Is blocks an array?:', Array.isArray(blocks));
-  // if (Array.isArray(blocks)) {
-  //   console.log('Length of blocks:', blocks.length);
-  //   if (blocks.length > 0) {
-  //     console.log('Type of blocks[0]:', typeof blocks[0]);
-  //     console.log('Is blocks[0] an array?:', Array.isArray(blocks[0]));
-  //     if (Array.isArray(blocks[0])) {
-  //       console.log('Length of blocks[0]:', blocks[0].length);
-  //     }
-  //   }
-  // }
-  
   // event handlers
   const handleClearClick = (): void => {
     if (brushRef?.current) {

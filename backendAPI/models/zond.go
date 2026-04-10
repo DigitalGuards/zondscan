@@ -73,32 +73,6 @@ type Transactions struct {
 	Status           string `json:"status"`
 }
 
-type ResultOld struct {
-	BaseFeePerGas    string        `json:"baseFeePerGas"`
-	GasLimit         string        `json:"gasLimit"`
-	GasUsed          string        `json:"gasUsed"`
-	Hash             string        `json:"hash"`
-	Number           string        `json:"number"`
-	ParentHash       string        `json:"parentHash"`
-	ReceiptsRoot     string        `json:"receiptsRoot"`
-	StateRoot        string        `json:"stateRoot"`
-	Timestamp        string        `json:"timestamp"`
-	Transactions     []Transaction `json:"transactions"`
-	TransactionsRoot string        `json:"transactionsRoot"`
-	Difficulty       string        `json:"difficulty"`
-	ExtraData        string        `json:"extraData"`
-	LogsBloom        string        `json:"logsBloom"`
-	Miner            string        `json:"miner"`
-	MixHash          string        `json:"mixHash"`
-	Nonce            string        `json:"nonce"`
-	Sha3Uncles       string        `json:"sha3Uncles"`
-	Size             string        `json:"size"`
-	TotalDifficulty  string        `json:"totalDifficulty"`
-	Uncles           []interface{} `json:"uncles"`
-	Withdrawals      []Withdrawal  `json:"withdrawals"`
-	WithdrawalsRoot  string        `json:"withdrawalsRoot"`
-}
-
 type Result struct {
 	BaseFeePerGas    string        `json:"baseFeePerGas"`
 	GasLimit         string        `json:"gasLimit"`

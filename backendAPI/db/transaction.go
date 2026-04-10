@@ -231,59 +231,6 @@ func ReturnTransactionsNetwork(page int) ([]models.TransactionByAddress, error) 
 	return transactions, nil
 }
 
-func ReturnTransactions(address string, page, limit int) ([]models.TransactionByAddress, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	var transactions []models.TransactionByAddress
-	defer cancel()
-
-	fmt.Println(address, page, limit)
-
-	projection := primitive.D{
-		{Key: "inOut", Value: 1},
-		{Key: "txType", Value: 1},
-		{Key: "address", Value: 1},
-		{Key: "txHash", Value: 1},
-		{Key: "timeStamp", Value: 1},
-		{Key: "amount", Value: 1},
-	}
-
-	opts := options.Find().
-		SetProjection(projection).
-		SetSort(primitive.D{{Key: "timeStamp", Value: -1}})
-
-	if limit != 0 {
-		if page == 0 {
-			page = 1
-		}
-		opts.SetSkip(int64((page - 1) * limit))
-		opts.SetLimit(int64(limit))
-	}
-
-	// Normalize address to handle both uppercase and lowercase Z prefix
-	normalizedAddress := strings.TrimPrefix(strings.TrimPrefix(address, "Z"), "z")
-	decoded, err := hex.DecodeString(normalizedAddress)
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	filter := primitive.D{{Key: "address", Value: decoded}}
-	results, err := configs.TransactionByAddressCollection.Find(ctx, filter, opts)
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	defer results.Close(ctx)
-	for results.Next(ctx) {
-		var singleTransaction models.TransactionByAddress
-		if err = results.Decode(&singleTransaction); err != nil {
-			fmt.Println(err)
-		}
-		transactions = append(transactions, singleTransaction)
-	}
-
-	return transactions, nil
-}
-
 func CountTransactionsNetwork() (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -398,26 +345,6 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 
 	filter := primitive.D{{Key: "txHash", Value: decoded}}
 	err = configs.TransferCollections.FindOne(ctx, filter).Decode(&result)
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	return result, err
-}
-
-func ReturnSingleCoinbaseTransfer(query string) (models.Transfer, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	var result models.Transfer
-
-	decoded, err := hex.DecodeString(strings.TrimPrefix(query, "0x"))
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	filter := primitive.D{{Key: "txHash", Value: decoded}}
-	err = configs.CoinbaseCollection.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
 		fmt.Println(err)
 	}

@@ -13,20 +13,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// UpdateValidators updates the previousHash field on a block document.
-func UpdateValidators(blockNumber string, previousHash string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	filter := bson.M{"result.number": blockNumber}
-	update := bson.M{"$set": bson.M{"previousHash": previousHash}}
-
-	_, err := configs.BlocksCollections.UpdateOne(ctx, filter, update)
-	if err != nil {
-		configs.Logger.Info("Failed to update validator document", zap.Error(err))
-	}
-}
-
 // InsertValidators stores each validator as its own document using BulkWrite upserts.
 // The document _id is the validator index string. This replaces the legacy single
 // mega-document approach and avoids MongoDB's 16 MB document size limit.

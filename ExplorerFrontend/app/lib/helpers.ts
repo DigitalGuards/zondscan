@@ -179,25 +179,6 @@ export function formatTimestamp(timestamp: number | undefined | null): string {
   return `${month}/${day}/${year}, ${hour12}:${minutes}:${seconds} ${ampm} UTC`;
 }
 
-export function formatNumber(value: number): string {
-  if (typeof value !== "number" || isNaN(value)) {
-    return "Error";
-  }
-  let formatted: string;
-  if (value >= 1e12) {
-    formatted = (value / 1e12).toFixed(2) + 'T';
-  } else if (value >= 1e9) {
-    formatted = (value / 1e9).toFixed(2) + 'B';
-  } else if (value >= 1e6) {
-    formatted = (value / 1e6).toFixed(2) + 'M';
-  } else if (value >= 1e3) {
-    formatted = (value / 1e3).toFixed(2) + 'K';
-  } else {
-    formatted = value.toFixed(2);
-  }
-  return '$' + formatted;
-}
-
 export function formatNumberWithCommas(x: number | string | undefined | null): string {
   if (x === undefined || x === null) {
     return "0";

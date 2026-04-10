@@ -12,11 +12,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-func ReturnDateTime() string {
-	currentTime := time.Now()
-	return currentTime.Format("2006-01-02 3:4:5 PM")
-}
-
 func ReturnTotalCirculatingSupply() string {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
