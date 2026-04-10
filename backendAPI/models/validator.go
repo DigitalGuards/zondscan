@@ -1,15 +1,5 @@
 package models
 
-// ValidatorStorage represents the legacy single mega-document in MongoDB.
-// Kept for backward-compatibility with any remaining code paths; new writes
-// use ValidatorDocument (one document per validator) instead.
-type ValidatorStorage struct {
-	ID         string            `bson:"_id" json:"_id"`
-	Epoch      string            `bson:"epoch" json:"epoch"`           // Stored as hex
-	Validators []ValidatorRecord `bson:"validators" json:"validators"` // All validator details
-	UpdatedAt  string            `bson:"updatedAt" json:"updatedAt"`   // Timestamp in hex
-}
-
 // ValidatorDocument is the per-validator MongoDB document written by the syncer.
 // _id is the validator index (decimal string).
 type ValidatorDocument struct {
@@ -26,21 +16,6 @@ type ValidatorDocument struct {
 	IsLeader                   bool   `bson:"isLeader" json:"isLeader"`
 	Epoch                      string `bson:"epoch" json:"epoch"`
 	UpdatedAt                  string `bson:"updatedAt" json:"updatedAt"`
-}
-
-// ValidatorRecord represents a single validator's data
-type ValidatorRecord struct {
-	Index                      string `bson:"index" json:"index"`                                       // Stored as hex
-	PublicKeyHex               string `bson:"publicKeyHex" json:"publicKeyHex"`                         // Converted from base64 to hex
-	WithdrawalCredentialsHex   string `bson:"withdrawalCredentialsHex" json:"withdrawalCredentialsHex"` // Converted from base64 to hex
-	EffectiveBalance           string `bson:"effectiveBalance" json:"effectiveBalance"`                 // Stored as hex
-	Slashed                    bool   `bson:"slashed" json:"slashed"`
-	ActivationEligibilityEpoch string `bson:"activationEligibilityEpoch" json:"activationEligibilityEpoch"` // Stored as hex
-	ActivationEpoch            string `bson:"activationEpoch" json:"activationEpoch"`                       // Stored as hex
-	ExitEpoch                  string `bson:"exitEpoch" json:"exitEpoch"`                                   // Stored as hex
-	WithdrawableEpoch          string `bson:"withdrawableEpoch" json:"withdrawableEpoch"`                   // Stored as hex
-	SlotNumber                 string `bson:"slotNumber" json:"slotNumber"`                                 // Stored as hex
-	IsLeader                   bool   `bson:"isLeader" json:"isLeader"`
 }
 
 // ValidatorResponse represents the API response format

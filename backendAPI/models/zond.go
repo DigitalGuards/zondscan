@@ -36,62 +36,6 @@ type Transaction struct {
 	Status           string `json:"status"`
 }
 
-type ProtocolTransactions struct {
-	BlockHash           string `json:"blockHash"`
-	BlockNumber         string `json:"blockNumber"`
-	From                string `json:"from"`
-	Hash                string `json:"hash"`
-	Nonce               string `json:"nonce"`
-	TransactionIndex    string `json:"transactionIndex"`
-	BlockProposerReward string `json:"blockProposerReward,omitempty"`
-	AttestorReward      string `json:"attestorReward,omitempty"`
-	FeeReward           string `json:"feeReward,omitempty"`
-	Type                string `json:"type"`
-	ChainID             string `json:"chainId"`
-	Signature           string `json:"signature"`
-	Pk                  string `json:"pk"`
-}
-
-type Transactions struct {
-	BlockHash        string `json:"blockHash"`
-	BlockNumber      string `json:"blockNumber"`
-	From             string `json:"from"`
-	Gas              string `json:"gas"`
-	GasPrice         string `json:"gasPrice"`
-	Hash             string `json:"hash"`
-	Nonce            string `json:"nonce"`
-	To               string `json:"to"`
-	TransactionIndex string `json:"transactionIndex"`
-	Type             string `json:"type"`
-	Value            string `json:"value"`
-	ChainID          string `json:"chainId"`
-	Signature        string `json:"signature"`
-	Pk               string `json:"pk"`
-	Data             string `json:"data"`
-	Status           string `json:"status"`
-}
-
-type ResultOld struct {
-	BaseFeePerGas    string        `json:"baseFeePerGas"`
-	GasLimit         string        `json:"gasLimit"`
-	GasUsed          string        `json:"gasUsed"`
-	Hash             string        `json:"hash"`
-	Number           string        `json:"number"`
-	ParentHash       string        `json:"parentHash"`
-	ReceiptsRoot     string        `json:"receiptsRoot"`
-	StateRoot        string        `json:"stateRoot"`
-	Timestamp        string        `json:"timestamp"`
-	Transactions     []Transaction `json:"transactions"`
-	TransactionsRoot string        `json:"transactionsRoot"`
-	ExtraData        string        `json:"extraData"`
-	LogsBloom        string        `json:"logsBloom"`
-	Miner            string        `json:"miner"`
-	Size             string        `json:"size"`
-	PrevRandao       string        `json:"prevRandao"`
-	Withdrawals      []Withdrawal  `json:"withdrawals"`
-	WithdrawalsRoot  string        `json:"withdrawalsRoot"`
-}
-
 type Result struct {
 	BaseFeePerGas    string        `json:"baseFeePerGas"`
 	GasLimit         string        `json:"gasLimit"`

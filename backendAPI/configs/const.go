@@ -16,7 +16,6 @@ var InternalTransactionByAddressCollection *mongo.Collection = GetCollection(DB,
 var AddressesCollections *mongo.Collection = GetCollection(DB, "addresses")
 var BlocksCollection *mongo.Collection = GetCollection(DB, "blocks")
 var ValidatorsCollections *mongo.Collection = GetCollection(DB, "validators")
-var CoinbaseCollection *mongo.Collection = GetCollection(DB, "coinbase")
 var ContractInfoCollection *mongo.Collection = GetCollection(DB, "contractCode")
 var BlockSizesCollection *mongo.Collection = GetCollection(DB, "averageBlockSize")
 var TotalCirculatingSupplyCollection *mongo.Collection = GetCollection(DB, "totalCirculatingSupply")

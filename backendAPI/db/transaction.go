@@ -406,26 +406,6 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 	return result, err
 }
 
-func ReturnSingleCoinbaseTransfer(query string) (models.Transfer, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	var result models.Transfer
-
-	decoded, err := hex.DecodeString(strings.TrimPrefix(query, "0x"))
-	if err != nil {
-		log.Printf("error decoding coinbase tx hash hex: %v", err)
-	}
-
-	filter := primitive.D{{Key: "txHash", Value: decoded}}
-	err = configs.CoinbaseCollection.FindOne(ctx, filter).Decode(&result)
-	if err != nil {
-		log.Printf("error finding coinbase transfer: %v", err)
-	}
-
-	return result, err
-}
-
 func ReturnDailyTransactionsVolume() int64 {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

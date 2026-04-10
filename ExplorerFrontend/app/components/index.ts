@@ -1,7 +1,6 @@
 export { default as Alert } from "./Alert";
 export { default as Badge } from "./Badge";
 export { default as BalanceCheckTool } from "./BalanceCheckTool";
-export { default as BlockSizeChart } from "./BlockSizeChart";
 export { default as Breadcrumbs } from "./Breadcrumbs";
 export { default as CopyButton } from "./CopyButton";
 export { default as DebouncedInput } from "./DebouncedInput";

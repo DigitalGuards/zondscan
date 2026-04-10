@@ -138,32 +138,3 @@ func GetTokenFromDatabase(contractAddress string) *models.ContractInfo {
 	return contract
 }
 
-// RefreshTokenMetadata updates the token metadata (name, symbol, decimals, totalSupply)
-// from the blockchain while preserving creation information.
-func RefreshTokenMetadata(contractAddress string) error {
-	detection := DetectToken(contractAddress)
-	if !detection.IsToken {
-		configs.Logger.Debug("Contract is not a token, skipping refresh",
-			zap.String("address", contractAddress))
-		return nil
-	}
-
-	// Get existing contract to preserve creation info
-	existingContract, _ := GetContract(contractAddress)
-
-	contractInfo := models.ContractInfo{
-		Address:     contractAddress,
-		IsToken:     true,
-		Name:        detection.Name,
-		Symbol:      detection.Symbol,
-		Decimals:    detection.Decimals,
-		TotalSupply: detection.TotalSupply,
-		Status:      "0x1",
-		UpdatedAt:   time.Now().UTC().Format(time.RFC3339),
-	}
-
-	// Preserve creation info if it exists
-	preserveCreationInfo(&contractInfo, existingContract)
-
-	return StoreContract(contractInfo)
-}
