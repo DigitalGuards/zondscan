@@ -121,19 +121,6 @@ type GetCode struct {
 	Result  string `json:"result"`
 }
 
-type ZondCallPayload struct {
-	Jsonrpc string        `json:"jsonrpc"`
-	Id      int           `json:"id"`
-	Method  string        `json:"method"`
-	Params  []interface{} `json:"params"`
-}
-
-type ZondResponse struct {
-	Id      int    `json:"id"`
-	Jsonrpc string `json:"jsonrpc"`
-	Result  string `json:"result"`
-}
-
 // ZondLogsResponse represents the response from qrl_getLogs RPC call
 // It uses the Log struct defined in models/receipt.go
 type ZondLogsResponse struct {

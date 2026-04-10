@@ -17,22 +17,6 @@ export interface DownloadBtnInternalProps {
 }
 
 /**
- * Props for table component
- */
-export interface TableProps {
-  transactions: Transaction[];
-  internalt: InternalTransaction[];
-}
-
-/**
- * Data structure for table component
- */
-export interface TableData {
-  transactions: Transaction[];
-  internalTransactions: InternalTransaction[];
-}
-
-/**
  * Props for transactions list component
  */
 export interface TransactionsListProps {
@@ -58,15 +42,6 @@ export interface PaginationProps {
   totalPages: number;
   onNextPage: () => void;
   onPreviousPage: () => void;
-}
-
-/**
- * Navigation handler functions
- */
-export interface NavigationHandlers {
-  navigateToPage: (page: number) => void;
-  goToNextPage: () => void;
-  goToPreviousPage: () => void;
 }
 
 /**

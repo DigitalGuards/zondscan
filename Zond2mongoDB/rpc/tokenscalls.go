@@ -28,14 +28,6 @@ const (
 	SIG_SUPPLY   = "0x18160ddd" // totalSupply()
 )
 
-// Custom token methods
-const (
-	SIG_MAX_SUPPLY      = "0x32668b54" // maxSupply()
-	SIG_MAX_TX_AMOUNT   = "0x94303c2d" // maxTxAmount()
-	SIG_MAX_WALLET_SIZE = "0x41d3014e" // maxWalletSize()
-	SIG_OWNER           = "0x8da5cb5b" // owner()
-)
-
 // Event signatures
 // Transfer event signature: keccak256("Transfer(address,address,uint256)")
 const TransferEventSignature = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
@@ -530,11 +522,6 @@ func TrimLeftZeros(hex string) string {
 	return "0"
 }
 
-// IsValidRecipient checks if a recipient address is valid
-func IsValidRecipient(recipient string) bool {
-	return validation.IsValidAddress(recipient)
-}
-
 // ParseTransferEvent parses a transfer event log.
 // Addresses are returned in canonical Q-prefix form.
 func ParseTransferEvent(log models.Log) (string, string, *big.Int, error) {
@@ -563,50 +550,3 @@ func ParseTransferEvent(log models.Log) (string, string, *big.Int, error) {
 	return from, to, amount, nil
 }
 
-// GetCustomTokenInfo attempts to read custom token properties
-func GetCustomTokenInfo(contractAddress string) (map[string]string, error) {
-	result := make(map[string]string)
-
-	// Try to get max supply
-	maxSupply, err := CallContractMethod(contractAddress, SIG_MAX_SUPPLY)
-	if err == nil && maxSupply != "" && maxSupply != "0x" {
-		// Convert hex to decimal
-		bigInt := new(big.Int)
-		if _, ok := bigInt.SetString(strings.TrimPrefix(maxSupply, "0x"), 16); ok {
-			result["maxSupply"] = bigInt.String()
-		}
-	}
-
-	// Try to get max tx amount
-	maxTxAmount, err := CallContractMethod(contractAddress, SIG_MAX_TX_AMOUNT)
-	if err == nil && maxTxAmount != "" && maxTxAmount != "0x" {
-		// Convert hex to decimal
-		bigInt := new(big.Int)
-		if _, ok := bigInt.SetString(strings.TrimPrefix(maxTxAmount, "0x"), 16); ok {
-			result["maxTxLimit"] = bigInt.String()
-		}
-	}
-
-	// Try to get max wallet size
-	maxWalletSize, err := CallContractMethod(contractAddress, SIG_MAX_WALLET_SIZE)
-	if err == nil && maxWalletSize != "" && maxWalletSize != "0x" {
-		// Convert hex to decimal
-		bigInt := new(big.Int)
-		if _, ok := bigInt.SetString(strings.TrimPrefix(maxWalletSize, "0x"), 16); ok {
-			result["maxWalletAmount"] = bigInt.String()
-		}
-	}
-
-	// Try to get owner
-	owner, err := CallContractMethod(contractAddress, SIG_OWNER)
-	if err == nil && owner != "" && owner != "0x" && len(owner) >= 42 {
-		// Extract address - typically format is 0x + 32 bytes (64 chars) with address in last 20 bytes
-		if len(owner) >= 66 {
-			// Extract the address from the last 40 characters (20 bytes), canonical Q-prefix
-			addressHex := strings.ToLower(owner[len(owner)-40:])
-			result["tokenOwner"] = "Q" + addressHex
-		}
-	}
-
-	return result, nil
-}
