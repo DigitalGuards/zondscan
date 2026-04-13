@@ -10,6 +10,7 @@ The project consists of three main components:
    - Modern UI with TypeScript support
    - Real-time data updates
    - Responsive design for all devices
+   - Hosts a live [QRL Connect](https://github.com/DigitalGuards/myqrlwallet-connect) demo dApp at [`/dapp-example`](https://zondscan.com/dapp-example), baked in at build time from the connect repo (see [`ExplorerFrontend/scripts/README.md`](ExplorerFrontend/scripts/README.md))
 
 2. **backendAPI**: Golang-based API server
    - RESTful API endpoints
