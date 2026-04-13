@@ -93,33 +93,3 @@ func GetDailyTransactionVolume() {
 	}
 }
 
-func GetVolumeFromBlockTimestamps(startTimestamp string, endTimestamp string) float64 {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// Query transfers within the time range using MongoDB filter
-	filter := bson.M{
-		"blockTimestamp": bson.M{
-			"$gte": startTimestamp,
-			"$lte": endTimestamp,
-		},
-	}
-
-	cursor, err := configs.TransferCollections.Find(ctx, filter)
-	if err != nil {
-		configs.Logger.Error("Failed to find transfers", zap.Error(err))
-		return 0
-	}
-	defer cursor.Close(ctx)
-
-	var totalVolume float64 = 0
-	for cursor.Next(ctx) {
-		var singleTransfer models.Transfer
-		if err = cursor.Decode(&singleTransfer); err != nil {
-			continue
-		}
-		totalVolume += singleTransfer.Value
-	}
-
-	return totalVolume
-}
