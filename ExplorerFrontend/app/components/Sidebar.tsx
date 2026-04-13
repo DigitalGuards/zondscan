@@ -327,6 +327,24 @@ export default function Sidebar(): JSX.Element {
               <span className="truncate">QRL Zond Wallet</span>
               <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5 text-gray-500 ml-auto flex-shrink-0" />
             </a>
+            <a
+              href="/dapp-example/"
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-gray-300
+                         hover:bg-[#2d2d2d] rounded-md transition-all duration-200
+                         hover:text-[#ffa729] group whitespace-nowrap"
+            >
+              <div className="w-5 h-5 relative flex-shrink-0">
+                <Image
+                  src={PartnerHandshakeIcon}
+                  alt=""
+                  fill
+                  sizes="20px"
+                  style={{ objectFit: 'contain' }}
+                  className={`${ICON_FILTER} ${ICON_FILTER_HOVER} transition-[filter]`}
+                />
+              </div>
+              <span className="truncate">dApp Example</span>
+            </a>
             <Link
               href="/api-explorer"
               aria-current={isActive(pathname, '/api-explorer') ? 'page' : undefined}
