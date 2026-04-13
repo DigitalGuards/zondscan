@@ -50,3 +50,5 @@ Zond2mongoDB/syncer
 Zond2mongoDB/backendAPI
 backendAPI/handler/main
 ExplorerFrontend/tsconfig.tsbuildinfo
+ExplorerFrontend/.dapp-example-cache
+ExplorerFrontend/public/dapp-example
