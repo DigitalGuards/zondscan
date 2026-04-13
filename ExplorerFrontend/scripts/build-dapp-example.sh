@@ -36,8 +36,9 @@ else
     rm -rf "$CACHE_DIR"
     git clone --depth 1 --branch "$REF" "$REPO_URL" "$CACHE_DIR"
   else
+    # FETCH_HEAD works for both branches and tags; origin/$REF would not resolve for tags.
     git -C "$CACHE_DIR" fetch --depth 1 origin "$REF"
-    git -C "$CACHE_DIR" checkout -B "$REF" "origin/$REF"
+    git -C "$CACHE_DIR" checkout --detach FETCH_HEAD
   fi
 fi
 
