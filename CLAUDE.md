@@ -136,6 +136,13 @@ Analytics:
 - `app/lib/helpers.ts` - Formatting and conversion utilities
 - Pattern: Server Components (`page.tsx`) fetch data; Client Components (`*-client.tsx`) handle interactivity
 
+### Hosted dApp Example (`/dapp-example`)
+- The route at `/dapp-example` is a static bundle baked in at build time from `DigitalGuards/myqrlwallet-connect` (folder: `example/`). It's served by Next directly from `public/dapp-example/`. See `ExplorerFrontend/scripts/README.md` for the full pipeline, env overrides, and troubleshooting.
+- Pipeline: `ExplorerFrontend/scripts/build-dapp-example.sh` is wired via the `prebuild` npm hook, so every `npm run build` (and `update-frontend.sh`) clones the connect repo fresh and rebuilds the example with `--base=/dapp-example/`.
+- **Gotcha:** `next dev` does NOT trigger `prebuild`, so `/dapp-example` 404s in dev until `npm run build` has been run at least once. When debugging a local 404, check `public/dapp-example/index.html` exists before anything else.
+- The `next.config.js` rewrite maps `/dapp-example` → `/dapp-example/index.html` (Next doesn't auto-serve `index.html` for directory requests under `public/`). Don't remove it.
+- Sidebar link uses a plain `<a>` with hard navigation (`Sidebar.tsx`) because the target is a static asset, not an App Router route — don't convert it to `<Link>`.
+
 ### Backend API (Go + Gin)
 - `configs/` - Environment and MongoDB setup
 - `db/` - Database query functions (one file per entity type)
