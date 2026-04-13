@@ -63,40 +63,6 @@ export function toFixed(x: number | string | undefined | null): string {
   return num.toString();
 }
 
-export function formatGas(amount: number | string | undefined | null): [string, string] {
-  // Handle undefined or null
-  if (amount === undefined || amount === null) {
-    return ['0', 'Shor'];
-  }
-
-  // Handle zero amount
-  if (amount === 0 || amount === '0' || amount === '0x0') {
-    return ['0', 'Shor'];
-  }
-
-  try {
-    let value: number | bigint;
-    // Handle hex strings (e.g., "0x123")
-    if (typeof amount === 'string' && amount.startsWith('0x')) {
-      value = parseInt(amount, 16);
-    }
-    // Handle number values
-    else if (typeof amount === 'number') {
-      value = amount;
-    }
-    // Handle other formats
-    else {
-      value = BigInt(amount);
-    }
-
-    // Return the numeric value as a string with 'Shor' unit
-    return [value.toString(), 'Shor'];
-  } catch (error) {
-    console.error('Error converting gas amount:', error, amount);
-    return ['0', 'Shor'];
-  }
-}
-
 export function formatGasPrice(wei: number | string | undefined | null): string {
   if (wei === undefined || wei === null || wei === 0 || wei === '0' || wei === '0x0') {
     return '0';
@@ -213,25 +179,6 @@ export function formatTimestamp(timestamp: number | undefined | null): string {
   const ampm = hours >= 12 ? 'PM' : 'AM';
   const hour12 = hours % 12 || 12;
   return `${month}/${day}/${year}, ${hour12}:${minutes}:${seconds} ${ampm} UTC`;
-}
-
-export function formatNumber(value: number): string {
-  if (typeof value !== "number" || isNaN(value)) {
-    return "Error";
-  }
-  let formatted: string;
-  if (value >= 1e12) {
-    formatted = (value / 1e12).toFixed(2) + 'T';
-  } else if (value >= 1e9) {
-    formatted = (value / 1e9).toFixed(2) + 'B';
-  } else if (value >= 1e6) {
-    formatted = (value / 1e6).toFixed(2) + 'M';
-  } else if (value >= 1e3) {
-    formatted = (value / 1e3).toFixed(2) + 'K';
-  } else {
-    formatted = value.toFixed(2);
-  }
-  return '$' + formatted;
 }
 
 export function formatNumberWithCommas(x: number | string | undefined | null): string {

@@ -704,67 +704,6 @@ func GetCode(address string, blockNrOrHash string) (string, error) {
 	return GetCode.Result, nil
 }
 
-func ZondCall(contractAddress string) (*models.ZondResponse, error) {
-	// Validate contract address format
-	if err := validation.ValidateAddress(contractAddress); err != nil {
-		return nil, fmt.Errorf("invalid contract address format: %v", err)
-	}
-
-	data := map[string]interface{}{
-		"from":     "Q20748ad4e06597dbca756e2731cd26094c05273a",
-		"chainId":  "0x7e7e",
-		"nonce":    "0x0",
-		"gas":      "0x61184",
-		"gasPrice": "0x2710",
-		"to":       contractAddress,
-		"value":    "0x0",
-		"data":     "",
-	}
-	blockData := map[string]string{
-		"blockNumber": "latest",
-	}
-
-	payload := models.ZondCallPayload{
-		Jsonrpc: "2.0",
-		Id:      1,
-		Method:  "qrl_call",
-		Params:  []interface{}{data, blockData},
-	}
-
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		zap.L().Info("Failed JSON marshal", zap.Error(err))
-		return nil, err
-	}
-
-	resp, err := GetHTTPClient().Post(os.Getenv("NODE_URL"), "application/json", bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		zap.L().Info("Failed to get a response from HTTP POST request", zap.Error(err))
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		zap.L().Info("Failed to read response body", zap.Error(err))
-		return nil, err
-	}
-
-	var responseData models.ZondResponse
-	err = json.Unmarshal(body, &responseData)
-	if err != nil {
-		zap.L().Info("Failed JSON unmarshal", zap.Error(err))
-		return nil, err
-	}
-
-	// Validate response data
-	if responseData.Result != "" && !validation.IsValidHexString(responseData.Result) {
-		return nil, fmt.Errorf("invalid response format: %s", responseData.Result)
-	}
-
-	return &responseData, nil
-}
-
 // ZondGetBlockLogs retrieves logs for a specific block with optional topic filtering
 func ZondGetBlockLogs(blockNumber string, topics []string) (*models.ZondLogsResponse, error) {
 	// Validate block number format - Zond uses 0x prefix for block numbers
