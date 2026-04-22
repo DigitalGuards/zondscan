@@ -5,6 +5,7 @@ ExplorerFrontend/.pnp
 ExplorerFrontend/.pnp.js
 ExplorerFrontend/coverage
 ExplorerFrontend/build
+ExplorerFrontend/tsconfig.tsbuildinfo
 ExplorerFrontend/.env.local
 Zond2mongoDB/.env
 Zond2mongoDB/main.exe
