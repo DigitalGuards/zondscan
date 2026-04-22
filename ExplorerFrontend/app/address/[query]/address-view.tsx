@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import CopyButton from "../../components/CopyButton";
 import QRCodeButton from "../../components/QRCodeButton";
+import ContractBytecode from "../../components/ContractBytecode";
 import TanStackTable from "../../components/TanStackTable";
 import BalanceDisplay from "./balance-display";
 import ActivityDisplay from "./activity-display";
@@ -203,6 +204,9 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                             {contractData.status === "0x1" ? "Success" : "Failed"}
                                         </div>
                                     </div>
+
+                                    {/* Contract Bytecode */}
+                                    <ContractBytecode contractCode={contractData.contractCode} />
                                 </div>
                             </div>
                         </div>
