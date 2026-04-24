@@ -79,7 +79,7 @@ select_node() {
                 break
                 ;;
             "Testnet Remote node (qrlwallet.com)")
-                NODE_URL="https://qrlwallet.com/api/zond-rpc/testnet"
+                NODE_URL="https://qrlwallet.com/api/qrl-rpc/testnet"
                 break
                 ;;
             "Custom node (enter URL manually)")
@@ -131,14 +131,6 @@ clone_repo() {
     if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
         print_status "Repository already exists. Checking git status..."
         git status
-        
-        read -p "Would you like to pull the latest changes? (y/n): " PULL_CHANGES
-        if [[ $PULL_CHANGES =~ ^[Yy]$ ]]; then
-            print_status "Pulling latest changes..."
-            git pull || print_error "Failed to pull latest changes"
-        else
-            print_status "Skipping pull, continuing with existing code..."
-        fi
     else
         print_status "Cloning QRL Explorer repository..."
         git clone https://github.com/DigitalGuards/zondscan.git || print_error "Failed to clone repository"
@@ -146,6 +138,87 @@ clone_repo() {
     fi
 
     export BASE_DIR=$(pwd)
+}
+
+# Prompt for branch selection (checkout + optional pull)
+select_branch() {
+    cd "$BASE_DIR" || print_error "BASE_DIR not set or invalid"
+
+    print_status "Fetching latest refs from origin..."
+    git fetch --all --prune 2>/dev/null || print_status "Fetch failed, continuing with cached refs"
+
+    CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    print_status "Current branch: $CURRENT_BRANCH"
+
+    # Build deduped branch list from local + origin (skip the bare 'origin' HEAD pointer)
+    mapfile -t BRANCHES < <(git for-each-ref --format='%(refname:short)' refs/heads refs/remotes/origin \
+        | grep -vE '^origin(/HEAD)?$' \
+        | sed 's|^origin/||' \
+        | sort -u)
+
+    print_status "Select branch to deploy:"
+    PS3="Please choose a branch: "
+    options=("Keep current ($CURRENT_BRANCH)" "${BRANCHES[@]}" "Custom (enter name manually)")
+    select opt in "${options[@]}"
+    do
+        case $opt in
+            "")
+                echo "Invalid option. Please try again."
+                ;;
+            "Keep current ($CURRENT_BRANCH)")
+                SELECTED_BRANCH="$CURRENT_BRANCH"
+                break
+                ;;
+            "Custom (enter name manually)")
+                read -p "Enter branch name: " SELECTED_BRANCH
+                [ -z "$SELECTED_BRANCH" ] && print_error "Branch name required"
+                break
+                ;;
+            *)
+                SELECTED_BRANCH="$opt"
+                break
+                ;;
+        esac
+    done
+
+    print_status "Selected branch: $SELECTED_BRANCH"
+
+    # If switching branches and tree is dirty, offer to stash
+    if [ "$SELECTED_BRANCH" != "$CURRENT_BRANCH" ] && [ -n "$(git status --porcelain)" ]; then
+        print_status "Working tree has uncommitted changes:"
+        git status --short
+        read -p "Stash and continue? (y/n): " STASH_CHANGES
+        if [[ $STASH_CHANGES =~ ^[Yy]$ ]]; then
+            git stash push -m "deploy.sh auto-stash $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                || print_error "Failed to stash changes"
+        else
+            print_error "Aborting — clean working tree first or stash manually"
+        fi
+    fi
+
+    # Checkout target branch — track origin if no local branch exists yet
+    if [ "$SELECTED_BRANCH" != "$CURRENT_BRANCH" ]; then
+        if git show-ref --verify --quiet "refs/heads/$SELECTED_BRANCH"; then
+            git checkout "$SELECTED_BRANCH" || print_error "Failed to checkout $SELECTED_BRANCH"
+        elif git show-ref --verify --quiet "refs/remotes/origin/$SELECTED_BRANCH"; then
+            git checkout -b "$SELECTED_BRANCH" "origin/$SELECTED_BRANCH" \
+                || print_error "Failed to checkout origin/$SELECTED_BRANCH"
+        else
+            print_error "Branch '$SELECTED_BRANCH' not found locally or on origin"
+        fi
+    fi
+
+    # Pull latest if branch tracks a remote
+    if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+        read -p "Pull latest changes for $SELECTED_BRANCH? (y/n): " PULL_LATEST
+        if [[ $PULL_LATEST =~ ^[Yy]$ ]]; then
+            git pull --ff-only || print_error "Failed to pull (non-fast-forward — resolve manually)"
+        fi
+    else
+        print_status "Branch has no upstream — skipping pull"
+    fi
+
+    print_status "On branch $(git rev-parse --abbrev-ref HEAD) at $(git rev-parse --short HEAD)"
 }
 
 # Setup server environment
@@ -397,6 +470,9 @@ main() {
 
     # Clone and setup
     clone_repo
+
+    # Pick which branch to deploy (after repo exists, before any builds)
+    select_branch
 
     # Ask if user wants to setup nginx
     read -p "Do you want to setup Nginx reverse proxy? (y/n): " SETUP_NGINX

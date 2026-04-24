@@ -86,7 +86,7 @@ select_node() {
                 break
                 ;;
             "Testnet Remote node (qrlwallet.com)")
-                NODE_URL="https://qrlwallet.com/api/zond-rpc/testnet"
+                NODE_URL="https://qrlwallet.com/api/qrl-rpc/testnet"
                 break
                 ;;
             "Custom node (enter URL manually)")
