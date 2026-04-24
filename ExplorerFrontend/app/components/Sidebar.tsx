@@ -180,7 +180,7 @@ export default function Sidebar(): JSX.Element {
 
       {/* Sidebar */}
       <aside
-        className={`fixed left-0 h-full overflow-y-auto z-50
+        className={`fixed left-0 bottom-0 overflow-y-auto overscroll-contain z-50
                     bg-gradient-to-b from-[#1a1a1a] via-[#1a1a1a] to-[#1f1f1f]
                     border-r border-[#2d2d2d] shadow-[4px_0_24px_rgba(0,0,0,0.2)]
                     transition-all duration-300 ease-in-out
@@ -188,7 +188,7 @@ export default function Sidebar(): JSX.Element {
                     w-64 lg:top-0 top-[53px]`}
         aria-label="Main navigation"
       >
-        <div className="p-4">
+        <div className="px-4 pt-4 pb-8">
           <Link href="/" className="flex flex-col items-center mb-6 px-1 group">
             <div className="w-32 h-24 relative">
               <Image
