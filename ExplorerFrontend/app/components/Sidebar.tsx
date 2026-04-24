@@ -307,7 +307,7 @@ export default function Sidebar(): JSX.Element {
 
             {/* External links & FAQ */}
             <a
-              href="https://qrlwallet.com"
+              href="https://myqrlwallet.com"
               target="_blank"
               rel="noopener noreferrer"
               className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-gray-300
@@ -324,7 +324,7 @@ export default function Sidebar(): JSX.Element {
                   className={`${ICON_FILTER} ${ICON_FILTER_HOVER} transition-[filter]`}
                 />
               </div>
-              <span className="truncate">QRL Zond Wallet</span>
+              <span className="truncate">MyQRLWallet</span>
               <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5 text-gray-500 ml-auto flex-shrink-0" />
             </a>
             <a
