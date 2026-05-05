@@ -65,6 +65,23 @@ check_dependencies() {
     fi
 }
 
+# Configure pm2-logrotate so logs can't fill the disk
+setup_pm2_logrotate() {
+    print_status "Configuring pm2-logrotate (daily, 3-day retention, 50M cap, gzip)..."
+
+    if pm2 list 2>/dev/null | grep -q pm2-logrotate; then
+        print_status "pm2-logrotate already installed"
+    else
+        pm2 install pm2-logrotate || print_error "Failed to install pm2-logrotate"
+    fi
+
+    pm2 set pm2-logrotate:retain 3
+    pm2 set pm2-logrotate:max_size 50M
+    pm2 set pm2-logrotate:compress true
+    pm2 set pm2-logrotate:rotateInterval '0 0 * * *'
+    pm2 set pm2-logrotate:dateFormat YYYY-MM-DD_HH-mm-ss
+    pm2 set pm2-logrotate:rotateModule true
+}
 
 # Prompt for node selection
 select_node() {
@@ -456,6 +473,9 @@ main() {
 
     # Check for required tools
     check_dependencies
+
+    # Ensure log rotation is in place before any processes start
+    setup_pm2_logrotate
 
     # Prompt for node selection
     select_node
