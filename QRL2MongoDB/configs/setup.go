@@ -1,0 +1,468 @@
+package configs
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.uber.org/zap"
+)
+
+func ConnectDB() *mongo.Client {
+	client, err := mongo.NewClient(options.Client().ApplyURI(EnvMongoURI()))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err = client.Connect(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	//ping the database
+	err = client.Ping(ctx, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Connected to MongoDB")
+
+	// Initialize collections with validators
+	db := client.Database("qrldata-z")
+
+	// Daily Transactions Volume
+	volumeValidator := bson.M{
+		"$jsonSchema": bson.M{
+			"bsonType": "object",
+			"required": []string{"volume", "timestamp"},
+			"properties": bson.M{
+				"volume": bson.M{
+					"bsonType":    "double",
+					"description": "transaction volume in QRL",
+				},
+				"timestamp": bson.M{
+					"bsonType":    "string",
+					"description": "block timestamp as hex string",
+				},
+				"transferCount": bson.M{
+					"bsonType":    "int",
+					"description": "number of transfers in the period",
+				},
+			},
+		},
+	}
+	ensureCollection(db, "dailyTransactionsVolume", volumeValidator)
+
+	// CoinGecko Data (current price)
+	coingeckoValidator := bson.M{
+		"$jsonSchema": bson.M{
+			"bsonType": "object",
+			"required": []string{"marketCapUSD", "priceUSD", "lastUpdated"},
+			"properties": bson.M{
+				"marketCapUSD": bson.M{
+					"bsonType":    "double",
+					"description": "must be a double and is required",
+				},
+				"priceUSD": bson.M{
+					"bsonType":    "double",
+					"description": "must be a double and is required",
+				},
+				"volumeUSD": bson.M{
+					"bsonType":    "double",
+					"description": "24h trading volume in USD",
+				},
+				"lastUpdated": bson.M{
+					"bsonType":    "date",
+					"description": "must be a date and is required",
+				},
+			},
+		},
+	}
+	ensureCollection(db, "coingecko", coingeckoValidator)
+
+	// Price History (historical snapshots)
+	priceHistoryValidator := bson.M{
+		"$jsonSchema": bson.M{
+			"bsonType": "object",
+			"required": []string{"timestamp", "priceUSD"},
+			"properties": bson.M{
+				"timestamp": bson.M{
+					"bsonType":    "date",
+					"description": "must be a date and is required",
+				},
+				"priceUSD": bson.M{
+					"bsonType":    "double",
+					"description": "must be a double and is required",
+				},
+				"marketCapUSD": bson.M{
+					"bsonType":    "double",
+					"description": "market cap in USD",
+				},
+				"volumeUSD": bson.M{
+					"bsonType":    "double",
+					"description": "24h trading volume in USD",
+				},
+			},
+		},
+	}
+	ensureCollection(db, "priceHistory", priceHistoryValidator)
+
+	// Wallet Count
+	walletValidator := bson.M{
+		"$jsonSchema": bson.M{
+			"bsonType": "object",
+			"required": []string{"count"},
+			"properties": bson.M{
+				"count": bson.M{
+					"bsonType":    "long",
+					"description": "must be a long/int64 and is required",
+				},
+			},
+		},
+	}
+	ensureCollection(db, "walletCount", walletValidator)
+
+	// Total Circulating Supply
+	circulatingValidator := bson.M{
+		"$jsonSchema": bson.M{
+			"bsonType": "object",
+			"required": []string{"circulating"},
+			"properties": bson.M{
+				"circulating": bson.M{
+					"bsonType":    "string",
+					"description": "must be a string and is required",
+				},
+			},
+		},
+	}
+	ensureCollection(db, "totalCirculatingSupply", circulatingValidator)
+
+	// Token Balances
+	tokenBalanceValidator := bson.M{
+		"$jsonSchema": bson.M{
+			"bsonType": "object",
+			"required": []string{"contractAddress", "holderAddress", "balance", "blockNumber", "updatedAt"},
+			"properties": bson.M{
+				"contractAddress": bson.M{
+					"bsonType":    "string",
+					"description": "must be a hex string and is required",
+				},
+				"holderAddress": bson.M{
+					"bsonType":    "string",
+					"description": "must be a hex string and is required",
+				},
+				"balance": bson.M{
+					"bsonType":    "string",
+					"description": "must be a hex string and is required",
+				},
+				"blockNumber": bson.M{
+					"bsonType":    "string",
+					"description": "must be a hex string and is required",
+				},
+				"updatedAt": bson.M{
+					"bsonType":    "string",
+					"description": "must be a string and is required",
+				},
+			},
+		},
+	}
+	ensureCollection(db, "tokenBalances", tokenBalanceValidator)
+
+	// Initialize collections
+	initializeCollections(db)
+
+	// Initialize sync state collection
+	_, err = db.Collection("sync_state").UpdateOne(
+		ctx,
+		bson.M{"_id": "last_synced_block"},
+		bson.M{"$setOnInsert": bson.M{"block_number": "0x0"}},
+		options.Update().SetUpsert(true),
+	)
+	if err != nil {
+		Logger.Error("Failed to initialize sync state collection", zap.Error(err))
+	}
+
+	return client
+}
+
+func ensureCollection(db *mongo.Database, name string, validator bson.M) {
+	cmd := bson.D{
+		{Key: "collMod", Value: name},
+		{Key: "validator", Value: validator},
+		{Key: "validationLevel", Value: "strict"},
+	}
+
+	err := db.RunCommand(context.Background(), cmd).Err()
+	if err != nil {
+		// If collection doesn't exist, create it with the validator
+		if err.Error() == "not found" {
+			opts := options.CreateCollection().SetValidator(validator)
+			err = db.CreateCollection(context.Background(), name, opts)
+			if err != nil {
+				Logger.Warn("Could not create collection with validator",
+					zap.String("collection", name),
+					zap.Error(err))
+			} else {
+				Logger.Info("Created collection with validator",
+					zap.String("collection", name))
+			}
+		} else {
+			Logger.Warn("Could not set up validator",
+				zap.String("collection", name),
+				zap.Error(err))
+		}
+	} else {
+		Logger.Info("Updated validator for collection",
+			zap.String("collection", name))
+	}
+}
+
+func initializeCollections(db *mongo.Database) {
+	ctx := context.Background()
+
+	// Initialize token balances collection with compound index
+	tokenBalancesCollection := db.Collection("tokenBalances")
+	_, err := tokenBalancesCollection.Indexes().CreateOne(
+		ctx,
+		mongo.IndexModel{
+			Keys: bson.D{
+				{Key: "contractAddress", Value: 1},
+				{Key: "holderAddress", Value: 1},
+			},
+			Options: options.Index().SetUnique(true),
+		},
+	)
+	if err != nil {
+		Logger.Error("Failed to create index for token balances collection", zap.Error(err))
+	}
+
+	// Initialize pending token contracts collection with compound index
+	pendingTokenContractsCollection := db.Collection("pending_token_contracts")
+	_, err = pendingTokenContractsCollection.Indexes().CreateOne(
+		ctx,
+		mongo.IndexModel{
+			Keys: bson.D{
+				{Key: "contractAddress", Value: 1},
+				{Key: "txHash", Value: 1},
+			},
+			Options: options.Index().SetUnique(true),
+		},
+	)
+	if err != nil {
+		Logger.Error("Failed to create index for pending token contracts collection", zap.Error(err))
+	}
+
+	// Also add index on the processed field for efficient querying
+	_, err = pendingTokenContractsCollection.Indexes().CreateOne(
+		ctx,
+		mongo.IndexModel{
+			Keys:    bson.D{{Key: "processed", Value: 1}},
+			Options: options.Index().SetName("processed_idx"),
+		},
+	)
+	if err != nil {
+		Logger.Error("Failed to create processed index for pending token contracts collection", zap.Error(err))
+	}
+
+	// Initialize token transfers collection with indexes
+	tokenTransfersCollection := db.Collection("tokenTransfers")
+	_, err = tokenTransfersCollection.Indexes().CreateMany(
+		ctx,
+		[]mongo.IndexModel{
+			{
+				Keys: bson.D{
+					{Key: "contractAddress", Value: 1},
+					{Key: "blockNumber", Value: 1},
+				},
+			},
+			{
+				Keys: bson.D{
+					{Key: "from", Value: 1},
+					{Key: "blockNumber", Value: 1},
+				},
+			},
+			{
+				Keys: bson.D{
+					{Key: "to", Value: 1},
+					{Key: "blockNumber", Value: 1},
+				},
+			},
+			{
+				Keys:    bson.D{{Key: "txHash", Value: 1}},
+				Options: options.Index().SetUnique(true),
+			},
+		},
+	)
+	if err != nil {
+		Logger.Error("Failed to create indexes for token transfers collection", zap.Error(err))
+	} else {
+		Logger.Info("Token transfers collection initialized with indexes")
+	}
+
+	// Initialize CoinGecko collection with empty document
+	_, err = db.Collection("coingecko").UpdateOne(
+		ctx,
+		bson.M{},
+		bson.M{"$setOnInsert": bson.M{
+			"marketCapUSD": 0.0,
+			"priceUSD":     0.0,
+			"volumeUSD":    0.0,
+			"lastUpdated":  time.Now(),
+		}},
+		options.Update().SetUpsert(true),
+	)
+	if err != nil {
+		Logger.Error("Failed to initialize CoinGecko collection", zap.Error(err))
+	}
+
+	// Initialize priceHistory collection with timestamp index for efficient time-range queries
+	priceHistoryCollection := db.Collection("priceHistory")
+	_, err = priceHistoryCollection.Indexes().CreateOne(
+		ctx,
+		mongo.IndexModel{
+			Keys:    bson.D{{Key: "timestamp", Value: -1}}, // Descending for recent-first queries
+			Options: options.Index().SetName("timestamp_desc_idx"),
+		},
+	)
+	if err != nil {
+		Logger.Error("Failed to create index for priceHistory collection", zap.Error(err))
+	} else {
+		Logger.Info("Price history collection initialized with timestamp index")
+	}
+
+	// Initialize transfer collection with blockTimestamp index for efficient time-range queries (daily volume)
+	transferCollection := db.Collection("transfer")
+	_, err = transferCollection.Indexes().CreateOne(
+		ctx,
+		mongo.IndexModel{
+			Keys:    bson.D{{Key: "blockTimestamp", Value: -1}}, // Descending for recent-first queries
+			Options: options.Index().SetName("blockTimestamp_desc_idx"),
+		},
+	)
+	if err != nil {
+		Logger.Error("Failed to create blockTimestamp index for transfer collection", zap.Error(err))
+	} else {
+		Logger.Info("Transfer collection initialized with blockTimestamp index")
+	}
+
+	// Create and set up the rest of the collections
+	ensureCollection(db, "blocks", nil)
+
+	// Add index on blockNumberInt for efficient numeric range queries on blocks.
+	// This replaces the old pattern of doing hex string $gte/$lte which produced
+	// incorrect lexicographic ordering (e.g. "0x9" > "0x10").
+	blocksCollection := db.Collection("blocks")
+	_, err = blocksCollection.Indexes().CreateOne(
+		ctx,
+		mongo.IndexModel{
+			Keys:    bson.D{{Key: "blockNumberInt", Value: -1}},
+			Options: options.Index().SetName("blockNumberInt_desc_idx"),
+		},
+	)
+	if err != nil {
+		Logger.Error("Failed to create blockNumberInt index for blocks collection", zap.Error(err))
+	} else {
+		Logger.Info("Blocks collection initialized with blockNumberInt index")
+	}
+
+	ensureCollection(db, "validators", nil)
+	ensureCollection(db, "contractCode", nil)
+	ensureCollection(db, "transactionByAddress", nil)
+	ensureCollection(db, "internalTransactionByAddress", nil)
+	ensureCollection(db, "contracts", nil)
+	ensureCollection(db, "addresses", nil)
+
+	// Create unique index on addresses.id to prevent duplicate entries from concurrent upserts
+	addressesCollection := db.Collection("addresses")
+	_, err = addressesCollection.Indexes().CreateOne(
+		ctx,
+		mongo.IndexModel{
+			Keys:    bson.D{{Key: "id", Value: 1}},
+			Options: options.Index().SetName("addresses_id_unique_idx").SetUnique(true),
+		},
+	)
+	if err != nil {
+		Logger.Warn("Could not create unique index on addresses.id (duplicates may exist — run dedup)", zap.Error(err))
+	} else {
+		Logger.Info("Addresses collection initialized with unique id index")
+	}
+	ensureCollection(db, "walletCount", nil)
+	ensureCollection(db, "dailyTransactionsVolume", nil)
+	ensureCollection(db, "totalCirculatingSupply", nil)
+	ensureCollection(db, "sync_state", nil)
+
+	// Create indexes on the validators collection for per-document lookup.
+	validatorsCollection := db.Collection("validators")
+	_, err = validatorsCollection.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "publicKeyHex", Value: 1}},
+			Options: options.Index().SetName("validators_pubkey_idx"),
+		},
+		{
+			Keys:    bson.D{{Key: "status", Value: 1}},
+			Options: options.Index().SetName("validators_status_idx"),
+		},
+		{
+			Keys:    bson.D{{Key: "effectiveBalance", Value: -1}},
+			Options: options.Index().SetName("validators_balance_desc_idx"),
+		},
+	})
+	if err != nil {
+		Logger.Warn("Could not create validators collection indexes", zap.Error(err))
+	}
+
+	Logger.Info("All collections initialized successfully")
+}
+
+// Client instance
+var DB *mongo.Client = ConnectDB()
+
+// Getting database collections
+func GetCollection(client *mongo.Client, collectionName string) *mongo.Collection {
+	collection := client.Database("qrldata-z").Collection(collectionName)
+	return collection
+}
+
+// Getter for contracts collection
+func GetContractsCollection() *mongo.Collection {
+	return GetCollection(DB, CONTRACT_CODE_COLLECTION)
+}
+
+// Getter for validator collection
+func GetValidatorCollection() *mongo.Collection {
+	return GetCollection(DB, VALIDATORS_COLLECTION)
+}
+
+// Getter for token balances collection
+func GetTokenBalancesCollection() *mongo.Collection {
+	return GetCollection(DB, "tokenBalances")
+}
+
+// GetTokenTransfersCollection returns the tokenTransfers collection
+func GetTokenTransfersCollection() *mongo.Collection {
+	// Use GetCollection with explicit collection name
+	coll := GetCollection(DB, "tokenTransfers")
+
+	// Log that we're getting a reference to the collection
+	Logger.Debug("Getting tokenTransfers collection reference")
+
+	return coll
+}
+
+func GetListCollectionNames(client *mongo.Client) []string {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	result, err := client.Database("qrldata-z").ListCollectionNames(ctx, bson.D{})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return result
+}

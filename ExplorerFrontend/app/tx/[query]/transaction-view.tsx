@@ -7,9 +7,9 @@ import { type TransactionDetails, getConfirmations, getTransactionStatus } from 
 import { formatAmount, formatTokenAmount } from '../../lib/helpers';
 import CopyButton from '../../components/CopyButton';
 import Breadcrumbs from '../../components/Breadcrumbs';
+import DetailRow from '../../components/DetailRow';
 import Badge from '../../components/Badge';
 
-// Back link component that uses useSearchParams
 function BackToTransactionsLink(): JSX.Element | null {
   const searchParams = useSearchParams();
   const fromTransactions = searchParams.get('from') === 'transactions';
@@ -25,7 +25,7 @@ function BackToTransactionsLink(): JSX.Element | null {
       <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
       </svg>
-      Back to Latest Transactions
+      Back to Transactions
     </Link>
   );
 }
@@ -35,7 +35,6 @@ const formatTimestamp = (timestamp: number): string => {
   const date = new Date(timestamp * 1000);
   if (date.getUTCFullYear() === 1970) return 'Pending';
 
-  // Use UTC to avoid hydration mismatch
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const month = months[date.getUTCMonth()];
   const day = date.getUTCDate();
@@ -46,30 +45,8 @@ const formatTimestamp = (timestamp: number): string => {
   return `${month} ${day}, ${year}, ${hours}:${minutes}:${seconds} UTC`;
 };
 
-const isZeroAddress = (addr: string): boolean => {
-  if (!addr) return false;
-  const stripped = addr.replace(/^[Zz]/, '').replace(/^0x/, '');
-  return /^0*$/.test(stripped);
-};
-
-const AddressDisplay = ({ address, isMobile }: { address: string, isMobile: boolean }): JSX.Element => {
-  const displayAddress = isMobile ? `${address.slice(0, 8)}...${address.slice(-6)}` : address;
-
-  return (
-    <div className="flex flex-col gap-2">
-      <a
-        href={`/address/${address}`}
-        className="text-gray-300 hover:text-[#ffa729] break-all font-mono
-                  transition-colors duration-300 group relative inline-block"
-      >
-        {displayAddress}
-        <div className="absolute -inset-2 rounded-lg bg-[#3d3d3d] opacity-0
-                      group-hover:opacity-10 transition-opacity duration-300" />
-      </a>
-      <CopyButton value={address} label="Copy address" />
-    </div>
-  );
-};
+const isZeroAddress = (addr: string): boolean =>
+  addr === 'Q0' || addr === 'Q' + '0'.repeat(40);
 
 interface TransactionViewProps {
   transaction: TransactionDetails;
@@ -82,265 +59,223 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
     const checkScreenSize = (): void => {
       setIsMobile(window.innerWidth < 768);
     };
-
     checkScreenSize();
     window.addEventListener('resize', checkScreenSize);
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
-  // Calculate confirmations and get status
   const confirmations = getConfirmations(transaction.blockNumber, transaction.latestBlock);
   const status = getTransactionStatus(confirmations);
-
-  // Format confirmation text
-  const confirmationText = confirmations === null 
-    ? 'Pending' 
+  const confirmationText = confirmations === null
+    ? 'Pending'
     : `${confirmations} Confirmation${confirmations === 1 ? '' : 's'}`;
 
-  // Format transaction value using the helper
   const [formattedValue, unit] = formatAmount(transaction.value);
 
-  // Calculate paid fees from gas values
   const calculatePaidFees = (): string => {
-    // Use PaidFees if available
     if (typeof transaction.PaidFees === 'number') {
       return transaction.PaidFees.toFixed(18);
     }
-    
-    // Fallback to manual calculation only if PaidFees is not available
     if (!transaction.gasUsed || !transaction.gasPrice) return '0';
-    
     try {
       const gasUsed = BigInt(transaction.gasUsed);
       const gasPrice = BigInt(transaction.gasPrice);
       const paidFees = gasUsed * gasPrice;
-      
-      // Convert to QRL (divide by 10^18)
-      const paidFeesQRL = Number(paidFees) / 1e18;
-      return paidFeesQRL.toFixed(18); // Show full precision
-    } catch (error) {
-      console.error('Error calculating paid fees:', error);
+      return (Number(paidFees) / 1e18).toFixed(18);
+    } catch {
       return '0';
     }
   };
 
   const paidFees = calculatePaidFees();
+  const badgeVariant = status.color === 'bg-green-500' ? 'success' as const
+    : status.color === 'bg-blue-500' ? 'info' as const
+    : 'warning' as const;
+
+  const displayAddr = (addr: string): string =>
+    isMobile ? `${addr.slice(0, 10)}...${addr.slice(-8)}` : addr;
 
   return (
-    <div className="py-4 md:py-8">
+    <div className="p-4 sm:p-8 max-w-6xl mx-auto">
       <Breadcrumbs items={[
         { label: 'Transactions', href: '/transactions/1' },
         { label: `${transaction.hash.slice(0, 10)}...${transaction.hash.slice(-6)}` },
       ]} />
 
-      <div className="relative overflow-hidden rounded-xl md:rounded-2xl
-                    bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
-                    border border-[#3d3d3d] shadow-lg md:shadow-xl">
-        <div className="p-4 md:p-8">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-4 md:mb-8 pb-4 md:pb-6 border-b border-gray-700">
-            <div className="flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 md:w-8 md:h-8 text-[#ffa729] mr-2 md:mr-3">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-              </svg>
-              <h1 className="text-lg md:text-2xl font-bold text-[#ffa729]">Transaction Details</h1>
-            </div>
-            <Badge
-              variant={status.color === 'bg-green-500' ? 'success' : status.color === 'bg-blue-500' ? 'info' : 'warning'}
-              size="md"
-              dot
-            >
-              {status.text}
-            </Badge>
+      <Suspense>
+        <BackToTransactionsLink />
+      </Suspense>
+
+      {/* Main Details Card */}
+      <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-[#3d3d3d]">
+          <div className="flex items-center gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-[#ffa729]">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+            </svg>
+            <h1 className="text-xl sm:text-2xl font-bold text-[#ffa729]">Transaction Details</h1>
           </div>
-          
-          {/* Content Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8">
-            {/* Left Column */}
-            <div className="space-y-4 md:space-y-6">
-              <div>
-                <h2 className="text-sm font-semibold text-gray-400 mb-2">Transaction Hash</h2>
-                <p className="text-gray-300 break-all font-mono mb-2">
-                  {isMobile ? `${transaction.hash.slice(0, 10)}...${transaction.hash.slice(-8)}` : transaction.hash}
-                </p>
-                <CopyButton value={transaction.hash} label="Copy hash" stopPropagation />
-              </div>
+          <Badge variant={badgeVariant} size="md" dot>{status.text}</Badge>
+        </div>
 
-              <div>
-                <h2 className="text-sm font-semibold text-gray-400 mb-2">Block</h2>
-                {transaction.blockNumber ? (
-                  <div>
-                    <a 
-                      href={`/block/${transaction.blockNumber}`}
-                      className="text-gray-300 hover:text-[#ffa729] transition-colors duration-300"
-                    >
-                      #{transaction.blockNumber}
-                    </a>
-                    <p className="text-sm text-gray-400 mt-1">{confirmationText}</p>
-                  </div>
-                ) : (
-                  <p className="text-gray-300">Pending</p>
-                )}
-              </div>
-
-              <div>
-                <h2 className="text-sm font-semibold text-gray-400 mb-2">Timestamp</h2>
-                <p className="text-gray-300">
-                  {formatTimestamp(transaction.timestamp)}
-                </p>
-              </div>
+        {/* Content */}
+        <div className="p-4 sm:p-6">
+          <DetailRow label="Transaction Hash" mono>
+            <div className="flex items-start gap-2">
+              <span>{isMobile ? displayAddr(transaction.hash) : transaction.hash}</span>
+              <CopyButton value={transaction.hash} label="Copy hash" size="sm" />
             </div>
-
-            {/* Right Column */}
-            <div className="space-y-4 md:space-y-6">
-              <div>
-                <h2 className="text-sm font-semibold text-gray-400 mb-2">From</h2>
-                <AddressDisplay address={transaction.from} isMobile={isMobile} />
-              </div>
-
-              <div>
-                <h2 className="text-sm font-semibold text-gray-400 mb-2">To</h2>
-                <AddressDisplay address={transaction.to} isMobile={isMobile} />
-              </div>
-
-              {/* Contract Creation Info */}
-              {transaction.contractCreated && (
-                <div className="col-span-1 md:col-span-2 pt-4 border-t border-gray-700">
-                  <div className="bg-green-900/20 border border-green-500/30 rounded-xl p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-green-400">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <h3 className="text-green-400 font-semibold">Contract Created</h3>
-                      {transaction.contractCreated.isToken && (
-                        <Badge variant="brand">QRC-20 Token</Badge>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <div>
-                        <span className="text-sm text-gray-400">Contract Address: </span>
-                        <a
-                          href={`/address/${transaction.contractCreated.address}`}
-                          className="text-[#ffa729] hover:text-[#ffb84d] font-mono text-sm transition-colors"
-                        >
-                          {isMobile
-                            ? `${transaction.contractCreated.address.slice(0, 10)}...${transaction.contractCreated.address.slice(-8)}`
-                            : transaction.contractCreated.address
-                          }
-                        </a>
-                      </div>
-                      {transaction.contractCreated.isToken && transaction.contractCreated.name && (
-                        <div>
-                          <span className="text-sm text-gray-400">Token: </span>
-                          <span className="text-white font-medium">
-                            {transaction.contractCreated.name} ({transaction.contractCreated.symbol})
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Token Transfer Info */}
-              {transaction.tokenTransfer && (
-                <div className="col-span-1 md:col-span-2 pt-4 border-t border-gray-700">
-                  <div className="bg-[#ffa729]/10 border border-[#ffa729]/30 rounded-xl p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-                      </svg>
-                      <h3 className="text-[#ffa729] font-semibold">Token Transfer</h3>
-                      <Badge variant="brand">QRC-20</Badge>
-                    </div>
-                    <div className="space-y-3">
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                        <span className="text-sm text-gray-400 min-w-[80px]">Token:</span>
-                        <a
-                          href={`/address/${transaction.tokenTransfer.contractAddress}`}
-                          className="text-[#ffa729] hover:text-[#ffb84d] font-medium transition-colors"
-                        >
-                          {transaction.tokenTransfer.tokenName} ({transaction.tokenTransfer.tokenSymbol})
-                        </a>
-                      </div>
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                        <span className="text-sm text-gray-400 min-w-[80px]">Amount:</span>
-                        <span className="text-white font-semibold text-lg">
-                          {formatTokenAmount(transaction.tokenTransfer.amount, transaction.tokenTransfer.tokenDecimals)}
-                          <span className="text-[#ffa729] ml-2 text-sm">{transaction.tokenTransfer.tokenSymbol}</span>
-                        </span>
-                      </div>
-                      <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-2">
-                        <span className="text-sm text-gray-400 min-w-[80px]">From:</span>
-                        {isZeroAddress(transaction.tokenTransfer.from) ? (
-                          <div className="flex items-center gap-2">
-                            <Badge variant="success">Mint</Badge>
-                            <span className="text-sm text-gray-400">
-                              via{' '}
-                              <a
-                                href={`/address/${transaction.tokenTransfer.contractAddress}`}
-                                className="text-[#ffa729] hover:text-[#ffb84d] transition-colors"
-                              >
-                                {transaction.tokenTransfer.tokenName} Contract
-                              </a>
-                            </span>
-                          </div>
-                        ) : (
-                          <a
-                            href={`/address/${transaction.tokenTransfer.from}`}
-                            className="text-gray-300 hover:text-[#ffa729] font-mono text-sm transition-colors break-all"
-                          >
-                            {isMobile
-                              ? `${transaction.tokenTransfer.from.slice(0, 10)}...${transaction.tokenTransfer.from.slice(-8)}`
-                              : transaction.tokenTransfer.from
-                            }
-                          </a>
-                        )}
-                      </div>
-                      <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-2">
-                        <span className="text-sm text-gray-400 min-w-[80px]">To:</span>
-                        {isZeroAddress(transaction.tokenTransfer.to) ? (
-                          <Badge variant="error">Burn</Badge>
-                        ) : (
-                          <a
-                            href={`/address/${transaction.tokenTransfer.to}`}
-                            className="text-gray-300 hover:text-[#ffa729] font-mono text-sm transition-colors break-all"
-                          >
-                            {isMobile
-                              ? `${transaction.tokenTransfer.to.slice(0, 10)}...${transaction.tokenTransfer.to.slice(-8)}`
-                              : transaction.tokenTransfer.to
-                            }
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <h2 className="text-sm font-semibold text-gray-400 mb-2">Value</h2>
-                <p className="text-xl md:text-2xl font-semibold text-[#ffa729]">
-                  {formattedValue}
-                  <span className="text-sm text-gray-400 ml-2">{unit}</span>
-                </p>
-              </div>
-
-              {(transaction.gasUsed || transaction.gasPrice) && (
-                <div className="space-y-4 pt-4 border-t border-gray-700">
-                  <div>
-                    <h2 className="text-sm font-semibold text-gray-400 mb-2">Transaction Fee</h2>
-                    <p className="text-xl md:text-2xl font-semibold text-[#ffa729]">
-                      {paidFees}
-                      <span className="text-sm text-gray-400 ml-2">QRL</span>
-                    </p>
-                  </div>
-                </div>
-              )}
+          </DetailRow>
+          <DetailRow label="Status">
+            <Badge variant={badgeVariant} dot>{status.text}</Badge>
+            <span className="text-gray-500 text-xs ml-2">{confirmationText}</span>
+          </DetailRow>
+          <DetailRow label="Block">
+            {transaction.blockNumber ? (
+              <Link
+                href={`/block/${transaction.blockNumber}`}
+                className="text-[#ffa729] hover:text-[#ffb954] transition-colors"
+              >
+                #{transaction.blockNumber}
+              </Link>
+            ) : (
+              <span className="text-gray-400">Pending</span>
+            )}
+          </DetailRow>
+          <DetailRow label="Timestamp">{formatTimestamp(transaction.timestamp)}</DetailRow>
+          <DetailRow label="From" mono>
+            <div className="flex items-start gap-2">
+              <Link
+                href={`/address/${transaction.from}`}
+                className="text-gray-200 hover:text-[#ffa729] transition-colors break-all"
+              >
+                {displayAddr(transaction.from)}
+              </Link>
+              <CopyButton value={transaction.from} label="Copy address" size="sm" />
             </div>
-          </div>
+          </DetailRow>
+          <DetailRow label="To" mono>
+            <div className="flex items-start gap-2">
+              <Link
+                href={`/address/${transaction.to}`}
+                className="text-gray-200 hover:text-[#ffa729] transition-colors break-all"
+              >
+                {displayAddr(transaction.to)}
+              </Link>
+              <CopyButton value={transaction.to} label="Copy address" size="sm" />
+            </div>
+          </DetailRow>
+          <DetailRow label="Value">
+            <span className="font-semibold text-[#ffa729]">{formattedValue}</span>
+            <span className="text-gray-500 ml-1">{unit}</span>
+          </DetailRow>
+          {(transaction.gasUsed || transaction.gasPrice) && (
+            <DetailRow label="Transaction Fee">
+              {paidFees}
+              <span className="text-gray-500 ml-1">QRL</span>
+            </DetailRow>
+          )}
         </div>
       </div>
+
+      {/* Contract Creation Section */}
+      {transaction.contractCreated && (
+        <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+          <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
+            <div className="flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-green-400">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <h2 className="text-[15px] font-semibold text-green-400">Contract Created</h2>
+              {transaction.contractCreated.isToken && <Badge variant="brand">QRC-20 Token</Badge>}
+            </div>
+          </div>
+          <div className="p-4 sm:p-6">
+            <DetailRow label="Contract Address" mono>
+              <Link
+                href={`/address/${transaction.contractCreated.address}`}
+                className="text-[#ffa729] hover:text-[#ffb84d] transition-colors break-all"
+              >
+                {displayAddr(transaction.contractCreated.address)}
+              </Link>
+            </DetailRow>
+            {transaction.contractCreated.isToken && transaction.contractCreated.name && (
+              <DetailRow label="Token">
+                <span className="font-medium text-white">
+                  {transaction.contractCreated.name} ({transaction.contractCreated.symbol})
+                </span>
+              </DetailRow>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Token Transfer Section */}
+      {transaction.tokenTransfer && (
+        <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+          <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
+            <div className="flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+              </svg>
+              <h2 className="text-[15px] font-semibold text-[#ffa729]">Token Transfer</h2>
+              <Badge variant="brand">QRC-20</Badge>
+            </div>
+          </div>
+          <div className="p-4 sm:p-6">
+            <DetailRow label="Token">
+              <Link
+                href={`/address/${transaction.tokenTransfer.contractAddress}`}
+                className="text-[#ffa729] hover:text-[#ffb84d] font-medium transition-colors"
+              >
+                {transaction.tokenTransfer.tokenName} ({transaction.tokenTransfer.tokenSymbol})
+              </Link>
+            </DetailRow>
+            <DetailRow label="Amount">
+              <span className="font-semibold text-white">
+                {formatTokenAmount(transaction.tokenTransfer.amount, transaction.tokenTransfer.tokenDecimals)}
+              </span>
+              <span className="text-[#ffa729] ml-2 text-sm">{transaction.tokenTransfer.tokenSymbol}</span>
+            </DetailRow>
+            <DetailRow label="From" mono>
+              {isZeroAddress(transaction.tokenTransfer.from) ? (
+                <div className="flex items-center gap-2">
+                  <Badge variant="success">Mint</Badge>
+                  <span className="text-sm text-gray-400">
+                    via{' '}
+                    <Link
+                      href={`/address/${transaction.tokenTransfer.contractAddress}`}
+                      className="text-[#ffa729] hover:text-[#ffb84d] transition-colors"
+                    >
+                      {transaction.tokenTransfer.tokenName} Contract
+                    </Link>
+                  </span>
+                </div>
+              ) : (
+                <Link
+                  href={`/address/${transaction.tokenTransfer.from}`}
+                  className="text-gray-200 hover:text-[#ffa729] transition-colors break-all"
+                >
+                  {displayAddr(transaction.tokenTransfer.from)}
+                </Link>
+              )}
+            </DetailRow>
+            <DetailRow label="To" mono>
+              {isZeroAddress(transaction.tokenTransfer.to) ? (
+                <Badge variant="error">Burn</Badge>
+              ) : (
+                <Link
+                  href={`/address/${transaction.tokenTransfer.to}`}
+                  className="text-gray-200 hover:text-[#ffa729] transition-colors break-all"
+                >
+                  {displayAddr(transaction.tokenTransfer.to)}
+                </Link>
+              )}
+            </DetailRow>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

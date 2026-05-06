@@ -5,8 +5,7 @@ import (
 	"backendAPI/models"
 	"context"
 	"fmt"
-	"strconv"
-	"strings"
+	"log"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -109,31 +108,6 @@ func CountBlocksNetwork() (int64, error) {
 	return count, nil
 }
 
-func ReturnHashToBlockNumber(query string) (uint64, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	var result models.ZondUint64Version
-
-	filter := primitive.D{{Key: "result.hash", Value: query}}
-	err := configs.BlocksCollection.FindOne(ctx, filter).Decode(&result)
-	if err != nil {
-		return 0, fmt.Errorf("failed to find block: %v", err)
-	}
-
-	// Convert hex string to uint64
-	numStr := result.Result.Number
-	if strings.HasPrefix(numStr, "0x") {
-		numStr = numStr[2:] // Remove "0x" prefix
-		num, err := strconv.ParseUint(numStr, 16, 64)
-		if err != nil {
-			return 0, fmt.Errorf("failed to parse block number: %v", err)
-		}
-		return num, nil
-	}
-	return 0, fmt.Errorf("invalid block number format: %s", numStr)
-}
-
 func ReturnBlockSizes() ([]primitive.M, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -147,7 +121,7 @@ func ReturnBlockSizes() ([]primitive.M, error) {
 
 	var episodes []primitive.M
 	if err = cursor.All(ctx, &episodes); err != nil {
-		fmt.Println(err)
+		log.Printf("error decoding block sizes: %v", err)
 	}
 
 	return episodes, err

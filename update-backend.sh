@@ -38,11 +38,11 @@ if [ $? -ne 0 ]; then
 fi
 echo -e "${GREEN}Git pull completed successfully${NC}"
 
-# Deploy Zond2mongoDB synchronizer
+# Deploy QRL2MongoDB synchronizer
 echo -e "${YELLOW}Building and deploying synchronizer...${NC}"
-cd Zond2mongoDB
+cd QRL2MongoDB
 if [ $? -ne 0 ]; then
-    echo -e "${RED}Error: Could not find Zond2mongoDB directory${NC}"
+    echo -e "${RED}Error: Could not find QRL2MongoDB directory${NC}"
     exit 1
 fi
 
@@ -56,8 +56,8 @@ fi
 pm2 stop synchroniser 2>/dev/null
 pm2 delete synchroniser 2>/dev/null
 
-# Start synchroniser with PM2
-pm2 start ./syncer --name synchroniser
+# Start synchroniser with PM2 (--interpreter none so PM2 doesn't try to run the Go binary as JS)
+pm2 start ./syncer --name synchroniser --interpreter none
 if [ $? -ne 0 ]; then
     echo -e "${RED}Error: Failed to start synchroniser with PM2${NC}"
     exit 1
@@ -72,9 +72,12 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-go build -o handler
+# NOTE: build target must NOT be "handler" — there is a handler/ package directory
+# in this repo; `go build -o handler` would write into it instead of producing a
+# top-level binary. Use the historical "backendAPI" name.
+go build -o backendAPI .
 if [ $? -ne 0 ]; then
-    echo -e "${RED}Error: Failed to build handler${NC}"
+    echo -e "${RED}Error: Failed to build backendAPI${NC}"
     exit 1
 fi
 
@@ -82,8 +85,8 @@ fi
 pm2 stop handler 2>/dev/null
 pm2 delete handler 2>/dev/null
 
-# Start handler with PM2
-pm2 start ./handler --name handler
+# Start handler with PM2 (--interpreter none so PM2 doesn't try to run the Go binary as JS)
+pm2 start ./backendAPI --name handler --interpreter none
 if [ $? -ne 0 ]; then
     echo -e "${RED}Error: Failed to start handler with PM2${NC}"
     exit 1

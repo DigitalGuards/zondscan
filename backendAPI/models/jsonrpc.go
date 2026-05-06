@@ -7,12 +7,6 @@ type JsonRPC struct {
 	ID      int           `json:"id"`
 }
 
-type Zond struct {
-	Jsonrpc   string    `json:"jsonrpc"`
-	ID        int       `json:"id"`
-	ResultOld ResultOld `json:"result"`
-}
-
 type ZondUint64Version struct {
 	Jsonrpc string `json:"jsonrpc"`
 	ID      int    `json:"id"`

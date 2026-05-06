@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { Disclosure } from '@headlessui/react'
-import { ChevronDownIcon, Bars3Icon, XMarkIcon, QuestionMarkCircleIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/20/solid'
+import { ChevronDownIcon, Bars3Icon, XMarkIcon, QuestionMarkCircleIcon, ArrowTopRightOnSquareIcon, CodeBracketIcon } from '@heroicons/react/20/solid'
 import LookUpIcon from '../../public/lookup.svg'
 import TokenIcon from '../../public/token.svg'
 import PartnerHandshakeIcon from '../../public/partner-handshake-icon.svg'
@@ -33,6 +33,7 @@ const navGroups: NavGroup[] = [
       { name: 'Latest Transactions', description: 'View all Transactions', href: '/transactions/1', imgSrc: PartnerHandshakeIcon },
       { name: 'Pending Transactions', description: 'View pending transactions', href: '/pending/1', imgSrc: PartnerHandshakeIcon },
       { name: 'Latest Blocks', description: 'View all Blocks', href: '/blocks/1', imgSrc: BlockchainIcon },
+      { name: 'Epochs', description: 'View all Epochs', href: '/epochs/1', imgSrc: BlockchainIcon },
       { name: 'Validators', description: 'Network Validators', href: '/validators', imgSrc: ContractIcon },
     ],
   },
@@ -63,6 +64,7 @@ function isActive(pathname: string, href: string): boolean {
   if (basePath !== href && pathname.startsWith(basePath + '/')) return true
   // Match parent paths for detail pages (e.g., /block/123 matches /blocks/1)
   if (href.startsWith('/blocks') && pathname.startsWith('/block/')) return true
+  if (href.startsWith('/epochs') && pathname.startsWith('/epochs/')) return true
   if (href.startsWith('/transactions') && pathname.startsWith('/tx/')) return true
   if (href === '/contracts' && pathname.startsWith('/contracts')) return true
   return false
@@ -178,7 +180,7 @@ export default function Sidebar(): JSX.Element {
 
       {/* Sidebar */}
       <aside
-        className={`fixed left-0 h-full overflow-y-auto z-50
+        className={`fixed left-0 bottom-0 overflow-y-auto overscroll-contain z-50
                     bg-gradient-to-b from-[#1a1a1a] via-[#1a1a1a] to-[#1f1f1f]
                     border-r border-[#2d2d2d] shadow-[4px_0_24px_rgba(0,0,0,0.2)]
                     transition-all duration-300 ease-in-out
@@ -186,7 +188,7 @@ export default function Sidebar(): JSX.Element {
                     w-64 lg:top-0 top-[53px]`}
         aria-label="Main navigation"
       >
-        <div className="p-4">
+        <div className="px-4 pt-4 pb-8">
           <Link href="/" className="flex flex-col items-center mb-6 px-1 group">
             <div className="w-32 h-24 relative">
               <Image
@@ -305,7 +307,7 @@ export default function Sidebar(): JSX.Element {
 
             {/* External links & FAQ */}
             <a
-              href="https://qrlwallet.com"
+              href="https://myqrlwallet.com"
               target="_blank"
               rel="noopener noreferrer"
               className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-gray-300
@@ -322,9 +324,35 @@ export default function Sidebar(): JSX.Element {
                   className={`${ICON_FILTER} ${ICON_FILTER_HOVER} transition-[filter]`}
                 />
               </div>
-              <span className="truncate">QRL Zond Wallet</span>
+              <span className="truncate">MyQRLWallet</span>
               <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5 text-gray-500 ml-auto flex-shrink-0" />
             </a>
+            <a
+              href="/dapp-example/"
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-gray-300
+                         hover:bg-[#2d2d2d] rounded-md transition-all duration-200
+                         hover:text-[#ffa729] group whitespace-nowrap"
+            >
+              <div className="w-5 h-5 relative flex-shrink-0">
+                <Image
+                  src={PartnerHandshakeIcon}
+                  alt=""
+                  fill
+                  sizes="20px"
+                  style={{ objectFit: 'contain' }}
+                  className={`${ICON_FILTER} ${ICON_FILTER_HOVER} transition-[filter]`}
+                />
+              </div>
+              <span className="truncate">dApp Example</span>
+            </a>
+            <Link
+              href="/api-explorer"
+              aria-current={isActive(pathname, '/api-explorer') ? 'page' : undefined}
+              className={'flex w-full items-center gap-2 px-3 py-2.5 text-sm rounded-md transition-all duration-200 group whitespace-nowrap ' + (isActive(pathname, '/api-explorer') ? 'bg-[#ffa729]/10 text-[#ffa729] border-l-2 border-[#ffa729]' : 'text-gray-300 hover:bg-[#2d2d2d] hover:text-[#ffa729]')}
+            >
+              <CodeBracketIcon className={'w-5 h-5 flex-shrink-0 ' + (isActive(pathname, '/api-explorer') ? 'text-[#ffa729]' : 'text-gray-500 group-hover:text-[#ffa729]') + ' transition-colors'} />
+              <span className="truncate">API Explorer</span>
+            </Link>
             <Link
               href="/faq"
               aria-current={pathname === '/faq' ? 'page' : undefined}

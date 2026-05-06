@@ -40,8 +40,8 @@ clean_database_and_logs() {
         mongosh --eval "db.getSiblingDB('qrldata-z').dropDatabase()" || print_status "Failed to drop database or database doesn't exist"
         export BASE_DIR=$(pwd)
         # Delete the log file if it exists
-        if [ -f "$BASE_DIR/Zond2mongoDB/logs/zond_sync.log" ]; then
-            rm "$BASE_DIR/Zond2mongoDB/logs/zond_sync.log" || print_status "Failed to delete log file"
+        if [ -f "$BASE_DIR/QRL2MongoDB/logs/zond_sync.log" ]; then
+            rm "$BASE_DIR/QRL2MongoDB/logs/zond_sync.log" || print_status "Failed to delete log file"
         else
             print_status "Log file not found, skipping deletion"
         fi
@@ -86,7 +86,7 @@ select_node() {
                 break
                 ;;
             "Testnet Remote node (qrlwallet.com)")
-                NODE_URL="https://qrlwallet.com/api/zond-rpc/testnet"
+                NODE_URL="https://qrlwallet.com/api/qrl-rpc/testnet"
                 break
                 ;;
             "Custom node (enter URL manually)")
@@ -186,19 +186,13 @@ setup_frontend() {
     cat > .env << EOL
 DATABASE_URL=mongodb://localhost:27017/qrldata-z?readPreference=primary
 DOMAIN_NAME=http://localhost:3000
-HANDLER_URL=http://127.0.0.1:8081
-EOL
-
-    # Create .env.local file
-    cat > .env.local << EOL
-DATABASE_URL=mongodb://localhost:27017/qrldata-z?readPreference=primary
-DOMAIN_NAME=http://localhost:3000
-HANDLER_URL=http://127.0.0.1:8081
+HANDLER_URL=http://127.0.0.1:8082
+NEXT_PUBLIC_HANDLER_URL=http://localhost:3000/api
 EOL
 
     # Install dependencies
     print_status "Installing frontend dependencies..."
-    npm install --legacy-peer-deps || print_error "Failed to install frontend dependencies"
+    npm install || print_error "Failed to install frontend dependencies"
 
     # Update browserslist database
     print_status "Updating browserslist database..."
@@ -212,7 +206,7 @@ EOL
 # Setup blockchain synchronizer
 setup_synchronizer() {
     print_status "Setting up blockchain synchronizer..."
-    cd "$BASE_DIR/Zond2mongoDB" || print_error "Synchronizer directory not found"
+    cd "$BASE_DIR/QRL2MongoDB" || print_error "Synchronizer directory not found"
 
     # Create .env file
     cat > .env << EOL
@@ -226,7 +220,7 @@ EOL
 
     # Start synchronizer with PM2, explicitly setting environment variables
     print_status "Starting synchronizer with PM2..."
-    pm2 start ./zsyncer.exe --name "syncer" --cwd "$BASE_DIR/Zond2mongoDB" || print_error "Failed to start synchronizer"
+    pm2 start ./zsyncer.exe --name "syncer" --cwd "$BASE_DIR/QRL2MongoDB" || print_error "Failed to start synchronizer"
 }
 
 # Save PM2 processes

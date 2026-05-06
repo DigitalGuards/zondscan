@@ -1,100 +1,28 @@
-"use client";
+'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import axios from 'axios';
 import config from '../../../config';
 import { useQuery } from '@tanstack/react-query';
-import type { Block, BlocksResponse } from '@/app/types';
+import type { BlocksResponse } from '@/app/types';
 import { useRouter } from 'next/navigation';
+import { timeAgo, truncateHash } from '../../lib/helpers';
 import SearchBar from '../../components/SearchBar';
+import Pagination from '../../components/Pagination';
 
-interface BlockCardProps {
-  blockData: Block;
-  currentPage?: number;
-}
-
-const BlockCard: React.FC<BlockCardProps> = ({ blockData, currentPage }) => {
-  // Format date using UTC to avoid hydration mismatch
-  const formatDate = (timestamp: number): string => {
-    const date = new Date(timestamp * 1000);
-    const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
-    const day = date.getUTCDate().toString().padStart(2, '0');
-    const year = date.getUTCFullYear();
-    const hours = date.getUTCHours().toString().padStart(2, '0');
-    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-    const seconds = date.getUTCSeconds().toString().padStart(2, '0');
-    return `${month}/${day}/${year}, ${hours}:${minutes}:${seconds}`;
-  };
-
-  // Truncate hash to show first 6 and last 4 characters
-  const truncateHash = (hash: string): string => {
-    if (!hash) return '';
-    return `${hash.substring(0, 6)}...${hash.substring(hash.length - 4)}`;
-  };
-
-  // Convert block number from hex to decimal if needed
-  const formatBlockNumber = (number: string | number): number => {
-    if (typeof number === 'string' && number.startsWith('0x')) {
-      return parseInt(number, 16);
-    }
-    return typeof number === 'number' ? number : parseInt(number);
-  };
-
-  const blockNumber = formatBlockNumber(blockData.number);
-
-  const pageParam = currentPage ? `?from=blocks&page=${currentPage}` : '';
-
-  return (
-    <a
-      href={`/block/${blockNumber}${pageParam}`}
-      className='relative overflow-hidden rounded-xl 
-                bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]
-                border border-[#3d3d3d] shadow-xl
-                hover:border-[#ffa729] transition-all duration-300
-                group mb-3 sm:mb-4 block'
-    >
-      <div className="p-4 sm:p-6">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center">
-          {/* Left Section - Icon and Status */}
-          <div className="flex flex-row sm:flex-col items-center mb-3 sm:mb-0 sm:w-48 w-full justify-between">
-            <div className="flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 sm:w-8 sm:h-8 text-[#ffa729] group-hover:scale-110 transition-transform duration-300">
-                <path strokeLinecap="round" strokeLinejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
-              </svg>
-              <span className="text-gray-300 ml-2 sm:hidden">Block #{blockNumber}</span>
-            </div>
-            <div className="flex flex-col items-end sm:items-center">
-              <p className="text-gray-300 mt-0 sm:mt-2 text-sm sm:text-base">Confirmed</p>
-              <p className="text-gray-400 text-xs sm:text-sm">{formatDate(blockData.timestamp)}</p>
-            </div>
-          </div>
-
-          {/* Right Section - Block Info */}
-          <div className="flex-1 sm:ml-8 space-y-2 w-full">
-            <h2 className="text-lg font-semibold text-[#ffa729] group-hover:scale-105 transition-transform duration-300 hidden sm:block">
-              Block #{blockNumber}
-            </h2>
-            <div className="flex items-center text-gray-400">
-              <span className="sm:inline hidden">Hash: </span>
-              <span className="text-gray-300 font-mono text-sm sm:text-base" title={blockData.hash}>
-                {truncateHash(blockData.hash)}
-              </span>
-            </div>
-            {blockData.transactions && (
-              <p className="text-gray-400 text-sm sm:text-base">
-                Transactions: <span className="text-gray-300">{blockData.transactions.length}</span>
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-    </a>
-  );
-};
+const ITEMS_PER_PAGE = 10;
 
 const fetchBlocks = async (page: string): Promise<BlocksResponse> => {
-  const response = await axios.get<BlocksResponse>(`${config.handlerUrl}/blocks?page=${page}&limit=5`);
+  const response = await axios.get<BlocksResponse>(`${config.handlerUrl}/blocks?page=${page}&limit=${ITEMS_PER_PAGE}`);
   return response.data;
+};
+
+const formatBlockNumber = (number: string | number): number => {
+  if (typeof number === 'string' && number.startsWith('0x')) {
+    return parseInt(number, 16);
+  }
+  return typeof number === 'number' ? number : parseInt(number);
 };
 
 interface BlocksClientProps {
@@ -109,98 +37,110 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['blocks', initialPage],
     queryFn: () => fetchBlocks(initialPage),
-    staleTime: 60000, // Consider data fresh for 60 seconds (increased from 30s)
-    gcTime: 5 * 60 * 1000, // Keep unused data in cache for 5 minutes
+    staleTime: 60000,
+    gcTime: 5 * 60 * 1000,
     retry: 2,
-    initialData // Use server-fetched data as initial data
+    initialData,
   });
 
-  // Limit total pages to 300 and calculate based on 5 blocks per page
-  const totalPages = data ? Math.min(Math.round(data.total / 5), 300) : 300;
+  const totalPages = data ? Math.min(Math.ceil(data.total / ITEMS_PER_PAGE), 300) : 300;
 
   const goToNextPage = (): void => {
-    const nextPage = Math.min(currentPage + 1, totalPages);
-    router.push(`/blocks/${nextPage}`);
+    router.push(`/blocks/${Math.min(currentPage + 1, totalPages)}`);
   };
 
   const goToPreviousPage = (): void => {
-    const prevPage = Math.max(currentPage - 1, 1);
-    router.push(`/blocks/${prevPage}`);
+    router.push(`/blocks/${Math.max(currentPage - 1, 1)}`);
   };
 
-  if (isLoading) {
-    return (
-      <div className="p-4 sm:p-8">
-        <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-[#ffa729]">Latest Synced Blocks</h1>
-        <div className="space-y-3 sm:space-y-4">
-          {[...Array(5)].map((_, i) => (
-            <div 
-              key={i}
-              className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] p-4 sm:p-6 animate-pulse"
-            >
-              <div className="flex flex-col sm:flex-row items-start sm:items-center">
-                <div className="w-full sm:w-48 flex flex-row sm:flex-col items-center justify-between sm:justify-center">
-                  <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gray-700 rounded-lg mb-0 sm:mb-2"></div>
-                  <div className="h-4 w-20 bg-gray-700 rounded"></div>
-                </div>
-                <div className="flex-1 sm:ml-8 space-y-2 mt-3 sm:mt-0">
-                  <div className="h-5 sm:h-6 w-32 bg-gray-700 rounded"></div>
-                  <div className="h-4 w-32 bg-gray-700 rounded"></div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div className="p-4 sm:p-8">
-        <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-[#ffa729]">Latest Synced Blocks</h1>
-        <div className="bg-red-900/50 border border-red-500 text-red-200 px-4 sm:px-6 py-3 sm:py-4 rounded-xl">
-          <p className="font-bold">Error:</p>
-          <p className="text-sm sm:text-base">{error instanceof Error ? error.message : 'Failed to load blocks'}</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="p-4 sm:p-8">
-      <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-[#ffa729]">Latest Synced Blocks</h1>
-      
-      <div className="max-w-[1200px] mx-auto mb-8">
+    <div className="p-4 sm:p-8 max-w-6xl mx-auto">
+      <h1 className="text-xl sm:text-2xl font-bold mb-4 text-[#ffa729]">Blocks</h1>
+
+      <div className="mb-6">
         <SearchBar />
       </div>
 
-      <div className="mb-6 sm:mb-8">
-        {data?.blocks.map((blockData) => (
-          <BlockCard key={blockData.number} blockData={blockData} currentPage={currentPage} />
-        ))}
+      <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden mb-6">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[#2a2a2a]">
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Block</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden sm:table-cell">Hash</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Txns</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Time</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden md:table-cell">Gas Used</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading ? (
+                Array.from({ length: ITEMS_PER_PAGE }).map((_, i) => (
+                  <tr key={i} className="border-b border-[#2a2a2a] last:border-b-0">
+                    <td className="px-4 py-3"><div className="h-4 w-16 bg-[#2a2a2a] rounded animate-pulse" /></td>
+                    <td className="px-4 py-3 hidden sm:table-cell"><div className="h-4 w-24 bg-[#2a2a2a] rounded animate-pulse" /></td>
+                    <td className="px-4 py-3"><div className="h-4 w-8 bg-[#2a2a2a] rounded animate-pulse" /></td>
+                    <td className="px-4 py-3"><div className="h-4 w-16 bg-[#2a2a2a] rounded animate-pulse" /></td>
+                    <td className="px-4 py-3 hidden md:table-cell"><div className="h-4 w-16 bg-[#2a2a2a] rounded animate-pulse" /></td>
+                  </tr>
+                ))
+              ) : isError ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-12 text-center text-red-400">
+                    {error instanceof Error ? error.message : 'Failed to load blocks'}
+                  </td>
+                </tr>
+              ) : !data?.blocks?.length ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-12 text-center text-gray-500">
+                    No blocks found.
+                  </td>
+                </tr>
+              ) : (
+                data.blocks.map((block) => {
+                  const blockNum = formatBlockNumber(block.number);
+                  return (
+                    <tr
+                      key={block.number}
+                      className="border-b border-[#2a2a2a] last:border-b-0 hover:bg-[#252525] transition-colors"
+                    >
+                      <td className="px-4 py-3">
+                        <Link
+                          href={`/block/${blockNum}?from=blocks&page=${currentPage}`}
+                          className="text-[#ffa729] hover:text-[#ffb954] hover:underline font-medium tabular-nums"
+                        >
+                          {blockNum.toLocaleString()}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 hidden sm:table-cell">
+                        <span className="text-gray-400 font-mono text-xs" title={block.hash}>
+                          {truncateHash(block.hash, 10, 6)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-300 tabular-nums">
+                        {block.transactions?.length ?? 0}
+                      </td>
+                      <td className="px-4 py-3 text-gray-400 tabular-nums">
+                        {timeAgo(block.timestamp)}
+                      </td>
+                      <td className="px-4 py-3 text-gray-400 tabular-nums hidden md:table-cell">
+                        {block.gasUsed ? parseInt(block.gasUsed, 16).toLocaleString() : '0'}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div className="flex justify-center items-center gap-2 sm:gap-4 text-sm sm:text-base text-gray-300">
-        <button 
-          onClick={goToPreviousPage} 
-          disabled={currentPage === 1} 
-          className="px-3 sm:px-4 py-2 rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d]
-                   hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d]
-                   transition-colors text-sm sm:text-base"
-        >
-          Previous
-        </button>
-        <span className="text-sm sm:text-base">Page {currentPage} of {totalPages}</span>
-        <button 
-          onClick={goToNextPage} 
-          disabled={currentPage === totalPages} 
-          className="px-3 sm:px-4 py-2 rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d]
-                   hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d]
-                   transition-colors text-sm sm:text-base"
-        >
-          Next
-        </button>
-      </div>
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPrevious={goToPreviousPage}
+        onNext={goToNextPage}
+      />
     </div>
   );
 }

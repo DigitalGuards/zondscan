@@ -8,12 +8,12 @@ function onlyNumbers(str: string): boolean {
   return /^[0-9]+$/.test(str);
 }
 
-// Validates if the input is a valid address (either 0x or Z prefixed)
+// Validates if the input is a valid address (either 0x or Q prefixed)
 function isValidAddress(address: string): boolean {
-  // Check for Z-prefixed address (Z or z + 40 hex chars)
-  if ((address.startsWith('Z') || address.startsWith('z')) && address.length === 41) {
+  // Check for Q-prefixed address (Q or q + 40 hex chars)
+  if ((address.startsWith('Q') || address.startsWith('q')) && address.length === 41) {
     // Check if the rest of the string is valid hex
-    return /^[Zz][0-9a-fA-F]{40}$/.test(address);
+    return /^[Qq][0-9a-fA-F]{40}$/.test(address);
   }
   
   // Check for 0x-prefixed address (0x + 40 hex chars)
@@ -42,7 +42,7 @@ export default function SearchBar(): JSX.Element {
     } else if (searchValue.length === 66) {
       newPath = "/tx/" + searchValue;
     } else if (isValidAddress(searchValue)) {
-      const normalized = searchValue.startsWith('z') ? 'Z' + searchValue.slice(1) : searchValue;
+      const normalized = searchValue.startsWith('q') ? 'Q' + searchValue.slice(1) : searchValue;
       newPath = "/address/" + normalized;
     } else {
       setError('Invalid input!');
@@ -78,7 +78,7 @@ export default function SearchBar(): JSX.Element {
             ref={inputRef}
             type="text"
             aria-label="Search by address, transaction hash, or block number"
-            placeholder="Search by Address (Zxx) / Txn Hash / Block.."
+            placeholder="Search by Address (Qxx) / Txn Hash / Block.."
             className="flex-1 py-3 sm:py-4 px-4 sm:px-6 text-sm sm:text-base text-gray-300
                      bg-background rounded-xl
                      border border-border
