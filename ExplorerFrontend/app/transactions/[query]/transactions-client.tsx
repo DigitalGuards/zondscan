@@ -21,18 +21,16 @@ export default function TransactionsClient({ initialData, pageNumber }: Transact
   const [error, setError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState<boolean>(false);
 
-  // Re-fetch data when page changes
   useEffect(() => {
     setData(initialData);
   }, [initialData, pageNumber]);
 
-  // Optional: Function to manually refetch data
   const refetchData = async (): Promise<void> => {
     try {
       setIsLoading(true);
       const pageNum = parseInt(pageNumber, 10) || 1;
       const timestamp = Date.now();
-      const response = await fetch(`${config.handlerUrl}/txs?page=${pageNum}&_t=${timestamp}`, {
+      const response = await fetch(`${config.handlerUrl}/txs?page=${pageNum}&limit=10&_t=${timestamp}`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
@@ -58,11 +56,14 @@ export default function TransactionsClient({ initialData, pageNumber }: Transact
 
   if (error) {
     return (
-      <div role="alert" className="p-4">
-        <h1 className="text-xl font-bold mb-2">Error</h1>
-        <p>{error}</p>
-        <button 
-          onClick={refetchData} 
+      <div className="p-4 sm:p-8 max-w-6xl mx-auto">
+        <h1 className="text-xl sm:text-2xl font-bold mb-4 text-[#ffa729]">Transactions</h1>
+        <div className="bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-xl">
+          <p className="font-bold">Error:</p>
+          <p className="text-sm">{error}</p>
+        </div>
+        <button
+          onClick={refetchData}
           className="mt-4 px-4 py-2 bg-[#ffa729] text-black rounded-lg hover:bg-[#ffb85c] transition-colors"
         >
           Try Again
@@ -75,15 +76,15 @@ export default function TransactionsClient({ initialData, pageNumber }: Transact
     return (
       <div className="flex justify-center items-center p-8">
         <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#ffa729]"></div>
-        <span className="ml-2">Refreshing transactions...</span>
+        <span className="ml-2 text-gray-400">Refreshing transactions...</span>
       </div>
     );
   }
 
   return (
-    <TransactionsList 
-      initialData={data} 
-      currentPage={parseInt(pageNumber)} 
+    <TransactionsList
+      initialData={data}
+      currentPage={parseInt(pageNumber)}
     />
   );
 }

@@ -38,8 +38,8 @@ clean_database_and_logs() {
         mongosh --eval "db.getSiblingDB('qrldata-z').dropDatabase()" || print_status "Failed to drop database or database doesn't exist"
 
         # Delete the log file if it exists
-        if [ -f "$BASE_DIR/Zond2mongoDB/logs/zond_sync.log" ]; then
-            rm "$BASE_DIR/Zond2mongoDB/logs/zond_sync.log" || print_status "Failed to delete log file"
+        if [ -f "$BASE_DIR/QRL2MongoDB/logs/zond_sync.log" ]; then
+            rm "$BASE_DIR/QRL2MongoDB/logs/zond_sync.log" || print_status "Failed to delete log file"
         else
             print_status "Log file not found, skipping deletion"
         fi
@@ -65,6 +65,23 @@ check_dependencies() {
     fi
 }
 
+# Configure pm2-logrotate so logs can't fill the disk
+setup_pm2_logrotate() {
+    print_status "Configuring pm2-logrotate (daily, 3-day retention, 50M cap, gzip)..."
+
+    if pm2 list 2>/dev/null | grep -q pm2-logrotate; then
+        print_status "pm2-logrotate already installed"
+    else
+        pm2 install pm2-logrotate || print_error "Failed to install pm2-logrotate"
+    fi
+
+    pm2 set pm2-logrotate:retain 3
+    pm2 set pm2-logrotate:max_size 50M
+    pm2 set pm2-logrotate:compress true
+    pm2 set pm2-logrotate:rotateInterval '0 0 * * *'
+    pm2 set pm2-logrotate:dateFormat YYYY-MM-DD_HH-mm-ss
+    pm2 set pm2-logrotate:rotateModule true
+}
 
 # Prompt for node selection
 select_node() {
@@ -79,7 +96,7 @@ select_node() {
                 break
                 ;;
             "Testnet Remote node (qrlwallet.com)")
-                NODE_URL="https://qrlwallet.com/api/zond-rpc/testnet"
+                NODE_URL="https://qrlwallet.com/api/qrl-rpc/testnet"
                 break
                 ;;
             "Custom node (enter URL manually)")
@@ -131,14 +148,6 @@ clone_repo() {
     if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
         print_status "Repository already exists. Checking git status..."
         git status
-        
-        read -p "Would you like to pull the latest changes? (y/n): " PULL_CHANGES
-        if [[ $PULL_CHANGES =~ ^[Yy]$ ]]; then
-            print_status "Pulling latest changes..."
-            git pull || print_error "Failed to pull latest changes"
-        else
-            print_status "Skipping pull, continuing with existing code..."
-        fi
     else
         print_status "Cloning QRL Explorer repository..."
         git clone https://github.com/DigitalGuards/zondscan.git || print_error "Failed to clone repository"
@@ -146,6 +155,87 @@ clone_repo() {
     fi
 
     export BASE_DIR=$(pwd)
+}
+
+# Prompt for branch selection (checkout + optional pull)
+select_branch() {
+    cd "$BASE_DIR" || print_error "BASE_DIR not set or invalid"
+
+    print_status "Fetching latest refs from origin..."
+    git fetch --all --prune 2>/dev/null || print_status "Fetch failed, continuing with cached refs"
+
+    CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    print_status "Current branch: $CURRENT_BRANCH"
+
+    # Build deduped branch list from local + origin (skip the bare 'origin' HEAD pointer)
+    mapfile -t BRANCHES < <(git for-each-ref --format='%(refname:short)' refs/heads refs/remotes/origin \
+        | grep -vE '^origin(/HEAD)?$' \
+        | sed 's|^origin/||' \
+        | sort -u)
+
+    print_status "Select branch to deploy:"
+    PS3="Please choose a branch: "
+    options=("Keep current ($CURRENT_BRANCH)" "${BRANCHES[@]}" "Custom (enter name manually)")
+    select opt in "${options[@]}"
+    do
+        case $opt in
+            "")
+                echo "Invalid option. Please try again."
+                ;;
+            "Keep current ($CURRENT_BRANCH)")
+                SELECTED_BRANCH="$CURRENT_BRANCH"
+                break
+                ;;
+            "Custom (enter name manually)")
+                read -p "Enter branch name: " SELECTED_BRANCH
+                [ -z "$SELECTED_BRANCH" ] && print_error "Branch name required"
+                break
+                ;;
+            *)
+                SELECTED_BRANCH="$opt"
+                break
+                ;;
+        esac
+    done
+
+    print_status "Selected branch: $SELECTED_BRANCH"
+
+    # If switching branches and tree is dirty, offer to stash
+    if [ "$SELECTED_BRANCH" != "$CURRENT_BRANCH" ] && [ -n "$(git status --porcelain)" ]; then
+        print_status "Working tree has uncommitted changes:"
+        git status --short
+        read -p "Stash and continue? (y/n): " STASH_CHANGES
+        if [[ $STASH_CHANGES =~ ^[Yy]$ ]]; then
+            git stash push -m "deploy.sh auto-stash $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                || print_error "Failed to stash changes"
+        else
+            print_error "Aborting — clean working tree first or stash manually"
+        fi
+    fi
+
+    # Checkout target branch — track origin if no local branch exists yet
+    if [ "$SELECTED_BRANCH" != "$CURRENT_BRANCH" ]; then
+        if git show-ref --verify --quiet "refs/heads/$SELECTED_BRANCH"; then
+            git checkout "$SELECTED_BRANCH" || print_error "Failed to checkout $SELECTED_BRANCH"
+        elif git show-ref --verify --quiet "refs/remotes/origin/$SELECTED_BRANCH"; then
+            git checkout -b "$SELECTED_BRANCH" "origin/$SELECTED_BRANCH" \
+                || print_error "Failed to checkout origin/$SELECTED_BRANCH"
+        else
+            print_error "Branch '$SELECTED_BRANCH' not found locally or on origin"
+        fi
+    fi
+
+    # Pull latest if branch tracks a remote
+    if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+        read -p "Pull latest changes for $SELECTED_BRANCH? (y/n): " PULL_LATEST
+        if [[ $PULL_LATEST =~ ^[Yy]$ ]]; then
+            git pull --ff-only || print_error "Failed to pull (non-fast-forward — resolve manually)"
+        fi
+    else
+        print_status "Branch has no upstream — skipping pull"
+    fi
+
+    print_status "On branch $(git rev-parse --abbrev-ref HEAD) at $(git rev-parse --short HEAD)"
 }
 
 # Setup server environment
@@ -311,27 +401,14 @@ setup_frontend() {
         cat > .env << EOL
 DATABASE_URL=mongodb://localhost:27017/qrldata-z?readPreference=primary
 DOMAIN_NAME=$PUBLIC_URL
-HANDLER_URL=http://127.0.0.1:8081
-NEXT_PUBLIC_HANDLER_URL=$PUBLIC_URL/api
-EOL
-    fi
-
-    # Create .env.local file only if it doesn't exist
-    if [ -f ".env.local" ]; then
-        print_status ".env.local file already exists, skipping creation"
-    else
-        print_status "Creating .env.local file..."
-        cat > .env.local << EOL
-DATABASE_URL=mongodb://localhost:27017/qrldata-z?readPreference=primary
-DOMAIN_NAME=$PUBLIC_URL
-HANDLER_URL=http://127.0.0.1:8081
+HANDLER_URL=http://127.0.0.1:8082
 NEXT_PUBLIC_HANDLER_URL=$PUBLIC_URL/api
 EOL
     fi
 
     # Install dependencies
     print_status "Installing frontend dependencies..."
-    npm install --legacy-peer-deps || print_error "Failed to install frontend dependencies"
+    npm install || print_error "Failed to install frontend dependencies"
 
     # Update browserslist database
     print_status "Updating browserslist database..."
@@ -349,7 +426,7 @@ EOL
 # Setup blockchain synchronizer
 setup_synchronizer() {
     print_status "Setting up blockchain synchronizer..."
-    cd "$BASE_DIR/Zond2mongoDB" || print_error "Synchronizer directory not found"
+    cd "$BASE_DIR/QRL2MongoDB" || print_error "Synchronizer directory not found"
 
     # Create .env file only if it doesn't exist
     if [ -f ".env" ]; then
@@ -372,7 +449,7 @@ EOL
 
     # Start synchronizer with PM2, explicitly setting environment variables
     print_status "Starting synchronizer with PM2..."
-     pm2 start ./zsyncer --name "synchroniser" --cwd "$BASE_DIR/Zond2mongoDB" || print_error "Failed to start synchronizer"
+     pm2 start ./zsyncer --name "synchroniser" --cwd "$BASE_DIR/QRL2MongoDB" || print_error "Failed to start synchronizer"
 }
 
 # Save PM2 processes
@@ -397,6 +474,9 @@ main() {
     # Check for required tools
     check_dependencies
 
+    # Ensure log rotation is in place before any processes start
+    setup_pm2_logrotate
+
     # Prompt for node selection
     select_node
 
@@ -410,6 +490,9 @@ main() {
 
     # Clone and setup
     clone_repo
+
+    # Pick which branch to deploy (after repo exists, before any builds)
+    select_branch
 
     # Ask if user wants to setup nginx
     read -p "Do you want to setup Nginx reverse proxy? (y/n): " SETUP_NGINX

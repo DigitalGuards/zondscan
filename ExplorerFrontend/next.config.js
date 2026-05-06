@@ -38,6 +38,14 @@ const nextConfig = {
         source: '/api/:path*',
         destination: `${process.env.HANDLER_URL || 'http://127.0.0.1:8081'}/:path*`,
       },
+      {
+        source: '/dapp-example',
+        destination: '/dapp-example/index.html',
+      },
+      {
+        source: '/dapp-example/',
+        destination: '/dapp-example/index.html',
+      },
     ];
   },
 }

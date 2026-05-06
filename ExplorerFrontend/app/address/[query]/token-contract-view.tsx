@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import CopyButton from "../../components/CopyButton";
 import QRCodeButton from "../../components/QRCodeButton";
+import ContractBytecode from "../../components/ContractBytecode";
 import { formatAmount } from "../../lib/helpers";
 import Breadcrumbs from "../../components/Breadcrumbs";
 
@@ -340,6 +341,14 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                 </div>
                             </div>
                         </div>
+
+                        {/* Contract Bytecode */}
+                        {contractData.contractCode && (
+                            <div>
+                                <h3 className="text-lg font-semibold text-accent mb-4">Bytecode</h3>
+                                <ContractBytecode contractCode={contractData.contractCode} />
+                            </div>
+                        )}
 
                         {/* Creation Transaction Details */}
                         <div>

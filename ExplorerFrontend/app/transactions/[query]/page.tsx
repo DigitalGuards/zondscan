@@ -11,7 +11,7 @@ async function getTransactions(page: string): Promise<TransactionsResponse> {
     const pageNum = parseInt(page, 10) || 1;
     
     const timestamp = Date.now();
-    const response = await fetch(`${config.handlerUrl}/txs?page=${pageNum}&_t=${timestamp}`, {
+    const response = await fetch(`${config.handlerUrl}/txs?page=${pageNum}&limit=10&_t=${timestamp}`, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',

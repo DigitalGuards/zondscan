@@ -1,11 +1,36 @@
-export function decodeToHex(input: string, format?: string): string {
-  const decoded = atob(input);
-  let hex = '';
-  for (let i = 0; i < decoded.length; i++) {
-    const byte = decoded.charCodeAt(i).toString(16);
-    hex += byte.length === 1 ? '0' + byte : byte;
+export function timeAgo(unixSeconds: number): string {
+  const now = Math.floor(Date.now() / 1000);
+  const diff = now - unixSeconds;
+  if (diff < 0) return 'just now';
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+export function formatStaked(gwei: string): string {
+  try {
+    const val = BigInt(gwei || '0');
+    const qrlBase = val / BigInt(1_000_000_000);
+    const remainder = val % BigInt(1_000_000_000);
+    const decimalStr = remainder.toString().padStart(9, '0').replace(/0+$/, '');
+    const result = formatNumberWithCommas(qrlBase.toString());
+    return decimalStr.length > 0 ? `${result}.${decimalStr} QRL` : `${result} QRL`;
+  } catch {
+    return '0 QRL';
   }
-  return hex;
+}
+
+export function decodeToHex(input: string, format?: string): string {
+  if (!input) return '';
+  try {
+    const binary = atob(input);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    return '';
+  }
 }
 
 export function toFixed(x: number | string | undefined | null): string {
@@ -40,37 +65,16 @@ export function toFixed(x: number | string | undefined | null): string {
   return num.toString();
 }
 
-export function formatGas(amount: number | string | undefined | null): [string, string] {
-  // Handle undefined or null
-  if (amount === undefined || amount === null) {
-    return ['0', 'Shor'];
+export function formatGasPrice(wei: number | string | undefined | null): string {
+  if (wei === undefined || wei === null || wei === 0 || wei === '0' || wei === '0x0') {
+    return '0';
   }
-
-  // Handle zero amount
-  if (amount === 0 || amount === '0' || amount === '0x0') {
-    return ['0', 'Shor'];
-  }
-
   try {
-    let value: number | bigint;
-    // Handle hex strings (e.g., "0x123")
-    if (typeof amount === 'string' && amount.startsWith('0x')) {
-      value = parseInt(amount, 16);
-    }
-    // Handle number values
-    else if (typeof amount === 'number') {
-      value = amount;
-    }
-    // Handle other formats
-    else {
-      value = BigInt(amount);
-    }
-
-    // Return the numeric value as a string with 'Shor' unit
-    return [value.toString(), 'Shor'];
-  } catch (error) {
-    console.error('Error converting gas amount:', error, amount);
-    return ['0', 'Shor'];
+    const value = typeof wei === 'string' && wei.startsWith('0x') ? BigInt(wei) : BigInt(String(wei));
+    const gwei = Number(value) / 1e9;
+    return gwei < 0.001 ? gwei.toExponential(2) : parseFloat(gwei.toFixed(9)).toString();
+  } catch {
+    return '0';
   }
 }
 
@@ -143,8 +147,8 @@ export function normalizeHexString(hexData: string | undefined | null): string {
     return hexData.slice(2);
   }
 
-  // If it starts with Z or z, remove the prefix
-  if (typeof hexData === 'string' && (hexData.startsWith('Z') || hexData.startsWith('z'))) {
+  // If it starts with Q or q, remove the prefix
+  if (typeof hexData === 'string' && (hexData.startsWith('Q') || hexData.startsWith('q'))) {
     return hexData.slice(1);
   }
 
@@ -179,25 +183,6 @@ export function formatTimestamp(timestamp: number | undefined | null): string {
   return `${month}/${day}/${year}, ${hour12}:${minutes}:${seconds} ${ampm} UTC`;
 }
 
-export function formatNumber(value: number): string {
-  if (typeof value !== "number" || isNaN(value)) {
-    return "Error";
-  }
-  let formatted: string;
-  if (value >= 1e12) {
-    formatted = (value / 1e12).toFixed(2) + 'T';
-  } else if (value >= 1e9) {
-    formatted = (value / 1e9).toFixed(2) + 'B';
-  } else if (value >= 1e6) {
-    formatted = (value / 1e6).toFixed(2) + 'M';
-  } else if (value >= 1e3) {
-    formatted = (value / 1e3).toFixed(2) + 'K';
-  } else {
-    formatted = value.toFixed(2);
-  }
-  return '$' + formatted;
-}
-
 export function formatNumberWithCommas(x: number | string | undefined | null): string {
   if (x === undefined || x === null) {
     return "0";
@@ -219,14 +204,14 @@ export function truncateHash(hash: string | undefined | null, startLength = 6, e
 }
 
 /**
- * Formats an address to ensure it has the correct prefix (Z for QRL addresses, 0x for contract addresses)
+ * Formats an address to ensure it has the correct prefix (Q for QRL addresses, 0x for contract addresses)
  */
 export function formatAddress(address: string | undefined | null): string {
   if (!address) return '';
 
-  // If already has Z/z prefix, normalize to uppercase Z
-  if (address.startsWith('Z') || address.startsWith('z')) {
-    return 'Z' + address.slice(1);
+  // If already has Q/q prefix, normalize to uppercase Q
+  if (address.startsWith('Q') || address.startsWith('q')) {
+    return 'Q' + address.slice(1);
   }
 
   // If has 0x prefix
@@ -235,13 +220,13 @@ export function formatAddress(address: string | undefined | null): string {
     if (address.startsWith('0x7')) {
       return address;
     }
-    // For regular addresses, convert to Z prefix
-    return 'Z' + address.slice(2);
+    // For regular addresses, convert to Q prefix
+    return 'Q' + address.slice(2);
   }
 
-  // If no prefix but is a valid hex string, add Z prefix
+  // If no prefix but is a valid hex string, add Q prefix
   if (/^[0-9a-fA-F]+$/.test(address)) {
-    return 'Z' + address;
+    return 'Q' + address;
   }
 
   // If invalid format, return as is
@@ -283,7 +268,7 @@ export function decodeTokenTransferInput(inputData: string | undefined | null): 
     try {
       // Extract recipient address (bytes 10-74, last 40 chars are the address)
       const toAddressPadded = data.slice(10, 74);
-      const toAddress = 'Z' + toAddressPadded.slice(-40);
+      const toAddress = 'Q' + toAddressPadded.slice(-40);
 
       // Extract amount (bytes 74-138)
       const amountHex = '0x' + data.slice(74);
@@ -311,11 +296,11 @@ export function decodeTokenTransferInput(inputData: string | undefined | null): 
     try {
       // Extract from address (bytes 10-74)
       const fromAddressPadded = data.slice(10, 74);
-      const fromAddress = 'Z' + fromAddressPadded.slice(-40);
+      const fromAddress = 'Q' + fromAddressPadded.slice(-40);
 
       // Extract to address (bytes 74-138)
       const toAddressPadded = data.slice(74, 138);
-      const toAddress = 'Z' + toAddressPadded.slice(-40);
+      const toAddress = 'Q' + toAddressPadded.slice(-40);
 
       // Extract amount (bytes 138-202)
       const amountHex = '0x' + data.slice(138);
@@ -333,6 +318,37 @@ export function decodeTokenTransferInput(inputData: string | undefined | null): 
   }
 
   return null;
+}
+
+/**
+ * Converts a smallest-unit integer string to a decimal string using BigInt (no floating-point).
+ * E.g. smallestUnitToDecimal("200000000000", 18) => "0.0000002"
+ */
+export function smallestUnitToDecimal(amount: string, decimals: number = 18): string {
+  if (!amount || amount === '0') return '0';
+  try {
+    const raw = BigInt(amount);
+    if (raw === BigInt(0)) return '0';
+    const divisor = BigInt(10) ** BigInt(decimals);
+    const wholePart = raw / divisor;
+    const fractionalPart = raw % divisor;
+    let fracStr = fractionalPart.toString().padStart(decimals, '0').replace(/0+$/, '');
+    return fracStr ? `${wholePart}.${fracStr}` : wholePart.toString();
+  } catch {
+    return '0';
+  }
+}
+
+/**
+ * Converts a decimal string to a smallest-unit integer string using string manipulation (no floating-point).
+ * E.g. decimalToSmallestUnit("0.0000002", 18) => "200000000000"
+ */
+export function decimalToSmallestUnit(value: string, decimals: number = 18): string {
+  if (!value || value === '0') return '0';
+  const parts = value.split('.');
+  const intPart = parts[0] || '0';
+  const fracPart = (parts[1] || '').slice(0, decimals).padEnd(decimals, '0');
+  return (intPart + fracPart).replace(/^0+/, '') || '0';
 }
 
 /**
