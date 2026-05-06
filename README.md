@@ -1,4 +1,4 @@
-# QRL Proof-Of-Stake Explorer
+# QRL V2 POS Explorer
 
 Quantum Resistant Ledger Proof-of-Stake explorer. It is blazing fast with a modern frontend using NextJS and Golang for the backend, stable and compatible with the Zond QRL network. Very easy to setup. Synchronising the blockchain node to MongoDB takes only 3 to 5 seconds, depending on your hardware, network speed, and size of the blockchain. Which makes it incredibly easy debug the system, as you can easily delete the blockchain data from MongoDB and simply restart to sync it again. Saves a lot of time.
 
@@ -22,7 +22,7 @@ The project consists of three main components:
    - Handles chain reorganization
    - Maintains data consistency
 
-Plus a Zond node (can be either external or local).
+Plus a QRL node (can be either external or local).
 
 Note: These instructions are only for the explorer related components. Are you trying to get your Zond up and running? Visit https://test-zond.theqrl.org/linux.html
 
@@ -55,7 +55,7 @@ These scripts will:
 1. Check for required dependencies (Node.js, npm, Go, MongoDB)
 2. Install PM2 if not present
 3. Clean up any existing PM2 processes and MongoDB data
-4. Prompt you to select a Zond node to connect to
+4. Prompt you to select a QRL node to connect to
 5. Set up and configure all three components with appropriate environment files
 6. Build and start all services using PM2
 
@@ -110,8 +110,6 @@ touch .env
 | HTTP_PORT | :8080 |
 | NODE_URL | http://localhost:8545 |
 
-**Note:** The backendAPI application specifically looks for a file named `.env` at runtime, not `.env.development` or `.env.production`.
-
 Build and start the backendAPI:
 ```bash
 # On Unix-like systems
@@ -155,8 +153,6 @@ pm2 start ./synchroniser.exe --name "synchroniser"
 pm2 save
 ```
 
-Great! The explorer should now be live. (Don't forget to use tmux or pm2 for Zond too!)
-
 ## Docker Setup
 
 ### Quick Start with Docker Compose
@@ -183,7 +179,7 @@ docker compose logs -f
 - Backend API: http://localhost:8082
 - MongoDB: localhost:27018
 
-**Note:** The Zond node URL defaults to `host.docker.internal:8545`. Update `docker-compose.yml` to point to your actual Zond node.
+**Note:** The QRL node URL defaults to `host.docker.internal:8545`. Update `docker-compose.yml` to point to your actual QRL node.
 
 ### Building Images Manually
 
@@ -233,7 +229,7 @@ Before deploying to production, update these files:
    echo -n "mongodb://user:pass@your-mongodb:27017/qrldata-z" | base64
    ```
 
-2. **k8s/configmap.yaml** - Set your Zond node URLs:
+2. **k8s/configmap.yaml** - Set your QRL node URLs:
    ```yaml
    NODE_URL: "http://your-zond-node:8545"
    BEACONCHAIN_API: "http://your-beacon:5051"
@@ -260,7 +256,7 @@ The backend consists of three main components that work together to provide bloc
    - Handles consensus and network communication
 
 2. **Zond2mongoDB (Synchronizer)**
-   - Connects to Zond node via RPC
+   - Connects to QRL node via RPC
    - Continuously syncs blockchain data to MongoDB
    - Components:
      * Block synchronization (blocks, transactions)
