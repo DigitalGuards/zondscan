@@ -10,7 +10,7 @@ QRL Proof-of-Stake Explorer - A blockchain explorer for the Quantum Resistant Le
 
 ```
 ┌─────────────────┐     ┌──────────────────┐     ┌───────────────┐     ┌──────────────┐
-│  QRL Zond Node  │────▶│  Zond2mongoDB    │────▶│   MongoDB     │◀────│  backendAPI  │
+│  QRL Zond Node  │────▶│  QRL2MongoDB    │────▶│   MongoDB     │◀────│  backendAPI  │
 │  (RPC :8545)    │     │  (synchronizer)  │     │  (qrldata-z)  │     │ (REST :8081) │
 └─────────────────┘     └──────────────────┘     └───────────────┘     └──────────────┘
                                                                               │
@@ -43,7 +43,7 @@ go build -o backendAPI main.go     # Build executable
 go test ./...                      # Run tests
 ```
 
-### Synchronizer (Zond2mongoDB/)
+### Synchronizer (QRL2MongoDB/)
 ```bash
 go mod download                     # Install dependencies
 go build -o synchroniser main.go    # Build executable
@@ -157,7 +157,7 @@ Analytics:
 - `rpc/` - Zond node RPC client
 - `services/validator_service.go` - Validator data processing
 
-## Sync Constants (Zond2mongoDB)
+## Sync Constants (QRL2MongoDB)
 
 ```go
 DefaultBatchSize       = 64    // Normal batch size
