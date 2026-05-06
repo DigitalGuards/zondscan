@@ -11,21 +11,37 @@ import (
 	"go.uber.org/zap"
 )
 
-// UpsertPendingTransaction updates or inserts a pending transaction
+// UpsertPendingTransaction updates or inserts a pending transaction.
+// createdAt is set only on initial insert (preserving "first seen" time across
+// repeated mempool polls); lastSeen is refreshed every call.
 func UpsertPendingTransaction(tx *models.PendingTransaction) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	tx.LastSeen = time.Now()
-	if tx.CreatedAt.IsZero() {
-		tx.CreatedAt = tx.LastSeen
+	now := time.Now()
+	tx.LastSeen = now
+	tx.CreatedAt = time.Time{}
+
+	bsonBytes, err := bson.Marshal(tx)
+	if err != nil {
+		configs.Logger.Error("Failed to marshal pending transaction", zap.Error(err))
+		return err
 	}
+	var setFields bson.M
+	if err := bson.Unmarshal(bsonBytes, &setFields); err != nil {
+		configs.Logger.Error("Failed to unmarshal pending transaction", zap.Error(err))
+		return err
+	}
+	delete(setFields, "createdAt")
 
 	opts := options.Update().SetUpsert(true)
 	filter := bson.M{"_id": tx.Hash}
-	update := bson.M{"$set": tx}
+	update := bson.M{
+		"$set":         setFields,
+		"$setOnInsert": bson.M{"createdAt": now},
+	}
 
-	_, err := configs.PendingTransactionsCollections.UpdateOne(ctx, filter, update, opts)
+	_, err = configs.PendingTransactionsCollections.UpdateOne(ctx, filter, update, opts)
 	if err != nil {
 		configs.Logger.Error("Failed to upsert pending transaction", zap.Error(err))
 		return err
