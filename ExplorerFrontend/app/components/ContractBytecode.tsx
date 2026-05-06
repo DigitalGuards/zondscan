@@ -2,30 +2,16 @@
 
 import { useMemo, useState } from 'react';
 import CopyButton from './CopyButton';
+import { decodeToHex } from '../lib/helpers';
 
 interface ContractBytecodeProps {
     contractCode: string;
 }
 
-function base64ToHex(b64: string): string {
-    if (!b64) return '';
-    try {
-        const binary = atob(b64);
-        let hex = '';
-        for (let i = 0; i < binary.length; i++) {
-            const byte = binary.charCodeAt(i).toString(16);
-            hex += byte.length === 1 ? '0' + byte : byte;
-        }
-        return hex;
-    } catch {
-        return '';
-    }
-}
-
 export default function ContractBytecode({ contractCode }: ContractBytecodeProps): JSX.Element | null {
     const [expanded, setExpanded] = useState(false);
 
-    const hex = useMemo(() => base64ToHex(contractCode), [contractCode]);
+    const hex = useMemo(() => decodeToHex(contractCode), [contractCode]);
 
     if (!hex) return null;
 

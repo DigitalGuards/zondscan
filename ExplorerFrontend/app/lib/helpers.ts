@@ -22,13 +22,15 @@ export function formatStaked(gwei: string): string {
 }
 
 export function decodeToHex(input: string, format?: string): string {
-  const decoded = atob(input);
-  let hex = '';
-  for (let i = 0; i < decoded.length; i++) {
-    const byte = decoded.charCodeAt(i).toString(16);
-    hex += byte.length === 1 ? '0' + byte : byte;
+  if (!input) return '';
+  try {
+    const binary = atob(input);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    return '';
   }
-  return hex;
 }
 
 export function toFixed(x: number | string | undefined | null): string {
