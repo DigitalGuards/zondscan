@@ -6,8 +6,8 @@ WORKDIR /app
 # Copy package files
 COPY package.json package-lock.json* ./
 
-# Install dependencies (--legacy-peer-deps for MUI version compatibility)
-RUN npm ci --legacy-peer-deps
+# Install dependencies
+RUN npm ci
 
 # Stage 2: Build the application
 FROM node:20-alpine AS builder
