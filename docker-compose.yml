@@ -65,7 +65,7 @@ services:
 
   syncer:
     build:
-      context: ./Zond2mongoDB
+      context: ./QRL2MongoDB
       dockerfile: Dockerfile
     container_name: zond-syncer
     restart: unless-stopped

@@ -17,7 +17,7 @@ The project consists of three main components:
    - MongoDB data aggregation
    - Real-time blockchain data serving
 
-3. **Zond2mongoDB**: Blockchain synchronizer
+3. **QRL2MongoDB**: Blockchain synchronizer
    - Syncs blockchain data to MongoDB
    - Handles chain reorganization
    - Maintains data consistency
@@ -121,11 +121,11 @@ go build -o backendAPI.exe main.go
 pm2 start ./backendAPI.exe --name "handler"
 ```
 
-### Zond2mongoDB Setup
+### QRL2MongoDB Setup
 
 Navigate to the synchronizer directory:
 ```
-cd ../Zond2mongoDB
+cd ../QRL2MongoDB
 touch .env
 ```
 
@@ -190,7 +190,7 @@ docker compose logs -f
 # Or build individually
 docker build -t zond-explorer-frontend:latest ./ExplorerFrontend
 docker build -t zond-explorer-backend:latest ./backendAPI
-docker build -t zond-explorer-syncer:latest ./Zond2mongoDB
+docker build -t zond-explorer-syncer:latest ./QRL2MongoDB
 ```
 
 ### Stopping Services
@@ -255,7 +255,7 @@ The backend consists of three main components that work together to provide bloc
    - Exposes RPC endpoints for data access
    - Handles consensus and network communication
 
-2. **Zond2mongoDB (Synchronizer)**
+2. **QRL2MongoDB (Synchronizer)**
    - Connects to QRL node via RPC
    - Continuously syncs blockchain data to MongoDB
    - Components:

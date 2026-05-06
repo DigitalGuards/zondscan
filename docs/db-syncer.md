@@ -1,8 +1,8 @@
-# Zond2mongoDB - Blockchain Database Synchronizer
+# QRL2MongoDB - Blockchain Database Synchronizer
 
 Comprehensive documentation for the QRL Zond blockchain synchronizer that powers [zondscan.com](https://zondscan.com). This service connects to a QRL Zond node via JSON-RPC, fetches blocks and transactions, and writes them to MongoDB (database: `qrldata-z`).
 
-**Source location:** `Zond2mongoDB/`
+**Source location:** `QRL2MongoDB/`
 
 ---
 
@@ -26,7 +26,7 @@ Comprehensive documentation for the QRL Zond blockchain synchronizer that powers
 ## 1. Architecture Overview
 
 ```
-                                    Zond2mongoDB
+                                    QRL2MongoDB
                                     ============
 
  +-----------------+          +-------------------------------+          +----------------+
@@ -879,7 +879,7 @@ When a new block is processed (`UpdatePendingTransactionsInBlock`):
 ### 10.2 Build
 
 ```bash
-cd Zond2mongoDB
+cd QRL2MongoDB
 
 # Download dependencies
 go mod download

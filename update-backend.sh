@@ -38,11 +38,11 @@ if [ $? -ne 0 ]; then
 fi
 echo -e "${GREEN}Git pull completed successfully${NC}"
 
-# Deploy Zond2mongoDB synchronizer
+# Deploy QRL2MongoDB synchronizer
 echo -e "${YELLOW}Building and deploying synchronizer...${NC}"
-cd Zond2mongoDB
+cd QRL2MongoDB
 if [ $? -ne 0 ]; then
-    echo -e "${RED}Error: Could not find Zond2mongoDB directory${NC}"
+    echo -e "${RED}Error: Could not find QRL2MongoDB directory${NC}"
     exit 1
 fi
 

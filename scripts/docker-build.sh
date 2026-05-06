@@ -33,7 +33,7 @@ echo ""
 
 # Build syncer
 echo "[3/3] Building syncer image..."
-docker build $NO_CACHE -t zond-explorer-syncer:latest "$PROJECT_ROOT/Zond2mongoDB"
+docker build $NO_CACHE -t zond-explorer-syncer:latest "$PROJECT_ROOT/QRL2MongoDB"
 echo "Syncer image built successfully!"
 echo ""
 

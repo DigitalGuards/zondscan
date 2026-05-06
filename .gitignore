@@ -7,10 +7,10 @@ ExplorerFrontend/coverage
 ExplorerFrontend/build
 ExplorerFrontend/tsconfig.tsbuildinfo
 ExplorerFrontend/.env.local
-Zond2mongoDB/.env
-Zond2mongoDB/main.exe
-Zond2mongoDB/logs.log
-Zond2mongoDB/rpc/.env
+QRL2MongoDB/.env
+QRL2MongoDB/main.exe
+QRL2MongoDB/logs.log
+QRL2MongoDB/rpc/.env
 backendAPI/main.exe
 backendAPI/.env.production
 backendAPI/.env.development
@@ -21,9 +21,9 @@ yarn-debug.log*
 yarn-error.log*
 nginx.conf
 backendAPI/backendAPI
-Zond2mongoDB/syncer
-Zond2mongoDB/zsyncer
-Zond2mongoDB/synchroniser/main
+QRL2MongoDB/syncer
+QRL2MongoDB/zsyncer
+QRL2MongoDB/synchroniser/main
 check-tx.txt
 check-mongodb.txt
 notes.md
@@ -33,11 +33,11 @@ QRLtoMongoDB-PoS/syncer
 todo.md
 notes
 tokentracking.md
-Zond2mongoDB/logs/reindex_contracts.log
-Zond2mongoDB/logs/reindex_tokens.log
+QRL2MongoDB/logs/reindex_contracts.log
+QRL2MongoDB/logs/reindex_tokens.log
 nul
 .cursor/rules/commentrule.mdc
-Zond2mongoDB/logs/*
+QRL2MongoDB/logs/*
 backendAPI/.env
 zond-contract-example/
 zond-contract-example*
@@ -47,8 +47,8 @@ backendAPI/backendAPI.log
 *.tsbuildinfo
 
 backendAPI/backendAPI
-Zond2mongoDB/syncer
-Zond2mongoDB/backendAPI
+QRL2MongoDB/syncer
+QRL2MongoDB/backendAPI
 backendAPI/handler/main
 ExplorerFrontend/tsconfig.tsbuildinfo
 ExplorerFrontend/.dapp-example-cache

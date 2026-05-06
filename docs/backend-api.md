@@ -1062,7 +1062,7 @@ HTTP_PORT=:8081
 - **Connection:** Via `MONGOURI` environment variable
 - **Connection singleton:** Uses `sync.Once` to ensure single connection across the application
 - **Timeout:** 10-second context timeout on connection
-- The database and collections are populated by the `Zond2mongoDB` synchronizer component (not the API).
+- The database and collections are populated by the `QRL2MongoDB` synchronizer component (not the API).
 
 ---
 
