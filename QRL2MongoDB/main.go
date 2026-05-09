@@ -2,11 +2,14 @@ package main
 
 import (
 	"QRL2MongoDB/configs"
+	"QRL2MongoDB/rpc"
 	"QRL2MongoDB/synchroniser"
 	"context"
+	"encoding/json"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -63,13 +66,54 @@ func main() {
 
 	configs.Logger.Info("Starting blockchain synchronization process...")
 	configs.Logger.Info("MongoDB URL: " + os.Getenv("MONGOURI"))
-	configs.Logger.Info("Node URL: " + os.Getenv("NODE_URL"))
+	configs.Logger.Info("Node URLs: " + strings.Join(rpc.Endpoints().AllURLs(), ", "))
 
-	// Start health check server for Kubernetes probes
+	// Start health check server for Kubernetes probes. The handler probes the
+	// configured node endpoints via the same selector the syncer uses, so
+	// `/health` reflects whether the syncer can actually make RPC calls right
+	// now (not just that the process is alive).
 	go func() {
 		http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"status":"ok"}`))
+			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+			defer cancel()
+			done := make(chan struct {
+				height uint64
+				err    error
+			}, 1)
+			go func() {
+				h, e := rpc.ProbeChainHead()
+				done <- struct {
+					height uint64
+					err    error
+				}{h, e}
+			}()
+			var height uint64
+			var probeErr error
+			select {
+			case <-ctx.Done():
+				probeErr = ctx.Err()
+			case res := <-done:
+				height = res.height
+				probeErr = res.err
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			payload := map[string]interface{}{
+				"endpoints":   rpc.Endpoints().AllURLs(),
+				"currentUrl":  rpc.Endpoints().CurrentURL(),
+				"primaryUrl":  rpc.Endpoints().PrimaryURL(),
+				"probeHeight": height,
+			}
+			if probeErr != nil {
+				payload["status"] = "degraded"
+				payload["error"] = probeErr.Error()
+				w.WriteHeader(http.StatusServiceUnavailable)
+			} else {
+				payload["status"] = "ok"
+				w.WriteHeader(http.StatusOK)
+			}
+			body, _ := json.Marshal(payload)
+			w.Write(body)
 		})
 		healthPort := os.Getenv("HEALTH_PORT")
 		if healthPort == "" {
