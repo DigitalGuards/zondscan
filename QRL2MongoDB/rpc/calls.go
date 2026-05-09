@@ -6,7 +6,6 @@ import (
 	"QRL2MongoDB/services"
 	"QRL2MongoDB/utils"
 	"QRL2MongoDB/validation"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,7 +14,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"go.uber.org/zap"
 )
@@ -35,53 +33,13 @@ func GetLatestBlock() (string, error) {
 		return "0x0", err
 	}
 
-	// Retry logic with exponential backoff
-	var resp *http.Response
-	var lastErr error
-	for retries := 0; retries < 3; retries++ {
-		req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err = GetHTTPClient().Do(req)
-		if err == nil && resp != nil {
-			break
-		}
-
-		lastErr = err
-		if resp != nil {
-			resp.Body.Close()
-		}
-
-		// Exponential backoff
-		backoffDuration := time.Duration(1<<uint(retries)) * time.Second
-		zap.L().Warn("RPC call failed, retrying...",
-			zap.Error(err),
-			zap.Int("retry", retries+1),
-			zap.Duration("backoff", backoffDuration))
-		time.Sleep(backoffDuration)
-	}
-
-	if lastErr != nil {
-		zap.L().Error("Failed to get response from RPC call after retries", zap.Error(lastErr))
-		return "0x0", lastErr
-	}
-	if resp == nil {
-		return "0x0", fmt.Errorf("received nil response after retries")
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
+	body, err := DoNodeRPC(b)
 	if err != nil {
-		zap.L().Info("Failed to read response body", zap.Error(err))
+		zap.L().Error("Failed to get response from RPC call after retries/failover", zap.Error(err))
 		return "0x0", err
 	}
 
-	err = json.Unmarshal([]byte(string(body)), &Zond)
-	if err != nil {
+	if err = json.Unmarshal(body, &Zond); err != nil {
 		zap.L().Info("Failed to unmarshal response", zap.Error(err))
 		return "0x0", err
 	}
@@ -112,26 +70,9 @@ func GetBlockByNumberMainnet(blockNumber string) (*models.ZondDatabaseBlock, err
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
-	if err != nil {
-		zap.L().Info("Failed to create request", zap.Error(err))
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := GetHTTPClient().Do(req)
+	body, err := DoNodeRPC(b)
 	if err != nil {
 		zap.L().Info("Failed to get response from RPC call", zap.Error(err))
-		return nil, err
-	}
-	if resp == nil {
-		return nil, fmt.Errorf("received nil response")
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		zap.L().Info("Failed to read response body", zap.Error(err))
 		return nil, err
 	}
 
@@ -181,29 +122,14 @@ func GetContractAddress(txHash string) (string, string, error) {
 		return "", "", err
 	}
 
-	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
-	if err != nil {
-		zap.L().Info("Failed to create request", zap.Error(err))
-		return "", "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := GetHTTPClient().Do(req)
+	body, err := DoNodeRPC(b)
 	if err != nil {
 		zap.L().Info("Failed to execute request", zap.Error(err))
 		return "", "", err
 	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		zap.L().Info("Failed to read response body", zap.Error(err))
-		return "", "", err
-	}
 
 	var ContractAddress models.Contract
-	err = json.Unmarshal([]byte(string(body)), &ContractAddress)
-	if err != nil {
+	if err := json.Unmarshal(body, &ContractAddress); err != nil {
 		zap.L().Info("Failed to unmarshal response", zap.Error(err))
 		return "", "", err
 	}
@@ -297,23 +223,17 @@ func CallDebugTraceTransaction(hash string) DebugTraceResult {
 		return emptyTrace(err)
 	}
 
-	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
-	if err != nil {
-		zap.L().Error("Failed to create request", zap.Error(err))
-		return emptyTrace(err)
+	// debug_traceTransaction is a primary-only method — public/foundation nodes
+	// don't expose the debug_ namespace. Pin to the primary URL so we don't
+	// surface a misleading "method not found" by failing over.
+	primary := Endpoints().PrimaryURL()
+	if primary == "" {
+		zap.L().Error("No node endpoint configured for debug trace")
+		return emptyTrace(fmt.Errorf("no node endpoint configured"))
 	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := GetHTTPClient().Do(req)
+	body, err := postWithRetry(primary, b, 1)
 	if err != nil {
 		zap.L().Error("Failed to execute request", zap.Error(err))
-		return emptyTrace(err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		zap.L().Error("Failed to read response body", zap.Error(err))
 		return emptyTrace(err)
 	}
 
@@ -493,23 +413,9 @@ func GetBalance(address string) (string, error) {
 		return "", err
 	}
 
-	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
-	if err != nil {
-		zap.L().Info("Failed to create request", zap.Error(err))
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := GetHTTPClient().Do(req)
+	body, err := DoNodeRPC(b)
 	if err != nil {
 		zap.L().Info("Failed to execute request", zap.Error(err))
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		zap.L().Info("Failed to read response body", zap.Error(err))
 		return "", err
 	}
 
@@ -669,29 +575,14 @@ func GetCode(address string, blockNrOrHash string) (string, error) {
 		return "", err
 	}
 
-	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
-	if err != nil {
-		zap.L().Info("Failed to create request", zap.Error(err))
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := GetHTTPClient().Do(req)
+	body, err := DoNodeRPC(b)
 	if err != nil {
 		zap.L().Info("Failed to execute request", zap.Error(err))
 		return "", err
 	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		zap.L().Info("Failed to read response body", zap.Error(err))
-		return "", err
-	}
 
 	var GetCode models.GetCode
-	err = json.Unmarshal([]byte(string(body)), &GetCode)
-	if err != nil {
+	if err := json.Unmarshal(body, &GetCode); err != nil {
 		zap.L().Info("Failed to unmarshal response", zap.Error(err))
 		return "", err
 	}
@@ -734,32 +625,14 @@ func ZondGetBlockLogs(blockNumber string, topics []string) (*models.ZondLogsResp
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
-	if err != nil {
-		zap.L().Info("Failed to create request", zap.Error(err))
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := GetHTTPClient().Do(req)
+	body, err := DoNodeRPC(b)
 	if err != nil {
 		zap.L().Info("Failed to get response from RPC call", zap.Error(err))
 		return nil, err
 	}
-	if resp == nil {
-		return nil, fmt.Errorf("received nil response")
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		zap.L().Info("Failed to read response body", zap.Error(err))
-		return nil, err
-	}
 
 	var responseData models.ZondLogsResponse
-	err = json.Unmarshal([]byte(string(body)), &responseData)
-	if err != nil {
+	if err := json.Unmarshal(body, &responseData); err != nil {
 		zap.L().Info("Failed to unmarshal response", zap.Error(err))
 		return nil, err
 	}
@@ -789,23 +662,9 @@ func GetTxDetailsByHash(txHash string) (*models.TransactionResult, error) {
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", os.Getenv("NODE_URL"), bytes.NewBuffer([]byte(b)))
-	if err != nil {
-		zap.L().Info("Failed to create request", zap.Error(err))
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := GetHTTPClient().Do(req)
+	body, err := DoNodeRPC(b)
 	if err != nil {
 		zap.L().Info("Failed to execute request", zap.Error(err))
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		zap.L().Info("Failed to read response body", zap.Error(err))
 		return nil, err
 	}
 

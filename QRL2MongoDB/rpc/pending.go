@@ -12,16 +12,20 @@ import (
 	"go.uber.org/zap"
 )
 
-// GetPendingTransactions retrieves all pending transactions from the node
-// Uses MEMPOOL_NODE_URL if set, otherwise falls back to NODE_URL
+// GetPendingTransactions retrieves all pending transactions from the node.
+// Uses MEMPOOL_NODE_URL if set, otherwise falls back to the configured primary
+// node URL. txpool_content is a primary-only RPC method (foundation public RPC
+// does not expose txpool_*), so this never fails over.
 func GetPendingTransactions() string {
-	// Try MEMPOOL_NODE_URL first (for dedicated mempool node), fall back to NODE_URL
+	// Try MEMPOOL_NODE_URL first (for dedicated mempool node), fall back to the
+	// primary URL from the failover-aware selector (covers both NODE_URLS list
+	// and legacy NODE_URL env vars).
 	nodeURL := os.Getenv("MEMPOOL_NODE_URL")
 	if nodeURL == "" {
-		nodeURL = os.Getenv("NODE_URL")
+		nodeURL = Endpoints().PrimaryURL()
 	}
 	if nodeURL == "" {
-		zap.L().Error("Neither MEMPOOL_NODE_URL nor NODE_URL environment variable set")
+		zap.L().Error("No mempool URL: set MEMPOOL_NODE_URL, NODE_URL, or NODE_URLS")
 		return ""
 	}
 
