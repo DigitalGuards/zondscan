@@ -42,7 +42,15 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
   );
 }
 
-function GasUsedChart({ rows }: { rows: GasHistoryRow[] }): JSX.Element {
+function formatAxisTick(unixSec: number, range: '24h' | '7d'): string {
+  const d = new Date(unixSec * 1000);
+  if (range === '7d') {
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  }
+  return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC', hour12: false });
+}
+
+function GasUsedChart({ rows, range }: { rows: GasHistoryRow[]; range: '24h' | '7d' }): JSX.Element {
   // Inline SVG line+area chart. Self-contained so we don't fight with
   // AreaChart's block-shape coupling.
   const points = useMemo(() => {
@@ -105,7 +113,7 @@ function GasUsedChart({ rows }: { rows: GasHistoryRow[] }): JSX.Element {
         {/* X labels */}
         {xTicks.map((t, i) => (
           <text key={i} x={sx(t)} y={h - 8} textAnchor="middle" fontSize="10" fill="#9ca3af">
-            {new Date(t * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC', hour12: false })}
+            {formatAxisTick(t, range)}
           </text>
         ))}
       </svg>
@@ -275,7 +283,7 @@ export default function GasClient(): JSX.Element {
           <h3 className="text-sm font-semibold text-[#ffa729]">Gas Used per Block</h3>
           <Badge variant="neutral">{range}</Badge>
         </div>
-        <GasUsedChart rows={history} />
+        <GasUsedChart rows={history} range={range} />
       </div>
 
       <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-lg p-4 sm:p-6">
