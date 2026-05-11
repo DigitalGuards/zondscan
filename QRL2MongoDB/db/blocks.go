@@ -233,11 +233,20 @@ func StoreLastKnownBlockNumber(blockNumber string) error {
 	// Use the integer field for the $lt guard so the comparison is numeric,
 	// not the lexicographic hex string comparison that would produce wrong
 	// ordering (e.g. "0x9" sorts after "0x10" lexicographically).
+	//
+	// Also accept docs that don't yet have block_number_int — legacy rows
+	// written by an older syncer were missing the field, which made the
+	// $lt match nothing and silently froze sync_state. The early-return
+	// guard above (existing.BlockNumber >= new) already prevents
+	// going-backwards for those rows.
 	result, err := syncColl.UpdateOne(
 		ctx,
 		bson.M{
-			"_id":              LastSyncedBlockID,
-			"block_number_int": bson.M{"$lt": blockNumberIntVal},
+			"_id": LastSyncedBlockID,
+			"$or": []bson.M{
+				{"block_number_int": bson.M{"$lt": blockNumberIntVal}},
+				{"block_number_int": bson.M{"$exists": false}},
+			},
 		},
 		bson.M{"$set": bson.M{
 			"block_number":     blockNumber,
