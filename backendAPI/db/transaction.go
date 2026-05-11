@@ -111,7 +111,7 @@ func ReturnAllInternalTransactionsByAddress(address string, page, limit int) ([]
 	opts := options.Find().
 		SetProjection(projection).
 		SetSort(primitive.D{{Key: "blockTimestamp", Value: -1}}).
-		SetSkip(int64((page - 1) * limit)).
+		SetSkip(int64(page-1) * int64(limit)).
 		SetLimit(int64(limit))
 
 	results, err := configs.InternalTransactionByAddressCollection.Find(ctx, filter, opts)
@@ -181,7 +181,7 @@ func ReturnAllTransactionsByAddress(address string, page, limit int) ([]models.T
 	opts := options.Find().
 		SetProjection(projection).
 		SetSort(primitive.D{{Key: "timeStamp", Value: -1}}).
-		SetSkip(int64((page - 1) * limit)).
+		SetSkip(int64(page-1) * int64(limit)).
 		SetLimit(int64(limit))
 
 	results, err := configs.TransactionByAddressCollection.Find(ctx, filter, opts)
