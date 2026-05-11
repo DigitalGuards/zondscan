@@ -1,0 +1,99 @@
+// Package cache provides a tiny in-process TTL cache with singleflight
+// deduplication, used to absorb concurrent traffic on hot read endpoints
+// (/overview, /blocks, /txs, /pending-transactions, /latestblock,
+// /address/aggregate).
+//
+// Without this layer, every page-view fans out into 1-8 MongoDB queries,
+// and the homepage polls every 30 s — so at modest concurrency the same
+// queries are run hundreds of times per second. With the cache, identical
+// requests within the TTL window are served from memory, and the
+// singleflight Group ensures only ONE goroutine recomputes a key when it
+// expires (no "thundering herd" against MongoDB).
+//
+// Bounded by design: only a small set of route+params keys exist, so we
+// don't need LRU eviction. A periodic janitor purges expired entries to
+// keep the map from leaking memory under unusual key churn.
+package cache
+
+import (
+	"sync"
+	"time"
+
+	"golang.org/x/sync/singleflight"
+)
+
+type entry struct {
+	val     interface{}
+	expires time.Time
+}
+
+// TTLCache is concurrent-safe. Zero value is not usable — call New().
+type TTLCache struct {
+	mu    sync.RWMutex
+	store map[string]entry
+	sf    singleflight.Group
+}
+
+func New() *TTLCache {
+	return &TTLCache{store: make(map[string]entry)}
+}
+
+// GetOrCompute returns the cached value for key if it's still fresh.
+// Otherwise it calls fn (deduped across concurrent callers for the same
+// key via singleflight), caches the result with the given TTL, and
+// returns it. If fn returns an error nothing is cached.
+func (c *TTLCache) GetOrCompute(key string, ttl time.Duration, fn func() (interface{}, error)) (interface{}, error) {
+	if v, ok := c.get(key); ok {
+		return v, nil
+	}
+	v, err, _ := c.sf.Do(key, func() (interface{}, error) {
+		// Re-check under singleflight in case another caller just populated
+		// the entry while we were queued.
+		if v, ok := c.get(key); ok {
+			return v, nil
+		}
+		val, err := fn()
+		if err != nil {
+			return nil, err
+		}
+		c.mu.Lock()
+		c.store[key] = entry{val: val, expires: time.Now().Add(ttl)}
+		c.mu.Unlock()
+		return val, nil
+	})
+	return v, err
+}
+
+func (c *TTLCache) get(key string) (interface{}, bool) {
+	c.mu.RLock()
+	e, ok := c.store[key]
+	c.mu.RUnlock()
+	if !ok || time.Now().After(e.expires) {
+		return nil, false
+	}
+	return e.val, true
+}
+
+// StartJanitor spawns a goroutine that walks the store every `interval`
+// and deletes expired entries. Returns immediately; the goroutine runs
+// for the process lifetime.
+func (c *TTLCache) StartJanitor(interval time.Duration) {
+	go func() {
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for range t.C {
+			c.evictExpired()
+		}
+	}()
+}
+
+func (c *TTLCache) evictExpired() {
+	now := time.Now()
+	c.mu.Lock()
+	for k, e := range c.store {
+		if now.After(e.expires) {
+			delete(c.store, k)
+		}
+	}
+	c.mu.Unlock()
+}

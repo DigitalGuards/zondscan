@@ -61,7 +61,23 @@ func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
 	return transactions, nil
 }
 
-func ReturnAllInternalTransactionsByAddress(address string) ([]models.TraceResult, error) {
+// ReturnAllInternalTransactionsByAddress returns one page (default 10, max
+// 50) of internal transactions for the given address, sorted by
+// blockTimestamp desc. Pagination was added to keep the worst-case
+// $or+sort cost from blowing past the 10 s context budget on high-volume
+// addresses (validators, contracts) where the unpaginated 200-row hit
+// would routinely time out.
+func ReturnAllInternalTransactionsByAddress(address string, page, limit int) ([]models.TraceResult, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 10
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -95,7 +111,8 @@ func ReturnAllInternalTransactionsByAddress(address string) ([]models.TraceResul
 	opts := options.Find().
 		SetProjection(projection).
 		SetSort(primitive.D{{Key: "blockTimestamp", Value: -1}}).
-		SetLimit(200)
+		SetSkip(int64((page - 1) * limit)).
+		SetLimit(int64(limit))
 
 	results, err := configs.InternalTransactionByAddressCollection.Find(ctx, filter, opts)
 	if err != nil {
@@ -122,7 +139,21 @@ func ReturnAllInternalTransactionsByAddress(address string) ([]models.TraceResul
 	return transactions, nil
 }
 
-func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddress, error) {
+// ReturnAllTransactionsByAddress returns one page (default 10, max 50) of
+// transactions involving the address, sorted by timeStamp desc. Paginated
+// to bound the $or+sort cost: high-volume addresses (validators,
+// contracts) routinely timed out under the unpaginated 200-row hit.
+func ReturnAllTransactionsByAddress(address string, page, limit int) ([]models.TransactionByAddress, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 10
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -150,7 +181,8 @@ func ReturnAllTransactionsByAddress(address string) ([]models.TransactionByAddre
 	opts := options.Find().
 		SetProjection(projection).
 		SetSort(primitive.D{{Key: "timeStamp", Value: -1}}).
-		SetLimit(200)
+		SetSkip(int64((page - 1) * limit)).
+		SetLimit(int64(limit))
 
 	results, err := configs.TransactionByAddressCollection.Find(ctx, filter, opts)
 	if err != nil {
