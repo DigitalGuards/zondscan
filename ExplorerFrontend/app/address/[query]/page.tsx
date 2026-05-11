@@ -42,8 +42,11 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
 async function fetchAddressData(address: string): Promise<AddressData | null> {
     try {
         const handlerUrl = process.env.HANDLER_URL || 'http://127.0.0.1:8080';
+        // 10 s ISR — address-page contents are dominated by recent tx
+        // history, which refreshes on the same chain-block cadence.
+        // Eliminates the per-pageview backend fanout this endpoint causes.
         const response = await fetch(`${handlerUrl}/address/aggregate/${address}`, {
-            cache: 'no-store'
+            next: { revalidate: 10 }
         });
 
         if (!response.ok) {

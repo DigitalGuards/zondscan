@@ -224,7 +224,13 @@ func ensureCollection(db *mongo.Database, name string, validator bson.M) {
 }
 
 func initializeCollections(db *mongo.Database) {
-	ctx := context.Background()
+	// Bound every index/collection setup call inside this function so a
+	// stalled MongoDB can't hang syncer startup indefinitely. 60s is
+	// generous enough for any single CreateIndex over this dataset; if a
+	// build truly takes longer the operation is too big for startup and
+	// should be moved offline.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 
 	// Initialize token balances collection with compound index
 	tokenBalancesCollection := db.Collection("tokenBalances")
@@ -415,6 +421,36 @@ func initializeCollections(db *mongo.Database) {
 	})
 	if err != nil {
 		Logger.Warn("Could not create validators collection indexes", zap.Error(err))
+	}
+
+	// Indexes on pending_transactions. The backend paginates by {status, createdAt}
+	// (`/pending-transactions` and the homepage poll) and the syncer cleans by
+	// lastSeen (`CleanupOldPendingTransactions`); both were doing collection scans
+	// before. Compound + single keys here are sized for the access pattern, not
+	// for general flexibility.
+	pendingTransactionsCollection := db.Collection(PENDING_TRANSACTIONS_COLLECTION)
+	_, err = pendingTransactionsCollection.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "status", Value: 1}, {Key: "createdAt", Value: -1}},
+			Options: options.Index().SetName("pending_status_createdAt_idx"),
+		},
+		{
+			Keys:    bson.D{{Key: "lastSeen", Value: 1}},
+			Options: options.Index().SetName("pending_lastSeen_idx"),
+		},
+	})
+	if err != nil {
+		Logger.Warn("Could not create pending_transactions indexes", zap.Error(err))
+	}
+
+	// validator_history sorts by epochInt -1 on the public /epochs listing.
+	validatorHistoryCollection := db.Collection(VALIDATOR_HISTORY_COLLECTION)
+	_, err = validatorHistoryCollection.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys:    bson.D{{Key: "epochInt", Value: -1}},
+		Options: options.Index().SetName("validator_history_epochInt_desc_idx"),
+	})
+	if err != nil {
+		Logger.Warn("Could not create validator_history.epochInt index", zap.Error(err))
 	}
 
 	Logger.Info("All collections initialized successfully")

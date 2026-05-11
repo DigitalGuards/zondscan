@@ -118,12 +118,15 @@ func ReturnContractCode(address string) (models.ContractInfo, error) {
 	return result, nil
 }
 
-// CountContracts returns the total number of smart contracts
+// CountContracts returns the total number of smart contracts. Uses
+// EstimatedDocumentCount (metadata read, ~microseconds) instead of
+// CountDocuments({}) which is O(rows) and blocked hot endpoints
+// (/overview) under any concurrency.
 func CountContracts() (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	count, err := configs.ContractInfoCollection.CountDocuments(ctx, bson.D{})
+	count, err := configs.ContractInfoCollection.EstimatedDocumentCount(ctx)
 	if err != nil {
 		return 0, err
 	}

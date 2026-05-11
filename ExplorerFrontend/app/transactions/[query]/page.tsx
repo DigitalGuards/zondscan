@@ -9,18 +9,20 @@ import { sharedMetadata } from '../../lib/seo/metaData';
 async function getTransactions(page: string): Promise<TransactionsResponse> {
   try {
     const pageNum = parseInt(page, 10) || 1;
-    
-    const timestamp = Date.now();
-    const response = await fetch(`${config.handlerUrl}/txs?page=${pageNum}&limit=10&_t=${timestamp}`, {
+
+    // Cache the response server-side for 10 s. Block time on QRL Zond is
+    // O(1 minute), so 10 s is well within a "freshness" SLA for a listing
+    // page and lets ISR absorb concurrent traffic instead of hammering
+    // the backend with one fetch per pageview. Drop the _t cache-buster
+    // and the no-store directive that were forcing zero caching.
+    const response = await fetch(`${config.handlerUrl}/txs?page=${pageNum}&limit=10`, {
       method: 'GET',
       headers: {
-        'Accept': 'application/json',
-        'Cache-Control': 'no-cache'
+        Accept: 'application/json',
       },
-      cache: 'no-store',
       next: {
-        revalidate: 0
-      }
+        revalidate: 10,
+      },
     });
 
     if (!response.ok) {
