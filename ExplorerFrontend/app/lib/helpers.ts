@@ -118,6 +118,35 @@ export function formatGasPrice(planck: number | string | undefined | null): stri
   }
 }
 
+// Format a Planck-denominated value with an adaptive unit suffix so the
+// number is human-readable. Base fee on a quiet chain (≤ 7 Planck) shows
+// as "7 Planck" rather than "7.00e-9 Shor"; a typical gas price (~3 Shor)
+// shows as "3.13 Shor"; an oversized value would show in Quanta (= QRL).
+// Returns [value_string, unit_string] so callers can style the unit
+// independently.
+export function formatPlanckAdaptive(planck: number | string | undefined | null): [string, string] {
+  if (planck === undefined || planck === null || planck === 0 || planck === '0' || planck === '0x0') {
+    return ['0', 'Planck'];
+  }
+  try {
+    const v = typeof planck === 'string' && planck.startsWith('0x') ? BigInt(planck) : BigInt(String(planck));
+    if (v === BigInt(0)) return ['0', 'Planck'];
+    const SHOR = BigInt(1_000_000_000);
+    const QUANTA = BigInt('1000000000000000000');
+    if (v < SHOR) {
+      return [v.toString(), 'Planck'];
+    }
+    if (v < QUANTA) {
+      const shor = Number(v) / 1e9;
+      return [parseFloat(shor.toFixed(9)).toString(), 'Shor'];
+    }
+    const quanta = Number(v) / 1e18;
+    return [parseFloat(quanta.toFixed(9)).toString(), 'Quanta'];
+  } catch {
+    return ['0', 'Planck'];
+  }
+}
+
 export function formatAmount(amount: number | string | undefined | null): [string, string] {
   // Handle undefined or null
   if (amount === undefined || amount === null) {
