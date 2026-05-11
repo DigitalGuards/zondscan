@@ -536,11 +536,13 @@ func InsertManyBlockDocuments(blocks []interface{}) {
 // which would leave stale blocks above the rollback point during chain reorgs and
 // silently corrupt the chain view.
 func Rollback(blockNumber string) error {
-	// Validate the input BEFORE building the filter. HexToInt64 returns 0
-	// on any parse failure (empty string, missing 0x, non-hex chars). With
-	// a $gt: 0 filter, a malformed blockNumber would delete every block
-	// except genesis — strictly worse than the original lex-sort bug we
-	// were fixing. Refuse to proceed unless the input is a real hex value.
+	// Validate the input BEFORE building the filter. HexToInt64 / HexToInt
+	// both silently return 0 on parse failure (empty string, missing 0x,
+	// non-hex chars). With a $gt: 0 filter, a malformed blockNumber would
+	// delete every block except genesis — strictly worse than the original
+	// lex-sort bug we were fixing. Parse explicitly so we get an error path,
+	// and reject negative values defensively (e.g. "0x-10" → -16 via
+	// strconv) which would also widen the filter dangerously.
 	s := strings.TrimPrefix(blockNumber, "0x")
 	if s == "" {
 		return fmt.Errorf("rollback: empty block number")
@@ -548,6 +550,9 @@ func Rollback(blockNumber string) error {
 	rollbackTo, err := strconv.ParseInt(s, 16, 64)
 	if err != nil {
 		return fmt.Errorf("rollback: invalid hex block number %q: %w", blockNumber, err)
+	}
+	if rollbackTo < 0 {
+		return fmt.Errorf("rollback: block number cannot be negative: %d", rollbackTo)
 	}
 
 	ctx := context.Background()
