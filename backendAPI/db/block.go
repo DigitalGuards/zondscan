@@ -69,9 +69,14 @@ func ReturnLatestBlocks(page int, limit int) ([]models.Result, error) {
 		{Key: "result.transactions", Value: 1},
 	}
 
+	// Sort by blockNumberInt (numeric), NOT result.timestamp (hex string).
+	// Hex-string sort goes wrong at width boundaries (e.g. "0x6a019244" vs
+	// "0x70000000"), which would reorder the public Latest Blocks list and
+	// cause pagination to duplicate/drop rows. Block number monotonically
+	// tracks chain order; the blockNumberInt_desc_idx covers this sort.
 	opts := options.Find().
 		SetProjection(projection).
-		SetSort(primitive.D{{Key: "result.timestamp", Value: -1}})
+		SetSort(primitive.D{{Key: "blockNumberInt", Value: -1}})
 
 	if page == 0 {
 		page = 1
