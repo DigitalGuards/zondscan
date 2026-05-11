@@ -5,6 +5,7 @@ import (
 	"QRL2MongoDB/models"
 	"QRL2MongoDB/utils"
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -535,11 +536,30 @@ func InsertManyBlockDocuments(blocks []interface{}) {
 // which would leave stale blocks above the rollback point during chain reorgs and
 // silently corrupt the chain view.
 func Rollback(blockNumber string) error {
+	// Validate the input BEFORE building the filter. HexToInt64 / HexToInt
+	// both silently return 0 on parse failure (empty string, missing 0x,
+	// non-hex chars). With a $gt: 0 filter, a malformed blockNumber would
+	// delete every block except genesis — strictly worse than the original
+	// lex-sort bug we were fixing. Parse explicitly so we get an error path,
+	// and reject negative values defensively (e.g. "0x-10" → -16 via
+	// strconv) which would also widen the filter dangerously.
+	s := strings.TrimPrefix(blockNumber, "0x")
+	if s == "" {
+		return fmt.Errorf("rollback: empty block number")
+	}
+	rollbackTo, err := strconv.ParseInt(s, 16, 64)
+	if err != nil {
+		return fmt.Errorf("rollback: invalid hex block number %q: %w", blockNumber, err)
+	}
+	if rollbackTo < 0 {
+		return fmt.Errorf("rollback: block number cannot be negative: %d", rollbackTo)
+	}
+
 	ctx := context.Background()
 
 	filter := bson.M{
 		"blockNumberInt": bson.M{
-			"$gt": HexToInt64(blockNumber),
+			"$gt": rollbackTo,
 		},
 	}
 
