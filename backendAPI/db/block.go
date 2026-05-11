@@ -101,11 +101,14 @@ func ReturnLatestBlocks(page int, limit int) ([]models.Result, error) {
 	return blocks, nil
 }
 
+// CountBlocksNetwork returns the total number of blocks. Uses
+// EstimatedDocumentCount (metadata read) rather than CountDocuments({}),
+// which is O(rows) on the blocks collection.
 func CountBlocksNetwork() (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	count, err := configs.BlocksCollection.CountDocuments(ctx, primitive.D{})
+	count, err := configs.BlocksCollection.EstimatedDocumentCount(ctx)
 	if err != nil {
 		return 0, err
 	}
