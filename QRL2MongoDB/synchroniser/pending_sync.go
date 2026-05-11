@@ -76,19 +76,28 @@ func UpdatePendingTransactionsInBlock(block *models.ZondDatabaseBlock) error {
 		return err
 	}
 
-	// Check each pending transaction
+	// Tombstone: keep the row with status="mined" rather than deleting it.
+	// Deletion would let a subsequent mempool poll re-insert the same hash
+	// via UpsertPendingTransaction's $setOnInsert path, flipping the status
+	// back to "pending". Since status is excluded from $set in the upsert,
+	// an existing tombstone is preserved across re-polls.
+	// CleanupOldPendingTransactions sweeps these rows once they age out.
 	for _, tx := range pendingTxs {
 		if blockTxs[tx.Hash] {
-			// Delete (don't $set status="mined") — a stale mempool entry can
-			// otherwise clobber status back to "pending" via UpsertPendingTransaction
-			// before the verification sweep catches it.
-			if err := db.DeletePendingTransaction(tx.Hash); err != nil {
-				configs.Logger.Error("Failed to delete mined pending transaction",
+			update := bson.M{
+				"$set": bson.M{
+					"status":      "mined",
+					"lastSeen":    time.Now(),
+					"blockNumber": block.Result.Number,
+				},
+			}
+			if _, err := collection.UpdateOne(ctx, bson.M{"_id": tx.Hash}, update); err != nil {
+				configs.Logger.Error("Failed to update mined transaction status",
 					zap.String("hash", tx.Hash),
 					zap.Error(err))
 				continue
 			}
-			configs.Logger.Info("Transaction mined and removed from pending",
+			configs.Logger.Info("Transaction mined",
 				zap.String("hash", tx.Hash),
 				zap.String("block", block.Result.Number))
 		}
@@ -168,7 +177,9 @@ func syncMempool() error {
 }
 
 // verifyPendingTransactions checks pending transactions against the node
-// and removes any that have been mined (have a receipt)
+// and tombstones any that have been mined (have a receipt). Tombstone instead
+// of delete to match UpdatePendingTransactionsInBlock — a delete here could
+// also race with mempool re-poll re-inserting the row as "pending".
 func verifyPendingTransactions() error {
 	hashes, err := db.GetAllPendingTransactionHashes()
 	if err != nil {
@@ -182,7 +193,7 @@ func verifyPendingTransactions() error {
 	configs.Logger.Info("Verifying pending transactions against node",
 		zap.Int("count", len(hashes)))
 
-	removedCount := 0
+	tombstonedCount := 0
 	for _, hash := range hashes {
 		// Check if transaction has a receipt (meaning it's mined)
 		receipt, err := rpc.GetTransactionReceipt(hash)
@@ -193,24 +204,24 @@ func verifyPendingTransactions() error {
 			continue
 		}
 
-		// If receipt exists with status, transaction is mined - remove from pending
+		// If receipt exists with status, the tx is mined — tombstone the row.
 		if receipt != nil && receipt.Result.Status != "" {
-			if err := db.DeletePendingTransaction(hash); err != nil {
-				configs.Logger.Error("Failed to delete mined pending transaction",
+			if err := db.UpdatePendingTransactionStatus(hash, "mined"); err != nil {
+				configs.Logger.Error("Failed to tombstone mined pending transaction",
 					zap.String("hash", hash),
 					zap.Error(err))
 			} else {
-				removedCount++
-				configs.Logger.Info("Removed mined transaction from pending",
+				tombstonedCount++
+				configs.Logger.Info("Tombstoned mined transaction in pending",
 					zap.String("hash", hash),
 					zap.String("blockNumber", receipt.Result.BlockNumber))
 			}
 		}
 	}
 
-	if removedCount > 0 {
+	if tombstonedCount > 0 {
 		configs.Logger.Info("Pending transaction verification complete",
-			zap.Int("removed", removedCount),
+			zap.Int("tombstoned", tombstonedCount),
 			zap.Int("total", len(hashes)))
 	}
 

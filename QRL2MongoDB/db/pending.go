@@ -82,7 +82,12 @@ func UpdatePendingTransactionStatus(hash string, status string) error {
 	return nil
 }
 
-// CleanupOldPendingTransactions removes transactions that haven't been seen recently
+// CleanupOldPendingTransactions removes rows that haven't been seen recently —
+// both genuinely-pending rows the node has forgotten about, and "mined"
+// tombstones that have aged out. The tombstones must be cleaned here too;
+// the per-status helpers (UpdatePendingTransactionsInBlock,
+// verifyPendingTransactions) intentionally leave them in place to block
+// stale mempool re-inserts.
 func CleanupOldPendingTransactions(maxAge time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -90,7 +95,6 @@ func CleanupOldPendingTransactions(maxAge time.Duration) error {
 	cutoff := time.Now().Add(-maxAge)
 	filter := bson.M{
 		"lastSeen": bson.M{"$lt": cutoff},
-		"status":   "pending",
 	}
 
 	_, err := configs.PendingTransactionsCollections.DeleteMany(ctx, filter)
