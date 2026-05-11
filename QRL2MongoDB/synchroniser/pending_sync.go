@@ -79,22 +79,16 @@ func UpdatePendingTransactionsInBlock(block *models.ZondDatabaseBlock) error {
 	// Check each pending transaction
 	for _, tx := range pendingTxs {
 		if blockTxs[tx.Hash] {
-			// Transaction is in the block, update its status
-			update := bson.M{
-				"$set": bson.M{
-					"status":      "mined",
-					"lastSeen":    time.Now(),
-					"blockNumber": block.Result.Number,
-				},
-			}
-			_, err := collection.UpdateOne(ctx, bson.M{"_id": tx.Hash}, update)
-			if err != nil {
-				configs.Logger.Error("Failed to update mined transaction status",
+			// Delete (don't $set status="mined") — a stale mempool entry can
+			// otherwise clobber status back to "pending" via UpsertPendingTransaction
+			// before the verification sweep catches it.
+			if err := db.DeletePendingTransaction(tx.Hash); err != nil {
+				configs.Logger.Error("Failed to delete mined pending transaction",
 					zap.String("hash", tx.Hash),
 					zap.Error(err))
 				continue
 			}
-			configs.Logger.Info("Transaction mined",
+			configs.Logger.Info("Transaction mined and removed from pending",
 				zap.String("hash", tx.Hash),
 				zap.String("block", block.Result.Number))
 		}

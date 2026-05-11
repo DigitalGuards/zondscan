@@ -158,17 +158,9 @@ export function getTransactionStatus(confirmations?: number | null): {
   text: string;
   color: string;
 } {
-  if (confirmations === null) {
-    return { text: 'Pending', color: 'bg-yellow-500' };
-  }
-
   if (confirmations && confirmations > 0) {
-    if (confirmations >= 1) {
-      return { text: 'Confirmed', color: 'bg-green-500' };
-    }
-    return { text: 'Processing', color: 'bg-blue-500' };
+    return { text: 'Confirmed', color: 'bg-green-500' };
   }
-
   return { text: 'Pending', color: 'bg-yellow-500' };
 }
 
