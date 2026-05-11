@@ -30,7 +30,7 @@ func hexToBig(s string) *big.Int {
 
 // BlockGasSample is the minimal projection we need from each block for the gas
 // page and ETA math. Block documents are stored with lowercase BSON keys
-// (gasused, gaslimit, basefeepergas) — match that exactly.
+// (gasused, gaslimit, basefeepergas, gasprice on tx) — match that exactly.
 type BlockGasSample struct {
 	BlockNumberInt int64 `bson:"blockNumberInt"`
 	Result         struct {
@@ -40,7 +40,8 @@ type BlockGasSample struct {
 		GasLimit      string `bson:"gaslimit"`
 		BaseFeePerGas string `bson:"basefeepergas"`
 		Transactions  []struct {
-			Hash string `bson:"hash"`
+			Hash     string `bson:"hash"`
+			GasPrice string `bson:"gasprice"`
 		} `bson:"transactions"`
 	} `bson:"result"`
 }
@@ -64,6 +65,7 @@ func GetRecentBlockSamples(n int) ([]BlockGasSample, error) {
 			{Key: "result.gaslimit", Value: 1},
 			{Key: "result.basefeepergas", Value: 1},
 			{Key: "result.transactions.hash", Value: 1},
+			{Key: "result.transactions.gasprice", Value: 1},
 		}).
 		SetSort(primitive.D{{Key: "blockNumberInt", Value: -1}}).
 		SetLimit(int64(n))
@@ -85,19 +87,24 @@ func GetRecentBlockSamples(n int) ([]BlockGasSample, error) {
 // and the ETA computation. All "avg" values are simple arithmetic means over
 // the provided window.
 type BlockStats struct {
-	AvgBlockTimeSec float64
-	AvgGasUsed      *big.Int
-	AvgGasLimit     *big.Int
-	LastNumberHex   string
-	LastGasUsedHex  string
-	LastGasLimitHex string
+	AvgBlockTimeSec    float64
+	AvgGasUsed         *big.Int
+	AvgGasLimit        *big.Int
+	LastNumberHex      string
+	LastGasUsedHex     string
+	LastGasLimitHex    string
+	// MedianTxGasPrice is the median of every `gasprice` across every tx in
+	// the sample window. Zero when no block in the window contained txs.
+	MedianTxGasPrice *big.Int
+	TxCount          int
 }
 
 func ComputeBlockStats(samples []BlockGasSample) BlockStats {
 	stats := BlockStats{
-		AvgBlockTimeSec: 60,
-		AvgGasUsed:      big.NewInt(0),
-		AvgGasLimit:     big.NewInt(0),
+		AvgBlockTimeSec:  60,
+		AvgGasUsed:       big.NewInt(0),
+		AvgGasLimit:      big.NewInt(0),
+		MedianTxGasPrice: big.NewInt(0),
 	}
 	if len(samples) == 0 {
 		return stats
@@ -108,9 +115,27 @@ func ComputeBlockStats(samples []BlockGasSample) BlockStats {
 
 	sumUsed := new(big.Int)
 	sumLimit := new(big.Int)
+	var txPrices []*big.Int
 	for _, s := range samples {
 		sumUsed.Add(sumUsed, hexToBig(s.Result.GasUsed))
 		sumLimit.Add(sumLimit, hexToBig(s.Result.GasLimit))
+		for _, t := range s.Result.Transactions {
+			if t.GasPrice == "" {
+				continue
+			}
+			txPrices = append(txPrices, hexToBig(t.GasPrice))
+		}
+	}
+	stats.TxCount = len(txPrices)
+	if len(txPrices) > 0 {
+		sort.Slice(txPrices, func(i, j int) bool { return txPrices[i].Cmp(txPrices[j]) < 0 })
+		mid := len(txPrices) / 2
+		if len(txPrices)%2 == 1 {
+			stats.MedianTxGasPrice.Set(txPrices[mid])
+		} else {
+			sum := new(big.Int).Add(txPrices[mid-1], txPrices[mid])
+			stats.MedianTxGasPrice.Quo(sum, big.NewInt(2))
+		}
 	}
 	n := big.NewInt(int64(len(samples)))
 	stats.AvgGasUsed.Quo(sumUsed, n)
