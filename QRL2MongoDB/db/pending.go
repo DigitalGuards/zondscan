@@ -32,13 +32,20 @@ func UpsertPendingTransaction(tx *models.PendingTransaction) error {
 		configs.Logger.Error("Failed to unmarshal pending transaction", zap.Error(err))
 		return err
 	}
+	// status must only be written on initial insert — otherwise a stale
+	// mempool entry can revert a row that was already marked mined back to
+	// "pending". Explicit transitions go through UpdatePendingTransactionStatus.
 	delete(setFields, "createdAt")
+	delete(setFields, "status")
 
 	opts := options.Update().SetUpsert(true)
 	filter := bson.M{"_id": tx.Hash}
 	update := bson.M{
-		"$set":         setFields,
-		"$setOnInsert": bson.M{"createdAt": now},
+		"$set": setFields,
+		"$setOnInsert": bson.M{
+			"createdAt": now,
+			"status":    "pending",
+		},
 	}
 
 	_, err = configs.PendingTransactionsCollections.UpdateOne(ctx, filter, update, opts)
