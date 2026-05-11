@@ -25,8 +25,15 @@ export const metadata: Metadata = {
 };
 
 
+// Render on demand (don't prerender at build, which would require backend
+// availability during `npm run build`). The fetch revalidate window below
+// is what does the heavy lifting under traffic.
+export const dynamic = 'force-dynamic';
+
 export default async function RichlistPage(): Promise<JSX.Element> {
-  const response = await fetch(config.handlerUrl + "/richlist", { cache: 'no-store' });
+  // Richlist changes slowly (balance rankings) — 30 s revalidate is plenty
+  // fresh and keeps a single backend call serving N concurrent pageloads.
+  const response = await fetch(config.handlerUrl + "/richlist", { next: { revalidate: 30 } });
   if (!response.ok) {
     throw new Error('Failed to load richlist data');
   }
