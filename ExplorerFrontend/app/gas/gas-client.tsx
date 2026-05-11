@@ -16,6 +16,7 @@ interface GasSummary {
   lastGasUsedHex: string;
   lastGasLimitHex: string;
   gasPriceHistogram: { shorLow: number; shorHigh: number; count: number }[];
+  qrlUsdPrice?: number;
 }
 
 interface GasHistoryRow {
@@ -30,6 +31,27 @@ interface GasHistoryRow {
 interface GasHistoryResp {
   range: '24h' | '7d';
   data: GasHistoryRow[];
+}
+
+// Cost of a `gas` units transaction at `gasPriceHex` (Planck) in USD,
+// given the current QRL/USD spot price. Returns null if any input is
+// missing/zero.
+function gasCostUsd(gasPriceHex: string | undefined, gasUnits: number, qrlUsd: number | undefined): number | null {
+  if (!gasPriceHex || !qrlUsd || qrlUsd <= 0) return null;
+  const planck = hexToBigInt(gasPriceHex);
+  if (planck === BigInt(0)) return null;
+  // total Planck = gasPrice (Planck) × gasUnits.  USD = Planck × 10^-18 × QRL/USD.
+  const totalPlanck = planck * BigInt(gasUnits);
+  const qrl = Number(totalPlanck) / 1e18;
+  return qrl * qrlUsd;
+}
+
+function formatUsdCost(usd: number | null): string {
+  if (usd === null) return '—';
+  if (usd === 0) return '$0';
+  if (usd < 0.000001) return `$${usd.toExponential(2)}`;
+  if (usd < 0.01) return `$${usd.toFixed(8).replace(/0+$/, '').replace(/\.$/, '')}`;
+  return `$${usd.toFixed(4)}`;
 }
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }): JSX.Element {
@@ -249,7 +271,7 @@ export default function GasClient(): JSX.Element {
         <StatCard
           label="Avg Gas Price"
           value={summary ? `${formatGasPrice(summary.avgGasPriceHex)} Shor` : '—'}
-          sub="median of last 20 transactions"
+          sub={summary ? `≈ ${formatUsdCost(gasCostUsd(summary.avgGasPriceHex, 21000, summary.qrlUsdPrice))} per transfer` : 'median of last 20 transactions'}
         />
         <StatCard
           label="Avg Block Time"

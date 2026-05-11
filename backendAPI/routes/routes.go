@@ -958,6 +958,9 @@ func UserRoute(router *gin.Engine) {
 				"recentMedianGasPriceHex":    "0x" + blockStats.MedianTxGasPrice.Text(16),
 				"mempoolMedianGasPriceHex":   "0x" + mp.MedianGasPrice.Text(16),
 				"recentTxCount":              blockStats.TxCount,
+				// QRL/USD spot price (last coingecko sample). Used by the
+				// frontend to convert gas prices into USD transfer costs.
+				"qrlUsdPrice":                db.GetCurrentPrice(),
 				"avgGasUsedHex":      "0x" + blockStats.AvgGasUsed.Text(16),
 				"avgGasLimitHex":     "0x" + blockStats.AvgGasLimit.Text(16),
 				"avgBlockTimeSec":    blockStats.AvgBlockTimeSec,

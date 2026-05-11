@@ -762,6 +762,73 @@ Single pending transaction by hash. Implements lifecycle management:
 3. If found as mined, returns `"status": "mined"` with block number.
 4. If not found anywhere, returns 404 with an explanation that the tx may have been dropped.
 
+#### `GET /pending-tx-eta/:hash`
+Best-effort inclusion-ETA for a single pending transaction. The headline `etaSec` is computed as `ceil(gasAhead / avgGasUsed) * avgBlockTimeSec`, floored at one block-time so "no one ahead of you" still implies one block of wait. Returns 404 once the tx is mined or dropped — the frontend's status poll handles the transition.
+
+```json
+{
+  "etaSec": 73.4,
+  "avgBlockTimeSec": 61.2,
+  "avgGasUsedHex": "0x2bc",
+  "pendingCount": 14,
+  "gasAheadHex": "0x...",
+  "medianGasPriceHex": "0x...",
+  "yourGasPriceHex": "0x..."
+}
+```
+
+**Notes:** Cached 5s per-hash. `gasAhead` is the sum of `gas` (gas limit) for every pending tx with strictly higher `gasPrice` than this one; `medianGasPriceHex` is the median across the mempool (Planck-denominated).
+
+### Gas
+
+#### `GET /gas/summary`
+Headline gas stats for the home tile and the `/gas` page stat cards. The `avgGasPriceHex` is the median across the **last 20 transactions network-wide**, walked from the blocks collection newest-first via an aggregation (capped at 500 blocks of backsearch). This keeps the headline meaningful on quiet testnets where the 30-block window may be empty. If the wider walk returns zero, the 30-block window median is used, and finally the mempool median.
+
+```json
+{
+  "avgGasPriceHex": "0x104c533c7",
+  "recentTxMedianHex": "0x104c533c7",
+  "recentTxSampleSize": 20,
+  "recentMedianGasPriceHex": "0x0",
+  "mempoolMedianGasPriceHex": "0x0",
+  "recentTxCount": 0,
+  "avgBlockTimeSec": 60.1,
+  "avgGasUsedHex": "0x...",
+  "avgGasLimitHex": "0x1312d00",
+  "pendingCount": 0,
+  "lastBlockNumberHex": "0xe3cf",
+  "lastGasUsedHex": "0x0",
+  "lastGasLimitHex": "0x1312d00",
+  "gasPriceHistogram": [
+    { "shorLow": 0, "shorHigh": 0, "count": 0 }
+  ],
+  "qrlUsdPrice": 0.0042
+}
+```
+
+**Notes:** Cached 5s. All hex values are Planck (10^-18 QRL); the frontend converts to Shor (÷10⁹) for display. Histogram buckets are pre-converted to Shor (decimal float64) for chart rendering. `qrlUsdPrice` is sourced from the last `coingecko` collection sample.
+
+#### `GET /gas/history?range=24h|7d`
+Per-block gas timeseries used by the `/gas` page charts. The syncer maintains a bounded `gasHistory` collection (one row per block, 7-day retention) populated by a periodic task every 30 minutes alongside the existing data-updates job.
+
+```json
+{
+  "range": "24h",
+  "data": [
+    {
+      "blockNumber": 32896,
+      "timestamp": 1778414354,
+      "gasUsed": "0x0",
+      "gasLimit": "0x1312d00",
+      "baseFeePerGas": "0x7",
+      "txCount": 0
+    }
+  ]
+}
+```
+
+**Notes:** Cached 30s. `range=24h` returns raw per-block rows (~1440 at 60s slot times). `range=7d` returns hourly downsampled rows (one row per `floor(timestamp / 3600)` bucket, keeping the latest block within each bucket).
+
 ---
 
 ## Database Collections & Query Patterns
@@ -798,6 +865,7 @@ All collections are in the `qrldata-z` database. Collection references are initi
 | `dailyTransactionsVolume` | Daily transaction volume | `FindOne` with empty filter |
 | `totalCirculatingSupply` | Circulating supply | `FindOne` with empty filter |
 | `averageBlockSize` | Block size history | Full scan sorted by `timestamp` asc |
+| `gasHistory` | Per-block gas timeseries powering `/gas/history`. Populated by the syncer's periodic task every 30 min; rows older than 7 days are swept | Filter by `timestamp >= since`; sorted by `timestamp` asc; optionally downsampled per-hour for the 7d range |
 
 ### Validator Collections
 
