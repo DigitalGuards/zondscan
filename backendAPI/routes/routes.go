@@ -928,8 +928,20 @@ func UserRoute(router *gin.Engine) {
 			mp := db.ComputeMempoolStatsFor(mempool, "0x0")
 			histogram := db.MempoolGasPriceHistogram(mempool, 12)
 
+			// Prefer the median across recent block txs ("what people actually
+			// paid"). Fall back to the mempool median if no txs landed in the
+			// window (quiet testnet). Both are still surfaced separately so the
+			// /gas page can label them honestly.
+			headlineHex := "0x" + blockStats.MedianTxGasPrice.Text(16)
+			if blockStats.MedianTxGasPrice.Sign() == 0 && mp.MedianGasPrice.Sign() > 0 {
+				headlineHex = "0x" + mp.MedianGasPrice.Text(16)
+			}
+
 			return gin.H{
-				"avgGasPriceHex":     "0x" + mp.MedianGasPrice.Text(16),
+				"avgGasPriceHex":     headlineHex,
+				"recentMedianGasPriceHex": "0x" + blockStats.MedianTxGasPrice.Text(16),
+				"mempoolMedianGasPriceHex": "0x" + mp.MedianGasPrice.Text(16),
+				"recentTxCount":     blockStats.TxCount,
 				"avgGasUsedHex":      "0x" + blockStats.AvgGasUsed.Text(16),
 				"avgGasLimitHex":     "0x" + blockStats.AvgGasLimit.Text(16),
 				"avgBlockTimeSec":    blockStats.AvgBlockTimeSec,
