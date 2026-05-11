@@ -264,6 +264,13 @@ func updateDataPeriodically() {
 	} else {
 		configs.Logger.Info("Successfully updated block sizes collection")
 	}
+
+	// Update gas-history timeseries used by /gas page and home stats.
+	// Idempotent and bounded by GasHistoryRetention.
+	configs.Logger.Info("Updating gas history collection...")
+	if err := db.UpdateGasHistory(); err != nil {
+		configs.Logger.Error("Failed to update gas history", zap.Error(err))
+	}
 }
 
 // singleBlockInsertion starts continuous block monitoring with periodic tasks
