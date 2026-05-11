@@ -67,6 +67,26 @@ func consumer(ch <-chan (<-chan Data)) {
 
 					for x := 0; x < len(data.blockNumbers); x++ {
 						db.ProcessTransactions(data.blockData[x])
+						// Tombstone any pending rows whose hashes are in this
+						// block. The single-block path (sync.go) calls this
+						// inline; without it here, batch-sync (first-sync /
+						// behind-the-tip catch-up) leaves rows as "pending"
+						// until verifyPendingTransactions sweeps them — up to
+						// 5 minutes after the tx is confirmed on-chain.
+						// blockData is []interface{} (see Data struct); use
+						// comma-ok so a bad type doesn't panic the whole
+						// consumer.
+						blk, ok := data.blockData[x].(models.ZondDatabaseBlock)
+						if !ok {
+							configs.Logger.Warn("Unexpected blockData type in batch consumer, skipping tombstone",
+								zap.Int("blockNumber", data.blockNumbers[x]))
+							continue
+						}
+						if err := UpdatePendingTransactionsInBlock(&blk); err != nil {
+							configs.Logger.Error("Failed to update pending transactions in batch block",
+								zap.String("block", blk.Result.Number),
+								zap.Error(err))
+						}
 					}
 					configs.Logger.Info("Processed transactions for blocks",
 						zap.Ints("block_numbers", data.blockNumbers))
