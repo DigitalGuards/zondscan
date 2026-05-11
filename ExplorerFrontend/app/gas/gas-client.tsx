@@ -249,7 +249,7 @@ export default function GasClient(): JSX.Element {
         <StatCard
           label="Avg Gas Price"
           value={summary ? `${formatGasPrice(summary.avgGasPriceHex)} Shor` : '—'}
-          sub="mempool median"
+          sub="median of last 20 transactions"
         />
         <StatCard
           label="Avg Block Time"

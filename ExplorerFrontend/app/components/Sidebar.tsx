@@ -12,6 +12,8 @@ import PartnerHandshakeIcon from '../../public/partner-handshake-icon.svg'
 import BlockchainIcon from '../../public/blockchain-icon.svg'
 import ContractIcon from '../../public/contract.svg'
 import SendIcon from '../../public/send.svg'
+import GasPumpIcon from '../../public/gas-pump.svg'
+import EpochIcon from '../../public/epoch-icon.svg'
 import RichIcon from '../../public/favis/favicon-32x32.png'
 
 interface NavItem {
@@ -33,13 +35,13 @@ const navGroups: NavGroup[] = [
       { name: 'Latest Transactions', description: 'View all Transactions', href: '/transactions/1', imgSrc: PartnerHandshakeIcon },
       { name: 'Pending Transactions', description: 'View pending transactions', href: '/pending/1', imgSrc: PartnerHandshakeIcon },
       { name: 'Latest Blocks', description: 'View all Blocks', href: '/blocks/1', imgSrc: BlockchainIcon },
-      { name: 'Gas', description: 'Network gas metrics', href: '/gas', imgSrc: BlockchainIcon },
+      { name: 'Gas', description: 'Network gas metrics', href: '/gas', imgSrc: GasPumpIcon },
     ],
   },
   {
     label: 'Consensus',
     items: [
-      { name: 'Epochs', description: 'View all Epochs', href: '/epochs/1', imgSrc: BlockchainIcon },
+      { name: 'Epochs', description: 'View all Epochs', href: '/epochs/1', imgSrc: EpochIcon },
       { name: 'Validators', description: 'Network Validators', href: '/validators', imgSrc: ContractIcon },
     ],
   },

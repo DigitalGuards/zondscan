@@ -928,20 +928,36 @@ func UserRoute(router *gin.Engine) {
 			mp := db.ComputeMempoolStatsFor(mempool, "0x0")
 			histogram := db.MempoolGasPriceHistogram(mempool, 12)
 
-			// Prefer the median across recent block txs ("what people actually
-			// paid"). Fall back to the mempool median if no txs landed in the
-			// window (quiet testnet). Both are still surfaced separately so the
-			// /gas page can label them honestly.
-			headlineHex := "0x" + blockStats.MedianTxGasPrice.Text(16)
-			if blockStats.MedianTxGasPrice.Sign() == 0 && mp.MedianGasPrice.Sign() > 0 {
-				headlineHex = "0x" + mp.MedianGasPrice.Text(16)
+			// Headline gas price: median across the last N transfers
+			// independent of when they happened. This stays meaningful on a
+			// quiet testnet where 30 recent blocks may contain zero txs. The
+			// 30-block window median and mempool median are still computed
+			// and surfaced for callers that care.
+			recentTxPrices, err := db.GetRecentTransactionGasPrices(20, 500)
+			if err != nil {
+				// Don't fail the whole summary — fall back to the 30-block
+				// window median if the wider walk fails.
+				recentTxPrices = nil
+			}
+			recentTxMedian := db.MedianBigHex(recentTxPrices)
+
+			headlineHex := "0x" + recentTxMedian.Text(16)
+			if recentTxMedian.Sign() == 0 {
+				switch {
+				case blockStats.MedianTxGasPrice.Sign() > 0:
+					headlineHex = "0x" + blockStats.MedianTxGasPrice.Text(16)
+				case mp.MedianGasPrice.Sign() > 0:
+					headlineHex = "0x" + mp.MedianGasPrice.Text(16)
+				}
 			}
 
 			return gin.H{
-				"avgGasPriceHex":     headlineHex,
-				"recentMedianGasPriceHex": "0x" + blockStats.MedianTxGasPrice.Text(16),
-				"mempoolMedianGasPriceHex": "0x" + mp.MedianGasPrice.Text(16),
-				"recentTxCount":     blockStats.TxCount,
+				"avgGasPriceHex":             headlineHex,
+				"recentTxMedianHex":          "0x" + recentTxMedian.Text(16),
+				"recentTxSampleSize":         len(recentTxPrices),
+				"recentMedianGasPriceHex":    "0x" + blockStats.MedianTxGasPrice.Text(16),
+				"mempoolMedianGasPriceHex":   "0x" + mp.MedianGasPrice.Text(16),
+				"recentTxCount":              blockStats.TxCount,
 				"avgGasUsedHex":      "0x" + blockStats.AvgGasUsed.Text(16),
 				"avgGasLimitHex":     "0x" + blockStats.AvgGasLimit.Text(16),
 				"avgBlockTimeSec":    blockStats.AvgBlockTimeSec,

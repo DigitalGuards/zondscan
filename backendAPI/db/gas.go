@@ -200,6 +200,77 @@ func GetPendingMempoolSnapshot() ([]MempoolSample, error) {
 	return out, nil
 }
 
+// GetRecentTransactionGasPrices returns the gasPrice of the last `n`
+// transactions network-wide, walking the blocks collection newest-first and
+// unwinding tx arrays until n prices are collected — bounded by `maxBlocks`
+// so a totally empty chain doesn't scan forever. This keeps the headline
+// "Avg Gas Price" meaningful on quiet testnets where the last 30 blocks may
+// have zero txs but a tx from two hours ago is still useful signal.
+//
+// Note: the syncer's `transfer` collection doesn't persist gasPrice (only
+// paidFees), so we read it from blocks where it lives natively in
+// result.transactions[].gasprice.
+func GetRecentTransactionGasPrices(n int, maxBlocks int) ([]string, error) {
+	if n <= 0 {
+		n = 20
+	}
+	if maxBlocks <= 0 {
+		maxBlocks = 500
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	pipeline := bson.A{
+		// Only consider blocks that actually have at least one tx.
+		bson.M{"$match": bson.M{"result.transactions.0": bson.M{"$exists": true}}},
+		bson.M{"$sort": bson.M{"blockNumberInt": -1}},
+		bson.M{"$limit": maxBlocks},
+		bson.M{"$unwind": "$result.transactions"},
+		bson.M{"$project": bson.M{"gasprice": "$result.transactions.gasprice"}},
+		bson.M{"$limit": n},
+	}
+
+	cur, err := configs.BlocksCollection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+
+	type row struct {
+		GasPrice string `bson:"gasprice"`
+	}
+	var rows []row
+	if err := cur.All(ctx, &rows); err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(rows))
+	for _, r := range rows {
+		if r.GasPrice != "" {
+			out = append(out, r.GasPrice)
+		}
+	}
+	return out, nil
+}
+
+// MedianBigHex computes the median of a slice of hex-encoded big-int values
+// and returns it as a *big.Int. Empty input → 0.
+func MedianBigHex(hexes []string) *big.Int {
+	if len(hexes) == 0 {
+		return big.NewInt(0)
+	}
+	vals := make([]*big.Int, 0, len(hexes))
+	for _, h := range hexes {
+		vals = append(vals, hexToBig(h))
+	}
+	sort.Slice(vals, func(i, j int) bool { return vals[i].Cmp(vals[j]) < 0 })
+	mid := len(vals) / 2
+	if len(vals)%2 == 1 {
+		return new(big.Int).Set(vals[mid])
+	}
+	sum := new(big.Int).Add(vals[mid-1], vals[mid])
+	return new(big.Int).Quo(sum, bigTwo)
+}
+
 // MempoolStats summarizes a mempool snapshot relative to a single tx.
 type MempoolStats struct {
 	Count           int
