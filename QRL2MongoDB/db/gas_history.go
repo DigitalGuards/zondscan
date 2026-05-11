@@ -63,14 +63,17 @@ func UpdateGasHistory() error {
 	// Scan new blocks newest→oldest? No — oldest→newest, capped, so we don't
 	// blow memory if the syncer has just caught up from a deep backfill. The
 	// retention sweep below will trim any historical excess.
+	// Block documents store these fields in lowercase BSON (gasused, gaslimit,
+	// basefeepergas) — both the projection paths and the local struct tags
+	// below need to match that exactly.
 	blockOpts := options.Find().
 		SetProjection(bson.M{
 			"blockNumberInt":           1,
 			"result.number":            1,
 			"result.timestamp":         1,
-			"result.gasUsed":           1,
-			"result.gasLimit":          1,
-			"result.baseFeePerGas":     1,
+			"result.gasused":           1,
+			"result.gaslimit":          1,
+			"result.basefeepergas":     1,
 			"result.transactions.hash": 1,
 		}).
 		SetSort(bson.M{"blockNumberInt": 1}).
@@ -87,9 +90,9 @@ func UpdateGasHistory() error {
 		Result         struct {
 			Number        string `bson:"number"`
 			Timestamp     string `bson:"timestamp"`
-			GasUsed       string `bson:"gasUsed"`
-			GasLimit      string `bson:"gasLimit"`
-			BaseFeePerGas string `bson:"baseFeePerGas"`
+			GasUsed       string `bson:"gasused"`
+			GasLimit      string `bson:"gaslimit"`
+			BaseFeePerGas string `bson:"basefeepergas"`
 			Transactions  []struct {
 				Hash string `bson:"hash"`
 			} `bson:"transactions"`

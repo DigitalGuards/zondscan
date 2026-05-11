@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import type { PendingTransaction } from '@/app/types';
 import config from '../../../../config';
-import { formatAmount, formatGasPrice, decodeTokenTransferInput, formatTokenAmount } from '../../../lib/helpers';
+import { formatAmount, formatGasPrice, decodeTokenTransferInput, formatTokenAmount, hexToBigInt } from '../../../lib/helpers';
 import Badge from '../../../components/Badge';
 import Breadcrumbs from '../../../components/Breadcrumbs';
 import DetailRow from '../../../components/DetailRow';
@@ -27,15 +27,6 @@ interface EtaResponse {
   gasAheadHex: string;
   medianGasPriceHex: string;
   yourGasPriceHex: string;
-}
-
-function hexBig(s: string | undefined | null): bigint {
-  if (!s) return BigInt(0);
-  try {
-    return BigInt(s.startsWith('0x') ? s : '0x' + s);
-  } catch {
-    return BigInt(0);
-  }
 }
 
 function formatElapsed(seconds: number): string {
@@ -111,8 +102,11 @@ export default function PendingTransactionView({ pendingTx }: PendingTransaction
   }, [statusQuery.data?.status, pendingTx.hash, router]);
 
   // ── Elapsed counter (driven by local 1s tick, independent of polls) ────
-  const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
+  // Seed from createdAt so SSR and the first client render produce identical
+  // markup (elapsed = 0); hydrate to real wall-clock time in the effect.
+  const [nowSec, setNowSec] = useState(pendingTx.createdAt ?? 0);
   useEffect(() => {
+    setNowSec(Math.floor(Date.now() / 1000));
     if (statusQuery.data?.status !== 'pending') return;
     const id = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 1000);
     return () => clearInterval(id);
@@ -136,8 +130,8 @@ export default function PendingTransactionView({ pendingTx }: PendingTransaction
   // ── Gas-vs-median comparison ───────────────────────────────────────────
   const gasCompare = useMemo(() => {
     if (!etaQuery.data?.medianGasPriceHex) return null;
-    const yours = hexBig(pendingTx.gasPrice);
-    const median = hexBig(etaQuery.data.medianGasPriceHex);
+    const yours = hexToBigInt(pendingTx.gasPrice);
+    const median = hexToBigInt(etaQuery.data.medianGasPriceHex);
     if (median === BigInt(0)) return null;
     if (yours > median) return { variant: 'success' as const, label: 'above median' };
     if (yours < median) return { variant: 'warning' as const, label: 'below median' };

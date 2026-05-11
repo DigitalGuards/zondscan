@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import config from '../../config';
 import Badge from '../components/Badge';
-import { formatGasPrice } from '../lib/helpers';
+import { formatGasPrice, hexToBigInt, hexToNumber, formatBigGas } from '../lib/helpers';
 
 interface GasSummary {
   avgGasPriceHex: string;
@@ -30,31 +30,6 @@ interface GasHistoryRow {
 interface GasHistoryResp {
   range: '24h' | '7d';
   data: GasHistoryRow[];
-}
-
-function hexBig(s: string | undefined | null): bigint {
-  if (!s) return BigInt(0);
-  try {
-    return BigInt(s.startsWith('0x') ? s : '0x' + s);
-  } catch {
-    return BigInt(0);
-  }
-}
-
-function hexToNumber(s: string | undefined | null): number {
-  if (!s) return 0;
-  try {
-    return Number(BigInt(s.startsWith('0x') ? s : '0x' + s));
-  } catch {
-    return 0;
-  }
-}
-
-function formatBigGas(s: string | undefined | null): string {
-  if (!s) return '—';
-  const v = hexBig(s);
-  if (v === BigInt(0)) return '0';
-  return v.toLocaleString();
 }
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }): JSX.Element {
@@ -130,7 +105,7 @@ function GasUsedChart({ rows }: { rows: GasHistoryRow[] }): JSX.Element {
         {/* X labels */}
         {xTicks.map((t, i) => (
           <text key={i} x={sx(t)} y={h - 8} textAnchor="middle" fontSize="10" fill="#9ca3af">
-            {new Date(t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            {new Date(t * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC', hour12: false })}
           </text>
         ))}
       </svg>
@@ -224,8 +199,8 @@ export default function GasClient(): JSX.Element {
 
   const utilization = useMemo(() => {
     if (!summary) return null;
-    const used = hexBig(summary.lastGasUsedHex);
-    const limit = hexBig(summary.lastGasLimitHex);
+    const used = hexToBigInt(summary.lastGasUsedHex);
+    const limit = hexToBigInt(summary.lastGasLimitHex);
     if (limit === BigInt(0)) return null;
     // percentage with 1 decimal
     const pct = Number((used * BigInt(1000)) / limit) / 10;

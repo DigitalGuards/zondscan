@@ -65,6 +65,42 @@ export function toFixed(x: number | string | undefined | null): string {
   return num.toString();
 }
 
+/**
+ * Parse a "0x"-prefixed hex string into a bigint. Returns 0n on missing or
+ * malformed input — gas-stats math should never throw on a dropped field.
+ */
+export function hexToBigInt(s: string | undefined | null): bigint {
+  if (!s) return BigInt(0);
+  try {
+    return BigInt(s.startsWith('0x') ? s : '0x' + s);
+  } catch {
+    return BigInt(0);
+  }
+}
+
+/**
+ * Parse a "0x"-prefixed hex string into a number. Lossy for values > 2^53,
+ * but block numbers / gas-used values fit comfortably in that range.
+ */
+export function hexToNumber(s: string | undefined | null): number {
+  if (!s) return 0;
+  try {
+    return Number(BigInt(s.startsWith('0x') ? s : '0x' + s));
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Format a hex gas count (gasUsed / gasLimit) as a thousands-separated decimal.
+ */
+export function formatBigGas(s: string | undefined | null): string {
+  if (!s) return '—';
+  const v = hexToBigInt(s);
+  if (v === BigInt(0)) return '0';
+  return v.toLocaleString('en-US');
+}
+
 export function formatGasPrice(wei: number | string | undefined | null): string {
   if (wei === undefined || wei === null || wei === 0 || wei === '0' || wei === '0x0') {
     return '0';
