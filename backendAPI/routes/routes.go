@@ -6,6 +6,7 @@ import (
 	"backendAPI/models"
 	"fmt"
 	"log"
+	"math/big"
 	"net/http"
 	"strconv"
 	"strings"
@@ -840,5 +841,142 @@ func UserRoute(router *gin.Engine) {
 			Page:            page,
 			Limit:           limit,
 		})
+	})
+
+	// ---- Gas / mempool stats ---------------------------------------------
+	//
+	// /pending-tx-eta/:hash returns a best-effort inclusion ETA for one
+	// pending tx, plus the supporting numbers (avg block time, avg gas
+	// usage, mempool size, median gasPrice, gas-ahead sum). The math is in
+	// db/gas.go; the route just plumbs it together.
+	router.GET("/pending-tx-eta/:hash", func(c *gin.Context) {
+		hash := c.Param("hash")
+		v, err := routeCache.GetOrCompute("eta:"+hash, 5*time.Second, func() (interface{}, error) {
+			tx, err := db.GetPendingTransactionByHash(hash)
+			if err != nil {
+				return nil, err
+			}
+			if tx == nil || tx.Status != "pending" {
+				return nil, nil
+			}
+
+			samples, err := db.GetRecentBlockSamples(30)
+			if err != nil {
+				return nil, err
+			}
+			blockStats := db.ComputeBlockStats(samples)
+
+			mempool, err := db.GetPendingMempoolSnapshot()
+			if err != nil {
+				return nil, err
+			}
+			mp := db.ComputeMempoolStatsFor(mempool, tx.GasPrice)
+
+			// ETA = ceil(gasAhead / avgGasUsed) * avgBlockTime.
+			avgGas := blockStats.AvgGasUsed
+			if avgGas.Sign() <= 0 {
+				avgGas = big.NewInt(1)
+			}
+			// Integer ceil-division: (a + b - 1) / b.
+			num := new(big.Int).Add(mp.GasAhead, new(big.Int).Sub(avgGas, big.NewInt(1)))
+			blocksAhead := new(big.Int).Quo(num, avgGas).Int64()
+			etaSec := float64(blocksAhead) * blockStats.AvgBlockTimeSec
+			// At minimum one block-time of wait — gasAhead = 0 still means we
+			// wait for the next block to be produced.
+			if etaSec < blockStats.AvgBlockTimeSec {
+				etaSec = blockStats.AvgBlockTimeSec
+			}
+
+			return gin.H{
+				"etaSec":            etaSec,
+				"avgBlockTimeSec":   blockStats.AvgBlockTimeSec,
+				"avgGasUsedHex":     "0x" + blockStats.AvgGasUsed.Text(16),
+				"pendingCount":      mp.Count,
+				"gasAheadHex":       "0x" + mp.GasAhead.Text(16),
+				"medianGasPriceHex": "0x" + mp.MedianGasPrice.Text(16),
+				"yourGasPriceHex":   tx.GasPrice,
+			}, nil
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if v == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Pending transaction not found"})
+			return
+		}
+		c.JSON(http.StatusOK, v)
+	})
+
+	// /gas/summary feeds the top stat cards on the /gas page and the home
+	// "Avg Gas Price" tile. Combines the same block + mempool snapshots used
+	// by the ETA endpoint.
+	router.GET("/gas/summary", func(c *gin.Context) {
+		v, err := routeCache.GetOrCompute("gas:summary", 5*time.Second, func() (interface{}, error) {
+			samples, err := db.GetRecentBlockSamples(30)
+			if err != nil {
+				return nil, err
+			}
+			blockStats := db.ComputeBlockStats(samples)
+
+			mempool, err := db.GetPendingMempoolSnapshot()
+			if err != nil {
+				return nil, err
+			}
+			// Pass an empty target so GasAhead is just total mempool gas
+			// (callers ignore that field for the summary).
+			mp := db.ComputeMempoolStatsFor(mempool, "0x0")
+			histogram := db.MempoolGasPriceHistogram(mempool, 12)
+
+			return gin.H{
+				"avgGasPriceHex":     "0x" + mp.MedianGasPrice.Text(16),
+				"avgGasUsedHex":      "0x" + blockStats.AvgGasUsed.Text(16),
+				"avgGasLimitHex":     "0x" + blockStats.AvgGasLimit.Text(16),
+				"avgBlockTimeSec":    blockStats.AvgBlockTimeSec,
+				"pendingCount":       mp.Count,
+				"lastBlockNumberHex": blockStats.LastNumberHex,
+				"lastGasUsedHex":     blockStats.LastGasUsedHex,
+				"lastGasLimitHex":    blockStats.LastGasLimitHex,
+				"gasPriceHistogram":  histogram,
+			}, nil
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, v)
+	})
+
+	// /gas/history?range=24h|7d serves the timeseries used by the /gas page
+	// charts. Data is sourced from the `gasHistory` collection populated by
+	// the syncer's periodic task.
+	router.GET("/gas/history", func(c *gin.Context) {
+		rng := c.DefaultQuery("range", "24h")
+		var sinceSec, bucketSec int64
+		switch rng {
+		case "7d":
+			sinceSec = time.Now().Unix() - 7*24*3600
+			bucketSec = 3600 // 1 row per hour
+		default:
+			rng = "24h"
+			sinceSec = time.Now().Unix() - 24*3600
+			bucketSec = 0 // raw per-block rows
+		}
+		key := "gas:history:" + rng
+		v, err := routeCache.GetOrCompute(key, 30*time.Second, func() (interface{}, error) {
+			rows, err := db.GetGasHistory(sinceSec, bucketSec)
+			if err != nil {
+				return nil, err
+			}
+			if rows == nil {
+				rows = []db.GasHistoryRow{}
+			}
+			return gin.H{"range": rng, "data": rows}, nil
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, v)
 	})
 }
