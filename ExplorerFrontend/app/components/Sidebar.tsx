@@ -35,6 +35,7 @@ const navGroups: NavGroup[] = [
       { name: 'Latest Blocks', description: 'View all Blocks', href: '/blocks/1', imgSrc: BlockchainIcon },
       { name: 'Epochs', description: 'View all Epochs', href: '/epochs/1', imgSrc: BlockchainIcon },
       { name: 'Validators', description: 'Network Validators', href: '/validators', imgSrc: ContractIcon },
+      { name: 'Gas', description: 'Network gas metrics', href: '/gas', imgSrc: BlockchainIcon },
     ],
   },
   {
