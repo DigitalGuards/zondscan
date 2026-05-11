@@ -29,15 +29,16 @@ func hexToBig(s string) *big.Int {
 }
 
 // BlockGasSample is the minimal projection we need from each block for the gas
-// page and ETA math.
+// page and ETA math. Block documents are stored with lowercase BSON keys
+// (gasused, gaslimit, basefeepergas) — match that exactly.
 type BlockGasSample struct {
-	BlockNumberInt int64  `bson:"blockNumberInt"`
+	BlockNumberInt int64 `bson:"blockNumberInt"`
 	Result         struct {
 		Number        string `bson:"number"`
 		Timestamp     string `bson:"timestamp"`
-		GasUsed       string `bson:"gasUsed"`
-		GasLimit      string `bson:"gasLimit"`
-		BaseFeePerGas string `bson:"baseFeePerGas"`
+		GasUsed       string `bson:"gasused"`
+		GasLimit      string `bson:"gaslimit"`
+		BaseFeePerGas string `bson:"basefeepergas"`
 		Transactions  []struct {
 			Hash string `bson:"hash"`
 		} `bson:"transactions"`
@@ -59,9 +60,9 @@ func GetRecentBlockSamples(n int) ([]BlockGasSample, error) {
 			{Key: "blockNumberInt", Value: 1},
 			{Key: "result.number", Value: 1},
 			{Key: "result.timestamp", Value: 1},
-			{Key: "result.gasUsed", Value: 1},
-			{Key: "result.gasLimit", Value: 1},
-			{Key: "result.baseFeePerGas", Value: 1},
+			{Key: "result.gasused", Value: 1},
+			{Key: "result.gaslimit", Value: 1},
+			{Key: "result.basefeepergas", Value: 1},
 			{Key: "result.transactions.hash", Value: 1},
 		}).
 		SetSort(primitive.D{{Key: "blockNumberInt", Value: -1}}).
