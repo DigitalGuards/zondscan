@@ -33,9 +33,14 @@ const navGroups: NavGroup[] = [
       { name: 'Latest Transactions', description: 'View all Transactions', href: '/transactions/1', imgSrc: PartnerHandshakeIcon },
       { name: 'Pending Transactions', description: 'View pending transactions', href: '/pending/1', imgSrc: PartnerHandshakeIcon },
       { name: 'Latest Blocks', description: 'View all Blocks', href: '/blocks/1', imgSrc: BlockchainIcon },
+      { name: 'Gas', description: 'Network gas metrics', href: '/gas', imgSrc: BlockchainIcon },
+    ],
+  },
+  {
+    label: 'Consensus',
+    items: [
       { name: 'Epochs', description: 'View all Epochs', href: '/epochs/1', imgSrc: BlockchainIcon },
       { name: 'Validators', description: 'Network Validators', href: '/validators', imgSrc: ContractIcon },
-      { name: 'Gas', description: 'Network gas metrics', href: '/gas', imgSrc: BlockchainIcon },
     ],
   },
   {
@@ -44,14 +49,13 @@ const navGroups: NavGroup[] = [
       { name: 'Smart Contracts', description: 'View QRL contracts', href: '/contracts', imgSrc: ContractIcon },
       { name: 'Balance Checker', description: 'Check Account balance', href: '/checker', imgSrc: LookUpIcon },
       { name: 'Unit Converter', description: 'Convert QRL currencies', href: '/converter', imgSrc: TokenIcon },
+      { name: 'Richlist', description: 'Top QRL holders', href: '/richlist', imgSrc: RichIcon },
     ],
   },
 ]
 
 // Flat links (single items that don't need accordion groups)
-const flatLinks: NavItem[] = [
-  { name: 'Richlist', description: 'Top QRL holders', href: '/richlist', imgSrc: RichIcon },
-]
+const flatLinks: NavItem[] = []
 
 const ICON_FILTER = "[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(105%)]"
 const ICON_FILTER_HOVER = "group-hover:[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(125%)]"
