@@ -81,9 +81,15 @@ func UpdateGasHistory() error {
 
 	cur, err := configs.BlocksCollections.Find(ctx, bson.M{"blockNumberInt": bson.M{"$gt": highwater}}, blockOpts)
 	if err != nil {
+		configs.Logger.Error("gasHistory blocks find failed",
+			zap.Int64("highwater", highwater),
+			zap.Error(err))
 		return err
 	}
 	defer cur.Close(ctx)
+
+	configs.Logger.Info("gasHistory scan started",
+		zap.Int64("highwater", highwater))
 
 	type blockProjection struct {
 		BlockNumberInt int64 `bson:"blockNumberInt"`
@@ -100,15 +106,21 @@ func UpdateGasHistory() error {
 	}
 
 	var ops []mongo.WriteModel
+	scanned := 0
+	skippedDecode := 0
+	skippedTs := 0
 	for cur.Next(ctx) {
+		scanned++
 		var b blockProjection
 		if err := cur.Decode(&b); err != nil {
+			skippedDecode++
 			continue
 		}
 		ts := HexToInt64(b.Result.Timestamp)
 		// Skip blocks with a malformed timestamp — they'd corrupt the
 		// retention sweep below.
 		if ts <= 0 {
+			skippedTs++
 			continue
 		}
 		row := gasHistoryRow{
@@ -126,8 +138,18 @@ func UpdateGasHistory() error {
 			SetUpsert(true))
 	}
 	if err := cur.Err(); err != nil {
+		configs.Logger.Error("gasHistory cursor error",
+			zap.Int("scanned", scanned),
+			zap.Error(err))
 		return err
 	}
+
+	configs.Logger.Info("gasHistory scan complete",
+		zap.Int64("highwater", highwater),
+		zap.Int("scanned", scanned),
+		zap.Int("skippedDecode", skippedDecode),
+		zap.Int("skippedTs", skippedTs),
+		zap.Int("ops", len(ops)))
 
 	if len(ops) > 0 {
 		_, err := col.BulkWrite(ctx, ops, options.BulkWrite().SetOrdered(false))
