@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import TransactionView from './transaction-view';
 import type { TransactionDetails } from '@/app/types';
 import config from '../../../config';
@@ -69,57 +69,44 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
   return transaction;
 }
 
-export default async function TransactionPage({ params }: PageProps): Promise<JSX.Element> {
-  let resolvedParams;
-  let txHash = '';
-  
+async function isPendingTransaction(txHash: string): Promise<boolean> {
   try {
-    resolvedParams = await params;
-    txHash = resolvedParams.query;
-
-    // Validate transaction hash format
-    const hashRegex = /^0x[0-9a-fA-F]{64}$/;
-    if (!hashRegex.test(txHash)) {
-      return (
-        <div className="container mx-auto px-4">
-          <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg mt-6">
-            <h2 className="text-red-500 font-semibold mb-2">Invalid Transaction Hash</h2>
-            <p className="text-gray-300">
-              The provided transaction hash is not in the correct format. 
-              Transaction hashes should start with &apos;0x&apos; followed by 64 hexadecimal characters.
-            </p>
-          </div>
-        </div>
-      );
-    }
-
-    // Check if transaction is in mempool (only show pending if status is actually "pending")
     const pendingResponse = await fetch(`${config.handlerUrl}/pending-transaction/${txHash}`);
-    if (pendingResponse.ok && pendingResponse.status === 200) {
-      const pendingData = await pendingResponse.json();
-      // Only show pending view if transaction exists AND status is "pending" (not "mined")
-      if (pendingData?.transaction && pendingData.transaction.status === 'pending') {
-        // If found in mempool with pending status, show pending message with link
-        return (
-          <div className="container mx-auto px-4">
-            <div className="bg-yellow-900/20 border border-yellow-500/50 rounded-xl p-6 shadow-lg mt-6">
-              <h2 className="text-yellow-500 font-semibold mb-2">Transaction Pending</h2>
-              <p className="text-gray-300 mb-4">
-                This transaction is still pending and has not been mined yet.
-              </p>
-              <a
-                href={`/pending/tx/${txHash}`}
-                className="inline-block bg-yellow-500/20 text-yellow-500 px-4 py-2 rounded-lg hover:bg-yellow-500/30 transition-colors"
-              >
-                View Pending Transaction →
-              </a>
-            </div>
-          </div>
-        );
-      }
-    }
+    if (!pendingResponse.ok || pendingResponse.status !== 200) return false;
+    const pendingData = await pendingResponse.json();
+    return Boolean(pendingData?.transaction && pendingData.transaction.status === 'pending');
+  } catch (error) {
+    console.error('Error checking pending transaction:', error);
+    return false;
+  }
+}
 
-    // Not in mempool, try to get mined transaction
+export default async function TransactionPage({ params }: PageProps): Promise<JSX.Element> {
+  const resolvedParams = await params;
+  const txHash = resolvedParams.query;
+
+  const hashRegex = /^0x[0-9a-fA-F]{64}$/;
+  if (!hashRegex.test(txHash)) {
+    return (
+      <div className="container mx-auto px-4">
+        <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg mt-6">
+          <h2 className="text-red-500 font-semibold mb-2">Invalid Transaction Hash</h2>
+          <p className="text-gray-300">
+            The provided transaction hash is not in the correct format.
+            Transaction hashes should start with &apos;0x&apos; followed by 64 hexadecimal characters.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // redirect() throws a NEXT_REDIRECT sentinel that the framework must
+  // receive uncaught — keep this call outside any try/catch.
+  if (await isPendingTransaction(txHash)) {
+    redirect(`/pending/tx/${txHash}`);
+  }
+
+  try {
     const transaction = await getTransaction(txHash);
     return <TransactionView transaction={transaction} />;
   } catch (error) {
