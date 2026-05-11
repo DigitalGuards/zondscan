@@ -82,17 +82,15 @@ func UpdatePendingTransactionsInBlock(block *models.ZondDatabaseBlock) error {
 	// back to "pending". Since status is excluded from $set in the upsert,
 	// an existing tombstone is preserved across re-polls.
 	// CleanupOldPendingTransactions sweeps these rows once they age out.
+	//
+	// Only status + lastSeen change here — match the shape that
+	// verifyPendingTransactions/UpdatePendingTransactionStatus writes, so
+	// both tombstone paths produce identical rows. blockNumber lives in
+	// the blocks/transactions collections.
 	for _, tx := range pendingTxs {
 		if blockTxs[tx.Hash] {
-			update := bson.M{
-				"$set": bson.M{
-					"status":      "mined",
-					"lastSeen":    time.Now(),
-					"blockNumber": block.Result.Number,
-				},
-			}
-			if _, err := collection.UpdateOne(ctx, bson.M{"_id": tx.Hash}, update); err != nil {
-				configs.Logger.Error("Failed to update mined transaction status",
+			if err := db.UpdatePendingTransactionStatus(tx.Hash, "mined"); err != nil {
+				configs.Logger.Error("Failed to tombstone mined transaction",
 					zap.String("hash", tx.Hash),
 					zap.Error(err))
 				continue

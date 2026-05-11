@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -79,22 +78,22 @@ func UserRoute(router *gin.Engine) {
 
 		// If not found in pending, check if it's in the transactions collection
 		if transaction == nil {
-			// Check if transaction exists in the transactions collection
 			tx, err := db.GetTransactionByHash(hash)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
 
+			// Mined tx whose tombstone was already swept — return 404 in the
+			// same shape as the tombstone branch below. The frontend treats
+			// any non-200 from this endpoint as "not pending" and fetches
+			// /tx/:hash for the mined payload, so returning the mined details
+			// here just duplicates work and creates a state-dependent API.
 			if tx != nil {
-				// Transaction is mined - return formatted response
-				c.JSON(http.StatusOK, gin.H{
-					"transaction": gin.H{
-						"hash":        tx.Hash, // Already has 0x prefix
-						"status":      "mined",
-						"blockNumber": tx.BlockNumber,
-						"timestamp":   time.Now().Unix(),
-					},
+				c.JSON(http.StatusNotFound, gin.H{
+					"error":   "Transaction has been mined",
+					"status":  "mined",
+					"details": "This transaction has been confirmed. Please view it as a confirmed transaction.",
 				})
 				return
 			}
