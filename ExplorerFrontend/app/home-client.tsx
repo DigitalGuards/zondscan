@@ -4,7 +4,7 @@ import * as React from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import axios from 'axios';
-import { formatNumberWithCommas, timeAgo, formatStaked } from './lib/helpers';
+import { formatNumberWithCommas, timeAgo, formatStaked, formatGasPrice } from './lib/helpers';
 import config from '../config.js';
 import SearchBar from './components/SearchBar';
 import StatusBadge from './components/StatusBadge';
@@ -48,6 +48,7 @@ interface HomeData {
   blocks: BlockResult[];
   totalStaked: string;
   marketCap: number;
+  avgGasPriceHex: string | null;
   loading: boolean;
   error: boolean;
   dataInitialized: boolean;
@@ -111,6 +112,12 @@ const icons = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
     </svg>
   ),
+  gas: (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 21h18" />
+    </svg>
+  ),
   block: (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
@@ -143,7 +150,7 @@ const icons = {
 function StatBar({ data }: { data: HomeData }) {
   const stats = [
     { label: 'Epoch', value: data.epochInfo ? data.epochInfo.headEpoch : '—', icon: icons.epoch },
-    { label: 'Slot', value: data.epochInfo ? formatNumberWithCommas(data.epochInfo.headSlot) : '—', icon: icons.slot },
+    { label: 'Avg Gas Price', value: data.avgGasPriceHex ? `${formatGasPrice(data.avgGasPriceHex)} Gwei` : '—', icon: icons.gas },
     { label: 'Block Height', value: formatNumberWithCommas(data.blockHeight.toString()), icon: icons.block },
     { label: 'Validators', value: formatNumberWithCommas(data.validatorCount.toString()), icon: icons.validators },
     { label: 'Staked QRL', value: data.totalStaked !== '0' ? formatStaked(data.totalStaked) : '—', icon: icons.staked },
@@ -355,6 +362,7 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
     blocks: [],
     totalStaked: '0',
     marketCap: 0,
+    avgGasPriceHex: null,
     loading: true,
     error: false,
     dataInitialized: false,
@@ -364,13 +372,14 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
     try {
       if (!config.handlerUrl) return;
 
-      const [overviewRes, latestBlockRes, txsRes, epochRes, blocksRes, epochsRes] = await Promise.allSettled([
+      const [overviewRes, latestBlockRes, txsRes, epochRes, blocksRes, epochsRes, gasRes] = await Promise.allSettled([
         axios.get(config.handlerUrl + '/overview'),
         axios.get(config.handlerUrl + '/latestblock'),
         axios.get(config.handlerUrl + '/txs?page=1'),
         axios.get(config.handlerUrl + '/epoch'),
         axios.get(config.handlerUrl + '/blocks?page=1&limit=10'),
         axios.get(config.handlerUrl + '/epochs?page=1&limit=1'),
+        axios.get(config.handlerUrl + '/gas/summary'),
       ]);
 
       setData((prev) => {
@@ -398,6 +407,9 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
           if (latestEpoch?.totalStaked) {
             next.totalStaked = latestEpoch.totalStaked;
           }
+        }
+        if (gasRes.status === 'fulfilled' && gasRes.value.data?.avgGasPriceHex) {
+          next.avgGasPriceHex = gasRes.value.data.avgGasPriceHex;
         }
 
         return next;
