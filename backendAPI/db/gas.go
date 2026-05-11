@@ -19,7 +19,9 @@ import (
 var (
 	bigOne = big.NewInt(1)
 	bigTwo = big.NewInt(2)
-	bigGwei = big.NewInt(1_000_000_000)
+	// 1 Shor = 10^9 Planck (the QRL-native pair of units, equivalent in
+	// magnitude to Ethereum's Gwei/wei).
+	bigShor = big.NewInt(1_000_000_000)
 )
 
 // hexToBig parses a "0x"-prefixed hex string into a *big.Int. Empty / malformed
@@ -240,15 +242,15 @@ func ComputeMempoolStatsFor(samples []MempoolSample, targetGasPriceHex string) M
 }
 
 // GasPriceBucket is one bin in the mempool gas-price histogram surfaced on the
-// /gas page.
+// /gas page. Bounds are reported in Shor (QRL-native; 1 Shor = 10^9 Planck).
 type GasPriceBucket struct {
-	GweiLow  float64 `json:"gweiLow"`
-	GweiHigh float64 `json:"gweiHigh"`
+	ShorLow  float64 `json:"shorLow"`
+	ShorHigh float64 `json:"shorHigh"`
 	Count    int     `json:"count"`
 }
 
 // MempoolGasPriceHistogram bins the snapshot into up to `bins` evenly-spaced
-// Gwei buckets between the min and max gasPrice. Returns a single-bin result
+// Shor buckets between the min and max gasPrice. Returns a single-bin result
 // if all txs share the same price (or the mempool is empty).
 func MempoolGasPriceHistogram(samples []MempoolSample, bins int) []GasPriceBucket {
 	if bins <= 0 {
@@ -260,22 +262,22 @@ func MempoolGasPriceHistogram(samples []MempoolSample, bins int) []GasPriceBucke
 	values := make([]float64, 0, len(samples))
 	for _, s := range samples {
 		gp := hexToBig(s.GasPrice)
-		// Gwei = wei / 1e9. We accept the float64 lossiness here — this is for
+		// Shor = Planck / 10^9. float64 lossiness is fine here — this is for
 		// a histogram, not accounting.
-		q := new(big.Int).Quo(gp, bigGwei)
+		q := new(big.Int).Quo(gp, bigShor)
 		values = append(values, float64(q.Int64()))
 	}
 	sort.Float64s(values)
 	minV, maxV := values[0], values[len(values)-1]
 	if maxV == minV {
-		return []GasPriceBucket{{GweiLow: minV, GweiHigh: maxV, Count: len(values)}}
+		return []GasPriceBucket{{ShorLow: minV, ShorHigh: maxV, Count: len(values)}}
 	}
 	width := (maxV - minV) / float64(bins)
 	out := make([]GasPriceBucket, bins)
 	for i := 0; i < bins; i++ {
 		out[i] = GasPriceBucket{
-			GweiLow:  minV + width*float64(i),
-			GweiHigh: minV + width*float64(i+1),
+			ShorLow:  minV + width*float64(i),
+			ShorHigh: minV + width*float64(i+1),
 		}
 	}
 	for _, v := range values {

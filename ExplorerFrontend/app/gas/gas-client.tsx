@@ -15,7 +15,7 @@ interface GasSummary {
   lastBlockNumberHex: string;
   lastGasUsedHex: string;
   lastGasLimitHex: string;
-  gasPriceHistogram: { gweiLow: number; gweiHigh: number; count: number }[];
+  gasPriceHistogram: { shorLow: number; shorHigh: number; count: number }[];
 }
 
 interface GasHistoryRow {
@@ -149,7 +149,7 @@ function HistogramChart({ buckets }: { buckets: GasSummary['gasPriceHistogram'] 
                 fill="#9ca3af"
                 textAnchor="middle"
               >
-                {b.gweiLow === b.gweiHigh ? b.gweiLow.toFixed(0) : `${b.gweiLow.toFixed(0)}–${b.gweiHigh.toFixed(0)}`}
+                {b.shorLow === b.shorHigh ? b.shorLow.toFixed(0) : `${b.shorLow.toFixed(0)}–${b.shorHigh.toFixed(0)}`}
               </text>
               {b.count > 0 && (
                 <text x={x + (barW - 4) / 2} y={y - 3} fontSize="9" fill="#d1d5db" textAnchor="middle">
@@ -160,7 +160,7 @@ function HistogramChart({ buckets }: { buckets: GasSummary['gasPriceHistogram'] 
           );
         })}
         <text x={w / 2} y={h - 4} fontSize="10" fill="#6b7280" textAnchor="middle">
-          gas price (Gwei)
+          gas price (Shor)
         </text>
       </svg>
     </div>
@@ -248,7 +248,7 @@ export default function GasClient(): JSX.Element {
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
         <StatCard
           label="Avg Gas Price"
-          value={summary ? `${formatGasPrice(summary.avgGasPriceHex)} Gwei` : '—'}
+          value={summary ? `${formatGasPrice(summary.avgGasPriceHex)} Shor` : '—'}
           sub="mempool median"
         />
         <StatCard
