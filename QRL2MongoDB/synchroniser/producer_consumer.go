@@ -61,32 +61,47 @@ func consumer(ch <-chan (<-chan Data)) {
 			for data := range p {
 				// Only process if there's data to process
 				if len(data.blockData) > 0 {
+					// Pre-validate every blockData entry. blockData is
+					// []interface{} (see Data struct). If we discovered a bad
+					// type mid-loop, InsertManyBlockDocuments below would have
+					// already committed the whole batch — we'd be left with
+					// rows in `blocks` whose transactions never get processed
+					// and whose pending hashes never get tombstoned, while
+					// sync_state still advances past them. Drop the whole
+					// batch on any bad type so gap-detection (or the next
+					// fetch) can re-pull from RPC.
+					blocks := make([]models.ZondDatabaseBlock, len(data.blockData))
+					typesOk := true
+					for x, entry := range data.blockData {
+						blk, ok := entry.(models.ZondDatabaseBlock)
+						if !ok {
+							configs.Logger.Error("Unexpected blockData type in batch consumer, dropping batch",
+								zap.Int("index", x),
+								zap.Int("blockNumber", data.blockNumbers[x]))
+							typesOk = false
+							break
+						}
+						blocks[x] = blk
+					}
+					if !typesOk {
+						continue
+					}
+
 					db.InsertManyBlockDocuments(data.blockData)
 					configs.Logger.Info("Inserted block batch",
 						zap.Int("count", len(data.blockData)))
 
-					// blockData is []interface{} (see Data struct). Assert before
-					// calling ProcessTransactions: that function does its own
-					// unchecked .(models.ZondDatabaseBlock) and would panic the
-					// consumer goroutine on a bad entry, which would render any
-					// subsequent safety check unreachable.
-					for x := 0; x < len(data.blockNumbers); x++ {
-						blk, ok := data.blockData[x].(models.ZondDatabaseBlock)
-						if !ok {
-							configs.Logger.Warn("Unexpected blockData type in batch consumer, skipping block",
-								zap.Int("blockNumber", data.blockNumbers[x]))
-							continue
-						}
-						db.ProcessTransactions(blk)
+					for x := 0; x < len(blocks); x++ {
+						db.ProcessTransactions(blocks[x])
 						// Tombstone any pending rows whose hashes are in this
 						// block. The single-block path (sync.go) calls this
 						// inline; without it here, batch-sync (first-sync /
 						// behind-the-tip catch-up) leaves rows as "pending"
 						// until verifyPendingTransactions sweeps them — up to
 						// 5 minutes after the tx is confirmed on-chain.
-						if err := UpdatePendingTransactionsInBlock(&blk); err != nil {
+						if err := UpdatePendingTransactionsInBlock(&blocks[x]); err != nil {
 							configs.Logger.Error("Failed to update pending transactions in batch block",
-								zap.String("block", blk.Result.Number),
+								zap.String("block", blocks[x].Result.Number),
 								zap.Error(err))
 						}
 					}
