@@ -63,10 +63,11 @@ func GetLatestBlockFromDB() *models.ZondDatabaseBlock {
 	ctx, cancel := context.WithTimeout(context.Background(), DBTimeout)
 	defer cancel()
 
-	// Query for the latest block by sorting on timestamp (more reliable than hex string sorting)
+	// Sort by blockNumberInt (numeric) — hex strings on result.number /
+	// result.timestamp lex-sort wrong at width boundaries.
 	findOptions := options.FindOne().
 		SetProjection(bson.M{"result.number": 1, "result.timestamp": 1}).
-		SetSort(bson.M{"result.timestamp": -1})
+		SetSort(bson.M{"blockNumberInt": -1})
 
 	var block models.ZondDatabaseBlock
 	err := configs.BlocksCollections.FindOne(ctx, bson.D{}, findOptions).Decode(&block)
@@ -294,9 +295,11 @@ func GetLastKnownBlockNumberFromInitialSync() string {
 		return result.BlockNumber
 	}
 
-	// If no record exists, find the oldest block in the DB
+	// If no record exists, find the oldest block in the DB. Sort ascending by
+	// blockNumberInt — sorting by result.number (hex string) would lex-sort
+	// "0x10" before "0x9" and return the wrong "oldest" block.
 	var block models.ZondDatabaseBlock
-	findOptions := options.FindOne().SetProjection(bson.M{"result.number": 1}).SetSort(bson.M{"result.number": 1})
+	findOptions := options.FindOne().SetProjection(bson.M{"result.number": 1}).SetSort(bson.M{"blockNumberInt": 1})
 	err = configs.BlocksCollections.FindOne(ctx, bson.M{}, findOptions).Decode(&block)
 
 	if err == nil && block.Result.Number != "" {
@@ -526,14 +529,17 @@ func InsertManyBlockDocuments(blocks []interface{}) {
 	}
 }
 
-// Rollback removes all blocks after the given block number and updates the sync state
+// Rollback removes all blocks after the given block number and updates the sync state.
+// Filter on blockNumberInt (numeric), NOT result.number (hex string) — lex comparison
+// on hex strings produces wrong results (e.g. "0xa" > "0x100" lexicographically),
+// which would leave stale blocks above the rollback point during chain reorgs and
+// silently corrupt the chain view.
 func Rollback(blockNumber string) error {
 	ctx := context.Background()
 
-	// Find all blocks after the given block number
 	filter := bson.M{
-		"result.number": bson.M{
-			"$gt": blockNumber,
+		"blockNumberInt": bson.M{
+			"$gt": HexToInt64(blockNumber),
 		},
 	}
 
