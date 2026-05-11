@@ -13,6 +13,15 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+// Reusable big.Int constants for hot paths (median calcs, ceil-divisions).
+// big.Int math is allocation-heavy; sharing read-only operands shaves
+// thousands of allocations per request on a busy mempool.
+var (
+	bigOne = big.NewInt(1)
+	bigTwo = big.NewInt(2)
+	bigGwei = big.NewInt(1_000_000_000)
+)
+
 // hexToBig parses a "0x"-prefixed hex string into a *big.Int. Empty / malformed
 // input yields 0 — gas math should never panic on a missing field.
 func hexToBig(s string) *big.Int {
@@ -115,7 +124,10 @@ func ComputeBlockStats(samples []BlockGasSample) BlockStats {
 
 	sumUsed := new(big.Int)
 	sumLimit := new(big.Int)
-	var txPrices []*big.Int
+	// Conservative pre-allocation: ~10 txs/block × N blocks. Avoids the
+	// 3-4 grow-and-copy passes the slice would otherwise do for a typical
+	// 30-block window on a busy chain.
+	txPrices := make([]*big.Int, 0, len(samples)*10)
 	for _, s := range samples {
 		sumUsed.Add(sumUsed, hexToBig(s.Result.GasUsed))
 		sumLimit.Add(sumLimit, hexToBig(s.Result.GasLimit))
@@ -134,7 +146,7 @@ func ComputeBlockStats(samples []BlockGasSample) BlockStats {
 			stats.MedianTxGasPrice.Set(txPrices[mid])
 		} else {
 			sum := new(big.Int).Add(txPrices[mid-1], txPrices[mid])
-			stats.MedianTxGasPrice.Quo(sum, big.NewInt(2))
+			stats.MedianTxGasPrice.Quo(sum, bigTwo)
 		}
 	}
 	n := big.NewInt(int64(len(samples)))
@@ -222,7 +234,7 @@ func ComputeMempoolStatsFor(samples []MempoolSample, targetGasPriceHex string) M
 		stats.MedianGasPrice.Set(prices[mid])
 	} else {
 		sum := new(big.Int).Add(prices[mid-1], prices[mid])
-		stats.MedianGasPrice.Quo(sum, big.NewInt(2))
+		stats.MedianGasPrice.Quo(sum, bigTwo)
 	}
 	return stats
 }
@@ -245,13 +257,12 @@ func MempoolGasPriceHistogram(samples []MempoolSample, bins int) []GasPriceBucke
 	if len(samples) == 0 {
 		return []GasPriceBucket{}
 	}
-	gwei := big.NewInt(1_000_000_000)
 	values := make([]float64, 0, len(samples))
 	for _, s := range samples {
 		gp := hexToBig(s.GasPrice)
 		// Gwei = wei / 1e9. We accept the float64 lossiness here — this is for
 		// a histogram, not accounting.
-		q := new(big.Int).Quo(gp, gwei)
+		q := new(big.Int).Quo(gp, bigGwei)
 		values = append(values, float64(q.Int64()))
 	}
 	sort.Float64s(values)
