@@ -88,12 +88,14 @@ func ReturnValidators(pageToken string) (*models.ValidatorResponse, error) {
 	}, nil
 }
 
-// CountValidators returns the total number of validator documents in the collection.
+// CountValidators returns the total validator count. Uses
+// EstimatedDocumentCount (metadata read) rather than CountDocuments({}),
+// which is O(rows) and ran on every /overview hit.
 func CountValidators() (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	count, err := configs.ValidatorsCollections.CountDocuments(ctx, bson.M{})
+	count, err := configs.ValidatorsCollections.EstimatedDocumentCount(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count validators: %v", err)
 	}
@@ -261,8 +263,10 @@ func GetEpochs(page, limit int) (*models.EpochsResponse, error) {
 	finalizedEpoch := parseEpoch(epochInfo.FinalizedEpoch)
 	justifiedEpoch := parseEpoch(epochInfo.JustifiedEpoch)
 
-	// Count total epoch records
-	total, err := configs.ValidatorHistoryCollection.CountDocuments(ctx, bson.M{})
+	// Count total epoch records. EstimatedDocumentCount is metadata-based
+	// and accurate enough for "total pages" pagination since epoch records
+	// are append-only.
+	total, err := configs.ValidatorHistoryCollection.EstimatedDocumentCount(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count epochs: %v", err)
 	}
@@ -449,8 +453,11 @@ func GetValidatorStats() (*models.ValidatorStatsResponse, error) {
 	}
 	currentEpoch := HexToInt(latestBlock) / 128
 
-	// Check whether the collection has any documents at all.
-	totalCount, err := configs.ValidatorsCollections.CountDocuments(ctx, bson.M{})
+	// Check whether the collection has any documents at all. The
+	// EstimatedDocumentCount metadata can be 0 on a brand-new collection
+	// or briefly stale during heavy writes; the == 0 guard below handles
+	// both cases the same way.
+	totalCount, err := configs.ValidatorsCollections.EstimatedDocumentCount(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count validators: %v", err)
 	}
