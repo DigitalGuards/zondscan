@@ -107,13 +107,11 @@ func UserRoute(router *gin.Engine) {
 			return
 		}
 
-		// If transaction is mined, delete it from pending collection and redirect to mined tx
+		// If the row is a tombstone for a mined tx, return 404 — let the
+		// frontend fall back to /tx/<hash>. Don't delete here: the tombstone
+		// protects against a stale mempool poll re-inserting the row as
+		// "pending". CleanupOldPendingTransactions sweeps it after maxAge.
 		if transaction.Status == "mined" {
-			if err := db.DeleteMinedTransaction(hash); err != nil {
-				// Log error but don't fail the request
-				log.Printf("Error deleting mined transaction %s: %v\n", hash, err)
-			}
-			// Don't return the pending transaction - let frontend fetch from /tx endpoint
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":   "Transaction has been mined",
 				"status":  "mined",
