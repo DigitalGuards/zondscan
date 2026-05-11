@@ -150,7 +150,7 @@ const icons = {
 function StatBar({ data }: { data: HomeData }) {
   const stats = [
     { label: 'Epoch', value: data.epochInfo ? data.epochInfo.headEpoch : '—', icon: icons.epoch },
-    { label: 'Avg Gas Price', value: data.avgGasPriceHex ? `${formatGasPrice(data.avgGasPriceHex)} Gwei` : '—', icon: icons.gas },
+    { label: 'Avg Gas Price', value: data.avgGasPriceHex ? `${formatGasPrice(data.avgGasPriceHex)} Shor` : '—', icon: icons.gas },
     { label: 'Block Height', value: formatNumberWithCommas(data.blockHeight.toString()), icon: icons.block },
     { label: 'Validators', value: formatNumberWithCommas(data.validatorCount.toString()), icon: icons.validators },
     { label: 'Staked QRL', value: data.totalStaked !== '0' ? formatStaked(data.totalStaked) : '—', icon: icons.staked },

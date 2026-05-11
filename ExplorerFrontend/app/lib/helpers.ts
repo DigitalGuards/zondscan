@@ -8,9 +8,11 @@ export function timeAgo(unixSeconds: number): string {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
-export function formatStaked(gwei: string): string {
+// Validator effective balances on the QRL beacon chain are Shor-denominated
+// (10^-9 QRL / "Quanta"). Convert to whole-QRL display.
+export function formatStaked(shor: string): string {
   try {
-    const val = BigInt(gwei || '0');
+    const val = BigInt(shor || '0');
     const qrlBase = val / BigInt(1_000_000_000);
     const remainder = val % BigInt(1_000_000_000);
     const decimalStr = remainder.toString().padStart(9, '0').replace(/0+$/, '');
@@ -101,14 +103,16 @@ export function formatBigGas(s: string | undefined | null): string {
   return v.toLocaleString('en-US');
 }
 
-export function formatGasPrice(wei: number | string | undefined | null): string {
-  if (wei === undefined || wei === null || wei === 0 || wei === '0' || wei === '0x0') {
+// Convert a gas price expressed in Planck (10^-18 QRL) to Shor (10^-9 QRL).
+// Callers append the " Shor" unit label themselves.
+export function formatGasPrice(planck: number | string | undefined | null): string {
+  if (planck === undefined || planck === null || planck === 0 || planck === '0' || planck === '0x0') {
     return '0';
   }
   try {
-    const value = typeof wei === 'string' && wei.startsWith('0x') ? BigInt(wei) : BigInt(String(wei));
-    const gwei = Number(value) / 1e9;
-    return gwei < 0.001 ? gwei.toExponential(2) : parseFloat(gwei.toFixed(9)).toString();
+    const value = typeof planck === 'string' && planck.startsWith('0x') ? BigInt(planck) : BigInt(String(planck));
+    const shor = Number(value) / 1e9;
+    return shor < 0.001 ? shor.toExponential(2) : parseFloat(shor.toFixed(9)).toString();
   } catch {
     return '0';
   }
@@ -135,7 +139,7 @@ export function formatAmount(amount: number | string | undefined | null): [strin
       const fractionalPart = value % divisor;
       totalNum = Number(wholePart) + Number(fractionalPart) / Number(divisor);
     }
-    // Handle decimal numbers (convert to wei/shor format first)
+    // Handle decimal numbers (convert to planck/shor format first)
     else if (typeof amount === 'number' || (typeof amount === 'string' && !isNaN(Number(amount)))) {
       const floatValue = parseFloat(String(amount));
       if (floatValue < 1000000000000000000) { // If number is already in QRL format
@@ -148,7 +152,7 @@ export function formatAmount(amount: number | string | undefined | null): [strin
         totalNum = Number(wholePart) + Number(fractionalPart) / Number(divisor);
       }
     }
-    // Handle other formats (assuming they're in wei/shor)
+    // Handle other formats (assuming they're in planck/shor)
     else {
       throw new Error('Invalid amount format');
     }

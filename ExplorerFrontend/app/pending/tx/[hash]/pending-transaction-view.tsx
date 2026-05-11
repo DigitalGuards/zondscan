@@ -230,7 +230,7 @@ export default function PendingTransactionView({ pendingTx }: PendingTransaction
             <span className="font-semibold text-[#ffa729]">{formattedValue}</span>
             <span className="text-gray-500 ml-1">{unit}</span>
           </DetailRow>
-          <DetailRow label="Gas Price">{formattedGasPrice} Gwei</DetailRow>
+          <DetailRow label="Gas Price">{formattedGasPrice} Shor</DetailRow>
           <DetailRow label="Gas Limit">{pendingTx.gas}</DetailRow>
           <DetailRow label="Nonce">{pendingTx.nonce}</DetailRow>
         </div>

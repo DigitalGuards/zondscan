@@ -5,7 +5,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import config from '../../../config';
 import Link from 'next/link';
-import { formatAmount, truncateHash, timeAgo } from '../../lib/helpers';
+import { formatAmount, truncateHash, timeAgo, formatGasPrice } from '../../lib/helpers';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import DetailRow from '../../components/DetailRow';
 import CopyButton from '../../components/CopyButton';
@@ -220,7 +220,7 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
           </DetailRow>
           <DetailRow label="Gas Used">{formatHexValue(blockData.gasUsed)}</DetailRow>
           <DetailRow label="Gas Limit">{formatHexValue(blockData.gasLimit)}</DetailRow>
-          <DetailRow label="Base Fee">{formatHexValue(blockData.baseFeePerGas)} Shor</DetailRow>
+          <DetailRow label="Base Fee">{formatGasPrice(blockData.baseFeePerGas)} Shor</DetailRow>
           {blockData.prevRandao && (
             <DetailRow label="Prev Randao" mono>{blockData.prevRandao}</DetailRow>
           )}

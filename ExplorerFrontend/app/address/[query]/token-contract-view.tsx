@@ -408,7 +408,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                         <div className="text-xs md:text-sm text-gray-400">Gas Price</div>
                                         <div className="text-sm text-gray-300">
                                             {creationTx?.GasPrice
-                                                ? `${(parseInt(creationTx.GasPrice, 16) / 1e9).toFixed(2)} Gwei`
+                                                ? `${(parseInt(creationTx.GasPrice, 16) / 1e9).toFixed(2)} Shor`
                                                 : '-'}
                                         </div>
                                     </div>
