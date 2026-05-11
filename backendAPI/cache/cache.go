@@ -87,11 +87,30 @@ func (c *TTLCache) StartJanitor(interval time.Duration) {
 	}()
 }
 
+// evictExpired uses a two-phase lock so a large cache doesn't stall reads
+// while the janitor scans: a read lock to collect candidate keys, then a
+// brief write lock to delete them (re-checking expiry to avoid a TOCTOU
+// race where a concurrent GetOrCompute refreshed the entry between
+// passes).
 func (c *TTLCache) evictExpired() {
 	now := time.Now()
-	c.mu.Lock()
+
+	c.mu.RLock()
+	var expiredKeys []string
 	for k, e := range c.store {
 		if now.After(e.expires) {
+			expiredKeys = append(expiredKeys, k)
+		}
+	}
+	c.mu.RUnlock()
+
+	if len(expiredKeys) == 0 {
+		return
+	}
+
+	c.mu.Lock()
+	for _, k := range expiredKeys {
+		if e, ok := c.store[k]; ok && now.After(e.expires) {
 			delete(c.store, k)
 		}
 	}

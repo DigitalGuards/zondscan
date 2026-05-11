@@ -138,7 +138,7 @@ func UserRoute(router *gin.Engine) {
 		// /overview is the homepage hero data — 8 separate Mongo round-trips
 		// per request. Cache the assembled payload for 10 s so N concurrent
 		// pageviews fan into 1 backend computation.
-		v, _ := routeCache.GetOrCompute("overview", 10*time.Second, func() (interface{}, error) {
+		v, err := routeCache.GetOrCompute("overview", 10*time.Second, func() (interface{}, error) {
 			marketCap := db.GetMarketCap()
 			currentPrice := db.GetCurrentPrice()
 			walletCount := db.GetWalletCount()
@@ -177,6 +177,10 @@ func UserRoute(router *gin.Engine) {
 				},
 			}, nil
 		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusOK, v)
 	})
 
@@ -458,9 +462,13 @@ func UserRoute(router *gin.Engine) {
 
 	router.GET("/richlist", func(c *gin.Context) {
 		// Richlist (top wallets by balance) changes slowly — 30 s TTL.
-		v, _ := routeCache.GetOrCompute("richlist", 30*time.Second, func() (interface{}, error) {
+		v, err := routeCache.GetOrCompute("richlist", 30*time.Second, func() (interface{}, error) {
 			return gin.H{"richlist": db.ReturnRichlist()}, nil
 		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusOK, v)
 	})
 
@@ -494,13 +502,17 @@ func UserRoute(router *gin.Engine) {
 	router.GET("/blocksizes", func(c *gin.Context) {
 		// Block-size aggregate is a precomputed collection refreshed by the
 		// syncer's periodic task — safe to cache for longer.
-		v, _ := routeCache.GetOrCompute("blocksizes", 30*time.Second, func() (interface{}, error) {
+		v, err := routeCache.GetOrCompute("blocksizes", 30*time.Second, func() (interface{}, error) {
 			query, err := db.ReturnBlockSizes()
 			if err != nil {
 				log.Printf("error fetching block sizes: %v", err)
 			}
 			return gin.H{"response": query}, nil
 		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusOK, v)
 	})
 
