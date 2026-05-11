@@ -224,7 +224,13 @@ func ensureCollection(db *mongo.Database, name string, validator bson.M) {
 }
 
 func initializeCollections(db *mongo.Database) {
-	ctx := context.Background()
+	// Bound every index/collection setup call inside this function so a
+	// stalled MongoDB can't hang syncer startup indefinitely. 60s is
+	// generous enough for any single CreateIndex over this dataset; if a
+	// build truly takes longer the operation is too big for startup and
+	// should be moved offline.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 
 	// Initialize token balances collection with compound index
 	tokenBalancesCollection := db.Collection("tokenBalances")
