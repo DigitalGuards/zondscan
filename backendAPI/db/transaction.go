@@ -218,12 +218,17 @@ func ReturnAllTransactionsByAddress(address string, page, limit int) ([]models.T
 	return transactions, nil
 }
 
-func ReturnTransactionsNetwork(page int) ([]models.TransactionByAddress, error) {
+func ReturnTransactionsNetwork(page, limit int) ([]models.TransactionByAddress, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	var transactions []models.TransactionByAddress
 	defer cancel()
 
-	limit := 5
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
 
 	projection := primitive.D{
 		{Key: "inOut", Value: 1},
