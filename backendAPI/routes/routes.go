@@ -625,7 +625,11 @@ func UserRoute(router *gin.Engine) {
 		v, err := routeCache.GetOrCompute("latest-txs", 5*time.Second, func() (interface{}, error) {
 			query, qerr := db.ReturnLatestTransactions()
 			if qerr != nil {
+				// Return the error so the cache doesn't store an empty
+				// payload — the next caller will retry against Mongo
+				// instead of being served stale junk for 5s.
 				log.Printf("error fetching latest transactions: %v", qerr)
+				return nil, qerr
 			}
 			return gin.H{"response": query}, nil
 		})
