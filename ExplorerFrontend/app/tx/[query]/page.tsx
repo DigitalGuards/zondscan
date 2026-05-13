@@ -22,10 +22,15 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
     throw new Error('Invalid transaction hash format');
   }
 
+  // The backend bundles `latestBlock` (from sync_state, dynamic) with the
+  // tx record (immutable once mined) in the same payload. Caching the whole
+  // response froze `latestBlock` for 60 s, so a freshly-mined tx viewed
+  // mid-cache-window showed a stale confirmation count (e.g. "1 Confirmation")
+  // and a refresh after expiry would jump dozens higher. Always fetch fresh.
   const response = await fetch(`${config.handlerUrl}/tx/${txHash}`, {
     method: 'GET',
     headers: { Accept: 'application/json' },
-    next: { revalidate: 60 }, // Cache for 60 seconds
+    cache: 'no-store',
   });
 
   if (!response.ok) {
