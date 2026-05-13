@@ -104,7 +104,11 @@ export function formatBigGas(s: string | undefined | null): string {
 }
 
 // Convert a gas price expressed in Planck (10^-18 QRL) to Shor (10^-9 QRL).
-// Callers append the " Shor" unit label themselves.
+// Callers append the " Shor" unit label themselves. Precision is adaptive:
+// at typical mempool magnitudes (single-digit Shor) we want 2 decimals
+// ("3.75 Shor"), not 9 ("3.750000012 Shor"). Sub-Shor values get more
+// decimals so they don't round to 0; sub-mShor values fall through to
+// exponential.
 export function formatGasPrice(planck: number | string | undefined | null): string {
   if (planck === undefined || planck === null || planck === 0 || planck === '0' || planck === '0x0') {
     return '0';
@@ -112,7 +116,9 @@ export function formatGasPrice(planck: number | string | undefined | null): stri
   try {
     const value = typeof planck === 'string' && planck.startsWith('0x') ? BigInt(planck) : BigInt(String(planck));
     const shor = Number(value) / 1e9;
-    return shor < 0.001 ? shor.toExponential(2) : parseFloat(shor.toFixed(9)).toString();
+    if (shor < 0.001) return shor.toExponential(2);
+    if (shor < 1) return parseFloat(shor.toFixed(4)).toString();
+    return shor.toFixed(2);
   } catch {
     return '0';
   }

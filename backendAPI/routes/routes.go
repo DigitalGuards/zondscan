@@ -248,10 +248,11 @@ func UserRoute(router *gin.Engine) {
 			})
 			return
 		}
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 
-		key := fmt.Sprintf("txs:%d", page)
+		key := fmt.Sprintf("txs:%d:%d", page, limit)
 		v, err := routeCache.GetOrCompute(key, 10*time.Second, func() (interface{}, error) {
-			txs, err := db.ReturnTransactionsNetwork(page)
+			txs, err := db.ReturnTransactionsNetwork(page, limit)
 			if err != nil {
 				return nil, fmt.Errorf("failed to fetch transactions: %w", err)
 			}
@@ -618,11 +619,21 @@ func UserRoute(router *gin.Engine) {
 	})
 
 	router.GET("/transactions", func(c *gin.Context) {
-		query, err := db.ReturnLatestTransactions()
+		// Network-wide latest-transactions feed. Hot path on the homepage —
+		// every visitor's 30s refresh hits this. Cache for 5s so the burst
+		// fans into one Mongo round-trip.
+		v, err := routeCache.GetOrCompute("latest-txs", 5*time.Second, func() (interface{}, error) {
+			query, qerr := db.ReturnLatestTransactions()
+			if qerr != nil {
+				log.Printf("error fetching latest transactions: %v", qerr)
+			}
+			return gin.H{"response": query}, nil
+		})
 		if err != nil {
-			log.Printf("error fetching latest transactions: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
 		}
-		c.JSON(http.StatusOK, gin.H{"response": query})
+		c.JSON(http.StatusOK, v)
 	})
 
 	router.GET("/contracts", func(c *gin.Context) {
