@@ -143,33 +143,31 @@ export interface PendingTransaction {
 }
 
 /**
- * Calculate the number of confirmations for a transaction
+ * Calculate the number of confirmations for a transaction. Clamped to >=0:
+ * if the backend's latestBlock is briefly stale relative to the tx's own
+ * block, we'd otherwise return a negative count and badge the (mined) tx
+ * as "Pending" with "-N Confirmations" — confusing UX.
  */
 export function getConfirmations(txBlockNumber?: string | number, latestBlock?: number): number | null {
   if (!txBlockNumber || !latestBlock) return null;
   const blockNum = typeof txBlockNumber === 'string' ? parseInt(txBlockNumber) : txBlockNumber;
-  return latestBlock - blockNum + 1;
+  return Math.max(0, latestBlock - blockNum + 1);
 }
 
 /**
- * Get transaction status based on confirmations
+ * Get transaction status based on confirmations. This helper is called from
+ * the mined-tx view (the /pending/tx redirect filters pending-status rows
+ * upstream), so any non-null confirmations means the tx is in a block →
+ * Confirmed. Only the missing-block-data case (null) falls back to Pending.
  */
 export function getTransactionStatus(confirmations?: number | null): {
   text: string;
   color: string;
 } {
-  if (confirmations === null) {
+  if (confirmations === null || confirmations === undefined) {
     return { text: 'Pending', color: 'bg-yellow-500' };
   }
-
-  if (confirmations && confirmations > 0) {
-    if (confirmations >= 1) {
-      return { text: 'Confirmed', color: 'bg-green-500' };
-    }
-    return { text: 'Processing', color: 'bg-blue-500' };
-  }
-
-  return { text: 'Pending', color: 'bg-yellow-500' };
+  return { text: 'Confirmed', color: 'bg-green-500' };
 }
 
 /**

@@ -165,6 +165,13 @@ pm2 start ./backendAPI.exe --name "handler"
 |----------|--------|-------------|
 | `/pending-transactions` | GET | Paginated mempool transactions. Query: `page`, `limit` |
 | `/pending-transaction/:hash` | GET | Single pending transaction. Returns 404 if mined or not found |
+| `/pending-tx-eta/:hash` | GET | Inclusion-ETA for one pending tx: `etaSec`, `avgBlockTimeSec`, `pendingCount`, `gasAheadHex`, `medianGasPriceHex`, `yourGasPriceHex`. Returns 404 once the tx is mined |
+
+### Gas
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/gas/summary` | GET | Headline gas stats: `avgGasPriceHex` (median across the last 20 txs network-wide, in Planck), `avgBlockTimeSec`, `avgGasUsedHex`, `avgGasLimitHex`, `pendingCount`, `lastBlockNumberHex`, `lastGasUsedHex`, `lastGasLimitHex`, `gasPriceHistogram` (mempool buckets in Shor), `qrlUsdPrice`, plus the auxiliary `recentTxMedianHex` / `recentMedianGasPriceHex` / `mempoolMedianGasPriceHex` for fallback diagnostics. Cached 5s |
+| `/gas/history` | GET | Per-block gas-used + gas-limit + baseFeePerGas + txCount timeseries used by the /gas page charts. Query: `range` = `24h` (raw per-block) or `7d` (downsampled to hourly buckets). Cached 30s |
 
 ### Addresses
 | Endpoint | Method | Description |

@@ -4,10 +4,9 @@ import * as React from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import axios from 'axios';
-import { formatNumberWithCommas, timeAgo, formatStaked } from './lib/helpers';
+import { formatNumberWithCommas, timeAgo, formatStaked, formatGasPrice, truncateHash, formatAmount, formatAddress } from './lib/helpers';
 import config from '../config.js';
 import SearchBar from './components/SearchBar';
-import StatusBadge from './components/StatusBadge';
 
 const Charts = dynamic(() => import('./components/Charts'), {
   loading: () => (
@@ -40,14 +39,26 @@ interface BlockResult {
   transactions: any[];
 }
 
+interface TxResult {
+  TxHash: string;
+  TimeStamp: string | number;
+  From: string;
+  To: string;
+  Amount: string | number;
+  BlockNumber?: string;
+  TxType?: string;
+}
+
 interface HomeData {
   blockHeight: number;
   totalTransactions: number;
   validatorCount: number;
   epochInfo: EpochInfo | null;
   blocks: BlockResult[];
+  txs: TxResult[];
   totalStaked: string;
   marketCap: number;
+  avgGasPriceHex: string | null;
   loading: boolean;
   error: boolean;
   dataInitialized: boolean;
@@ -56,7 +67,6 @@ interface HomeData {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const SLOTS_PER_EPOCH = 128;
-const SECONDS_PER_SLOT = 60;
 
 function parseHex(hex: string): number {
   if (!hex) return 0;
@@ -64,38 +74,24 @@ function parseHex(hex: string): number {
   return parseInt(hex, 10) || 0;
 }
 
-/** Derive recent epoch rows from epoch info */
-function deriveEpochs(epochInfo: EpochInfo | null): EpochRow[] {
-  if (!epochInfo) return [];
-  const head = parseInt(epochInfo.headEpoch);
-  const finalized = parseInt(epochInfo.finalizedEpoch);
-  const justified = parseInt(epochInfo.justifiedEpoch);
-  const now = Math.floor(Date.now() / 1000);
-  const epochDuration = SLOTS_PER_EPOCH * SECONDS_PER_SLOT; // 7680s
-
-  // Current epoch start time estimate
-  const slotInEpoch = epochInfo.slotInEpoch || 0;
-  const currentEpochStartTime = now - slotInEpoch * SECONDS_PER_SLOT;
-
-  const rows: EpochRow[] = [];
-  const count = Math.min(head + 1, 10);
-  for (let i = 0; i < count; i++) {
-    const epoch = head - i;
-    if (epoch < 0) break;
-    const epochStartTime = currentEpochStartTime - i * epochDuration;
-    let status: 'finalized' | 'justified' | 'pending';
-    if (epoch <= finalized) status = 'finalized';
-    else if (epoch <= justified) status = 'justified';
-    else status = 'pending';
-    rows.push({ epoch, time: epochStartTime, status });
-  }
-  return rows;
+function parseTimestamp(ts: string | number | undefined): number {
+  if (ts === undefined || ts === null) return 0;
+  if (typeof ts === 'number') return ts;
+  if (ts.startsWith('0x')) return parseInt(ts, 16);
+  return parseInt(ts, 10) || 0;
 }
 
-interface EpochRow {
-  epoch: number;
-  time: number;
-  status: 'finalized' | 'justified' | 'pending';
+/** Dedupe txs by hash (the network endpoint returns one row per side of a transfer). */
+function dedupeTxs(txs: TxResult[], max: number): TxResult[] {
+  const seen = new Set<string>();
+  const out: TxResult[] = [];
+  for (const tx of txs) {
+    if (!tx?.TxHash || seen.has(tx.TxHash)) continue;
+    seen.add(tx.TxHash);
+    out.push(tx);
+    if (out.length >= max) break;
+  }
+  return out;
 }
 
 // ── Icons ────────────────────────────────────────────────────────────────────
@@ -109,6 +105,12 @@ const icons = {
   slot: (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+    </svg>
+  ),
+  gas: (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 21h18" />
     </svg>
   ),
   block: (
@@ -143,7 +145,7 @@ const icons = {
 function StatBar({ data }: { data: HomeData }) {
   const stats = [
     { label: 'Epoch', value: data.epochInfo ? data.epochInfo.headEpoch : '—', icon: icons.epoch },
-    { label: 'Slot', value: data.epochInfo ? formatNumberWithCommas(data.epochInfo.headSlot) : '—', icon: icons.slot },
+    { label: 'Avg Gas Price', value: data.avgGasPriceHex ? `${formatGasPrice(data.avgGasPriceHex)} Shor` : '—', icon: icons.gas },
     { label: 'Block Height', value: formatNumberWithCommas(data.blockHeight.toString()), icon: icons.block },
     { label: 'Validators', value: formatNumberWithCommas(data.validatorCount.toString()), icon: icons.validators },
     { label: 'Staked QRL', value: data.totalStaked !== '0' ? formatStaked(data.totalStaked) : '—', icon: icons.staked },
@@ -180,165 +182,180 @@ function StatBar({ data }: { data: HomeData }) {
   );
 }
 
-// ── Epoch Table ──────────────────────────────────────────────────────────────
+// ── Tables (etherscan-inspired card rows) ────────────────────────────────────
 
-const TABLE_ROWS = 10;
+const TABLE_ROWS = 8;
 
-const ROW_CLASS = 'flex items-center px-4 h-[38px] border-b border-[#2a2a2a] last:border-b-0 text-sm';
-const HEAD_CLASS = 'flex items-center px-4 py-2 border-b border-[#2a2a2a] text-[11px] font-normal text-gray-600 uppercase tracking-wider';
+const ROW_CLASS = 'flex items-center gap-3 px-4 py-3 border-b border-[#2a2a2a] last:border-b-0 text-sm';
 
-function EpochTable({ epochs, loading }: { epochs: EpochRow[]; loading: boolean }) {
-  const padCount = loading ? 0 : Math.max(0, TABLE_ROWS - epochs.length);
-
+function TableHeader({ icon, title, viewAllHref }: { icon: React.ReactNode; title: string; viewAllHref: string }) {
   return (
-    <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2a2a]">
-        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-[#ffa729]">
-          {icons.epoch}
-          Latest Epochs
-        </h2>
-        <Link href="/epochs/1" className="text-xs text-[#ffa729] hover:text-[#ffb954] hover:underline transition-colors">
-          View all &rarr;
-        </Link>
-      </div>
-
-      {/* Column headers */}
-      <div className={HEAD_CLASS}>
-        <span className="w-20">Epoch</span>
-        <span className="flex-1">Time</span>
-        <span className="w-24 text-right">Status</span>
-      </div>
-
-      {/* Rows */}
-      <div>
-        {loading ? (
-          Array.from({ length: TABLE_ROWS }).map((_, i) => (
-            <div key={i} className={ROW_CLASS}>
-              <span className="w-20"><div className="h-4 w-12 bg-[#2a2a2a] rounded animate-pulse" /></span>
-              <span className="flex-1"><div className="h-4 w-16 bg-[#2a2a2a] rounded animate-pulse" /></span>
-              <span className="w-24 flex justify-end"><div className="h-4 w-16 bg-[#2a2a2a] rounded animate-pulse" /></span>
-            </div>
-          ))
-        ) : epochs.length === 0 ? (
-          Array.from({ length: TABLE_ROWS }).map((_, i) => (
-            <div key={i} className={ROW_CLASS}>
-              <span className="w-20 text-transparent select-none">—</span>
-              <span className="flex-1" />
-              <span className="w-24" />
-            </div>
-          ))
-        ) : (
-          <>
-            {epochs.map((epoch) => (
-              <div
-                key={epoch.epoch}
-                className={`${ROW_CLASS} hover:bg-[#252525] transition-colors`}
-              >
-                <span className="w-20">
-                  <Link href={`/epoch/${epoch.epoch}`} className="text-[#ffa729] hover:text-[#ffb954] hover:underline font-medium tabular-nums">
-                    {formatNumberWithCommas(epoch.epoch.toString())}
-                  </Link>
-                </span>
-                <span className="flex-1 text-gray-400 tabular-nums">{timeAgo(epoch.time)}</span>
-                <span className="w-24 flex justify-end">
-                  <StatusBadge status={epoch.status} />
-                </span>
-              </div>
-            ))}
-            {Array.from({ length: padCount }).map((_, i) => (
-              <div key={`pad-${i}`} className={ROW_CLASS}>
-                <span className="w-20 text-transparent select-none">—</span>
-                <span className="flex-1" />
-                <span className="w-24" />
-              </div>
-            ))}
-          </>
-        )}
-      </div>
+    <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2a2a]">
+      <h2 className="flex items-center gap-2 text-[15px] font-semibold text-[#ffa729]">
+        {icon}
+        {title}
+      </h2>
+      <Link href={viewAllHref} className="text-xs text-[#ffa729] hover:text-[#ffb954] hover:underline transition-colors">
+        View all &rarr;
+      </Link>
     </div>
   );
+}
+
+function RowIcon({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex-shrink-0 w-8 h-8 rounded-md bg-[#2a2a2a] flex items-center justify-center text-gray-400">
+      {children}
+    </div>
+  );
+}
+
+function ValueBadge({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-[#2a2a2a] border border-[#3a3a3a] text-[11px] text-gray-300 tabular-nums">
+      {children}
+    </span>
+  );
+}
+
+function SkeletonRow() {
+  return (
+    <div className={ROW_CLASS}>
+      <div className="flex-shrink-0 w-8 h-8 rounded-md bg-[#2a2a2a] animate-pulse" />
+      <div className="flex-1 min-w-0 space-y-1.5">
+        <div className="h-3.5 w-24 bg-[#2a2a2a] rounded animate-pulse" />
+        <div className="h-3 w-16 bg-[#2a2a2a] rounded animate-pulse" />
+      </div>
+      <div className="flex-1 min-w-0 space-y-1.5 hidden sm:block">
+        <div className="h-3 w-28 bg-[#2a2a2a] rounded animate-pulse" />
+        <div className="h-3 w-28 bg-[#2a2a2a] rounded animate-pulse" />
+      </div>
+      <div className="h-5 w-16 bg-[#2a2a2a] rounded animate-pulse" />
+    </div>
+  );
+}
+
+function getEpochFromBlock(blockNumber: number): number {
+  return Math.floor(blockNumber / SLOTS_PER_EPOCH);
 }
 
 // ── Block Table ──────────────────────────────────────────────────────────────
 
 function BlockTable({ blocks, loading }: { blocks: BlockResult[]; loading: boolean }) {
-  function getSlotFromBlock(blockNumber: string): number {
-    return parseHex(blockNumber);
-  }
-
-  function getEpochFromSlot(slot: number): number {
-    return Math.floor(slot / SLOTS_PER_EPOCH);
-  }
-
   return (
     <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2a2a]">
-        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-[#ffa729]">
-          {icons.block}
-          Latest Blocks
-        </h2>
-        <Link href="/blocks/1" className="text-xs text-[#ffa729] hover:text-[#ffb954] hover:underline transition-colors">
-          View all &rarr;
-        </Link>
-      </div>
-
-      {/* Column headers */}
-      <div className={HEAD_CLASS}>
-        <span className="w-20">Block</span>
-        <span className="w-16 hidden sm:block">Epoch</span>
-        <span className="flex-1">Time</span>
-        <span className="w-12 text-right">Txns</span>
-      </div>
-
-      {/* Rows */}
+      <TableHeader icon={icons.block} title="Latest Blocks" viewAllHref="/blocks/1" />
       <div>
-        {loading ? (
-          Array.from({ length: TABLE_ROWS }).map((_, i) => (
-            <div key={i} className={ROW_CLASS}>
-              <span className="w-20"><div className="h-4 w-14 bg-[#2a2a2a] rounded animate-pulse" /></span>
-              <span className="w-16 hidden sm:block"><div className="h-4 w-10 bg-[#2a2a2a] rounded animate-pulse" /></span>
-              <span className="flex-1"><div className="h-4 w-14 bg-[#2a2a2a] rounded animate-pulse" /></span>
-              <span className="w-12 flex justify-end"><div className="h-4 w-6 bg-[#2a2a2a] rounded animate-pulse" /></span>
-            </div>
-          ))
-        ) : blocks.length === 0 ? (
-          Array.from({ length: TABLE_ROWS }).map((_, i) => (
-            <div key={i} className={ROW_CLASS}>
-              <span className="w-20 text-transparent select-none">—</span>
-              <span className="w-16 hidden sm:block" />
-              <span className="flex-1" />
-              <span className="w-12" />
-            </div>
-          ))
-        ) : (
-          blocks.slice(0, TABLE_ROWS).map((block, idx) => {
-            const blockNum = parseHex(block.number);
-            const slot = getSlotFromBlock(block.number);
-            const epoch = getEpochFromSlot(slot);
-            const timestamp = parseHex(block.timestamp);
-            const txCount = block.transactions?.length || 0;
+        {loading
+          ? Array.from({ length: TABLE_ROWS }).map((_, i) => <SkeletonRow key={i} />)
+          : blocks.slice(0, TABLE_ROWS).map((block, idx) => {
+              const blockNum = parseHex(block.number);
+              const epoch = getEpochFromBlock(blockNum);
+              const timestamp = parseHex(block.timestamp);
+              const txCount = block.transactions?.length || 0;
+              const miner = block.miner ? formatAddress(block.miner) : '';
 
-            return (
-              <div
-                key={`${block.number}-${idx}`}
-                className={`${ROW_CLASS} hover:bg-[#252525] transition-colors`}
-              >
-                <span className="w-20">
-                  <Link href={`/block/${blockNum}`} className="text-[#ffa729] hover:text-[#ffb954] hover:underline font-medium tabular-nums">
-                    {formatNumberWithCommas(blockNum.toString())}
-                  </Link>
-                </span>
-                <span className="w-16 text-gray-400 tabular-nums hidden sm:block">
-                  {formatNumberWithCommas(epoch.toString())}
-                </span>
-                <span className="flex-1 text-gray-400 tabular-nums">{timeAgo(timestamp)}</span>
-                <span className="w-12 text-right text-gray-300 tabular-nums">{txCount}</span>
-              </div>
-            );
-          })
-        )}
+              return (
+                <div key={`${block.number}-${idx}`} className={`${ROW_CLASS} hover:bg-[#252525] transition-colors`}>
+                  <RowIcon>{icons.block}</RowIcon>
+
+                  <div className="flex-1 min-w-0">
+                    <Link
+                      href={`/block/${blockNum}`}
+                      className="block text-[#ffa729] hover:text-[#ffb954] hover:underline font-medium tabular-nums truncate"
+                    >
+                      {formatNumberWithCommas(blockNum.toString())}
+                    </Link>
+                    <span className="text-[11px] text-gray-500 tabular-nums">{timeAgo(timestamp)}</span>
+                  </div>
+
+                  <div className="flex-1 min-w-0 hidden sm:block">
+                    {miner ? (
+                      <div className="flex items-center gap-1 text-[12px] truncate">
+                        <span className="text-gray-500">Miner</span>
+                        <Link
+                          href={`/address/${miner}`}
+                          className="text-gray-300 hover:text-[#ffa729] hover:underline font-mono truncate"
+                        >
+                          {truncateHash(miner, 8, 6)}
+                        </Link>
+                      </div>
+                    ) : null}
+                    <div className="text-[11px] text-gray-500 tabular-nums">
+                      <Link href={`/block/${blockNum}`} className="hover:text-[#ffa729] hover:underline">
+                        {txCount} txn{txCount === 1 ? '' : 's'}
+                      </Link>
+                      <span className="text-gray-600"> · epoch {formatNumberWithCommas(epoch.toString())}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex-shrink-0">
+                    <ValueBadge>{txCount} txn{txCount === 1 ? '' : 's'}</ValueBadge>
+                  </div>
+                </div>
+              );
+            })}
+      </div>
+    </div>
+  );
+}
+
+// ── Transaction Table ────────────────────────────────────────────────────────
+
+function TransactionTable({ txs, loading }: { txs: TxResult[]; loading: boolean }) {
+  return (
+    <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden">
+      <TableHeader icon={icons.transactions} title="Latest Transactions" viewAllHref="/transactions/1" />
+      <div>
+        {loading
+          ? Array.from({ length: TABLE_ROWS }).map((_, i) => <SkeletonRow key={i} />)
+          : txs.slice(0, TABLE_ROWS).map((tx, idx) => {
+              const timestamp = parseTimestamp(tx.TimeStamp);
+              const from = tx.From ? formatAddress(tx.From) : '';
+              const to = tx.To ? formatAddress(tx.To) : '';
+              const [amount, unit] = formatAmount(tx.Amount);
+
+              return (
+                <div key={`${tx.TxHash}-${idx}`} className={`${ROW_CLASS} hover:bg-[#252525] transition-colors`}>
+                  <RowIcon>{icons.transactions}</RowIcon>
+
+                  <div className="flex-1 min-w-0">
+                    <Link
+                      href={`/tx/${tx.TxHash}`}
+                      className="block text-[#ffa729] hover:text-[#ffb954] hover:underline font-mono text-[13px] truncate"
+                    >
+                      {truncateHash(tx.TxHash, 10, 6)}
+                    </Link>
+                    <span className="text-[11px] text-gray-500 tabular-nums">{timeAgo(timestamp)}</span>
+                  </div>
+
+                  <div className="flex-1 min-w-0 hidden sm:block">
+                    <div className="flex items-center gap-1 text-[12px] truncate">
+                      <span className="text-gray-500 w-8 flex-shrink-0">From</span>
+                      {from ? (
+                        <Link href={`/address/${from}`} className="text-gray-300 hover:text-[#ffa729] hover:underline font-mono truncate">
+                          {truncateHash(from, 8, 6)}
+                        </Link>
+                      ) : <span className="text-gray-600">—</span>}
+                    </div>
+                    <div className="flex items-center gap-1 text-[12px] truncate">
+                      <span className="text-gray-500 w-8 flex-shrink-0">To</span>
+                      {to ? (
+                        <Link href={`/address/${to}`} className="text-gray-300 hover:text-[#ffa729] hover:underline font-mono truncate">
+                          {truncateHash(to, 8, 6)}
+                        </Link>
+                      ) : <span className="text-gray-600">—</span>}
+                    </div>
+                  </div>
+
+                  <div className="flex-shrink-0">
+                    <ValueBadge>
+                      {amount} <span className="text-gray-500 ml-0.5">{unit}</span>
+                    </ValueBadge>
+                  </div>
+                </div>
+              );
+            })}
       </div>
     </div>
   );
@@ -353,8 +370,10 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
     validatorCount: 0,
     epochInfo: null,
     blocks: [],
+    txs: [],
     totalStaked: '0',
     marketCap: 0,
+    avgGasPriceHex: null,
     loading: true,
     error: false,
     dataInitialized: false,
@@ -364,13 +383,15 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
     try {
       if (!config.handlerUrl) return;
 
-      const [overviewRes, latestBlockRes, txsRes, epochRes, blocksRes, epochsRes] = await Promise.allSettled([
+      const [overviewRes, latestBlockRes, txsRes, epochRes, blocksRes, epochsRes, gasRes, latestTxsRes] = await Promise.allSettled([
         axios.get(config.handlerUrl + '/overview'),
         axios.get(config.handlerUrl + '/latestblock'),
         axios.get(config.handlerUrl + '/txs?page=1'),
         axios.get(config.handlerUrl + '/epoch'),
         axios.get(config.handlerUrl + '/blocks?page=1&limit=10'),
         axios.get(config.handlerUrl + '/epochs?page=1&limit=1'),
+        axios.get(config.handlerUrl + '/gas/summary'),
+        axios.get(config.handlerUrl + '/transactions'),
       ]);
 
       setData((prev) => {
@@ -399,6 +420,13 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
             next.totalStaked = latestEpoch.totalStaked;
           }
         }
+        if (gasRes.status === 'fulfilled' && gasRes.value.data?.avgGasPriceHex) {
+          next.avgGasPriceHex = gasRes.value.data.avgGasPriceHex;
+        }
+        if (latestTxsRes.status === 'fulfilled') {
+          const rows = (latestTxsRes.value.data?.response || []) as TxResult[];
+          next.txs = dedupeTxs(rows, TABLE_ROWS);
+        }
 
         return next;
       });
@@ -414,8 +442,6 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, [fetchData]);
-
-  const epochs = React.useMemo(() => deriveEpochs(data.epochInfo), [data.epochInfo]);
 
   return (
     <div className="px-4 lg:px-8 pt-4 lg:pt-6">
@@ -443,8 +469,8 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
 
         {/* Side-by-Side Tables */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-          <EpochTable epochs={epochs} loading={data.loading} />
           <BlockTable blocks={data.blocks} loading={data.loading} />
+          <TransactionTable txs={data.txs} loading={data.loading} />
         </div>
 
         {/* TradingView Chart */}

@@ -48,7 +48,11 @@ interface HistoryRecord {
   totalStaked: string;
 }
 
-// Custom hook for responsive viewport dimensions (SSR-safe)
+// Custom hook for responsive viewport dimensions (SSR-safe).
+// The app layout uses `lg:ml-64` (a 256px sidebar offset on lg+ screens),
+// so on desktop the content area is window.innerWidth - 256, NOT
+// window.innerWidth. Charts sized from raw innerWidth bled into the
+// right margin and clipped against the viewport.
 function useViewport() {
   const [viewport, setViewport] = useState({
     width: 800, // Default for SSR
@@ -59,14 +63,24 @@ function useViewport() {
 
   useEffect(() => {
     const updateViewport = () => {
-      const width = window.innerWidth;
-      const isMobile = width < 640;
-      const padding = isMobile ? 64 : 48;
-      const maxWidth = isMobile ? 500 : 600;
-      const chartWidth = Math.max(Math.min(width - padding, maxWidth), 280);
-      const fullChartWidth = Math.max(Math.min(width - 64, 1200), 300);
+      const winW = window.innerWidth;
+      const isMobile = winW < 640;
+      const isLg = winW >= 1024;
+      // Subtract sidebar on lg+, where layout.tsx applies `lg:ml-64`.
+      const contentW = isLg ? winW - 256 : winW;
+      // Page padding (lg:p-8 = 32*2). Card padding (p-3 sm:p-4 = ~32). Scrollbar safety.
+      const pagePad = 64;
+      const cardPad = 32;
+      const scrollbar = 16;
+      const inner = contentW - pagePad - cardPad - scrollbar;
+      // The full-width validator-count chart gets the whole inner width.
+      const fullChartWidth = Math.max(Math.min(inner, 1200), 300);
+      // The two charts side-by-side on lg (grid-cols-2 gap-6) each get half
+      // (inner - 24 gap) / 2; on mobile they stack so each gets full inner.
+      const sideBySide = isLg ? (inner - 24) / 2 : inner;
+      const chartWidth = Math.max(Math.min(sideBySide, 600), 280);
 
-      setViewport({ width, isMobile, chartWidth, fullChartWidth });
+      setViewport({ width: contentW, isMobile, chartWidth, fullChartWidth });
     };
 
     updateViewport();
@@ -126,7 +140,7 @@ export default function ValidatorsWrapper(): JSX.Element {
 
   if (error && !validators.length) {
     return (
-      <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+      <div className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8 overflow-x-hidden">
         <div className="bg-red-900/20 border border-red-800 rounded-xl p-6 text-center">
           <h2 className="text-xl font-semibold text-red-400 mb-2">Error</h2>
           <p className="text-gray-400">{error}</p>
@@ -142,7 +156,7 @@ export default function ValidatorsWrapper(): JSX.Element {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+    <div className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8 overflow-x-hidden">
       {/* Page Header */}
       <div className="mb-6">
         <h1 className="text-xl sm:text-2xl font-bold text-[#ffa729] mb-2">Validators</h1>

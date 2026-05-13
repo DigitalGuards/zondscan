@@ -90,13 +90,3 @@ func GetPendingTransactionByHash(hash string) (*models.PendingTransaction, error
 
 	return &transaction, nil
 }
-
-// DeleteMinedTransaction removes a transaction from the pending_transactions collection once it's mined
-func DeleteMinedTransaction(hash string) error {
-    collection := configs.GetCollection(configs.DB, PENDING_COLLECTION)
-    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
-
-    _, err := collection.DeleteOne(ctx, bson.M{"_id": hash})
-    return err
-}

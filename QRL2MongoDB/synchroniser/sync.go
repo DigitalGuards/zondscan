@@ -254,7 +254,9 @@ func findHighestProcessedBlock() string {
 }
 
 // forceUpdateSyncState directly updates the sync state without conditions
-// This is used to fix sync state issues when the normal update mechanism fails
+// This is used to fix sync state issues when the normal update mechanism fails.
+// Writes both block_number and block_number_int so the invariant that
+// StoreLastKnownBlockNumber relies on (numeric $lt guard) isn't violated.
 func forceUpdateSyncState(blockNumber string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -265,7 +267,10 @@ func forceUpdateSyncState(blockNumber string) {
 	_, err := syncColl.UpdateOne(
 		ctx,
 		bson.M{"_id": db.LastSyncedBlockID},
-		bson.M{"$set": bson.M{"block_number": blockNumber}},
+		bson.M{"$set": bson.M{
+			"block_number":     blockNumber,
+			"block_number_int": db.HexToInt64(blockNumber),
+		}},
 		options.Update().SetUpsert(true),
 	)
 

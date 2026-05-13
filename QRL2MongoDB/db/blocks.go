@@ -5,6 +5,7 @@ import (
 	"QRL2MongoDB/models"
 	"QRL2MongoDB/utils"
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -63,10 +64,11 @@ func GetLatestBlockFromDB() *models.ZondDatabaseBlock {
 	ctx, cancel := context.WithTimeout(context.Background(), DBTimeout)
 	defer cancel()
 
-	// Query for the latest block by sorting on timestamp (more reliable than hex string sorting)
+	// Sort by blockNumberInt (numeric) — hex strings on result.number /
+	// result.timestamp lex-sort wrong at width boundaries.
 	findOptions := options.FindOne().
 		SetProjection(bson.M{"result.number": 1, "result.timestamp": 1}).
-		SetSort(bson.M{"result.timestamp": -1})
+		SetSort(bson.M{"blockNumberInt": -1})
 
 	var block models.ZondDatabaseBlock
 	err := configs.BlocksCollections.FindOne(ctx, bson.D{}, findOptions).Decode(&block)
@@ -233,11 +235,20 @@ func StoreLastKnownBlockNumber(blockNumber string) error {
 	// Use the integer field for the $lt guard so the comparison is numeric,
 	// not the lexicographic hex string comparison that would produce wrong
 	// ordering (e.g. "0x9" sorts after "0x10" lexicographically).
+	//
+	// Also accept docs that don't yet have block_number_int — legacy rows
+	// written by an older syncer were missing the field, which made the
+	// $lt match nothing and silently froze sync_state. The early-return
+	// guard above (existing.BlockNumber >= new) already prevents
+	// going-backwards for those rows.
 	result, err := syncColl.UpdateOne(
 		ctx,
 		bson.M{
-			"_id":              LastSyncedBlockID,
-			"block_number_int": bson.M{"$lt": blockNumberIntVal},
+			"_id": LastSyncedBlockID,
+			"$or": []bson.M{
+				{"block_number_int": bson.M{"$lt": blockNumberIntVal}},
+				{"block_number_int": bson.M{"$exists": false}},
+			},
 		},
 		bson.M{"$set": bson.M{
 			"block_number":     blockNumber,
@@ -285,9 +296,11 @@ func GetLastKnownBlockNumberFromInitialSync() string {
 		return result.BlockNumber
 	}
 
-	// If no record exists, find the oldest block in the DB
+	// If no record exists, find the oldest block in the DB. Sort ascending by
+	// blockNumberInt — sorting by result.number (hex string) would lex-sort
+	// "0x10" before "0x9" and return the wrong "oldest" block.
 	var block models.ZondDatabaseBlock
-	findOptions := options.FindOne().SetProjection(bson.M{"result.number": 1}).SetSort(bson.M{"result.number": 1})
+	findOptions := options.FindOne().SetProjection(bson.M{"result.number": 1}).SetSort(bson.M{"blockNumberInt": 1})
 	err = configs.BlocksCollections.FindOne(ctx, bson.M{}, findOptions).Decode(&block)
 
 	if err == nil && block.Result.Number != "" {
@@ -517,14 +530,36 @@ func InsertManyBlockDocuments(blocks []interface{}) {
 	}
 }
 
-// Rollback removes all blocks after the given block number and updates the sync state
+// Rollback removes all blocks after the given block number and updates the sync state.
+// Filter on blockNumberInt (numeric), NOT result.number (hex string) — lex comparison
+// on hex strings produces wrong results (e.g. "0xa" > "0x100" lexicographically),
+// which would leave stale blocks above the rollback point during chain reorgs and
+// silently corrupt the chain view.
 func Rollback(blockNumber string) error {
+	// Validate the input BEFORE building the filter. HexToInt64 / HexToInt
+	// both silently return 0 on parse failure (empty string, missing 0x,
+	// non-hex chars). With a $gt: 0 filter, a malformed blockNumber would
+	// delete every block except genesis — strictly worse than the original
+	// lex-sort bug we were fixing. Parse explicitly so we get an error path,
+	// and reject negative values defensively (e.g. "0x-10" → -16 via
+	// strconv) which would also widen the filter dangerously.
+	s := strings.TrimPrefix(blockNumber, "0x")
+	if s == "" {
+		return fmt.Errorf("rollback: empty block number")
+	}
+	rollbackTo, err := strconv.ParseInt(s, 16, 64)
+	if err != nil {
+		return fmt.Errorf("rollback: invalid hex block number %q: %w", blockNumber, err)
+	}
+	if rollbackTo < 0 {
+		return fmt.Errorf("rollback: block number cannot be negative: %d", rollbackTo)
+	}
+
 	ctx := context.Background()
 
-	// Find all blocks after the given block number
 	filter := bson.M{
-		"result.number": bson.M{
-			"$gt": blockNumber,
+		"blockNumberInt": bson.M{
+			"$gt": rollbackTo,
 		},
 	}
 

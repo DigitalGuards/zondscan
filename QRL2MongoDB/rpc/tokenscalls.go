@@ -2,14 +2,10 @@ package rpc
 
 import (
 	"QRL2MongoDB/models"
-	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math/big"
-	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -62,36 +58,16 @@ func CallContractMethod(contractAddress string, methodSig string) (string, error
 		return "", fmt.Errorf("failed to marshal JSON: %v", err)
 	}
 
-	// Log the RPC endpoint
-	nodeUrl := os.Getenv("NODE_URL")
 	zap.L().Debug("Sending RPC request",
-		zap.String("url", nodeUrl),
+		zap.String("url", Endpoints().CurrentURL()),
 		zap.String("method", "qrl_call"))
 
-	req, err := http.NewRequest("POST", nodeUrl, bytes.NewBuffer(b))
-	if err != nil {
-		zap.L().Error("Failed to create HTTP request for contract call",
-			zap.String("contractAddress", contractAddress),
-			zap.Error(err))
-		return "", fmt.Errorf("failed to create request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := GetHTTPClient().Do(req)
+	body, err := DoNodeRPC(b)
 	if err != nil {
 		zap.L().Error("Failed to execute HTTP request for contract call",
 			zap.String("contractAddress", contractAddress),
 			zap.Error(err))
 		return "", fmt.Errorf("failed to execute request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		zap.L().Error("Failed to read response body from contract call",
-			zap.String("contractAddress", contractAddress),
-			zap.Error(err))
-		return "", fmt.Errorf("failed to read response body: %v", err)
 	}
 
 	// Log full response for debugging
@@ -433,11 +409,6 @@ func GetTransactionReceipt(txHash string) (*models.TransactionReceipt, error) {
 		return nil, fmt.Errorf("transaction hash cannot be empty")
 	}
 
-	nodeURL := os.Getenv("NODE_URL")
-	if nodeURL == "" {
-		return nil, fmt.Errorf("NODE_URL environment variable is not set")
-	}
-
 	group := models.JsonRPC{
 		Jsonrpc: "2.0",
 		Method:  "qrl_getTransactionReceipt",
@@ -450,16 +421,9 @@ func GetTransactionReceipt(txHash string) (*models.TransactionReceipt, error) {
 		return nil, fmt.Errorf("failed to marshal request: %v", err)
 	}
 
-	// Make HTTP request
-	resp, err := GetHTTPClient().Post(nodeURL, "application/json", bytes.NewBuffer(b))
+	body, err := DoNodeRPC(b)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make RPC request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %v", err)
 	}
 
 	// First unmarshal into a map to check for JSON-RPC error
@@ -549,4 +513,3 @@ func ParseTransferEvent(log models.Log) (string, string, *big.Int, error) {
 
 	return from, to, amount, nil
 }
-
