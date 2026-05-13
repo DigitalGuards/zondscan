@@ -5,7 +5,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import config from '../../../config';
 import Link from 'next/link';
-import { formatAmount, truncateHash, timeAgo } from '../../lib/helpers';
+import { formatAmount, truncateHash, timeAgo, formatPlanckAdaptive } from '../../lib/helpers';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import DetailRow from '../../components/DetailRow';
 import CopyButton from '../../components/CopyButton';
@@ -90,10 +90,27 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
   const [blockData, setBlockData] = useState<Block | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
 
   const blockNum = parseInt(blockNumber);
 
+  // Reject obviously-bad inputs before hitting the API: negative numbers,
+  // non-integers, NaN, and absurdly long hex strings would all just earn
+  // a 400 from the backend. Catching them here keeps the URL bar honest
+  // and skips the network round-trip + console noise.
+  const isValidBlockId = (() => {
+    if (!blockNumber) return false;
+    if (blockNumber.startsWith('0x')) return /^0x[0-9a-fA-F]{1,16}$/.test(blockNumber);
+    const n = parseInt(blockNumber, 10);
+    return Number.isFinite(n) && n >= 0 && String(n) === blockNumber;
+  })();
+
   useEffect(() => {
+    if (!isValidBlockId) {
+      setLoading(false);
+      setNotFound(true);
+      return;
+    }
     const fetchBlock = async (): Promise<void> => {
       try {
         setLoading(true);
@@ -122,21 +139,49 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
           withdrawalsRoot: block.withdrawalsRoot || '',
         });
         setError(null);
+        setNotFound(false);
       } catch (err) {
-        console.error('Error fetching block:', err);
-        setError('Failed to load block details');
+        // A 404 just means the block hasn't been synced yet (or doesn't
+        // exist). Treat that as an informational state, not a console
+        // error — Next.js dev mode promotes console.error to a red
+        // overlay which makes a benign "future block" feel like a bug.
+        if (axios.isAxiosError(err) && (err.response?.status === 404 || err.response?.status === 400)) {
+          // 404 → block hasn't been synced; 400 → unparseable block id
+          // (we'd usually have caught it in `isValidBlockId` above, but
+          // the backend's parser may reject some edge cases we don't).
+          setNotFound(true);
+          setError(null);
+        } else {
+          console.error('Error fetching block:', err);
+          setError('Failed to load block details');
+          setNotFound(false);
+        }
       } finally {
         setLoading(false);
       }
     };
 
     if (blockNumber) fetchBlock();
-  }, [blockNumber]);
+  }, [blockNumber, isValidBlockId]);
 
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
         <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#ffa729]"></div>
+      </div>
+    );
+  }
+
+  if (notFound) {
+    return (
+      <div className="p-4 sm:p-8 max-w-6xl mx-auto">
+        <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-lg p-6">
+          <p className="font-semibold text-[#ffa729] mb-1">Block #{Number.isFinite(blockNum) ? blockNum.toLocaleString() : blockNumber} not found</p>
+          <p className="text-sm text-gray-300">
+            This block hasn&apos;t been produced (or synced) yet. Check back in a few seconds, or
+            {' '}<Link href="/blocks/1" className="text-[#ffa729] hover:underline">browse recent blocks</Link>.
+          </p>
+        </div>
       </div>
     );
   }
@@ -220,7 +265,12 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
           </DetailRow>
           <DetailRow label="Gas Used">{formatHexValue(blockData.gasUsed)}</DetailRow>
           <DetailRow label="Gas Limit">{formatHexValue(blockData.gasLimit)}</DetailRow>
-          <DetailRow label="Base Fee">{formatHexValue(blockData.baseFeePerGas)} Shor</DetailRow>
+          <DetailRow label="Base Fee">
+            {(() => {
+              const [val, unit] = formatPlanckAdaptive(blockData.baseFeePerGas);
+              return <>{val} {unit}</>;
+            })()}
+          </DetailRow>
           {blockData.prevRandao && (
             <DetailRow label="Prev Randao" mono>{blockData.prevRandao}</DetailRow>
           )}

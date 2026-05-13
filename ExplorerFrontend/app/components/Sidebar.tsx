@@ -12,6 +12,8 @@ import PartnerHandshakeIcon from '../../public/partner-handshake-icon.svg'
 import BlockchainIcon from '../../public/blockchain-icon.svg'
 import ContractIcon from '../../public/contract.svg'
 import SendIcon from '../../public/send.svg'
+import GasPumpIcon from '../../public/gas-pump.svg'
+import EpochIcon from '../../public/epoch-icon.svg'
 import RichIcon from '../../public/favis/favicon-32x32.png'
 
 interface NavItem {
@@ -33,7 +35,13 @@ const navGroups: NavGroup[] = [
       { name: 'Latest Transactions', description: 'View all Transactions', href: '/transactions/1', imgSrc: PartnerHandshakeIcon },
       { name: 'Pending Transactions', description: 'View pending transactions', href: '/pending/1', imgSrc: PartnerHandshakeIcon },
       { name: 'Latest Blocks', description: 'View all Blocks', href: '/blocks/1', imgSrc: BlockchainIcon },
-      { name: 'Epochs', description: 'View all Epochs', href: '/epochs/1', imgSrc: BlockchainIcon },
+      { name: 'Gas', description: 'Network gas metrics', href: '/gas', imgSrc: GasPumpIcon },
+    ],
+  },
+  {
+    label: 'Consensus',
+    items: [
+      { name: 'Epochs', description: 'View all Epochs', href: '/epochs/1', imgSrc: EpochIcon },
       { name: 'Validators', description: 'Network Validators', href: '/validators', imgSrc: ContractIcon },
     ],
   },
@@ -43,14 +51,13 @@ const navGroups: NavGroup[] = [
       { name: 'Smart Contracts', description: 'View QRL contracts', href: '/contracts', imgSrc: ContractIcon },
       { name: 'Balance Checker', description: 'Check Account balance', href: '/checker', imgSrc: LookUpIcon },
       { name: 'Unit Converter', description: 'Convert QRL currencies', href: '/converter', imgSrc: TokenIcon },
+      { name: 'Richlist', description: 'Top QRL holders', href: '/richlist', imgSrc: RichIcon },
     ],
   },
 ]
 
 // Flat links (single items that don't need accordion groups)
-const flatLinks: NavItem[] = [
-  { name: 'Richlist', description: 'Top QRL holders', href: '/richlist', imgSrc: RichIcon },
-]
+const flatLinks: NavItem[] = []
 
 const ICON_FILTER = "[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(105%)]"
 const ICON_FILTER_HOVER = "group-hover:[filter:invert(80%)_sepia(50%)_saturate(1000%)_hue-rotate(330deg)_brightness(125%)]"

@@ -1,10 +1,12 @@
 package routes
 
 import (
+	"backendAPI/cache"
 	"backendAPI/db"
 	"backendAPI/models"
 	"fmt"
 	"log"
+	"math/big"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,6 +15,16 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/mongo"
 )
+
+// routeCache absorbs concurrent traffic on read endpoints with a small TTL
+// (5–30 s depending on freshness needs). Singleflight inside the cache
+// guarantees only one goroutine recomputes a key when it expires, so
+// MongoDB never sees a "thundering herd" on cache miss.
+var routeCache = cache.New()
+
+func init() {
+	routeCache.StartJanitor(time.Minute)
+}
 
 // parseHexBlockNumber parses a "0x"-prefixed hex string into a uint64.
 func parseHexBlockNumber(hexStr string) (uint64, error) {
@@ -47,25 +59,25 @@ func UserRoute(router *gin.Engine) {
 	// Add pending transactions endpoint with pagination
 	router.GET("/pending-transactions", func(c *gin.Context) {
 		page, limit := getPaginationParams(c, 1, 10)
-
-		result, err := db.GetPendingTransactions(page, limit)
+		key := fmt.Sprintf("pending-tx:%d:%d", page, limit)
+		// Frontend polls this every 30 s × every user. 5 s TTL absorbs the
+		// herd; mempool freshness only suffers by at most 5 s.
+		v, err := routeCache.GetOrCompute(key, 5*time.Second, func() (interface{}, error) {
+			result, err := db.GetPendingTransactions(page, limit)
+			if err != nil {
+				return nil, fmt.Errorf("failed to fetch pending transactions: %w", err)
+			}
+			if result.Transactions == nil {
+				result.Transactions = make([]models.PendingTransaction, 0)
+			}
+			return result, nil
+		})
 		if err != nil {
 			log.Printf("Error fetching pending transactions: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to fetch pending transactions: %v", err),
-			})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-
-		// Log the result for debugging
-		log.Printf("Found %d pending transactions", len(result.Transactions))
-
-		// Return empty array instead of null for transactions
-		if result.Transactions == nil {
-			result.Transactions = make([]models.PendingTransaction, 0)
-		}
-
-		c.JSON(http.StatusOK, result)
+		c.JSON(http.StatusOK, v)
 	})
 
 	// Add endpoint for fetching a specific pending transaction
@@ -79,22 +91,22 @@ func UserRoute(router *gin.Engine) {
 
 		// If not found in pending, check if it's in the transactions collection
 		if transaction == nil {
-			// Check if transaction exists in the transactions collection
 			tx, err := db.GetTransactionByHash(hash)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
 
+			// Mined tx whose tombstone was already swept — return 404 in the
+			// same shape as the tombstone branch below. The frontend treats
+			// any non-200 from this endpoint as "not pending" and fetches
+			// /tx/:hash for the mined payload, so returning the mined details
+			// here just duplicates work and creates a state-dependent API.
 			if tx != nil {
-				// Transaction is mined - return formatted response
-				c.JSON(http.StatusOK, gin.H{
-					"transaction": gin.H{
-						"hash":        tx.Hash, // Already has 0x prefix
-						"status":      "mined",
-						"blockNumber": tx.BlockNumber,
-						"timestamp":   time.Now().Unix(),
-					},
+				c.JSON(http.StatusNotFound, gin.H{
+					"error":   "Transaction has been mined",
+					"status":  "mined",
+					"details": "This transaction has been confirmed. Please view it as a confirmed transaction.",
 				})
 				return
 			}
@@ -107,13 +119,11 @@ func UserRoute(router *gin.Engine) {
 			return
 		}
 
-		// If transaction is mined, delete it from pending collection and redirect to mined tx
+		// If the row is a tombstone for a mined tx, return 404 — let the
+		// frontend fall back to /tx/<hash>. Don't delete here: the tombstone
+		// protects against a stale mempool poll re-inserting the row as
+		// "pending". CleanupOldPendingTransactions sweeps it after maxAge.
 		if transaction.Status == "mined" {
-			if err := db.DeleteMinedTransaction(hash); err != nil {
-				// Log error but don't fail the request
-				log.Printf("Error deleting mined transaction %s: %v\n", hash, err)
-			}
-			// Don't return the pending transaction - let frontend fetch from /tx endpoint
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":   "Transaction has been mined",
 				"status":  "mined",
@@ -126,55 +136,53 @@ func UserRoute(router *gin.Engine) {
 	})
 
 	router.GET("/overview", func(c *gin.Context) {
-		// Get market cap with default value
-		marketCap := db.GetMarketCap()
+		// /overview is the homepage hero data — 8 separate Mongo round-trips
+		// per request. Cache the assembled payload for 10 s so N concurrent
+		// pageviews fan into 1 backend computation.
+		v, err := routeCache.GetOrCompute("overview", 10*time.Second, func() (interface{}, error) {
+			marketCap := db.GetMarketCap()
+			currentPrice := db.GetCurrentPrice()
+			walletCount := db.GetWalletCount()
 
-		// Get current price with default value
-		currentPrice := db.GetCurrentPrice()
+			circulating := db.ReturnTotalCirculatingSupply()
+			if circulating == "" {
+				circulating = "65000000" // default when no data is available
+			}
 
-		// Get wallet count with default value
-		walletCount := db.GetWalletCount()
+			volume := db.ReturnDailyTransactionsVolume()
 
-		// Get circulating supply with default value
-		circulating := db.ReturnTotalCirculatingSupply()
-		if circulating == "" {
-			circulating = "65000000" // Default value when no data is available
-		}
+			validatorCount, err := db.CountValidators()
+			if err != nil {
+				validatorCount = 0
+			}
 
-		// Get daily transaction volume with default value
-		volume := db.ReturnDailyTransactionsVolume()
+			contractCount, err := db.CountContracts()
+			if err != nil {
+				contractCount = 0
+			}
 
-		// Get validator count
-		validatorCount, err := db.CountValidators()
-		if err != nil {
-			validatorCount = 0
-		}
+			tradingVolume := db.GetCurrentVolume()
 
-		// Get contract count
-		contractCount, err := db.CountContracts()
-		if err != nil {
-			contractCount = 0
-		}
-
-		// Get 24h trading volume
-		tradingVolume := db.GetCurrentVolume()
-
-		// Return response with default values if data isn't available
-
-		c.JSON(http.StatusOK, gin.H{
-			"marketcap":      marketCap,      // Returns 0 if not available
-			"currentPrice":   currentPrice,   // Returns 0 if not available
-			"countwallets":   walletCount,    // Returns 0 if not available
-			"circulating":    circulating,    // Returns "0" if not available
-			"volume":         volume,         // Returns 0 if not available
-			"tradingVolume":  tradingVolume,  // 24h trading volume from CoinGecko
-			"validatorCount": validatorCount, // Returns 0 if not available
-			"contractCount":  contractCount,  // Returns 0 if not available
-			"status": gin.H{
-				"syncing":         true, // Indicate that data is still being synced
-				"dataInitialized": marketCap > 0 || currentPrice > 0 || walletCount > 0 || circulating != "0" || volume > 0,
-			},
+			return gin.H{
+				"marketcap":      marketCap,
+				"currentPrice":   currentPrice,
+				"countwallets":   walletCount,
+				"circulating":    circulating,
+				"volume":         volume,
+				"tradingVolume":  tradingVolume,
+				"validatorCount": validatorCount,
+				"contractCount":  contractCount,
+				"status": gin.H{
+					"syncing":         true,
+					"dataInitialized": marketCap > 0 || currentPrice > 0 || walletCount > 0 || circulating != "0" || volume > 0,
+				},
+			}, nil
 		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, v)
 	})
 
 	// Price history endpoint for wallet apps and charts
@@ -233,7 +241,6 @@ func UserRoute(router *gin.Engine) {
 
 	router.GET("/txs", func(c *gin.Context) {
 		pageStr := c.Query("page")
-
 		page, err := strconv.Atoi(pageStr)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
@@ -241,50 +248,40 @@ func UserRoute(router *gin.Engine) {
 			})
 			return
 		}
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 
-		txs, err := db.ReturnTransactionsNetwork(page)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to fetch transactions: %v", err),
-			})
-			return
-		}
-
-		// Transaction count for the address
-		countTransactions, err := db.CountTransactionsNetwork()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to count transactions: %v", err),
-			})
-			return
-		}
-
-		latestBlockNumber, err := db.GetLatestBlockFromSyncState()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to get latest block: %v", err),
-			})
-			return
-		}
-
-		latestBlockNum, err := parseHexBlockNumber(latestBlockNumber)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to parse block number: %v", err),
-			})
-			return
-		}
-
-		// Return empty array instead of null if no transactions
-		if txs == nil {
-			txs = make([]models.TransactionByAddress, 0)
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"txs":         txs,
-			"total":       countTransactions,
-			"latestBlock": latestBlockNum,
+		key := fmt.Sprintf("txs:%d:%d", page, limit)
+		v, err := routeCache.GetOrCompute(key, 10*time.Second, func() (interface{}, error) {
+			txs, err := db.ReturnTransactionsNetwork(page, limit)
+			if err != nil {
+				return nil, fmt.Errorf("failed to fetch transactions: %w", err)
+			}
+			countTransactions, err := db.CountTransactionsNetwork()
+			if err != nil {
+				return nil, fmt.Errorf("failed to count transactions: %w", err)
+			}
+			latestBlockNumber, err := db.GetLatestBlockFromSyncState()
+			if err != nil {
+				return nil, fmt.Errorf("failed to get latest block: %w", err)
+			}
+			latestBlockNum, err := parseHexBlockNumber(latestBlockNumber)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse block number: %w", err)
+			}
+			if txs == nil {
+				txs = make([]models.TransactionByAddress, 0)
+			}
+			return gin.H{
+				"txs":         txs,
+				"total":       countTransactions,
+				"latestBlock": latestBlockNum,
+			}, nil
 		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, v)
 	})
 
 	router.GET("/walletdistribution/:query", func(c *gin.Context) {
@@ -304,70 +301,69 @@ func UserRoute(router *gin.Engine) {
 		param := c.Param("query")
 		// db functions normalize the address to canonical q-prefix internally.
 
-		// Single Address data
-		addressData, err := db.ReturnSingleAddress(param)
-		if err != nil && err != mongo.ErrNoDocuments {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error querying address: %v", err)})
-			return
-		}
+		// Pagination for the tx-list aggregations. Defaults match the old
+		// implicit page-1 view; cap at 50 (the same cap the DB layer
+		// enforces) so a hostile caller can't push limit=10000.
+		page, limit := getPaginationParams(c, 1, 10)
 
-		// Transaction count for the address
-		countTransactions, err := db.CountTransactions(param)
-		if err != nil {
-			log.Printf("error counting transactions: %v", err)
-		}
+		key := fmt.Sprintf("addr:%s:%d:%d", strings.ToLower(param), page, limit)
+		v, err := routeCache.GetOrCompute(key, 10*time.Second, func() (interface{}, error) {
+			addressData, err := db.ReturnSingleAddress(param)
+			if err != nil && err != mongo.ErrNoDocuments {
+				return nil, fmt.Errorf("error querying address: %w", err)
+			}
 
-		// Rank of the address
-		rank, err := db.ReturnRankAddress(param)
-		if err != nil {
-			log.Printf("error getting rank: %v", err)
-		}
+			countTransactions, err := db.CountTransactions(param)
+			if err != nil {
+				log.Printf("error counting transactions: %v", err)
+			}
 
-		// Get all transactions by the address
-		transactionsByAddress, err := db.ReturnAllTransactionsByAddress(param)
-		if err != nil {
-			log.Printf("error getting transactions: %v", err)
-		}
+			rank, err := db.ReturnRankAddress(param)
+			if err != nil {
+				log.Printf("error getting rank: %v", err)
+			}
 
-		// Get all internal transactions by the address
-		internalTransactionsByAddress, err := db.ReturnAllInternalTransactionsByAddress(param)
-		if err != nil {
-			log.Printf("error getting internal transactions: %v", err)
-		}
+			transactionsByAddress, err := db.ReturnAllTransactionsByAddress(param, page, limit)
+			if err != nil {
+				log.Printf("error getting transactions: %v", err)
+			}
 
-		// Get contract code data
-		contractCodeData, err := db.ReturnContractCode(param)
-		if err != nil {
-			log.Printf("error getting contract code: %v", err)
-		}
+			internalTransactionsByAddress, err := db.ReturnAllInternalTransactionsByAddress(param, page, limit)
+			if err != nil {
+				log.Printf("error getting internal transactions: %v", err)
+			}
 
-		// Get latest block number
-		latestBlockNumber, err := db.GetLatestBlockFromSyncState()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to get latest block: %v", err),
-			})
-			return
-		}
+			contractCodeData, err := db.ReturnContractCode(param)
+			if err != nil {
+				log.Printf("error getting contract code: %v", err)
+			}
 
-		latestBlockNum, err := parseHexBlockNumber(latestBlockNumber)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to parse block number: %v", err),
-			})
-			return
-		}
+			latestBlockNumber, err := db.GetLatestBlockFromSyncState()
+			if err != nil {
+				return nil, fmt.Errorf("failed to get latest block: %w", err)
+			}
+			latestBlockNum, err := parseHexBlockNumber(latestBlockNumber)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse block number: %w", err)
+			}
 
-		// Response aggregation
-		c.JSON(http.StatusOK, gin.H{
-			"address":                          addressData,
-			"transactions_count":               countTransactions,
-			"rank":                             rank,
-			"transactions_by_address":          transactionsByAddress,
-			"internal_transactions_by_address": internalTransactionsByAddress,
-			"contract_code":                    contractCodeData,
-			"latestBlock":                      latestBlockNum,
+			return gin.H{
+				"address":                          addressData,
+				"transactions_count":               countTransactions,
+				"rank":                             rank,
+				"transactions_by_address":          transactionsByAddress,
+				"internal_transactions_by_address": internalTransactionsByAddress,
+				"contract_code":                    contractCodeData,
+				"latestBlock":                      latestBlockNum,
+				"page":                             page,
+				"limit":                            limit,
+			}, nil
 		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, v)
 	})
 
 	router.GET("/tx/:query", func(c *gin.Context) {
@@ -436,25 +432,25 @@ func UserRoute(router *gin.Engine) {
 	})
 
 	router.GET("/latestblock", func(c *gin.Context) {
-		blockNumber, err := db.GetLatestBlockFromSyncState()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to fetch latest block: %v", err),
-			})
-			return
-		}
-
-		num, err := parseHexBlockNumber(blockNumber)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Invalid block number format in sync state",
-			})
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"blockNumber": num,
+		// Several frontend pages and external pollers hit this very often;
+		// a 5 s cache trims the load by orders of magnitude with no
+		// visible staleness (chain block time is much longer).
+		v, err := routeCache.GetOrCompute("latestblock", 5*time.Second, func() (interface{}, error) {
+			blockNumber, err := db.GetLatestBlockFromSyncState()
+			if err != nil {
+				return nil, fmt.Errorf("failed to fetch latest block: %w", err)
+			}
+			num, err := parseHexBlockNumber(blockNumber)
+			if err != nil {
+				return nil, fmt.Errorf("invalid block number format in sync state: %w", err)
+			}
+			return gin.H{"blockNumber": num}, nil
 		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, v)
 	})
 
 	router.GET("/coinbase/:query", func(c *gin.Context) {
@@ -467,43 +463,59 @@ func UserRoute(router *gin.Engine) {
 	})
 
 	router.GET("/richlist", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"richlist": db.ReturnRichlist()})
+		// Richlist (top wallets by balance) changes slowly — 30 s TTL.
+		v, err := routeCache.GetOrCompute("richlist", 30*time.Second, func() (interface{}, error) {
+			return gin.H{"richlist": db.ReturnRichlist()}, nil
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, v)
 	})
 
 	router.GET("/blocks", func(c *gin.Context) {
 		page, limit := getPaginationParams(c, 1, 5)
-
-		blocks, err := db.ReturnLatestBlocks(page, limit)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch blocks"})
-			return
-		}
-
-		countBlocks, err := db.CountBlocksNetwork()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to count blocks"})
-			return
-		}
-
-		// Limit total pages to 300
-		maxPages := int64(300)
-		maxBlocks := maxPages * int64(limit)
-		if countBlocks > maxBlocks {
-			countBlocks = maxBlocks
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"blocks": blocks,
-			"total":  countBlocks,
+		key := fmt.Sprintf("blocks:%d:%d", page, limit)
+		v, err := routeCache.GetOrCompute(key, 10*time.Second, func() (interface{}, error) {
+			blocks, err := db.ReturnLatestBlocks(page, limit)
+			if err != nil {
+				return nil, fmt.Errorf("failed to fetch blocks: %w", err)
+			}
+			countBlocks, err := db.CountBlocksNetwork()
+			if err != nil {
+				return nil, fmt.Errorf("failed to count blocks: %w", err)
+			}
+			// Limit total pages to 300
+			maxPages := int64(300)
+			maxBlocks := maxPages * int64(limit)
+			if countBlocks > maxBlocks {
+				countBlocks = maxBlocks
+			}
+			return gin.H{"blocks": blocks, "total": countBlocks}, nil
 		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, v)
 	})
 
 	router.GET("/blocksizes", func(c *gin.Context) {
-		query, err := db.ReturnBlockSizes()
+		// Block-size aggregate is a precomputed collection refreshed by the
+		// syncer's periodic task — safe to cache for longer.
+		v, err := routeCache.GetOrCompute("blocksizes", 30*time.Second, func() (interface{}, error) {
+			query, err := db.ReturnBlockSizes()
+			if err != nil {
+				log.Printf("error fetching block sizes: %v", err)
+			}
+			return gin.H{"response": query}, nil
+		})
 		if err != nil {
-			log.Printf("error fetching block sizes: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
 		}
-		c.JSON(http.StatusOK, gin.H{"response": query})
+		c.JSON(http.StatusOK, v)
 	})
 
 	// Paginated epochs listing
@@ -607,11 +619,21 @@ func UserRoute(router *gin.Engine) {
 	})
 
 	router.GET("/transactions", func(c *gin.Context) {
-		query, err := db.ReturnLatestTransactions()
+		// Network-wide latest-transactions feed. Hot path on the homepage —
+		// every visitor's 30s refresh hits this. Cache for 5s so the burst
+		// fans into one Mongo round-trip.
+		v, err := routeCache.GetOrCompute("latest-txs", 5*time.Second, func() (interface{}, error) {
+			query, qerr := db.ReturnLatestTransactions()
+			if qerr != nil {
+				log.Printf("error fetching latest transactions: %v", qerr)
+			}
+			return gin.H{"response": query}, nil
+		})
 		if err != nil {
-			log.Printf("error fetching latest transactions: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
 		}
-		c.JSON(http.StatusOK, gin.H{"response": query})
+		c.JSON(http.StatusOK, v)
 	})
 
 	router.GET("/contracts", func(c *gin.Context) {
@@ -830,5 +852,173 @@ func UserRoute(router *gin.Engine) {
 			Page:            page,
 			Limit:           limit,
 		})
+	})
+
+	// ---- Gas / mempool stats ---------------------------------------------
+	//
+	// /pending-tx-eta/:hash returns a best-effort inclusion ETA for one
+	// pending tx, plus the supporting numbers (avg block time, avg gas
+	// usage, mempool size, median gasPrice, gas-ahead sum). The math is in
+	// db/gas.go; the route just plumbs it together.
+	router.GET("/pending-tx-eta/:hash", func(c *gin.Context) {
+		hash := c.Param("hash")
+		v, err := routeCache.GetOrCompute("eta:"+hash, 5*time.Second, func() (interface{}, error) {
+			tx, err := db.GetPendingTransactionByHash(hash)
+			if err != nil {
+				return nil, err
+			}
+			if tx == nil || tx.Status != "pending" {
+				return nil, nil
+			}
+
+			samples, err := db.GetRecentBlockSamples(30)
+			if err != nil {
+				return nil, err
+			}
+			blockStats := db.ComputeBlockStats(samples)
+
+			mempool, err := db.GetPendingMempoolSnapshot()
+			if err != nil {
+				return nil, err
+			}
+			mp := db.ComputeMempoolStatsFor(mempool, tx.GasPrice)
+
+			// ETA = ceil(gasAhead / avgGasUsed) * avgBlockTime.
+			avgGas := blockStats.AvgGasUsed
+			if avgGas.Sign() <= 0 {
+				avgGas = big.NewInt(1)
+			}
+			// Integer ceil-division: (a + b - 1) / b.
+			num := new(big.Int).Add(mp.GasAhead, new(big.Int).Sub(avgGas, big.NewInt(1)))
+			blocksAhead := new(big.Int).Quo(num, avgGas).Int64()
+			etaSec := float64(blocksAhead) * blockStats.AvgBlockTimeSec
+			// At minimum one block-time of wait — gasAhead = 0 still means we
+			// wait for the next block to be produced.
+			if etaSec < blockStats.AvgBlockTimeSec {
+				etaSec = blockStats.AvgBlockTimeSec
+			}
+
+			return gin.H{
+				"etaSec":            etaSec,
+				"avgBlockTimeSec":   blockStats.AvgBlockTimeSec,
+				"avgGasUsedHex":     "0x" + blockStats.AvgGasUsed.Text(16),
+				"pendingCount":      mp.Count,
+				"gasAheadHex":       "0x" + mp.GasAhead.Text(16),
+				"medianGasPriceHex": "0x" + mp.MedianGasPrice.Text(16),
+				"yourGasPriceHex":   tx.GasPrice,
+			}, nil
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if v == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Pending transaction not found"})
+			return
+		}
+		c.JSON(http.StatusOK, v)
+	})
+
+	// /gas/summary feeds the top stat cards on the /gas page and the home
+	// "Avg Gas Price" tile. Combines the same block + mempool snapshots used
+	// by the ETA endpoint.
+	router.GET("/gas/summary", func(c *gin.Context) {
+		v, err := routeCache.GetOrCompute("gas:summary", 5*time.Second, func() (interface{}, error) {
+			samples, err := db.GetRecentBlockSamples(30)
+			if err != nil {
+				return nil, err
+			}
+			blockStats := db.ComputeBlockStats(samples)
+
+			mempool, err := db.GetPendingMempoolSnapshot()
+			if err != nil {
+				return nil, err
+			}
+			// Pass an empty target so GasAhead is just total mempool gas
+			// (callers ignore that field for the summary).
+			mp := db.ComputeMempoolStatsFor(mempool, "0x0")
+			histogram := db.MempoolGasPriceHistogram(mempool, 12)
+
+			// Headline gas price: median across the last N transfers
+			// independent of when they happened. This stays meaningful on a
+			// quiet testnet where 30 recent blocks may contain zero txs. The
+			// 30-block window median and mempool median are still computed
+			// and surfaced for callers that care.
+			recentTxPrices, err := db.GetRecentTransactionGasPrices(20, 500)
+			if err != nil {
+				// Don't fail the whole summary — fall back to the 30-block
+				// window median if the wider walk fails.
+				recentTxPrices = nil
+			}
+			recentTxMedian := db.MedianBigHex(recentTxPrices)
+
+			headlineHex := "0x" + recentTxMedian.Text(16)
+			if recentTxMedian.Sign() == 0 {
+				switch {
+				case blockStats.MedianTxGasPrice.Sign() > 0:
+					headlineHex = "0x" + blockStats.MedianTxGasPrice.Text(16)
+				case mp.MedianGasPrice.Sign() > 0:
+					headlineHex = "0x" + mp.MedianGasPrice.Text(16)
+				}
+			}
+
+			return gin.H{
+				"avgGasPriceHex":             headlineHex,
+				"recentTxMedianHex":          "0x" + recentTxMedian.Text(16),
+				"recentTxSampleSize":         len(recentTxPrices),
+				"recentMedianGasPriceHex":    "0x" + blockStats.MedianTxGasPrice.Text(16),
+				"mempoolMedianGasPriceHex":   "0x" + mp.MedianGasPrice.Text(16),
+				"recentTxCount":              blockStats.TxCount,
+				// QRL/USD spot price (last coingecko sample). Used by the
+				// frontend to convert gas prices into USD transfer costs.
+				"qrlUsdPrice":                db.GetCurrentPrice(),
+				"avgGasUsedHex":      "0x" + blockStats.AvgGasUsed.Text(16),
+				"avgGasLimitHex":     "0x" + blockStats.AvgGasLimit.Text(16),
+				"avgBlockTimeSec":    blockStats.AvgBlockTimeSec,
+				"pendingCount":       mp.Count,
+				"lastBlockNumberHex": blockStats.LastNumberHex,
+				"lastGasUsedHex":     blockStats.LastGasUsedHex,
+				"lastGasLimitHex":    blockStats.LastGasLimitHex,
+				"gasPriceHistogram":  histogram,
+			}, nil
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, v)
+	})
+
+	// /gas/history?range=24h|7d serves the timeseries used by the /gas page
+	// charts. Data is sourced from the `gasHistory` collection populated by
+	// the syncer's periodic task.
+	router.GET("/gas/history", func(c *gin.Context) {
+		rng := c.DefaultQuery("range", "24h")
+		var sinceSec, bucketSec int64
+		switch rng {
+		case "7d":
+			sinceSec = time.Now().Unix() - 7*24*3600
+			bucketSec = 3600 // 1 row per hour
+		default:
+			rng = "24h"
+			sinceSec = time.Now().Unix() - 24*3600
+			bucketSec = 0 // raw per-block rows
+		}
+		key := "gas:history:" + rng
+		v, err := routeCache.GetOrCompute(key, 30*time.Second, func() (interface{}, error) {
+			rows, err := db.GetGasHistory(sinceSec, bucketSec)
+			if err != nil {
+				return nil, err
+			}
+			if rows == nil {
+				rows = []db.GasHistoryRow{}
+			}
+			return gin.H{"range": rng, "data": rows}, nil
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, v)
 	})
 }

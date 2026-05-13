@@ -24,7 +24,7 @@ type TransactionByAddress struct {
 }
 
 func formatFloat(f float64) string {
-	// Use %.18f to show all 18 decimal places for wei
+	// %.18f shows all 18 decimal places for Planck (10^-18 QRL)
 	return fmt.Sprintf("%.18f", f)
 }
 

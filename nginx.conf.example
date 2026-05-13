@@ -2,6 +2,15 @@
 # Copy this file to /etc/nginx/sites-available/your-domain.com
 # Then create a symlink: ln -s /etc/nginx/sites-available/your-domain.com /etc/nginx/sites-enabled/
 
+# Per-IP rate-limit zone. Keep this in the http {} context (it usually lives
+# in /etc/nginx/nginx.conf, NOT inside a server {} block). The zone here is
+# 10 MB which fits roughly 160k tracked IPs; the rate cap is 20 req/s per
+# IP, with a small burst bucket so genuine page-load fanouts (multiple
+# API calls during a single page render) don't get rejected. Tune `rate`
+# and `burst` upward if legitimate clients hit them.
+#
+# limit_req_zone $binary_remote_addr zone=zondscan_api:10m rate=20r/s;
+
 # HTTP redirect to HTTPS
 server {
     listen 80;
@@ -40,6 +49,14 @@ server {
 
     # Backend API proxy (Go handler)
     location /api/ {
+        # Per-IP rate limit. Uncomment after defining `zondscan_api` in
+        # the http {} context (see the top of this file). `burst=40
+        # nodelay` lets a burst of 40 requests through immediately, then
+        # falls back to the steady 20 req/s cap. Returns 503 when
+        # exceeded — adjust to 429 with `limit_req_status 429;` if you
+        # want a clearer signal to abusers.
+        # limit_req zone=zondscan_api burst=40 nodelay;
+
         proxy_pass http://127.0.0.1:8080/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;

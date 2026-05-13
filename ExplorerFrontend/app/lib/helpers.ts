@@ -8,9 +8,11 @@ export function timeAgo(unixSeconds: number): string {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
-export function formatStaked(gwei: string): string {
+// Validator effective balances on the QRL beacon chain are Shor-denominated
+// (10^-9 QRL / "Quanta"). Convert to whole-QRL display.
+export function formatStaked(shor: string): string {
   try {
-    const val = BigInt(gwei || '0');
+    const val = BigInt(shor || '0');
     const qrlBase = val / BigInt(1_000_000_000);
     const remainder = val % BigInt(1_000_000_000);
     const decimalStr = remainder.toString().padStart(9, '0').replace(/0+$/, '');
@@ -65,16 +67,89 @@ export function toFixed(x: number | string | undefined | null): string {
   return num.toString();
 }
 
-export function formatGasPrice(wei: number | string | undefined | null): string {
-  if (wei === undefined || wei === null || wei === 0 || wei === '0' || wei === '0x0') {
+/**
+ * Parse a "0x"-prefixed hex string into a bigint. Returns 0n on missing or
+ * malformed input — gas-stats math should never throw on a dropped field.
+ */
+export function hexToBigInt(s: string | undefined | null): bigint {
+  if (!s) return BigInt(0);
+  try {
+    return BigInt(s.startsWith('0x') ? s : '0x' + s);
+  } catch {
+    return BigInt(0);
+  }
+}
+
+/**
+ * Parse a "0x"-prefixed hex string into a number. Lossy for values > 2^53,
+ * but block numbers / gas-used values fit comfortably in that range.
+ */
+export function hexToNumber(s: string | undefined | null): number {
+  if (!s) return 0;
+  try {
+    return Number(BigInt(s.startsWith('0x') ? s : '0x' + s));
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Format a hex gas count (gasUsed / gasLimit) as a thousands-separated decimal.
+ */
+export function formatBigGas(s: string | undefined | null): string {
+  if (!s) return '—';
+  const v = hexToBigInt(s);
+  if (v === BigInt(0)) return '0';
+  return v.toLocaleString('en-US');
+}
+
+// Convert a gas price expressed in Planck (10^-18 QRL) to Shor (10^-9 QRL).
+// Callers append the " Shor" unit label themselves. Precision is adaptive:
+// at typical mempool magnitudes (single-digit Shor) we want 2 decimals
+// ("3.75 Shor"), not 9 ("3.750000012 Shor"). Sub-Shor values get more
+// decimals so they don't round to 0; sub-mShor values fall through to
+// exponential.
+export function formatGasPrice(planck: number | string | undefined | null): string {
+  if (planck === undefined || planck === null || planck === 0 || planck === '0' || planck === '0x0') {
     return '0';
   }
   try {
-    const value = typeof wei === 'string' && wei.startsWith('0x') ? BigInt(wei) : BigInt(String(wei));
-    const gwei = Number(value) / 1e9;
-    return gwei < 0.001 ? gwei.toExponential(2) : parseFloat(gwei.toFixed(9)).toString();
+    const value = typeof planck === 'string' && planck.startsWith('0x') ? BigInt(planck) : BigInt(String(planck));
+    const shor = Number(value) / 1e9;
+    if (shor < 0.001) return shor.toExponential(2);
+    if (shor < 1) return parseFloat(shor.toFixed(4)).toString();
+    return shor.toFixed(2);
   } catch {
     return '0';
+  }
+}
+
+// Format a Planck-denominated value with an adaptive unit suffix so the
+// number is human-readable. Base fee on a quiet chain (≤ 7 Planck) shows
+// as "7 Planck" rather than "7.00e-9 Shor"; a typical gas price (~3 Shor)
+// shows as "3.13 Shor"; an oversized value would show in Quanta (= QRL).
+// Returns [value_string, unit_string] so callers can style the unit
+// independently.
+export function formatPlanckAdaptive(planck: number | string | undefined | null): [string, string] {
+  if (planck === undefined || planck === null || planck === 0 || planck === '0' || planck === '0x0') {
+    return ['0', 'Planck'];
+  }
+  try {
+    const v = typeof planck === 'string' && planck.startsWith('0x') ? BigInt(planck) : BigInt(String(planck));
+    if (v === BigInt(0)) return ['0', 'Planck'];
+    const SHOR = BigInt(1_000_000_000);
+    const QUANTA = BigInt('1000000000000000000');
+    if (v < SHOR) {
+      return [v.toString(), 'Planck'];
+    }
+    if (v < QUANTA) {
+      const shor = Number(v) / 1e9;
+      return [parseFloat(shor.toFixed(9)).toString(), 'Shor'];
+    }
+    const quanta = Number(v) / 1e18;
+    return [parseFloat(quanta.toFixed(9)).toString(), 'Quanta'];
+  } catch {
+    return ['0', 'Planck'];
   }
 }
 
@@ -99,7 +174,7 @@ export function formatAmount(amount: number | string | undefined | null): [strin
       const fractionalPart = value % divisor;
       totalNum = Number(wholePart) + Number(fractionalPart) / Number(divisor);
     }
-    // Handle decimal numbers (convert to wei/shor format first)
+    // Handle decimal numbers (convert to planck/shor format first)
     else if (typeof amount === 'number' || (typeof amount === 'string' && !isNaN(Number(amount)))) {
       const floatValue = parseFloat(String(amount));
       if (floatValue < 1000000000000000000) { // If number is already in QRL format
@@ -112,7 +187,7 @@ export function formatAmount(amount: number | string | undefined | null): [strin
         totalNum = Number(wholePart) + Number(fractionalPart) / Number(divisor);
       }
     }
-    // Handle other formats (assuming they're in wei/shor)
+    // Handle other formats (assuming they're in planck/shor)
     else {
       throw new Error('Invalid amount format');
     }
