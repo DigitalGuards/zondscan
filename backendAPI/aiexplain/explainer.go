@@ -16,6 +16,17 @@ var (
 	ErrNotFound       = errors.New("contract not found")
 	ErrNotVerified    = errors.New("contract is not verified")
 	ErrSourceTooLarge = errors.New("contract source exceeds size cap")
+	ErrRegenCap       = errors.New("regeneration cap reached")
+)
+
+// RegenLimitPerWindow is the hard cap on regenerations per contract per
+// rolling 7-day window. Initial generations don't count; only ?regenerate=1
+// calls consume slots. Combined with the cache (subsequent reads short-
+// circuit to MongoDB) this bounds the Anthropic spend per contract to
+// 5 calls per week regardless of how often the page is hit.
+const (
+	RegenLimitPerWindow = 5
+	RegenWindow         = 7 * 24 * time.Hour
 )
 
 // Explainer is the orchestrator: it enforces the verified-only gate, runs
@@ -30,20 +41,19 @@ type Explainer struct {
 	SourceMaxBytes int
 }
 
-// systemPrompt frames the LLM as a smart-contract auditor producing a
-// non-technical summary. The wording is deliberately conservative: this
-// is a *summary*, not financial advice, and the model should call out
-// risks rather than vouch for safety.
-const systemPrompt = `You are an expert smart contract analyst. Given the source code of a contract that has been verified on the QRL Zond v2 blockchain, write a concise plain-English summary that a non-developer can understand.
+// systemPrompt frames the LLM as a neutral describer. No safety analysis,
+// no implementation feedback, no opinions — just factual observations
+// about what the contract is and what it does. The summary is intentionally
+// short so it complements rather than competes with the source / ABI panels.
+const systemPrompt = `You are summarising a verified smart contract on the QRL Zond v2 blockchain. Produce a short factual description of what the contract is. Do NOT include opinions, safety analysis, risk assessments, recommendations, access-control discussion, or implementation feedback. Just neutral observations.
 
-Output Markdown structured as:
+Output Markdown with only these sections:
 
-**Purpose** — one sentence on what this contract is.
-**What it does** — 2-4 bullets describing the main behaviours / functions.
-**Who can use it** — note any access control (owner-only, admin, anyone, etc.).
-**Risks to watch for** — surface anything that could cost users money: unchecked mints, owner kill switches, upgradeable proxies, missing access control, math overflow, reentrancy patterns, etc. Be specific. If nothing stands out, say so plainly.
+**Purpose** — one sentence describing what this contract is.
+**What it does** — 2-4 short bullets, descriptive and factual only.
+**Standard** — only when the contract clearly matches a well-known token standard (ERC-20, ERC-721, ERC-1155, etc.); name the standard. Omit this section otherwise.
 
-Keep the whole answer under 350 words. Never recommend interaction. Never claim the contract is safe. If the source looks like a well-known standard (ERC-20, ERC-721, etc.), say so explicitly.`
+Keep the entire answer under 150 words. Never add sections on risks, security, access control, audit notes, or implementation quality.`
 
 // Explain returns the cached explanation when present, or generates a fresh
 // one via Anthropic and persists it before returning. Forces a fresh call
@@ -68,6 +78,20 @@ func (e *Explainer) Explain(ctx context.Context, address string, regenerate bool
 			Model:       c.AIExplanationModel,
 			Cached:      true,
 		}, nil
+	}
+
+	// Regen path: reserve a slot atomically before spending Anthropic
+	// credit. ReserveRegenSlot returns ErrRegenCap when the rolling 7-day
+	// cap is hit; we surface that as a typed error the HTTP layer maps to
+	// 429. Initial generations skip this check — only regenerate=true
+	// passes through here.
+	if regenerate {
+		if err := db.ReserveAIRegenSlot(address, RegenLimitPerWindow, RegenWindow); err != nil {
+			if errors.Is(err, db.ErrAIRegenCap) {
+				return nil, ErrRegenCap
+			}
+			return nil, fmt.Errorf("reserve regen slot: %w", err)
+		}
 	}
 
 	source := c.SourceCode
