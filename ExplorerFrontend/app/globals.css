@@ -107,19 +107,25 @@
    "edgeless" and hard to target.
    Styling mirrors the dapp-example page on zondscan.com/dapp-example so the
    verify / read / write surfaces feel consistent with the wallet-pairing
-   demo: dark page-bg fill (one tier darker than the surrounding card),
-   subtle border that matches the card body, accent-only focus (no ring). */
+   demo: dark page-bg fill (one tier darker than the surrounding card) with
+   a visible outline. We use `border-border` (#3d3d3d) to match the card's
+   own outer border — `border-background-secondary` would dissolve into
+   `card-simple`'s solid #2d2d2d background. */
 @utility form-input {
   @apply block w-full bg-background text-gray-200
-           border border-background-secondary rounded-md
+           border border-border rounded-md
            px-3 py-2.5 text-sm
            focus:outline-none focus:border-accent
            placeholder-gray-500 transition-colors;
 }
 
+/* Native checkboxes can't be styled with text-color / bg-color directly
+   without `appearance: none`. CSS `accent-color` is the right knob —
+   browsers paint the box fill and the check mark with this token. We
+   keep the border for the unchecked state. */
 @utility form-checkbox {
-  @apply h-4 w-4 rounded border border-background-secondary bg-background
-           text-accent
+  @apply h-4 w-4 rounded border border-border bg-background
+           accent-accent
            focus:outline-none focus:border-accent
            transition-colors;
 }

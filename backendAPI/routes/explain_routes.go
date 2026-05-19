@@ -72,8 +72,13 @@ func RegisterContractExplainRoute(router *gin.Engine) {
 					"error": "regeneration cap reached: 5 regenerations per contract per 7-day window. Try again later.",
 				})
 			default:
+				// Log the wrapped error server-side (may include Anthropic
+				// status / response details) but return a generic public
+				// message — internal error strings can leak provider config
+				// hints (quota messages, model id) that aren't useful to
+				// API consumers.
 				log.Printf("explain: %s failed: %v", addr, err)
-				c.JSON(http.StatusBadGateway, gin.H{"error": "AI explanation failed: " + err.Error()})
+				c.JSON(http.StatusBadGateway, gin.H{"error": "AI explanation failed; try again shortly"})
 			}
 			return
 		}
