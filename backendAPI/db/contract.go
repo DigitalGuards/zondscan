@@ -4,6 +4,7 @@ import (
 	"backendAPI/configs"
 	"backendAPI/models"
 	"context"
+	"errors"
 	"log"
 	"strings"
 	"time"
@@ -179,6 +180,79 @@ func MarkContractVerified(address string, result models.VerificationResult) erro
 		return mongo.ErrNoDocuments
 	}
 	return nil
+}
+
+// ErrAIRegenCap signals that the per-contract regen cap has been reached
+// inside the current rolling window. The HTTP layer maps it to 429.
+var ErrAIRegenCap = errors.New("AI regen cap reached")
+
+// ReserveAIRegenSlot atomically reserves one regeneration slot on the
+// contract document. Returns ErrAIRegenCap when:
+//
+//   - the existing window has not yet rolled over (now - windowStart < window) AND
+//   - the count has already reached limit.
+//
+// Otherwise it either increments the count within the current window or
+// resets the window start to now with count=1 (rollover case / first regen).
+// Both paths use a single $set/$inc UpdateOne so there's no read-modify-
+// write race between concurrent callers — the loser sees ErrAIRegenCap.
+func ReserveAIRegenSlot(address string, limit int, window time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	normalizedAddr := normalizeAddress(address)
+	now := time.Now().UTC()
+	cutoff := now.Add(-window).Format(time.RFC3339)
+	nowStr := now.Format(time.RFC3339)
+
+	// Path A: increment within the current window (window is still fresh,
+	// count is below limit).
+	res, err := configs.ContractInfoCollection.UpdateOne(
+		ctx,
+		bson.M{
+			"address":                       normalizedAddr,
+			"aiExplanationRegenWindowStart": bson.M{"$gte": cutoff},
+			"aiExplanationRegenCount":       bson.M{"$lt": limit},
+		},
+		bson.M{"$inc": bson.M{"aiExplanationRegenCount": 1}},
+	)
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount > 0 {
+		return nil
+	}
+
+	// Path B: open a fresh window. Matches when the window expired, was
+	// never started, or the field is missing entirely.
+	res, err = configs.ContractInfoCollection.UpdateOne(
+		ctx,
+		bson.M{
+			"address": normalizedAddr,
+			"$or": []bson.M{
+				{"aiExplanationRegenWindowStart": bson.M{"$lt": cutoff}},
+				{"aiExplanationRegenWindowStart": bson.M{"$exists": false}},
+				{"aiExplanationRegenWindowStart": ""},
+			},
+		},
+		bson.M{"$set": bson.M{
+			"aiExplanationRegenCount":       1,
+			"aiExplanationRegenWindowStart": nowStr,
+		}},
+	)
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount > 0 {
+		return nil
+	}
+
+	// Neither path matched: a fresh window exists AND count is at limit.
+	// (If the address truly doesn't exist, Path B's first clause `$or`
+	// branches would not match because the address filter rules them out;
+	// but the caller already validated existence via ReturnContractCode,
+	// so we know the contract is present.)
+	return ErrAIRegenCap
 }
 
 // SaveContractExplanation persists the M6a AI-generated explanation onto

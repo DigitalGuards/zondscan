@@ -50,4 +50,11 @@ type ContractInfo struct {
 	AIExplanation      string `json:"aiExplanation,omitempty" bson:"aiExplanation,omitempty"`
 	AIExplanationAt    string `json:"aiExplanationAt,omitempty" bson:"aiExplanationAt,omitempty"`
 	AIExplanationModel string `json:"aiExplanationModel,omitempty" bson:"aiExplanationModel,omitempty"`
+
+	// Regen cap state. The rolling 7-day window starts when the first
+	// regen in a window fires, then resets after the window expires.
+	// AIExplanationRegenCount counts regens within the current window
+	// (initial generates don't count). See aiexplain.RegenLimitPerWindow.
+	AIExplanationRegenCount       int    `json:"aiExplanationRegenCount,omitempty" bson:"aiExplanationRegenCount,omitempty"`
+	AIExplanationRegenWindowStart string `json:"aiExplanationRegenWindowStart,omitempty" bson:"aiExplanationRegenWindowStart,omitempty"`
 }

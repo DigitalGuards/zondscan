@@ -87,6 +87,9 @@ type ContractInfo struct {
 	AIExplanation      string `bson:"aiExplanation,omitempty" json:"aiExplanation,omitempty"`
 	AIExplanationAt    string `bson:"aiExplanationAt,omitempty" json:"aiExplanationAt,omitempty"`
 	AIExplanationModel string `bson:"aiExplanationModel,omitempty" json:"aiExplanationModel,omitempty"`
+
+	AIExplanationRegenCount       int    `bson:"aiExplanationRegenCount,omitempty" json:"aiExplanationRegenCount,omitempty"`
+	AIExplanationRegenWindowStart string `bson:"aiExplanationRegenWindowStart,omitempty" json:"aiExplanationRegenWindowStart,omitempty"`
 }
 
 // LogsResponse represents the response from qrl_getLogs
