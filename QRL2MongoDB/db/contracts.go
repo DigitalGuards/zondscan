@@ -99,17 +99,16 @@ func StoreContract(contract models.ContractInfo) error {
 			merged.TotalSupply = ""
 		}
 
-		// Always update the timestamp
-		merged.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-	} else if errors.Is(err, mongo.ErrNoDocuments) {
-		// First write — initialise updatedAt.
-		merged.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-	} else {
+	} else if !errors.Is(err, mongo.ErrNoDocuments) {
 		configs.Logger.Error("Failed to check for existing contract",
 			zap.String("address", contract.Address),
 			zap.Error(err))
 		return err
 	}
+
+	// Stamp updatedAt once for both code paths (merge + first-write).
+	// Live indexing — the wall clock is the right source here.
+	merged.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 
 	opts := options.Update().SetUpsert(true)
 	update := bson.M{"$set": syncerOwnedSet(merged)}
@@ -132,8 +131,25 @@ func StoreContract(contract models.ContractInfo) error {
 // endpoint. Keep this list in sync with the non-verification fields on
 // models.ContractInfo; any field added to the model that the syncer also
 // populates must be added here.
+//
+// We use an explicit allow-list rather than marshal-and-delete-known-keys
+// for two reasons:
+//
+//  1. Default-deny is the safer posture for a write boundary protecting
+//     trust-critical fields. Adding a new SYNCER-owned field and
+//     forgetting to add it here results in a visible omission (easy to
+//     spot in tests / data sampling). The inverted shape would default
+//     to "syncer may write any new field" — a new VERIFICATION field
+//     forgotten in the delete list would get silently clobbered. Silent
+//     trust-store corruption is the much worse failure mode.
+//  2. bson.Marshal + bson.Unmarshal per write is real overhead in the
+//     hot path (every contract creation, every reprocess pass).
+//
+// The optional CustomERC20 caps respect their model `omitempty` semantics:
+// empty values are not written, matching the pre-refactor on-disk shape so
+// `$exists` queries (if any are ever added) behave the same.
 func syncerOwnedSet(c models.ContractInfo) bson.M {
-	return bson.M{
+	m := bson.M{
 		"address":             c.Address,
 		"status":              c.Status,
 		"isToken":             c.IsToken,
@@ -146,10 +162,17 @@ func syncerOwnedSet(c models.ContractInfo) bson.M {
 		"creationTransaction": c.CreationTransaction,
 		"creationBlockNumber": c.CreationBlockNumber,
 		"updatedAt":           c.UpdatedAt,
-		"maxSupply":           c.MaxSupply,
-		"maxWalletAmount":     c.MaxWalletAmount,
-		"maxTxLimit":          c.MaxTxLimit,
 	}
+	if c.MaxSupply != "" {
+		m["maxSupply"] = c.MaxSupply
+	}
+	if c.MaxWalletAmount != "" {
+		m["maxWalletAmount"] = c.MaxWalletAmount
+	}
+	if c.MaxTxLimit != "" {
+		m["maxTxLimit"] = c.MaxTxLimit
+	}
+	return m
 }
 
 // GetContract retrieves contract information from the database
