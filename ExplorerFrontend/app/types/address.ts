@@ -1,7 +1,12 @@
 import type { Transaction, InternalTransaction } from './transaction';
 
 /**
- * Contract data associated with an address
+ * Contract data associated with an address.
+ *
+ * Verification fields below are written exclusively by the backend verify
+ * endpoint (M2). Until a contract is verified, `verified` is `false` and
+ * the optional source/abi/compiler fields are absent — matching the Go
+ * struct's `omitempty` bson tags.
  */
 export interface ContractData {
   creatorAddress: string;
@@ -14,6 +19,21 @@ export interface ContractData {
   name: string;
   symbol: string;
   updatedAt: string;
+
+  // Source verification (added by M1, populated by M2+)
+  verified: boolean;
+  sourceCode?: string;
+  abi?: string;
+  contractName?: string;
+  compilerVersion?: string;
+  optimizationEnabled?: boolean;
+  optimizationRuns?: number;
+  evmVersion?: string;
+  constructorArguments?: string;
+  libraries?: Record<string, string>;
+  license?: string;
+  verificationMethod?: string;
+  verifiedAt?: string;
 }
 
 /**

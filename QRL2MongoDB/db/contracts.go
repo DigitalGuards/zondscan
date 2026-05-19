@@ -16,7 +16,23 @@ import (
 	"go.uber.org/zap"
 )
 
-// StoreContract stores or merges contract information in the database
+// StoreContract stores or merges contract information in the database.
+//
+// **Merge-safety invariant**: the syncer is the only writer of the
+// syncer-owned fields enumerated by `syncerOwnedSet` below; the backend
+// verify endpoint is the only writer of the verification fields
+// (verified / sourceCode / abi / contractName / compilerVersion /
+// optimizationEnabled / optimizationRuns / evmVersion /
+// constructorArguments / libraries / license / verificationMethod /
+// verifiedAt). The two write paths NEVER overlap.
+//
+// Previously this function did `$set: updateData` (whole-doc), which
+// re-introduced a race: if the syncer's FindOne read predated a
+// concurrent verification write, the whole-doc $set would clobber the
+// freshly-written verification fields with stale empties from the
+// in-memory copy. Switching to a field-scoped $set listing only the
+// syncer-owned fields makes that race impossible by construction —
+// the syncer literally cannot touch verification keys.
 func StoreContract(contract models.ContractInfo) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -32,12 +48,12 @@ func StoreContract(contract models.ContractInfo) error {
 	var existingContract models.ContractInfo
 	err := collection.FindOne(ctx, filter).Decode(&existingContract)
 
-	updateData := contract
+	merged := contract
 
 	if err == nil {
 		// Existing contract found, merge new data into it
 		configs.Logger.Debug("Found existing contract, merging data", zap.String("address", contract.Address))
-		merged := existingContract
+		merged = existingContract
 
 		// Merge fields from the new 'contract' object, only if the new value is non-empty/non-zero
 		// and the existing value *is* empty/zero. This prioritizes data from the creation tx.
@@ -85,10 +101,10 @@ func StoreContract(contract models.ContractInfo) error {
 
 		// Always update the timestamp
 		merged.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-
-		updateData = merged
-
-	} else if !errors.Is(err, mongo.ErrNoDocuments) {
+	} else if errors.Is(err, mongo.ErrNoDocuments) {
+		// First write — initialise updatedAt.
+		merged.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	} else {
 		configs.Logger.Error("Failed to check for existing contract",
 			zap.String("address", contract.Address),
 			zap.Error(err))
@@ -96,7 +112,7 @@ func StoreContract(contract models.ContractInfo) error {
 	}
 
 	opts := options.Update().SetUpsert(true)
-	update := bson.M{"$set": updateData}
+	update := bson.M{"$set": syncerOwnedSet(merged)}
 
 	_, err = collection.UpdateOne(ctx, filter, update, opts)
 	if err != nil {
@@ -106,8 +122,34 @@ func StoreContract(contract models.ContractInfo) error {
 		return err
 	}
 
-	configs.Logger.Info("Successfully stored/merged contract", zap.String("address", updateData.Address))
+	configs.Logger.Info("Successfully stored/merged contract", zap.String("address", merged.Address))
 	return nil
+}
+
+// syncerOwnedSet returns the $set payload for fields the syncer is allowed
+// to write. Verification fields (verified / sourceCode / abi / ...) are
+// deliberately absent — they belong exclusively to the backend verify
+// endpoint. Keep this list in sync with the non-verification fields on
+// models.ContractInfo; any field added to the model that the syncer also
+// populates must be added here.
+func syncerOwnedSet(c models.ContractInfo) bson.M {
+	return bson.M{
+		"address":             c.Address,
+		"status":              c.Status,
+		"isToken":             c.IsToken,
+		"name":                c.Name,
+		"symbol":              c.Symbol,
+		"decimals":            c.Decimals,
+		"totalSupply":         c.TotalSupply,
+		"contractCode":        c.ContractCode,
+		"creatorAddress":      c.CreatorAddress,
+		"creationTransaction": c.CreationTransaction,
+		"creationBlockNumber": c.CreationBlockNumber,
+		"updatedAt":           c.UpdatedAt,
+		"maxSupply":           c.MaxSupply,
+		"maxWalletAmount":     c.MaxWalletAmount,
+		"maxTxLimit":          c.MaxTxLimit,
+	}
 }
 
 // GetContract retrieves contract information from the database
