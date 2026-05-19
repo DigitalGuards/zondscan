@@ -73,13 +73,17 @@ export default function VerifyContractClient(): JSX.Element {
 
   const isTerminal = job?.status === 'success' || job?.status === 'failed';
 
-  // Poll the job to terminal.
+  // Poll the job to terminal. Depend on the stable jobId (not the whole
+  // job object) so setJob() inside the poller doesn't restart the timer
+  // — without this the effective cadence drifts between 1.5–3s as the
+  // interval re-arms after every response.
+  const jobId = job?.jobId;
   useEffect(() => {
-    if (!job || isTerminal) return;
+    if (!jobId || isTerminal) return;
     let cancelled = false;
     const id = setInterval(async () => {
       try {
-        const r = await axios.get<VerificationJob>(`${config.handlerUrl}/contract/verify/${job.jobId}`);
+        const r = await axios.get<VerificationJob>(`${config.handlerUrl}/contract/verify/${jobId}`);
         if (cancelled) return;
         setJob(r.data);
       } catch (e) {
@@ -88,7 +92,7 @@ export default function VerifyContractClient(): JSX.Element {
       }
     }, 1500);
     return () => { cancelled = true; clearInterval(id); };
-  }, [job, isTerminal]);
+  }, [jobId, isTerminal]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -119,7 +123,10 @@ export default function VerifyContractClient(): JSX.Element {
         sourceCode,
         contractName: contractName.trim(),
         optimizerEnabled,
-        optimizerRuns: Number(optimizerRuns) || 200,
+        // Pass the raw optimizerRuns through — 0 is a legitimate
+        // configuration distinct from the default, so don't fall back
+        // via `|| 200`.
+        optimizerRuns: optimizerRuns,
         evmVersion: evmVersion.trim() || undefined,
         constructorArguments: constructorArgs.trim() || undefined,
         imports,
