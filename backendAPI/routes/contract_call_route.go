@@ -3,6 +3,7 @@ package routes
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -75,6 +76,11 @@ func RegisterContractCallRoute(router *gin.Engine) {
 		// to an attacker (returns 0x). Keeping it scoped to known contracts
 		// also lets us bound the audit story.
 		known, err := db.ReturnContractCode(req.To)
+		if err != nil {
+			// Log unexpected database failures so they don't silently
+			// hide behind the public 404 response.
+			log.Printf("contract_call: ReturnContractCode(%s) failed: %v", req.To, err)
+		}
 		if err != nil || known.ContractAddress == "" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "address is not a known contract"})
 			return
