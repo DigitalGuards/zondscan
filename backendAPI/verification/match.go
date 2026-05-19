@@ -202,18 +202,30 @@ func Match(compiledHex, onChainHex string, immRefs map[string][]ImmutableRange) 
 // stripCBORTrailer removes the Solidity/Hyperion-style metadata trailer
 // from the end of deployed bytecode. The convention: the LAST 2 bytes are
 // a big-endian uint16 length of the preceding CBOR map; we strip those
-// length bytes + the map. Returns the input unchanged if the encoding
-// looks malformed (length too large, runaway), so corrupt input never
-// over-strips the code body.
+// length bytes + the map.
+//
+// Sanity gates (return input unchanged if any fails):
+//
+//   - len(b) < 2                    no length bytes
+//   - cborLen <= 0                  garbage / no trailer claimed
+//   - cborLen+2 >= len(b)           would strip the entire code body —
+//                                   two such inputs would compare equal
+//                                   even when their code bodies differ
+//   - cborLen > 1024                real metadata is well under 100 B; a
+//                                   length larger than this is almost
+//                                   certainly the wrong interpretation of
+//                                   two random tail bytes
+//
+// Either condition leaves the bytes alone so the existing length+masked
+// equal compare still catches real differences.
+const maxCBORTrailerLen = 1024
+
 func stripCBORTrailer(b []byte) []byte {
 	if len(b) < 2 {
 		return b
 	}
 	cborLen := int(b[len(b)-2])<<8 | int(b[len(b)-1])
-	// Sanity: a real CBOR metadata blob is rarely more than ~100 bytes;
-	// cap at len-2 and ignore obviously-wrong values to avoid stripping
-	// the entire code on garbage tails.
-	if cborLen <= 0 || cborLen+2 > len(b) {
+	if cborLen <= 0 || cborLen+2 >= len(b) || cborLen > maxCBORTrailerLen {
 		return b
 	}
 	return b[:len(b)-cborLen-2]
