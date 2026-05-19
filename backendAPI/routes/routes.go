@@ -56,6 +56,12 @@ func UserRoute(router *gin.Engine) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
+	// Contract-verification endpoints (POST /contract/verify, GET
+	// /contract/verify/:jobId, GET /contract/compiler-info). The
+	// individual handlers return 503 when verification.Default() is nil,
+	// so this is safe to wire unconditionally.
+	RegisterVerificationRoutes(router)
+
 	// Add pending transactions endpoint with pagination
 	router.GET("/pending-transactions", func(c *gin.Context) {
 		page, limit := getPaginationParams(c, 1, 10)
