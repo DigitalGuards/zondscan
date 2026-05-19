@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"backendAPI/aiexplain"
 	"backendAPI/configs"
 	"backendAPI/routes"
 	"backendAPI/verification"
@@ -82,6 +83,15 @@ func RequestHandler() {
 		log.Printf("Contract verification disabled: %v", err)
 	} else {
 		log.Println("Contract verification ready")
+	}
+
+	// Init the AI explainer singleton. Same nil-tolerance pattern as the
+	// verifier — handlers return 503 when Default() is nil, so a missing
+	// API key never blocks the rest of the backend.
+	if err := aiexplain.Init(); err != nil {
+		log.Printf("Contract AI explainer disabled: %v", err)
+	} else {
+		log.Println("Contract AI explainer ready")
 	}
 
 	// Configure routes
