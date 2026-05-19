@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import TransactionsList from './TransactionsList';
 import type { Transaction } from '@/app/types';
 import config from '../../../config';
@@ -20,10 +20,15 @@ export default function TransactionsClient({ initialData, pageNumber }: Transact
   const [data, setData] = React.useState<TransactionsResponse>(initialData);
   const [error, setError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState<boolean>(false);
-
-  useEffect(() => {
+  // Resync local `data` whenever the parent pushes a new initialData /
+  // pageNumber. React's "adjusting state on prop change" pattern: detect
+  // mid-render and update, avoiding set-state-in-effect.
+  const [prevKey, setPrevKey] = React.useState<string>(`${pageNumber}|${initialData.total}`);
+  const nextKey = `${pageNumber}|${initialData.total}`;
+  if (prevKey !== nextKey) {
+    setPrevKey(nextKey);
     setData(initialData);
-  }, [initialData, pageNumber]);
+  }
 
   const refetchData = async (): Promise<void> => {
     try {
