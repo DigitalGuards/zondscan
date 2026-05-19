@@ -34,6 +34,13 @@ export interface ContractData {
   license?: string;
   verificationMethod?: string;
   verifiedAt?: string;
+
+  // M6a — populated only after a user has triggered the on-demand AI
+  // explanation. Frontend treats absence as "not generated yet"; the
+  // AiExplainCard renders a button instead of the cached body.
+  aiExplanation?: string;
+  aiExplanationAt?: string;
+  aiExplanationModel?: string;
 }
 
 /**
