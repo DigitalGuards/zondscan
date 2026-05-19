@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import axios, { AxiosError } from 'axios';
 import type { ContractData } from '../types/address';
+import { getQrlConnect } from '../lib/qrlConnect';
 import config from '../../config';
 
 interface AiExplainCardProps {
@@ -37,6 +38,36 @@ export default function AiExplainCard({ contractData }: AiExplainCardProps): JSX
   const [cached, setCached] = useState<boolean>(Boolean(contractData.aiExplanation));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Owner-only regen gate. Lazily snapshots any stored wallet session at
+  // mount and updates when the wallet's accountsChanged event fires.
+  const [isOwner, setIsOwner] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const creator = (contractData.creatorAddress ?? '').toLowerCase();
+    if (!creator) return;
+    let qrl;
+    try {
+      qrl = getQrlConnect();
+    } catch {
+      // SSR path or environment without window.crypto.
+      return;
+    }
+    const check = (): void => {
+      const acc = qrl.getAccounts()[0] ?? '';
+      setIsOwner(acc.toLowerCase() === creator);
+    };
+    check();
+    const onChange = (): void => check();
+    qrl.on('accountsChanged', onChange);
+    qrl.on('connect', onChange);
+    qrl.on('disconnect', onChange);
+    return () => {
+      qrl.off('accountsChanged', onChange);
+      qrl.off('connect', onChange);
+      qrl.off('disconnect', onChange);
+    };
+  }, [contractData.creatorAddress]);
 
   if (!contractData.verified) return null;
 
@@ -86,15 +117,21 @@ export default function AiExplainCard({ contractData }: AiExplainCardProps): JSX
               {loading ? 'Analysing…' : 'Explain with AI'}
             </button>
           )}
-          {explanation && (
+          {explanation && isOwner && (
             <button
               type="button"
               onClick={() => call(true)}
               disabled={loading}
               className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-card-gradient border border-border hover:border-accent text-xs text-gray-300 hover:text-accent transition-colors disabled:opacity-50"
+              title="Regenerate (limited to 5 per 7-day window)"
             >
               {loading ? 'Analysing…' : 'Regenerate'}
             </button>
+          )}
+          {explanation && !isOwner && (
+            <span className="text-[10px] text-gray-500 self-center">
+              Only the contract creator can regenerate.
+            </span>
           )}
         </div>
       </div>

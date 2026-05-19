@@ -227,6 +227,49 @@ const endpointGroups: EndpointGroup[] = [
       },
     ],
   },
+  {
+    category: 'Contract Verification (M1-M3)',
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/contract/compiler-info',
+        description: 'Returns the language and pinned Hyperion build id the verifier is willing to accept. Use this to confirm the explorer can verify against your hypc version before you POST a job. Returns 503 when the verifier is not configured on this deployment.',
+        example: '/contract/compiler-info',
+      },
+      {
+        method: 'POST',
+        path: '/contract/verify',
+        description: 'Enqueues a verification job for a deployed contract. The endpoint compiles the supplied source via the pinned hypc runner, compares the deployed-bytecode (Solidity-style CBOR metadata trailer stripped on both sides) and on success writes the verified source + ABI back onto the contract document. Body: { address, sourceCode, contractName, compilerVersion?, optimizerEnabled, optimizerRuns, evmVersion?, constructorArguments?, libraries?, imports?, license? }. Rate-limited per IP. Max body 1 MiB. Returns { jobId, status, address } synchronously; poll /contract/verify/:jobId for the terminal state.',
+        params: 'JSON body (see description) — address + sourceCode + contractName are required',
+        example: 'POST /contract/verify  body: {"address":"Q…","sourceCode":"...","contractName":"Foo"}',
+      },
+      {
+        method: 'GET',
+        path: '/contract/verify/:jobId',
+        description: 'Returns the current state of a verification job. Status values: pending, compiling, success, failed. The body echoes the original submission payload (sans the standard-JSON wrapper) and, on success, includes a result reference with the ABI and verifiedAt stamp.',
+        example: '/contract/verify/27fcbb55ffb611ec',
+      },
+    ],
+  },
+  {
+    category: 'Contract Interaction (M4-M6)',
+    endpoints: [
+      {
+        method: 'POST',
+        path: '/contract/call',
+        description: 'Open-but-bounded eth_call proxy for read-only contract reads. The body is forwarded as a qrl_call to the node with a hard gas cap, data-size cap and per-call timeout. The `to` address must be a known contract in the indexer (404 otherwise) so non-contract reads cannot be proxied. Body: { to, data }. Returns { result } on success or { error, code, reverted: true } on RPC errors (HTTP 200 in both branches, distinguish via fields). Per-IP rate-limited (60/min).',
+        params: 'JSON body: to (Q-address, required), data (0x-prefixed even-length hex, required, max 8 KiB)',
+        example: 'POST /contract/call  body: {"to":"Qed2af...","data":"0xef690cc0"}',
+      },
+      {
+        method: 'POST',
+        path: '/contract/explain/:address',
+        description: 'On-demand AI summary of a VERIFIED contract’s source code (Claude Haiku). The summary is cached per-contract in the contractCode collection (fields aiExplanation / aiExplanationAt / aiExplanationModel) so subsequent reads are free until ?regenerate=1 busts the cache. Returns 403 if the address is not a verified contract — only verified contracts can be analysed.',
+        params: 'regenerate (query, optional) - "1" or "true" to force a fresh LLM call',
+        example: 'POST /contract/explain/Qed2af55af7a492a6e504b364dd882159f9374f46',
+      },
+    ],
+  },
 ]
 
 const BASE_URL = 'https://zondscan.com/api'
