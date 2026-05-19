@@ -4,7 +4,9 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import CopyButton from "../../components/CopyButton";
 import QRCodeButton from "../../components/QRCodeButton";
-import ContractBytecode from "../../components/ContractBytecode";
+import ContractTabs from "../../components/ContractTabs";
+import VerifiedBadge from "../../components/VerifiedBadge";
+import type { ContractData } from "../../types/address";
 import { formatAmount } from "../../lib/helpers";
 import Breadcrumbs from "../../components/Breadcrumbs";
 
@@ -55,7 +57,10 @@ interface CreationTxData {
 
 interface TokenContractViewProps {
     address: string;
-    contractData: {
+    // Accept the shared ContractData shape so verification fields flow
+    // through to the Code/Read/Write tabs alongside the existing
+    // creator/symbol/decimals metadata.
+    contractData: Partial<ContractData> & {
         creatorAddress?: string;
         creationTransaction?: string;
         contractCode?: string;
@@ -342,11 +347,39 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                             </div>
                         </div>
 
-                        {/* Contract Bytecode */}
+                        {/* Contract Code (verified source / ABI / bytecode) + Read / Write tabs.
+                            Replaces the standalone bytecode block on token pages too — same
+                            behaviour as the address page, just nested inside the Overview tab. */}
                         {contractData.contractCode && (
                             <div>
-                                <h3 className="text-lg font-semibold text-accent mb-4">Bytecode</h3>
-                                <ContractBytecode contractCode={contractData.contractCode} />
+                                <div className="flex items-center gap-2 flex-wrap mb-4">
+                                    <h3 className="text-lg font-semibold text-accent">Contract</h3>
+                                    {contractData.verified && <VerifiedBadge />}
+                                </div>
+                                <ContractTabs
+                                    contractData={{
+                                        creatorAddress: creatorAddress,
+                                        address: address,
+                                        contractCode: contractData.contractCode,
+                                        creationTransaction: contractData.creationTransaction ?? '',
+                                        isToken: contractData.isToken ?? true,
+                                        status: contractData.status ?? '',
+                                        decimals: contractData.decimals ?? 0,
+                                        name: contractData.name ?? '',
+                                        symbol: contractData.symbol ?? '',
+                                        updatedAt: contractData.updatedAt ?? '',
+                                        verified: contractData.verified ?? false,
+                                        sourceCode: contractData.sourceCode,
+                                        abi: contractData.abi,
+                                        contractName: contractData.contractName,
+                                        compilerVersion: contractData.compilerVersion,
+                                        optimizationEnabled: contractData.optimizationEnabled,
+                                        optimizationRuns: contractData.optimizationRuns,
+                                        evmVersion: contractData.evmVersion,
+                                        license: contractData.license,
+                                        verifiedAt: contractData.verifiedAt,
+                                    }}
+                                />
                             </div>
                         )}
 

@@ -20,11 +20,11 @@ const faqs = [
   },
   {
     question: "What information can I find about smart contracts?",
-    answer: "Zondscan provides comprehensive information about smart contracts:\n\n1. Contract source code (if verified)\n2. Contract creation transaction\n3. Contract interactions and internal transactions\n4. Contract balance and token holdings\n5. Contract events and logs\n\nVerified contracts also include their ABI and can be interacted with directly through the explorer."
+    answer: "Zondscan provides comprehensive information about smart contracts:\n\n1. Contract source code (if verified) under the Code tab\n2. Contract creation transaction\n3. Contract interactions and internal transactions\n4. Contract balance and token holdings\n5. Contract events and logs\n\nVerified contracts also publish their ABI; Read and Write tabs for direct interaction are rolling out in follow-up milestones."
   },
   {
     question: "How do I verify smart contract source code?",
-    answer: "To verify a smart contract on Zondscan:\n\n1. Navigate to the contract address page\n2. Click on the 'Verify & Publish' button\n3. Upload the original source code\n4. Provide the exact compiler version and optimization settings used\n5. Submit for verification\n\nOnce verified, the contract's source code and interactions become publicly visible on Zondscan."
+    answer: "To verify a smart contract on Zondscan:\n\n1. Navigate to the contract address page and open the Code tab\n2. Click on the 'Verify & Publish' button (or go to /verify-contract directly)\n3. Paste the original source code (and any imports as a JSON map)\n4. Match the exact optimizer settings used at deploy time\n5. Submit — Zondscan re-compiles with the pinned Hyperion build and byte-matches against the on-chain runtime\n\nOnce verified, the contract's source code and ABI become publicly visible on the address page."
   },
   {
     question: "What are the differences between QRL Zond and Ethereum?",
