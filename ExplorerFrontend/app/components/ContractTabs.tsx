@@ -5,6 +5,7 @@ import Link from 'next/link';
 import CopyButton from './CopyButton';
 import ContractBytecode from './ContractBytecode';
 import ReadContract from './ReadContract';
+import WriteContract from './WriteContract';
 import type { ContractData } from '../types/address';
 
 interface ContractTabsProps {
@@ -20,13 +21,9 @@ type TabKey = 'code' | 'read' | 'write';
  *  - Code  — for verified contracts: source + compiler settings + ABI +
  *            bytecode (as a sub-section). For unverified: bytecode + a
  *            "Verify & Publish" CTA linking to /verify-contract.
- *  - Read  — `view`/`pure` function dispatcher. M4 fills this in.
+ *  - Read  — `view`/`pure` function dispatcher (M4).
  *  - Write — `nonpayable`/`payable` function dispatcher via the QRL Connect
- *            session. M5 fills this in.
- *
- * Read/Write tabs are scaffolds in this PR; their bodies show a
- * "coming soon" placeholder so the layout is final but the runtime is
- * deferred.
+ *            session (M5).
  */
 export default function ContractTabs({ contractData }: ContractTabsProps): JSX.Element {
   const [tab, setTab] = useState<TabKey>('code');
@@ -50,7 +47,7 @@ export default function ContractTabs({ contractData }: ContractTabsProps): JSX.E
 
       {tab === 'code' && <CodeTab contractData={contractData} parsedAbi={parsedAbi} />}
       {tab === 'read' && <ReadContract contractData={contractData} />}
-      {tab === 'write' && <ComingSoonTab label="Write contract" subhead="State-changing calls via wallet pairing arrive in a follow-up." />}
+      {tab === 'write' && <WriteContract contractData={contractData} />}
     </div>
   );
 }
@@ -161,7 +158,9 @@ function SourcePanel({ contractData }: { contractData: ContractData }) {
 
 function AbiPanel({ abi, raw }: { abi: unknown | null; raw: string }) {
   const [expanded, setExpanded] = useState(false);
-  if (!raw) return null;
+  // Hooks must be called unconditionally — the early return below cannot
+  // precede useMemo. raw='' is a cheap input for JSON.stringify so the
+  // computed value is harmless when the panel is about to bail.
   const pretty = useMemo(() => {
     if (abi === null) return raw;
     try {
@@ -170,6 +169,7 @@ function AbiPanel({ abi, raw }: { abi: unknown | null; raw: string }) {
       return raw;
     }
   }, [abi, raw]);
+  if (!raw) return null;
 
   return (
     <div>
@@ -198,11 +198,3 @@ function AbiPanel({ abi, raw }: { abi: unknown | null; raw: string }) {
   );
 }
 
-function ComingSoonTab({ label, subhead }: { label: string; subhead: string }) {
-  return (
-    <div className="rounded-lg border border-border bg-card-gradient p-6 text-center">
-      <div className="text-sm md:text-base font-medium text-gray-300">{label} — coming soon</div>
-      <div className="text-xs md:text-sm text-gray-400 mt-1">{subhead}</div>
-    </div>
-  );
-}
