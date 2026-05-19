@@ -17,9 +17,6 @@ CHANGELOG*
 # Environment files
 .env
 .env.*
-.env.local
-.env.development
-.env.production
 
 # IDE and editor files
 .idea

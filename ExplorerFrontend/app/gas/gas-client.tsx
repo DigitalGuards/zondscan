@@ -221,10 +221,11 @@ export default function GasClient(): JSX.Element {
         const r = await axios.get<GasHistoryResp>(`${config.handlerUrl}/gas/history?range=${range}`);
         if (!cancelled) setHistory(r.data?.data ?? []);
       } catch (e) {
-        console.error(e);
+        if (!cancelled) console.error(e);
       }
     };
     load();
+    return () => { cancelled = true; };
   }, [range]);
 
   const utilization = useMemo(() => {

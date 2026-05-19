@@ -134,6 +134,147 @@ func CountContracts() (int64, error) {
 	return count, nil
 }
 
+// MarkContractVerified writes the verification result onto the existing
+// contract document using a **targeted $set of only verification fields**.
+// This is the symmetric half of the syncer's field-scoped $set (see
+// QRL2MongoDB/db/contracts.go:syncerOwnedSet) — neither writer ever
+// touches the other's keys, so concurrent updates can't clobber each
+// other regardless of which thread reads first.
+//
+// `verifiedAt` is stamped here; callers should not pre-populate it.
+func MarkContractVerified(address string, result models.VerificationResult) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	normalizedAddr := normalizeAddress(address)
+	verifiedAt := time.Now().UTC().Format(time.RFC3339)
+
+	verificationSet := bson.M{
+		"verified":             true,
+		"sourceCode":           result.SourceCode,
+		"abi":                  result.Abi,
+		"contractName":         result.ContractName,
+		"compilerVersion":      result.CompilerVersion,
+		"optimizationEnabled":  result.OptimizationEnabled,
+		"optimizationRuns":     result.OptimizationRuns,
+		"evmVersion":           result.EvmVersion,
+		"constructorArguments": result.ConstructorArguments,
+		"libraries":            result.Libraries,
+		"license":              result.License,
+		"verificationMethod":   result.VerificationMethod,
+		"verifiedAt":           verifiedAt,
+	}
+
+	res, err := configs.ContractInfoCollection.UpdateOne(
+		ctx,
+		bson.M{"address": normalizedAddr},
+		bson.M{"$set": verificationSet},
+	)
+	if err != nil {
+		log.Printf("MarkContractVerified: failed to update %s: %v", normalizedAddr, err)
+		return err
+	}
+	if res.MatchedCount == 0 {
+		log.Printf("MarkContractVerified: no contract document for %s", normalizedAddr)
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
+// CreateVerificationJob inserts a fresh job row in `pending` state. The
+// caller (HTTP layer) supplies a UUID-like JobID and the echoed Payload.
+func CreateVerificationJob(job models.ContractVerificationJob) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	job.Address = normalizeAddress(job.Address)
+	if job.Status == "" {
+		job.Status = models.VerificationJobPending
+	}
+	if job.CreatedAt == "" {
+		job.CreatedAt = now
+	}
+	job.UpdatedAt = now
+
+	_, err := configs.ContractVerificationsCollection.InsertOne(ctx, job)
+	if err != nil {
+		log.Printf("CreateVerificationJob: failed for %s/%s: %v", job.Address, job.JobID, err)
+		return err
+	}
+	return nil
+}
+
+// GetVerificationJob looks up a job by its JobID. Returns (nil, nil) when
+// no job matches so callers can treat absence and error distinctly.
+func GetVerificationJob(jobID string) (*models.ContractVerificationJob, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var job models.ContractVerificationJob
+	err := configs.ContractVerificationsCollection.FindOne(ctx, bson.M{"jobId": jobID}).Decode(&job)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &job, nil
+}
+
+// UpdateVerificationJob applies a targeted $set to a job document — only
+// the supplied fields are written. Use this for status transitions
+// (pending → compiling → success/failed), error notes, and the result
+// handle. `updatedAt` is stamped automatically.
+func UpdateVerificationJob(jobID string, patch bson.M) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if patch == nil {
+		patch = bson.M{}
+	}
+	patch["updatedAt"] = time.Now().UTC().Format(time.RFC3339)
+
+	res, err := configs.ContractVerificationsCollection.UpdateOne(
+		ctx,
+		bson.M{"jobId": jobID},
+		bson.M{"$set": patch},
+	)
+	if err != nil {
+		log.Printf("UpdateVerificationJob: %s: %v", jobID, err)
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
+// FindVerificationJobsByAddress lists verification jobs for a contract
+// address, filtered to a single status (e.g. "pending" or "compiling").
+// `limit` bounds the result; pass 1 for a "does any in-flight job exist"
+// check.
+func FindVerificationJobsByAddress(address string, status models.VerificationJobStatus, limit int64) ([]models.ContractVerificationJob, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	normalizedAddr := normalizeAddress(address)
+	filter := bson.M{"address": normalizedAddr, "status": status}
+	opts := options.Find().SetLimit(limit).SetSort(bson.D{{Key: "createdAt", Value: -1}})
+
+	cursor, err := configs.ContractVerificationsCollection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var jobs []models.ContractVerificationJob
+	if err := cursor.All(ctx, &jobs); err != nil {
+		return nil, err
+	}
+	return jobs, nil
+}
+
 // GetContractByCreationTx returns contract info for a given creation transaction hash
 func GetContractByCreationTx(txHash string) (*models.ContractInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

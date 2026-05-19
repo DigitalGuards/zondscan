@@ -3,15 +3,11 @@ package db
 import (
 	"backendAPI/configs"
 	"backendAPI/models"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"math/big"
-	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -119,8 +115,6 @@ func ReturnRankAddress(address string) (int64, error) {
 }
 
 func GetBalance(address string) (float64, string) {
-	var result models.Balance
-
 	// Ensure address has Q prefix for RPC calls
 	rpcAddress := address
 	if strings.HasPrefix(rpcAddress, "0x") {
@@ -129,64 +123,39 @@ func GetBalance(address string) (float64, string) {
 		rpcAddress = "Q" + rpcAddress
 	}
 
-	group := models.JsonRPC{
-		Jsonrpc: "2.0",
-		Method:  "qrl_getBalance",
-		Params:  []interface{}{rpcAddress, "latest"},
-		ID:      1,
-	}
-	b, err := json.Marshal(group)
-	if err != nil {
-		log.Printf("error marshaling RPC request: %v", err)
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	nodeURL := os.Getenv("NODE_URL")
-	if nodeURL == "" {
-		nodeURL = "http://127.0.0.1:8545" // fallback to default if not set
-	}
-
-	req, err := http.NewRequest("POST", nodeURL, bytes.NewBuffer(b))
+	raw, rpcErr, err := NodeRPC(ctx, "qrl_getBalance", []interface{}{rpcAddress, "latest"})
 	if err != nil {
-		log.Printf("error creating balance request: %v", err)
+		log.Printf("GetBalance(%s): %v", address, err)
 		return 0, "Error connecting to node"
 	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Printf("error making balance request: %v", err)
-		return 0, "Error connecting to node"
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("error reading balance response: %v", err)
-		return 0, "Error reading node response"
+	if rpcErr != nil {
+		return 0, rpcErr.Message
 	}
 
-	err = json.Unmarshal(body, &result)
-	if err != nil {
-		log.Printf("error unmarshaling balance response: %v", err)
+	var hexResult string
+	if err := json.Unmarshal(raw, &hexResult); err != nil {
+		log.Printf("GetBalance(%s): unmarshal result: %v", address, err)
+		return 0, "Error parsing node response"
+	}
+	if len(hexResult) < 3 || !strings.HasPrefix(hexResult, "0x") {
+		log.Printf("GetBalance(%s): unexpected balance shape %q", address, hexResult)
 		return 0, "Error parsing node response"
 	}
 
-	if result.Error.Message != "" {
-		return 0, result.Error.Message
-	} else {
-		balance := new(big.Int)
-		balance, success := balance.SetString(result.Result[2:], 16)
-		if !success {
-			log.Printf("error converting hex balance to big.Int for address %s", address)
-		}
-
-		balanceFloat := new(big.Float).SetInt(balance)
-		divisor := new(big.Float).SetFloat64(1e18)
-		result := new(big.Float).Quo(balanceFloat, divisor)
-		float64Value, _ := result.Float64()
-		return float64Value, ""
+	balance := new(big.Int)
+	balance, success := balance.SetString(hexResult[2:], 16)
+	if !success {
+		log.Printf("error converting hex balance to big.Int for address %s", address)
 	}
+
+	balanceFloat := new(big.Float).SetInt(balance)
+	divisor := new(big.Float).SetFloat64(1e18)
+	res := new(big.Float).Quo(balanceFloat, divisor)
+	float64Value, _ := res.Float64()
+	return float64Value, ""
 }
 
 func ReturnWalletDistribution(query uint64) (int64, error) {

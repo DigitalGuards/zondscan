@@ -467,3 +467,23 @@ export function formatTokenAmount(amount: string | undefined | null, decimals: n
     return amount;
   }
 }
+
+/**
+ * Normalise an ABI-decoded value tree to use the canonical Q-prefix for
+ * QRL v2 addresses. The 0.3.x @theqrl/web3-zond-abi decoder still emits
+ * the legacy Z prefix for `address` outputs; every other surface in
+ * zondscan uses Q. Mutually recursive on array types so nested shapes
+ * like `address[][]` flatten correctly.
+ */
+export function qNormaliseAbiValue(v: unknown, type: string): unknown {
+  if (type === 'address' && typeof v === 'string' && /^Z[0-9a-fA-F]{40}$/.test(v)) {
+    return 'Q' + v.slice(1);
+  }
+  // Strip the last `[N]` or `[]` dimension and recurse so nested array
+  // types (e.g. `address[][]`) get fully unwound.
+  if (/\[\d*\]$/.test(type) && Array.isArray(v)) {
+    const innerType = type.replace(/\[\d*\]$/, '');
+    return v.map(x => qNormaliseAbiValue(x, innerType));
+  }
+  return v;
+}
