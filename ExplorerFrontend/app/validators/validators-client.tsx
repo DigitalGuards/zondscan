@@ -132,10 +132,14 @@ export default function ValidatorsWrapper(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    fetchData();
-    // Refresh data every 60 seconds
+    // Defer the initial call so its inner setState() lands outside the
+    // synchronous effect body (set-state-in-effect rule).
+    const initial = setTimeout(fetchData, 0);
     const interval = setInterval(fetchData, 60000);
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(initial);
+      clearInterval(interval);
+    };
   }, [fetchData]);
 
   if (error && !validators.length) {

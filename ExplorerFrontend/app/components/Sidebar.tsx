@@ -135,10 +135,14 @@ export default function Sidebar(): JSX.Element {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isOpen])
 
-  // Close sidebar on route change (mobile)
-  React.useEffect(() => {
-    setIsOpen(false)
-  }, [pathname])
+  // Close sidebar on route change (mobile). React's "adjusting state on
+  // prop change" pattern: detect mid-render and reset without queuing a
+  // post-render setState in an effect (set-state-in-effect rule).
+  const [prevPath, setPrevPath] = React.useState(pathname)
+  if (prevPath !== pathname) {
+    setPrevPath(pathname)
+    if (isOpen) setIsOpen(false)
+  }
 
   return (
     <>

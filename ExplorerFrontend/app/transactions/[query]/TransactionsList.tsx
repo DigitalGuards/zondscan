@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatAmount, timeAgo, truncateHash } from '../../lib/helpers';
@@ -18,12 +18,12 @@ export default function TransactionsList({
   currentPage,
 }: TransactionsListProps): JSX.Element {
   const router = useRouter();
-  const [transactions, setTransactions] = useState(initialData.txs);
-  const [totalPages] = useState(Math.max(1, Math.ceil(initialData.total / ITEMS_PER_PAGE)));
-
-  useEffect(() => {
-    setTransactions(initialData.txs);
-  }, [initialData]);
+  // Render straight from props; the previous local mirror state served no
+  // purpose (no setter is called) and the useEffect-resync tripped the new
+  // set-state-in-effect rule. Memo for stable identity in case downstream
+  // components ever .map over it with referential keys.
+  const transactions = useMemo(() => initialData.txs, [initialData.txs]);
+  const totalPages = Math.max(1, Math.ceil(initialData.total / ITEMS_PER_PAGE));
 
   const goToNextPage = (): void => {
     router.push(`/transactions/${Math.min(currentPage + 1, totalPages)}`);
