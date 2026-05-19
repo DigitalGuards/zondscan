@@ -1,0 +1,323 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
+import axios, { AxiosError } from 'axios';
+import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import config from '../../config';
+
+interface CompilerInfo {
+  language: string;
+  buildId: string;
+}
+
+interface VerifyEnqueueResponse {
+  jobId: string;
+  status: string;
+  address: string;
+  alreadyVerified?: boolean;
+}
+
+interface VerificationJob {
+  jobId: string;
+  status: 'pending' | 'compiling' | 'success' | 'failed';
+  error?: string;
+  address: string;
+  payload?: {
+    contractName?: string;
+    compilerVersion?: string;
+  };
+}
+
+const COMMON_LICENSES = ['MIT', 'GPL-3.0', 'Apache-2.0', 'BSD-2-Clause', 'BSD-3-Clause', 'Unlicense', 'No license'];
+
+/**
+ * Client-side verify-contract form. Posts to /contract/verify and polls
+ * /contract/verify/:jobId until terminal. Compiler-version selector is
+ * intentionally absent — the backend supports exactly one pinned build
+ * (read-only display).
+ */
+export default function VerifyContractClient(): JSX.Element {
+  const searchParams = useSearchParams();
+  const prefillAddress = searchParams?.get('address') ?? '';
+
+  const [address, setAddress] = useState(prefillAddress);
+  const [contractName, setContractName] = useState('');
+  const [sourceCode, setSourceCode] = useState('');
+  const [importsText, setImportsText] = useState('');
+  const [optimizerEnabled, setOptimizerEnabled] = useState(false);
+  const [optimizerRuns, setOptimizerRuns] = useState(200);
+  const [evmVersion, setEvmVersion] = useState('');
+  const [constructorArgs, setConstructorArgs] = useState('');
+  const [license, setLicense] = useState('MIT');
+
+  const [compilerInfo, setCompilerInfo] = useState<CompilerInfo | null>(null);
+  const [compilerErr, setCompilerErr] = useState<string | null>(null);
+
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [job, setJob] = useState<VerificationJob | null>(null);
+  const [alreadyVerified, setAlreadyVerified] = useState<string | null>(null);
+
+  // Fetch the pinned compiler build once on mount. If the backend doesn't
+  // expose it (503), surface that as a banner — submitting in that state
+  // will just 503 from the backend.
+  useEffect(() => {
+    let cancelled = false;
+    axios.get<CompilerInfo>(`${config.handlerUrl}/contract/compiler-info`)
+      .then(r => { if (!cancelled) setCompilerInfo(r.data); })
+      .catch(e => { if (!cancelled) setCompilerErr(extractAxiosError(e)); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const isTerminal = job?.status === 'success' || job?.status === 'failed';
+
+  // Poll the job to terminal.
+  useEffect(() => {
+    if (!job || isTerminal) return;
+    let cancelled = false;
+    const id = setInterval(async () => {
+      try {
+        const r = await axios.get<VerificationJob>(`${config.handlerUrl}/contract/verify/${job.jobId}`);
+        if (cancelled) return;
+        setJob(r.data);
+      } catch (e) {
+        if (cancelled) return;
+        setJob(j => j ? { ...j, status: 'failed', error: extractAxiosError(e) } : j);
+      }
+    }, 1500);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [job, isTerminal]);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSubmitError(null);
+    setAlreadyVerified(null);
+    setJob(null);
+
+    let imports: Record<string, string> | undefined;
+    if (importsText.trim()) {
+      try {
+        const parsed = JSON.parse(importsText) as unknown;
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          imports = parsed as Record<string, string>;
+        } else {
+          setSubmitError('Imports must be a JSON object: { "Filename.hyp": "<source>" }');
+          return;
+        }
+      } catch (e) {
+        setSubmitError('Imports field is not valid JSON: ' + (e instanceof Error ? e.message : String(e)));
+        return;
+      }
+    }
+
+    setSubmitting(true);
+    try {
+      const resp = await axios.post<VerifyEnqueueResponse>(`${config.handlerUrl}/contract/verify`, {
+        address: address.trim(),
+        sourceCode,
+        contractName: contractName.trim(),
+        optimizerEnabled,
+        optimizerRuns: Number(optimizerRuns) || 200,
+        evmVersion: evmVersion.trim() || undefined,
+        constructorArguments: constructorArgs.trim() || undefined,
+        imports,
+        license: license || undefined,
+      });
+      if (resp.data.alreadyVerified) {
+        setAlreadyVerified(resp.data.address);
+      } else {
+        setJob({ jobId: resp.data.jobId, status: 'pending', address: resp.data.address });
+      }
+    } catch (e) {
+      setSubmitError(extractAxiosError(e));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const compilerBanner = useMemo(() => {
+    if (compilerErr) {
+      return (
+        <div className="rounded-lg border border-red-500/40 bg-red-500/10 text-red-300 text-xs md:text-sm p-3">
+          Verification is not available right now (compiler-info: {compilerErr}).
+        </div>
+      );
+    }
+    if (!compilerInfo) return null;
+    return (
+      <div className="rounded-lg border border-border bg-card-gradient p-3 text-xs md:text-sm text-gray-300">
+        <div className="text-gray-400">Pinned compiler</div>
+        <div className="font-mono break-all">{compilerInfo.language} {compilerInfo.buildId}</div>
+      </div>
+    );
+  }, [compilerErr, compilerInfo]);
+
+  return (
+    <div className="space-y-3 md:space-y-4">
+      {compilerBanner}
+
+      {alreadyVerified && (
+        <div className="rounded-lg border border-green-500/40 bg-green-500/10 text-green-300 text-xs md:text-sm p-3">
+          This contract is already verified.{' '}
+          <Link href={`/address/${alreadyVerified}`} className="underline">Go to address page →</Link>
+        </div>
+      )}
+
+      {job && (
+        <div className={`rounded-lg border p-3 text-xs md:text-sm ${
+          job.status === 'success' ? 'border-green-500/40 bg-green-500/10 text-green-300' :
+          job.status === 'failed' ? 'border-red-500/40 bg-red-500/10 text-red-300' :
+          'border-border bg-card-gradient text-gray-300'
+        }`}>
+          <div className="font-medium">
+            {job.status === 'pending' && 'Queued…'}
+            {job.status === 'compiling' && 'Compiling + matching bytecode…'}
+            {job.status === 'success' && 'Verified ✓'}
+            {job.status === 'failed' && 'Verification failed'}
+          </div>
+          {job.status === 'success' && (
+            <div className="mt-1">
+              <Link href={`/address/${job.address}`} className="underline">View verified contract →</Link>
+            </div>
+          )}
+          {job.error && (
+            <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-[11px] opacity-80">
+              {job.error}
+            </pre>
+          )}
+        </div>
+      )}
+
+      {submitError && (
+        <div className="rounded-lg border border-red-500/40 bg-red-500/10 text-red-300 text-xs md:text-sm p-3">
+          {submitError}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-3 md:space-y-4">
+        <Field label="Contract address (Q…)">
+          <input
+            required
+            value={address}
+            onChange={e => setAddress(e.target.value)}
+            placeholder="Q…"
+            className="form-input font-mono"
+          />
+        </Field>
+
+        <Field label="Contract name" hint="Must match a contract declared in the source.">
+          <input
+            required
+            value={contractName}
+            onChange={e => setContractName(e.target.value)}
+            placeholder="e.g. SimpleERC721"
+            className="form-input"
+          />
+        </Field>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+          <Field label="Optimizer">
+            <label className="flex items-center gap-2 text-sm text-gray-200">
+              <input
+                type="checkbox"
+                checked={optimizerEnabled}
+                onChange={e => setOptimizerEnabled(e.target.checked)}
+                className="form-checkbox"
+              />
+              Enabled
+            </label>
+          </Field>
+          <Field label="Optimizer runs">
+            <input
+              type="number"
+              min={0}
+              value={optimizerRuns}
+              onChange={e => setOptimizerRuns(Number(e.target.value))}
+              disabled={!optimizerEnabled}
+              className="form-input"
+            />
+          </Field>
+          <Field label="License">
+            <select
+              value={license}
+              onChange={e => setLicense(e.target.value)}
+              className="form-input"
+            >
+              {COMMON_LICENSES.map(l => <option key={l} value={l}>{l}</option>)}
+            </select>
+          </Field>
+        </div>
+
+        <Field label="EVM version (optional)">
+          <input
+            value={evmVersion}
+            onChange={e => setEvmVersion(e.target.value)}
+            placeholder="e.g. shanghai"
+            className="form-input"
+          />
+        </Field>
+
+        <Field label="Source code (single file)" hint="Submit the contract source as a single .hyp file. Multi-file imports go in the Imports field below.">
+          <textarea
+            required
+            value={sourceCode}
+            onChange={e => setSourceCode(e.target.value)}
+            rows={14}
+            placeholder="// SPDX-License-Identifier: MIT&#10;pragma hyperion ^0.0.2;&#10;contract MyContract { … }"
+            className="form-input font-mono text-xs"
+          />
+        </Field>
+
+        <Field
+          label="Imports (optional)"
+          hint='JSON object mapping import paths → source contents. Example: {"Context.hyp": "...source..."}'
+        >
+          <textarea
+            value={importsText}
+            onChange={e => setImportsText(e.target.value)}
+            rows={6}
+            placeholder='{"Context.hyp": "// SPDX-License-Identifier: MIT&#10;pragma hyperion ^0.0.2;&#10;abstract contract Context { … }"}'
+            className="form-input font-mono text-xs"
+          />
+        </Field>
+
+        <Field label="Constructor arguments (optional)" hint="Hex-encoded ABI tuple. Advisory — not used for the byte-match check.">
+          <input
+            value={constructorArgs}
+            onChange={e => setConstructorArgs(e.target.value)}
+            placeholder="0x…"
+            className="form-input font-mono text-xs"
+          />
+        </Field>
+
+        <button
+          type="submit"
+          disabled={submitting || (job?.status === 'pending' || job?.status === 'compiling')}
+          className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-accent text-black text-sm font-medium hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {submitting ? 'Submitting…' : 'Verify & Publish'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-xs md:text-sm text-gray-400 mb-1">{label}</div>
+      {children}
+      {hint && <div className="text-[11px] text-gray-500 mt-1">{hint}</div>}
+    </div>
+  );
+}
+
+function extractAxiosError(e: unknown): string {
+  if (e instanceof AxiosError) {
+    const d = e.response?.data as { error?: string; message?: string } | undefined;
+    return d?.error || d?.message || e.message;
+  }
+  return e instanceof Error ? e.message : String(e);
+}
