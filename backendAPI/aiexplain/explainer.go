@@ -94,9 +94,17 @@ func (e *Explainer) Explain(ctx context.Context, address string, regenerate bool
 		}
 	}
 
+	// Truncate by rune count so a UTF-8 codepoint can't be split mid-byte
+	// (which would produce an invalid string and confuse the LLM tokenizer).
+	// SourceMaxBytes is interpreted as a *rune* cap; bytes ≈ runes for the
+	// ASCII-dominant Hyperion source we expect, with a small safety margin
+	// for non-ASCII string literals in the source.
 	source := c.SourceCode
-	if len(source) > e.SourceMaxBytes && e.SourceMaxBytes > 0 {
-		source = source[:e.SourceMaxBytes] + "\n\n// […truncated for length…]"
+	if e.SourceMaxBytes > 0 {
+		runes := []rune(c.SourceCode)
+		if len(runes) > e.SourceMaxBytes {
+			source = string(runes[:e.SourceMaxBytes]) + "\n\n// […truncated for length…]"
+		}
 	}
 
 	user := buildUserPrompt(c, source)
