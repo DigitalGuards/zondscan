@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import axios, { AxiosError } from 'axios';
 import * as zondAbi from '@theqrl/web3-zond-abi';
 import type { ContractData } from '../types/address';
+import { qNormaliseAbiValue } from '../lib/helpers';
 import config from '../../config';
 
 interface AbiInput {
@@ -193,7 +194,7 @@ function parseArg(raw: string, type: string): unknown {
     if (type.startsWith('uint') || type.startsWith('int')) return '0';
     return '';
   }
-  if (type === 'bool') return t === 'true' || t === '1';
+  if (type === 'bool') return t.toLowerCase() === 'true' || t === '1';
   if (type.endsWith(']') || type === 'tuple') {
     try { return JSON.parse(t); } catch {
       throw new Error(`expected JSON for ${type}: e.g. [1,2,3]`);
@@ -219,25 +220,16 @@ function placeholderFor(type: string): string {
 // formatDecoded renders @theqrl/web3-zond-abi.decodeParameters output for
 // human consumption. The Result object carries both `0,1,…` index keys
 // and any named keys, plus a `__length__`. We flatten to a stable shape,
-// and Q-normalise any address-typed value because the 0.3.x ABI decoder
-// emits the legacy Z prefix that nothing else in zondscan uses.
+// and qNormaliseAbiValue (in app/lib/helpers.ts) maps any address-typed
+// value from the legacy Z prefix the 0.3.x decoder emits to the canonical
+// Q prefix the rest of zondscan uses.
 function formatDecoded(decoded: unknown, outputs: { name: string; type: string }[]): string {
   const out: Record<string, unknown> = {};
   outputs.forEach((o, i) => {
     const v = (decoded as Record<string, unknown>)[String(i)];
-    out[o.name && o.name !== '' ? o.name : `_${i}`] = qNormalise(v, o.type);
+    out[o.name && o.name !== '' ? o.name : `_${i}`] = qNormaliseAbiValue(v, o.type);
   });
   return JSON.stringify(out, replacer, 2);
-}
-
-function qNormalise(v: unknown, type: string): unknown {
-  if (type === 'address' && typeof v === 'string' && /^Z[0-9a-fA-F]{40}$/.test(v)) {
-    return 'Q' + v.slice(1);
-  }
-  if (type.startsWith('address[') && Array.isArray(v)) {
-    return v.map(x => qNormalise(x, 'address'));
-  }
-  return v;
 }
 
 function replacer(_k: string, v: unknown): unknown {
