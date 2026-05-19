@@ -250,6 +250,31 @@ func UpdateVerificationJob(jobID string, patch bson.M) error {
 	return nil
 }
 
+// FindVerificationJobsByAddress lists verification jobs for a contract
+// address, filtered to a single status (e.g. "pending" or "compiling").
+// `limit` bounds the result; pass 1 for a "does any in-flight job exist"
+// check.
+func FindVerificationJobsByAddress(address string, status models.VerificationJobStatus, limit int64) ([]models.ContractVerificationJob, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	normalizedAddr := normalizeAddress(address)
+	filter := bson.M{"address": normalizedAddr, "status": status}
+	opts := options.Find().SetLimit(limit).SetSort(bson.D{{Key: "createdAt", Value: -1}})
+
+	cursor, err := configs.ContractVerificationsCollection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var jobs []models.ContractVerificationJob
+	if err := cursor.All(ctx, &jobs); err != nil {
+		return nil, err
+	}
+	return jobs, nil
+}
+
 // GetContractByCreationTx returns contract info for a given creation transaction hash
 func GetContractByCreationTx(txHash string) (*models.ContractInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
