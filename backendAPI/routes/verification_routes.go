@@ -33,12 +33,21 @@ func RegisterVerificationRoutes(router *gin.Engine) {
 		c.JSON(http.StatusOK, v.Compiler.CompilerInfo())
 	})
 
+	// Maximum body size for a verify submission. The compiler also has
+	// VERIFIER_SOURCE_MAX_BYTES (default 256 KiB) on the marshalled
+	// standard-JSON payload, but that fires AFTER ShouldBindJSON has
+	// already buffered the request. Cap the raw stream too so a malicious
+	// gigantic body can't OOM the process during JSON binding.
+	const verifyMaxRequestBytes int64 = 1 << 20 // 1 MiB
+
 	router.POST("/contract/verify", verifyLimiter, func(c *gin.Context) {
 		v := verification.Default()
 		if v == nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "contract verification not configured"})
 			return
 		}
+
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, verifyMaxRequestBytes)
 
 		var req verification.VerifyRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -129,10 +138,14 @@ func RegisterVerificationRoutes(router *gin.Engine) {
 
 // newJobID returns a short opaque token (16 hex chars). Crypto random is
 // overkill for an externally-opaque handle but it's free and keeps callers
-// from guessing other users' jobs.
+// from guessing other users' jobs. A rand.Read failure on Linux/macOS
+// means /dev/urandom is unreadable — the process is unsalvageable, so
+// panic rather than continue with a degenerate ID.
 func newJobID() string {
 	var buf [8]byte
-	_, _ = rand.Read(buf[:])
+	if _, err := rand.Read(buf[:]); err != nil {
+		panic("verification: crypto/rand unavailable: " + err.Error())
+	}
 	return hex.EncodeToString(buf[:])
 }
 

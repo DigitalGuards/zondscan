@@ -19,11 +19,33 @@ import (
 //
 // Implementation is sync.Map + a per-entry mutex; cheap enough for the
 // small request volume we expect on /contract/verify (one submission per
-// human action). Eviction is opportunistic — buckets that haven't been
-// touched in 10×window get garbage-collected on the next access.
+// human action). A janitor goroutine fully evicts idle buckets every
+// `window` so the map doesn't grow unbounded as unique IPs hit the endpoint.
 func PerIPRateLimit(burst float64, refill float64, window time.Duration) gin.HandlerFunc {
 	var buckets sync.Map // key: string IP, val: *bucket
-	evictAfter := 10 * window
+	const idleMultiplier = 10
+	evictAfter := time.Duration(idleMultiplier) * window
+
+	// Start the janitor once per middleware instance. It walks the map
+	// each `window` and `buckets.Delete`s any entry untouched for longer
+	// than `evictAfter`. Costs O(active IPs) per tick, which is fine — we
+	// never expect more than thousands of concurrent verifiers.
+	go func() {
+		ticker := time.NewTicker(window)
+		defer ticker.Stop()
+		for now := range ticker.C {
+			buckets.Range(func(k, v interface{}) bool {
+				b := v.(*bucket)
+				b.mu.Lock()
+				idle := now.Sub(b.last)
+				b.mu.Unlock()
+				if idle > evictAfter {
+					buckets.Delete(k)
+				}
+				return true
+			})
+		}
+	}()
 
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
@@ -33,9 +55,8 @@ func PerIPRateLimit(burst float64, refill float64, window time.Duration) gin.Han
 		b := val.(*bucket)
 
 		b.mu.Lock()
-		// Evict idle bucket (other IPs sharing this map don't get cleaned
-		// up automatically — opportunistic on access is fine for our
-		// volume).
+		// Belt-and-braces in case a request races the janitor: if the
+		// bucket was effectively dropped mid-tick, reset it.
 		if now.Sub(b.last) > evictAfter {
 			b.tokens = burst
 		} else {
