@@ -111,9 +111,13 @@ export default async function TransactionPage({ params }: PageProps): Promise<JS
     redirect(`/pending/tx/${txHash}`);
   }
 
+  // Constructing JSX inside the try/catch lets render-time errors escape
+  // the catch block (React doesn't render synchronously), so the rule
+  // react-hooks/error-boundaries flags it. Resolve the transaction first,
+  // then return the JSX outside the try.
+  let transaction;
   try {
-    const transaction = await getTransaction(txHash);
-    return <TransactionView transaction={transaction} />;
+    transaction = await getTransaction(txHash);
   } catch (error) {
     console.error('Error in TransactionPage:', error);
     return (
@@ -132,4 +136,5 @@ export default async function TransactionPage({ params }: PageProps): Promise<JS
       </div>
     );
   }
+  return <TransactionView transaction={transaction} />;
 }
