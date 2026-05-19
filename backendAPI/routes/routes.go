@@ -67,6 +67,11 @@ func UserRoute(router *gin.Engine) {
 	// gas-cap + per-call timeout.
 	RegisterContractCallRoute(router)
 
+	// Contract AI explainer (POST /contract/explain/:address). Hard gate:
+	// only verified contracts are analysed. Returns 503 when the
+	// Anthropic key isn't configured. Per-IP rate-limited (10/min).
+	RegisterContractExplainRoute(router)
+
 	// Add pending transactions endpoint with pagination
 	router.GET("/pending-transactions", func(c *gin.Context) {
 		page, limit := getPaginationParams(c, 1, 10)

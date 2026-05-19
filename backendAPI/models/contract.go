@@ -42,4 +42,12 @@ type ContractInfo struct {
 	License              string            `json:"license,omitempty" bson:"license,omitempty"`
 	VerificationMethod   string            `json:"verificationMethod,omitempty" bson:"verificationMethod,omitempty"`
 	VerifiedAt           string            `json:"verifiedAt,omitempty" bson:"verifiedAt,omitempty"`
+
+	// M6a AI explanation cache. Populated only when an authorised user has
+	// triggered POST /contract/explain/:address. The syncer must NOT write
+	// into these — kept off the syncer's allow-list in
+	// QRL2MongoDB/db/contracts.go:StoreContract.
+	AIExplanation      string `json:"aiExplanation,omitempty" bson:"aiExplanation,omitempty"`
+	AIExplanationAt    string `json:"aiExplanationAt,omitempty" bson:"aiExplanationAt,omitempty"`
+	AIExplanationModel string `json:"aiExplanationModel,omitempty" bson:"aiExplanationModel,omitempty"`
 }

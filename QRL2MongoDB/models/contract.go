@@ -80,6 +80,13 @@ type ContractInfo struct {
 	License              string            `bson:"license,omitempty" json:"license,omitempty"`
 	VerificationMethod   string            `bson:"verificationMethod,omitempty" json:"verificationMethod,omitempty"`
 	VerifiedAt           string            `bson:"verifiedAt,omitempty" json:"verifiedAt,omitempty"`
+
+	// M6a AI explanation cache. Written exclusively by the backend
+	// /contract/explain endpoint; the syncer holds them only for
+	// round-trip preservation.
+	AIExplanation      string `bson:"aiExplanation,omitempty" json:"aiExplanation,omitempty"`
+	AIExplanationAt    string `bson:"aiExplanationAt,omitempty" json:"aiExplanationAt,omitempty"`
+	AIExplanationModel string `bson:"aiExplanationModel,omitempty" json:"aiExplanationModel,omitempty"`
 }
 
 // LogsResponse represents the response from qrl_getLogs
