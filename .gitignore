@@ -6,7 +6,6 @@ ExplorerFrontend/.pnp.js
 ExplorerFrontend/coverage
 ExplorerFrontend/build
 ExplorerFrontend/tsconfig.tsbuildinfo
-ExplorerFrontend/.env.local
 QRL2MongoDB/.env
 QRL2MongoDB/main.exe
 QRL2MongoDB/logs.log
