@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import CopyButton from './CopyButton';
 import ContractBytecode from './ContractBytecode';
+import ReadContract from './ReadContract';
 import type { ContractData } from '../types/address';
 
 interface ContractTabsProps {
@@ -48,7 +49,7 @@ export default function ContractTabs({ contractData }: ContractTabsProps): JSX.E
       </div>
 
       {tab === 'code' && <CodeTab contractData={contractData} parsedAbi={parsedAbi} />}
-      {tab === 'read' && <ComingSoonTab label="Read contract" subhead="View/pure function dispatcher arrives in a follow-up." />}
+      {tab === 'read' && <ReadContract contractData={contractData} />}
       {tab === 'write' && <ComingSoonTab label="Write contract" subhead="State-changing calls via wallet pairing arrive in a follow-up." />}
     </div>
   );

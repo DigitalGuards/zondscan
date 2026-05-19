@@ -62,6 +62,11 @@ func UserRoute(router *gin.Engine) {
 	// so this is safe to wire unconditionally.
 	RegisterVerificationRoutes(router)
 
+	// Contract-read endpoint (POST /contract/call). Open eth_call proxy
+	// scoped to known contract addresses, with rate-limit + size-cap +
+	// gas-cap + per-call timeout.
+	RegisterContractCallRoute(router)
+
 	// Add pending transactions endpoint with pagination
 	router.GET("/pending-transactions", func(c *gin.Context) {
 		page, limit := getPaginationParams(c, 1, 10)
