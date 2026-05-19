@@ -31,6 +31,13 @@ type MatchOutcome struct {
 	ImmutablesCount int
 }
 
+// nodeHTTPClient is a process-wide HTTP client reused for every
+// qrl_getCode call. Reusing the same client (and thus the same connection
+// pool / DNS cache) is materially cheaper than `&http.Client{}` per call,
+// which would force a fresh TCP+TLS handshake every time the verifier
+// queries the node.
+var nodeHTTPClient = &http.Client{Timeout: 10 * time.Second}
+
 // FetchOnChainCode pulls the authoritative runtime code via qrl_getCode.
 // Never trust the syncer's base64-encoded contractCode field for matching:
 // the syncer source might lag, and any byte-shape difference between
@@ -58,8 +65,7 @@ func FetchOnChainCode(ctx context.Context, address string) (string, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := nodeHTTPClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("node RPC: %w", err)
 	}

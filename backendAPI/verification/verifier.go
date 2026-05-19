@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -41,7 +42,12 @@ func (v *Verifier) RunAsync(jobID string, req VerifyRequest) {
 }
 
 func (v *Verifier) run(ctx context.Context, jobID string, req VerifyRequest) {
-	_ = db.UpdateVerificationJob(jobID, bson.M{"status": models.VerificationJobCompiling})
+	if err := db.UpdateVerificationJob(jobID, bson.M{"status": models.VerificationJobCompiling}); err != nil {
+		// Status transition failures aren't fatal — the rest of the run
+		// continues and the client will see the eventual terminal state.
+		// But we log so persistent mongo issues don't go unnoticed.
+		log.Printf("verifier: failed to mark job %s compiling: %v", jobID, err)
+	}
 
 	input := wrapStandardJSON(req)
 
@@ -101,21 +107,25 @@ func (v *Verifier) run(ctx context.Context, jobID string, req VerifyRequest) {
 		return
 	}
 
-	_ = db.UpdateVerificationJob(jobID, bson.M{
+	if err := db.UpdateVerificationJob(jobID, bson.M{
 		"status": models.VerificationJobSuccess,
 		"error":  "",
 		"result": models.VerificationJobResultRef{
 			Abi:        string(abiBytes),
 			VerifiedAt: time.Now().UTC().Format(time.RFC3339),
 		},
-	})
+	}); err != nil {
+		log.Printf("verifier: failed to mark job %s success: %v", jobID, err)
+	}
 }
 
 func failJob(jobID, msg string) {
-	_ = db.UpdateVerificationJob(jobID, bson.M{
+	if err := db.UpdateVerificationJob(jobID, bson.M{
 		"status": models.VerificationJobFailed,
 		"error":  msg,
-	})
+	}); err != nil {
+		log.Printf("verifier: failed to mark job %s failed (%q): %v", jobID, msg, err)
+	}
 }
 
 // wrapStandardJSON builds the Hyperion standard-JSON input from the user-
