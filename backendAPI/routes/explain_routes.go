@@ -67,6 +67,10 @@ func RegisterContractExplainRoute(router *gin.Engine) {
 				c.JSON(http.StatusNotFound, gin.H{"error": "address is not a known contract"})
 			case errors.Is(err, aiexplain.ErrNotVerified):
 				c.JSON(http.StatusForbidden, gin.H{"error": "contract is not verified — only verified contracts can be analysed"})
+			case errors.Is(err, aiexplain.ErrRegenCap):
+				c.JSON(http.StatusTooManyRequests, gin.H{
+					"error": "regeneration cap reached: 5 regenerations per contract per 7-day window. Try again later.",
+				})
 			default:
 				log.Printf("explain: %s failed: %v", addr, err)
 				c.JSON(http.StatusBadGateway, gin.H{"error": "AI explanation failed: " + err.Error()})
