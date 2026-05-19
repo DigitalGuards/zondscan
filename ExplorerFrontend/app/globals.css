@@ -100,6 +100,30 @@
            placeholder-gray-500 outline-hidden transition-colors;
 }
 
+/* Tailwind v4 doesn't ship @tailwindcss/forms, so add explicit utilities for
+   the form controls used by the verify / read / write flows. Without these,
+   the bare `<input>` and `<textarea>` elements render with no background,
+   no border, and the parent card bleeds through them — the boxes look
+   "edgeless" and hard to target.
+   Styling mirrors the dapp-example page on zondscan.com/dapp-example so the
+   verify / read / write surfaces feel consistent with the wallet-pairing
+   demo: dark page-bg fill (one tier darker than the surrounding card),
+   subtle border that matches the card body, accent-only focus (no ring). */
+@utility form-input {
+  @apply block w-full bg-background text-gray-200
+           border border-background-secondary rounded-md
+           px-3 py-2.5 text-sm
+           focus:outline-none focus:border-accent
+           placeholder-gray-500 transition-colors;
+}
+
+@utility form-checkbox {
+  @apply h-4 w-4 rounded border border-background-secondary bg-background
+           text-accent
+           focus:outline-none focus:border-accent
+           transition-colors;
+}
+
 @utility table-header {
   /* Table styles */
   @apply px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm
