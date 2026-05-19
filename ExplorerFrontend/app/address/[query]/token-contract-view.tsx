@@ -357,7 +357,13 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                     {contractData.verified && <VerifiedBadge />}
                                 </div>
                                 <ContractTabs
+                                    // Forward the whole contractData and only override
+                                    // the few required-string fields that ContractData
+                                    // wants non-optional. Avoids hand-listing every
+                                    // optional verification field — adding a new field
+                                    // to ContractData just flows through.
                                     contractData={{
+                                        ...contractData,
                                         creatorAddress: creatorAddress,
                                         address: address,
                                         contractCode: contractData.contractCode,
@@ -369,15 +375,6 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                         symbol: contractData.symbol ?? '',
                                         updatedAt: contractData.updatedAt ?? '',
                                         verified: contractData.verified ?? false,
-                                        sourceCode: contractData.sourceCode,
-                                        abi: contractData.abi,
-                                        contractName: contractData.contractName,
-                                        compilerVersion: contractData.compilerVersion,
-                                        optimizationEnabled: contractData.optimizationEnabled,
-                                        optimizationRuns: contractData.optimizationRuns,
-                                        evmVersion: contractData.evmVersion,
-                                        license: contractData.license,
-                                        verifiedAt: contractData.verifiedAt,
                                     }}
                                 />
                             </div>
