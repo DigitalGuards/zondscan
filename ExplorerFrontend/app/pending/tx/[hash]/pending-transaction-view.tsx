@@ -92,34 +92,46 @@ export default function PendingTransactionView({ pendingTx }: PendingTransaction
   });
 
   // ── Mined → navigate, dropped → flip local state ───────────────────────
-  const [isDropped, setIsDropped] = useState(false);
+  // Derive isDropped from the polled status directly. router.replace is
+  // a side effect that *must* stay in a useEffect (no setState involved
+  // there, so the rule doesn't fire).
+  const isDropped = statusQuery.data?.status === 'dropped';
   useEffect(() => {
     if (statusQuery.data?.status === 'mined') {
       router.replace(`/tx/${pendingTx.hash}`);
-    } else if (statusQuery.data?.status === 'dropped') {
-      setIsDropped(true);
     }
   }, [statusQuery.data?.status, pendingTx.hash, router]);
 
   // ── Elapsed counter (driven by local 1s tick, independent of polls) ────
   // Seed from createdAt so SSR and the first client render produce identical
-  // markup (elapsed = 0); hydrate to real wall-clock time in the effect.
+  // markup (elapsed = 0); hydrate to real wall-clock time after mount via
+  // a deferred setState (outside the synchronous effect body) so we don't
+  // trip set-state-in-effect.
   const [nowSec, setNowSec] = useState(pendingTx.createdAt ?? 0);
   useEffect(() => {
-    setNowSec(Math.floor(Date.now() / 1000));
-    if (statusQuery.data?.status !== 'pending') return;
+    const seed = setTimeout(() => setNowSec(Math.floor(Date.now() / 1000)), 0);
+    if (statusQuery.data?.status !== 'pending') {
+      return () => clearTimeout(seed);
+    }
     const id = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 1000);
-    return () => clearInterval(id);
+    return () => {
+      clearTimeout(seed);
+      clearInterval(id);
+    };
   }, [statusQuery.data?.status]);
   const elapsedSec = Math.max(0, nowSec - (pendingTx.createdAt ?? nowSec));
 
   // ── ETA countdown — seeded from each poll, ticks down every second ─────
+  // Adjusting-state-on-prop-change: detect a new poll value mid-render and
+  // resync without writing state inside an effect (set-state-in-effect).
   const [etaRemaining, setEtaRemaining] = useState<number | null>(null);
-  useEffect(() => {
+  const [prevEtaSec, setPrevEtaSec] = useState<number | undefined>(undefined);
+  if (etaQuery.data?.etaSec !== prevEtaSec) {
+    setPrevEtaSec(etaQuery.data?.etaSec);
     if (typeof etaQuery.data?.etaSec === 'number') {
       setEtaRemaining(Math.max(0, Math.round(etaQuery.data.etaSec)));
     }
-  }, [etaQuery.data?.etaSec]);
+  }
   const hasEta = etaRemaining !== null;
   useEffect(() => {
     if (!hasEta) return;

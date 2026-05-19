@@ -56,6 +56,17 @@ func UserRoute(router *gin.Engine) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
+	// Contract-verification endpoints (POST /contract/verify, GET
+	// /contract/verify/:jobId, GET /contract/compiler-info). The
+	// individual handlers return 503 when verification.Default() is nil,
+	// so this is safe to wire unconditionally.
+	RegisterVerificationRoutes(router)
+
+	// Contract-read endpoint (POST /contract/call). Open eth_call proxy
+	// scoped to known contract addresses, with rate-limit + size-cap +
+	// gas-cap + per-call timeout.
+	RegisterContractCallRoute(router)
+
 	// Add pending transactions endpoint with pagination
 	router.GET("/pending-transactions", func(c *gin.Context) {
 		page, limit := getPaginationParams(c, 1, 10)
@@ -625,7 +636,11 @@ func UserRoute(router *gin.Engine) {
 		v, err := routeCache.GetOrCompute("latest-txs", 5*time.Second, func() (interface{}, error) {
 			query, qerr := db.ReturnLatestTransactions()
 			if qerr != nil {
+				// Return the error so the cache doesn't store an empty
+				// payload — the next caller will retry against Mongo
+				// instead of being served stale junk for 5s.
 				log.Printf("error fetching latest transactions: %v", qerr)
+				return nil, qerr
 			}
 			return gin.H{"response": query}, nil
 		})

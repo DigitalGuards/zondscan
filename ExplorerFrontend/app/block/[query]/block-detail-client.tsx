@@ -87,30 +87,38 @@ const formatTimestampUTC = (timestamp: string | null | undefined): string => {
 };
 
 export default function BlockDetailClient({ blockNumber }: BlockDetailClientProps): JSX.Element {
-  const [blockData, setBlockData] = useState<Block | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [notFound, setNotFound] = useState(false);
-
-  const blockNum = parseInt(blockNumber);
-
   // Reject obviously-bad inputs before hitting the API: negative numbers,
   // non-integers, NaN, and absurdly long hex strings would all just earn
   // a 400 from the backend. Catching them here keeps the URL bar honest
   // and skips the network round-trip + console noise.
-  const isValidBlockId = (() => {
+  const isValidBlockId = ((): boolean => {
     if (!blockNumber) return false;
     if (blockNumber.startsWith('0x')) return /^0x[0-9a-fA-F]{1,16}$/.test(blockNumber);
     const n = parseInt(blockNumber, 10);
     return Number.isFinite(n) && n >= 0 && String(n) === blockNumber;
   })();
 
+  const [blockData, setBlockData] = useState<Block | null>(null);
+  // Initialise loading/notFound from the validity check so the invalid-id
+  // path doesn't need to write state inside a useEffect (set-state-in-effect
+  // rule). React's "adjusting state on prop change" pattern below resyncs
+  // when the user navigates between blocks.
+  const [loading, setLoading] = useState<boolean>(isValidBlockId);
+  const [error, setError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState<boolean>(!isValidBlockId);
+  const [prevBlock, setPrevBlock] = useState<string>(blockNumber);
+  if (prevBlock !== blockNumber) {
+    setPrevBlock(blockNumber);
+    setBlockData(null);
+    setError(null);
+    setLoading(isValidBlockId);
+    setNotFound(!isValidBlockId);
+  }
+
+  const blockNum = parseInt(blockNumber);
+
   useEffect(() => {
-    if (!isValidBlockId) {
-      setLoading(false);
-      setNotFound(true);
-      return;
-    }
+    if (!isValidBlockId) return;
     const fetchBlock = async (): Promise<void> => {
       try {
         setLoading(true);

@@ -437,10 +437,15 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
   }, []);
 
   React.useEffect(() => {
-    fetchData();
+    // Defer the initial call so its inner setState() lands outside the
+    // synchronous effect body (set-state-in-effect rule).
+    const initial = setTimeout(fetchData, 0);
     // Refresh every 30s (approx half a slot)
     const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(initial);
+      clearInterval(interval);
+    };
   }, [fetchData]);
 
   return (

@@ -1,0 +1,12 @@
+{
+  "name": "hypc-runner",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Node entry that wraps @theqrl/hypc for the Go verifier backend. Invoked one-shot per verify request.",
+  "scripts": {
+    "version": "node hypc-runner.js --version"
+  },
+  "dependencies": {
+    "@theqrl/hypc": "^0.0.2"
+  }
+}

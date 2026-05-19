@@ -28,6 +28,47 @@ type TabType = 'tokens' | 'contracts';
 
 const ITEMS_PER_PAGE = 15;
 
+// Hoisted out of the render body so each ContractsClient render doesn't
+// allocate a brand-new component identity. React 19 (and the new
+// react-hooks/error-boundaries rule) flag in-render component creation as
+// a bug — every new identity loses state and re-mounts children.
+function TabButton({
+  tab,
+  label,
+  count,
+  activeTab,
+  onSelect,
+}: {
+  tab: TabType;
+  label: string;
+  count?: number;
+  activeTab: TabType;
+  onSelect: (t: TabType) => void;
+}): JSX.Element {
+  const active = activeTab === tab;
+  return (
+    <button
+      role="tab"
+      aria-selected={active}
+      onClick={() => onSelect(tab)}
+      className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+        active ? 'bg-[#ffa729] text-black' : 'bg-[#2d2d2d] text-gray-300 hover:bg-[#3d3d3d]'
+      }`}
+    >
+      {label}
+      {count !== undefined && (
+        <span
+          className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
+            active ? 'bg-black/20' : 'bg-[#1f1f1f]'
+          }`}
+        >
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
 // Format total supply (uses 10^decimals)
 function formatTotalSupply(supply: string | undefined, decimals: number | undefined): string {
   if (!supply || supply === '0') return '0';
@@ -122,34 +163,16 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
     return () => clearTimeout(timer);
   }, [activeTab, searchQuery, currentPage, fetchContracts]);
 
-  // Reset page when tab or search changes
-  useEffect(() => {
-    setCurrentPage(0);
-  }, [activeTab, searchQuery]);
+  // Reset page when tab or search changes — adjusting state on prop/state
+  // change instead of writing it in an effect (set-state-in-effect).
+  const [prevReset, setPrevReset] = useState<string>(`${activeTab}|${searchQuery}`);
+  const resetKey = `${activeTab}|${searchQuery}`;
+  if (prevReset !== resetKey) {
+    setPrevReset(resetKey);
+    if (currentPage !== 0) setCurrentPage(0);
+  }
 
   const totalPages = Math.max(1, Math.ceil(total / ITEMS_PER_PAGE));
-
-  const TabButton = ({ tab, label, count }: { tab: TabType; label: string; count?: number }) => (
-    <button
-      role="tab"
-      aria-selected={activeTab === tab}
-      onClick={() => setActiveTab(tab)}
-      className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-        activeTab === tab
-          ? 'bg-[#ffa729] text-black'
-          : 'bg-[#2d2d2d] text-gray-300 hover:bg-[#3d3d3d]'
-      }`}
-    >
-      {label}
-      {count !== undefined && (
-        <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
-          activeTab === tab ? 'bg-black/20' : 'bg-[#1f1f1f]'
-        }`}>
-          {count}
-        </span>
-      )}
-    </button>
-  );
 
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
@@ -161,8 +184,8 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
 
       {/* Tabs */}
       <div role="tablist" className="flex gap-2 mb-6">
-        <TabButton tab="tokens" label="Tokens" />
-        <TabButton tab="contracts" label="All Contracts" />
+        <TabButton tab="tokens" label="Tokens" activeTab={activeTab} onSelect={setActiveTab} />
+        <TabButton tab="contracts" label="All Contracts" activeTab={activeTab} onSelect={setActiveTab} />
       </div>
 
       {/* Search */}
