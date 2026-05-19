@@ -181,6 +181,39 @@ func MarkContractVerified(address string, result models.VerificationResult) erro
 	return nil
 }
 
+// SaveContractExplanation persists the M6a AI-generated explanation onto
+// the contract document. Uses the same field-scoped $set pattern as
+// MarkContractVerified so the syncer cannot stomp the cache during a
+// concurrent contract-state refresh.
+//
+// generatedAt is the caller's responsibility (typically time.Now().UTC()
+// formatted RFC3339) so the explainer can echo back the same timestamp it
+// returns to the HTTP client without a re-read.
+func SaveContractExplanation(address, explanation, model, generatedAt string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	normalizedAddr := normalizeAddress(address)
+	res, err := configs.ContractInfoCollection.UpdateOne(
+		ctx,
+		bson.M{"address": normalizedAddr},
+		bson.M{"$set": bson.M{
+			"aiExplanation":      explanation,
+			"aiExplanationAt":    generatedAt,
+			"aiExplanationModel": model,
+		}},
+	)
+	if err != nil {
+		log.Printf("SaveContractExplanation: failed to update %s: %v", normalizedAddr, err)
+		return err
+	}
+	if res.MatchedCount == 0 {
+		log.Printf("SaveContractExplanation: no contract document for %s", normalizedAddr)
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
 // CreateVerificationJob inserts a fresh job row in `pending` state. The
 // caller (HTTP layer) supplies a UUID-like JobID and the echoed Payload.
 func CreateVerificationJob(job models.ContractVerificationJob) error {

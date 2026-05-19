@@ -6,6 +6,7 @@ import CopyButton from './CopyButton';
 import ContractBytecode from './ContractBytecode';
 import ReadContract from './ReadContract';
 import WriteContract from './WriteContract';
+import AiExplainCard from './AiExplainCard';
 import type { ContractData } from '../types/address';
 
 interface ContractTabsProps {
@@ -98,6 +99,7 @@ function CodeTab({ contractData, parsedAbi }: { contractData: ContractData; pars
   return (
     <div className="space-y-3 md:space-y-4">
       <CompilerSettings contractData={contractData} />
+      <AiExplainCard contractData={contractData} />
       <SourcePanel contractData={contractData} />
       <AbiPanel abi={parsedAbi} raw={contractData.abi ?? ''} />
       <ContractBytecode contractCode={contractData.contractCode} />
