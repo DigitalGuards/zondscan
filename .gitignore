@@ -13,6 +13,7 @@ QRL2MongoDB/rpc/.env
 backendAPI/main.exe
 backendAPI/.env.production
 backendAPI/.env.development
+backendAPI/verification/runner/node_modules
 *.exe
 .DS_Store
 npm-debug.log*

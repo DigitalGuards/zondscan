@@ -3,6 +3,7 @@ package handler
 import (
 	"backendAPI/configs"
 	"backendAPI/routes"
+	"backendAPI/verification"
 	"log"
 	"os"
 	"runtime/debug"
@@ -73,6 +74,15 @@ func RequestHandler() {
 		log.Fatal("Failed to get MongoDB client, shutting down")
 	}
 	log.Println("MongoDB connection successful")
+
+	// Init the contract-verification singleton before routes register —
+	// the handlers tolerate a nil verifier (503 response) so a missing
+	// HYPC_RUNNER env never blocks the rest of the backend from booting.
+	if err := verification.Init(); err != nil {
+		log.Printf("Contract verification disabled: %v", err)
+	} else {
+		log.Println("Contract verification ready")
+	}
 
 	// Configure routes
 	log.Println("Configuring API routes...")
