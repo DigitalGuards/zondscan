@@ -158,7 +158,9 @@ function SourcePanel({ contractData }: { contractData: ContractData }) {
 
 function AbiPanel({ abi, raw }: { abi: unknown | null; raw: string }) {
   const [expanded, setExpanded] = useState(false);
-  if (!raw) return null;
+  // Hooks must be called unconditionally — the early return below cannot
+  // precede useMemo. raw='' is a cheap input for JSON.stringify so the
+  // computed value is harmless when the panel is about to bail.
   const pretty = useMemo(() => {
     if (abi === null) return raw;
     try {
@@ -167,6 +169,7 @@ function AbiPanel({ abi, raw }: { abi: unknown | null; raw: string }) {
       return raw;
     }
   }, [abi, raw]);
+  if (!raw) return null;
 
   return (
     <div>

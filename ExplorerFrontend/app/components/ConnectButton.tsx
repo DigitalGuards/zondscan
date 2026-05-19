@@ -31,22 +31,53 @@ const STATUS_LABEL: Record<ConnectionStatus, string> = {
  * lib/qrlConnect.ts) so multiple components sharing it don't double-announce
  * via EIP-6963 or stomp on the persisted-session storage key.
  */
+// Lazy snapshot of any stored session so the initial render shows the
+// connected pill instead of flashing the "Connect Wallet" CTA before the
+// reconnect effect runs. Returning these from useState initializers (rather
+// than calling setState() inside useEffect) satisfies the new
+// `react-hooks/set-state-in-effect` rule.
+function initialAccount(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const qrl = getQrlConnect();
+    if (qrl.hasStoredSession()) return qrl.getAccounts()[0] ?? null;
+  } catch {
+    // SSR / test environments without window.crypto etc.
+  }
+  return null;
+}
+function initialStatus(): ConnectionStatus {
+  if (typeof window === 'undefined') return ConnectionStatus.DISCONNECTED;
+  try {
+    const qrl = getQrlConnect();
+    if (qrl.hasStoredSession()) return ConnectionStatus.RECONNECTING;
+  } catch {
+    // Fall through to disconnected.
+  }
+  return ConnectionStatus.DISCONNECTED;
+}
+
 export default function ConnectButton({ onAccount, onProvider }: ConnectButtonProps): JSX.Element {
   const [open, setOpen] = useState(false);
   const [uri, setUri] = useState<string | null>(null);
-  const [status, setStatus] = useState<ConnectionStatus>(ConnectionStatus.DISCONNECTED);
-  const [account, setAccount] = useState<string | null>(null);
+  const [status, setStatus] = useState<ConnectionStatus>(initialStatus);
+  const [account, setAccount] = useState<string | null>(initialAccount);
   const [error, setError] = useState<string | null>(null);
   const providerRef = useRef<QRLConnectProvider | null>(null);
 
-  // One-time SDK init + event wire-up. Guarded by `providerRef.current`
-  // rather than the empty-deps array alone, because React 18 Strict Mode
-  // double-invokes effects in dev and we must not register listeners twice.
+  // Event wire-up. Guarded by `providerRef.current` rather than the empty-
+  // deps array alone, because React 18 Strict Mode double-invokes effects
+  // in dev and we must not register listeners twice. All state writes
+  // happen inside event-emitter callbacks (never in the effect body), so
+  // this complies with `react-hooks/set-state-in-effect`.
   useEffect(() => {
     if (providerRef.current) return;
     const qrl = getQrlConnect();
     providerRef.current = qrl;
     onProvider?.(qrl);
+    // Notify the parent once on mount if we already restored an account
+    // from the stored session via the useState initializer above.
+    if (account) onAccount?.(account);
 
     const onConnect = () => {
       setStatus(ConnectionStatus.CONNECTED);
@@ -75,25 +106,15 @@ export default function ConnectButton({ onAccount, onProvider }: ConnectButtonPr
     qrl.on('disconnect', onDisconnect);
     qrl.on('statusChanged', onStatusChanged);
 
-    // Auto-reconnect if a session is in localStorage. Surface the cached
-    // accounts immediately so the Write tab doesn't render a stale
-    // "Connect Wallet" CTA while the relay handshake completes in the
-    // background.
-    if (qrl.hasStoredSession()) {
-      const cached = qrl.getAccounts();
-      if (cached.length > 0) {
-        setAccount(cached[0]);
-        onAccount?.(cached[0]);
-      }
-      setStatus(ConnectionStatus.RECONNECTING);
-    }
-
     return () => {
       qrl.off('connect', onConnect);
       qrl.off('accountsChanged', onAccountsChanged);
       qrl.off('disconnect', onDisconnect);
       qrl.off('statusChanged', onStatusChanged);
     };
+    // `account` is read once at mount only — listing it would re-attach
+    // listeners on every account change, which is wrong.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onAccount, onProvider]);
 
   const openPairing = useCallback(async () => {
