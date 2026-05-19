@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -53,20 +54,63 @@ func RequestHandler() {
 
 	router := gin.New() // Use New() instead of Default() for custom middleware
 
+	// Trust only the local reverse proxy when reading X-Forwarded-For /
+	// X-Real-IP. Without this, gin.New() defaults to trusting all proxies
+	// and `c.ClientIP()` returns the first IP in any client-supplied XFF
+	// header — letting an attacker pick a fresh per-IP rate-limit bucket
+	// per request just by sending `X-Forwarded-For: <random>`. In prod,
+	// nginx terminates TLS and reaches us over loopback, so loopback +
+	// link-local IPv6 are the only legitimate proxy hops.
+	//
+	// Operators behind a different proxy topology should override via the
+	// TRUSTED_PROXIES env var (comma-separated CIDRs or addresses).
+	trustedProxies := []string{"127.0.0.1", "::1"}
+	if env := os.Getenv("TRUSTED_PROXIES"); env != "" {
+		trustedProxies = trustedProxies[:0]
+		for _, p := range strings.Split(env, ",") {
+			if p = strings.TrimSpace(p); p != "" {
+				trustedProxies = append(trustedProxies, p)
+			}
+		}
+	}
+	if err := router.SetTrustedProxies(trustedProxies); err != nil {
+		log.Fatalf("Failed to configure trusted proxies (%v): %v", trustedProxies, err)
+	}
+	log.Printf("Trusted proxies: %v", trustedProxies)
+
 	// Add custom middlewares
 	router.Use(gin.Logger())         // Standard logger
 	router.Use(recoveryMiddleware()) // Custom recovery middleware
 	router.Use(monitorMiddleware())  // Request monitoring middleware
 
+	// CORS — scope to the explorer's own origins. POST endpoints
+	// (/contract/verify, /contract/call, /contract/explain) are not safe
+	// to expose to arbitrary web origins: a third-party page could fire
+	// off Anthropic-billed explain calls under the visitor's IP. The
+	// wildcard `Access-Control-Allow-Origin: *` is preserved only when
+	// CORS_ALLOW_ORIGINS is unset, so operators who explicitly want a
+	// fully open API can opt back in via env.
+	allowOrigins := []string{
+		"https://zondscan.com",
+		"https://www.zondscan.com",
+	}
+	if env := os.Getenv("CORS_ALLOW_ORIGINS"); env != "" {
+		allowOrigins = nil
+		for _, o := range strings.Split(env, ",") {
+			if o = strings.TrimSpace(o); o != "" {
+				allowOrigins = append(allowOrigins, o)
+			}
+		}
+	}
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"},
+		AllowOrigins:     allowOrigins,
 		AllowMethods:     []string{"GET", "POST"},
 		AllowHeaders:     []string{"Origin", "Content-Length", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: false, // Must be false when AllowOrigins is wildcard (CORS spec)
+		AllowCredentials: false,
 		MaxAge:           12 * time.Hour,
 	}))
-	log.Println("CORS configuration initialized successfully")
+	log.Printf("CORS allow-origins: %v", allowOrigins)
 
 	// Initialize MongoDB connection with additional error handling
 	log.Println("Initializing MongoDB connection...")
