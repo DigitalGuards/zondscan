@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import CopyButton from "../../components/CopyButton";
 import QRCodeButton from "../../components/QRCodeButton";
-import ContractBytecode from "../../components/ContractBytecode";
+import ContractTabs from "../../components/ContractTabs";
+import VerifiedBadge from "../../components/VerifiedBadge";
 import TanStackTable from "../../components/TanStackTable";
 import BalanceDisplay from "./balance-display";
 import ActivityDisplay from "./activity-display";
@@ -130,9 +131,12 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                     {contractData && contractData.contractCode && (
                         <div className="mt-4 md:mt-6">
                             <div className="card-simple p-3 md:p-4 lg:p-6 space-y-3 md:space-y-4">
-                                <h3 className="text-base md:text-lg font-semibold text-accent">
-                                    {contractData.isToken ? 'Token Contract' : 'Contract'} Information
-                                </h3>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <h3 className="text-base md:text-lg font-semibold text-accent">
+                                        {contractData.isToken ? 'Token Contract' : 'Contract'} Information
+                                    </h3>
+                                    {contractData.verified && <VerifiedBadge />}
+                                </div>
                                 
                                 <div className="space-y-3">
                                     {/* Creator Address */}
@@ -205,8 +209,11 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                         </div>
                                     </div>
 
-                                    {/* Contract Bytecode */}
-                                    <ContractBytecode contractCode={contractData.contractCode} />
+                                    {/* Contract Code (verified source / ABI / bytecode) +
+                                        Read / Write tabs. Replaces the old standalone bytecode
+                                        block. ContractTabs handles both the unverified state
+                                        (bytecode + Verify & Publish CTA) and the verified state. */}
+                                    <ContractTabs contractData={contractData} />
                                 </div>
                             </div>
                         </div>
