@@ -101,17 +101,21 @@ func (c *Client) Generate(ctx context.Context, system, user string) (string, str
 		return "", "", fmt.Errorf("anthropic HTTP %d: %s", resp.StatusCode, truncate(string(raw), 200))
 	}
 
-	for _, c := range parsed.Content {
-		if c.Type == "text" && c.Text != "" {
-			return c.Text, parsed.Model, nil
+	for _, block := range parsed.Content {
+		if block.Type == "text" && block.Text != "" {
+			return block.Text, parsed.Model, nil
 		}
 	}
 	return "", parsed.Model, fmt.Errorf("anthropic returned no text content")
 }
 
+// truncate caps the displayed length of a log message safely against
+// multi-byte UTF-8 input — slicing a string by byte index could split a
+// codepoint and produce invalid UTF-8 in logs.
 func truncate(s string, n int) string {
-	if len(s) <= n {
+	runes := []rune(s)
+	if len(runes) <= n {
 		return s
 	}
-	return s[:n] + "…"
+	return string(runes[:n]) + "…"
 }
