@@ -99,11 +99,16 @@ func FetchOnChainCode(ctx context.Context, address string) (string, error) {
 // on-chain runtime code, masking any `immutable`-backed byte ranges in
 // both before comparing.
 //
-// Per the M2.0 spike, Hyperion v0.0.2 does NOT emit a Solidity-style
-// CBOR metadata trailer, so there's no trailer to strip — the masked
-// bytes simply have to match exactly. If a future hypc build starts
-// emitting a trailer, extend this function with a strip step *before*
-// the length / equal compare.
+// Hyperion v0.0.2 emits a Solidity-style CBOR metadata trailer at the end
+// of the deployed bytecode (last 2 bytes = trailer length, preceding that
+// length is a CBOR map carrying the IPFS hash of source metadata + the
+// hypc build id). The trailer's IPFS hash mixes in the source file path
+// used at compile time, so a verifier that compiles via "Foo.hyp" cannot
+// recover the same hash as a deployer that compiled via "contract.hyp"
+// even when the source content is byte-identical. We strip the trailer
+// from both sides before comparing — the masking step that follows then
+// gives us a byte-equal compare of the code body, which is the security-
+// relevant payload.
 func Match(compiledHex, onChainHex string, immRefs map[string][]ImmutableRange) (MatchOutcome, error) {
 	compiledHex = strings.ToLower(strings.TrimPrefix(compiledHex, "0x"))
 	onChainHex = strings.ToLower(strings.TrimPrefix(onChainHex, "0x"))
@@ -128,6 +133,9 @@ func Match(compiledHex, onChainHex string, immRefs map[string][]ImmutableRange) 
 	if err != nil {
 		return out, fmt.Errorf("decode on-chain hex: %w", err)
 	}
+
+	cb = stripCBORTrailer(cb)
+	ob = stripCBORTrailer(ob)
 
 	immutablesCount := 0
 	for _, ranges := range immRefs {
@@ -189,4 +197,24 @@ func Match(compiledHex, onChainHex string, immRefs map[string][]ImmutableRange) 
 		}
 	}
 	return out, errors.New("byte slices unequal but no diff found")
+}
+
+// stripCBORTrailer removes the Solidity/Hyperion-style metadata trailer
+// from the end of deployed bytecode. The convention: the LAST 2 bytes are
+// a big-endian uint16 length of the preceding CBOR map; we strip those
+// length bytes + the map. Returns the input unchanged if the encoding
+// looks malformed (length too large, runaway), so corrupt input never
+// over-strips the code body.
+func stripCBORTrailer(b []byte) []byte {
+	if len(b) < 2 {
+		return b
+	}
+	cborLen := int(b[len(b)-2])<<8 | int(b[len(b)-1])
+	// Sanity: a real CBOR metadata blob is rarely more than ~100 bytes;
+	// cap at len-2 and ignore obviously-wrong values to avoid stripping
+	// the entire code on garbage tails.
+	if cborLen <= 0 || cborLen+2 > len(b) {
+		return b
+	}
+	return b[:len(b)-cborLen-2]
 }
