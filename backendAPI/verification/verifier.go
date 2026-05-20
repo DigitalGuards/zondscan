@@ -141,11 +141,13 @@ func wrapStandardJSON(req VerifyRequest) StandardJSONInput {
 		sources[normalizeImportPath(path)] = StandardJSONSource{Content: content}
 	}
 
+	// hypc 0.2.x treats "no optimizer block" and "optimizer: {enabled:false}"
+	// as different inputs — the latter still applies a baseline optimization
+	// pass that shrinks output by ~100 bytes. Since the standard CLI flow
+	// (`hypc --bin` with no flags) omits the optimizer entirely, we mirror
+	// that for the "optimizer off" path. Explicit enable still includes the
+	// block with the requested runs.
 	settings := StandardJSONSettings{
-		Optimizer: &Optimizer{
-			Enabled: req.OptimizerEnabled,
-			Runs:    req.OptimizerRuns,
-		},
 		EVMVersion: req.EvmVersion,
 		OutputSelection: map[string]map[string][]string{
 			"*": {
@@ -162,6 +164,13 @@ func wrapStandardJSON(req VerifyRequest) StandardJSONInput {
 				},
 			},
 		},
+	}
+	if req.OptimizerEnabled {
+		runs := req.OptimizerRuns
+		if runs <= 0 {
+			runs = 200
+		}
+		settings.Optimizer = &Optimizer{Enabled: true, Runs: runs}
 	}
 	if len(req.Libraries) > 0 {
 		// Libraries map is keyed by file → name → address. Best-effort:
