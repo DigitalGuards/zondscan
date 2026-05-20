@@ -120,9 +120,12 @@ func (c *Compiler) Compile(ctx context.Context, input StandardJSONInput) (*Stand
 
 	cmd := exec.CommandContext(subCtx, c.NodeBin, c.RunnerPath)
 	cmd.Stdin = bytes.NewReader(payload)
-	// Scrub the env — the runner only needs PATH to find node-bundled
-	// shared libs. Anything else is signalling we don't want leaking.
-	cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
+	// Scrub the env. Two pass-throughs:
+	//   PATH      — node + shell builtins
+	//   HYPC_BIN  — lets the native-binary runner (hypc-native.sh) pin an
+	//               absolute hypc path independent of PATH order. Ignored
+	//               by the WASM-via-Node runner.
+	cmd.Env = runnerEnv()
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -148,12 +151,23 @@ func (c *Compiler) probeVersion() (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, c.NodeBin, c.RunnerPath, "--version")
-	cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
+	cmd.Env = runnerEnv()
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// runnerEnv builds the minimal env passed to the runner subprocess.
+// Kept in one place so the Compile and probeVersion paths can't drift
+// from each other.
+func runnerEnv() []string {
+	env := []string{"PATH=" + os.Getenv("PATH")}
+	if v := os.Getenv("HYPC_BIN"); v != "" {
+		env = append(env, "HYPC_BIN="+v)
+	}
+	return env
 }
 
 func envWithDefault(k, d string) string {
