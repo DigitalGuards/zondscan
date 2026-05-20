@@ -79,19 +79,41 @@ type CompilerError struct {
 }
 
 // CompiledContract is the per-contract artifact from the compiler's output
-// for a given source unit. Hyperion uses `zvm` (Zond VM) rather than `evm`.
+// for a given source unit. The bytecode is published under different
+// top-level keys depending on the hypc version:
+//
+//   hypc 0.0.2  → `zvm`  (the legacy Zond VM naming)
+//   hypc 0.2.x+ → `qrvm` (post-fork QRL VM rename)
+//
+// Both shapes are parsed; the verifier picks whichever is populated via
+// `CompiledContract.DeployedBytecode()` so downstream code doesn't have
+// to branch on compiler version.
 type CompiledContract struct {
-	ABI json.RawMessage `json:"abi,omitempty"`
-	ZVM struct {
-		DeployedBytecode struct {
-			Object              string                          `json:"object"`
-			ImmutableReferences map[string][]ImmutableRange     `json:"immutableReferences,omitempty"`
-		} `json:"deployedBytecode"`
-		Bytecode struct {
-			Object string `json:"object"`
-		} `json:"bytecode"`
-	} `json:"zvm"`
-	Metadata string `json:"metadata,omitempty"`
+	ABI      json.RawMessage `json:"abi,omitempty"`
+	ZVM      vmArtifacts     `json:"zvm,omitempty"`
+	QRVM     vmArtifacts     `json:"qrvm,omitempty"`
+	Metadata string          `json:"metadata,omitempty"`
+}
+
+type vmArtifacts struct {
+	DeployedBytecode deployedBytecodeArtifact `json:"deployedBytecode"`
+	Bytecode         struct {
+		Object string `json:"object"`
+	} `json:"bytecode"`
+}
+
+type deployedBytecodeArtifact struct {
+	Object              string                      `json:"object"`
+	ImmutableReferences map[string][]ImmutableRange `json:"immutableReferences,omitempty"`
+}
+
+// DeployedBytecode returns the populated deployed-bytecode artifact,
+// preferring qrvm (modern) over zvm (legacy 0.0.2).
+func (c *CompiledContract) DeployedBytecode() deployedBytecodeArtifact {
+	if c.QRVM.DeployedBytecode.Object != "" {
+		return c.QRVM.DeployedBytecode
+	}
+	return c.ZVM.DeployedBytecode
 }
 
 // ImmutableRange is a byte slice within deployedBytecode that holds an

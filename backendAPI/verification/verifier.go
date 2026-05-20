@@ -73,7 +73,8 @@ func (v *Verifier) run(ctx context.Context, jobID string, req VerifyRequest) {
 		return
 	}
 
-	match, err := Match(contract.ZVM.DeployedBytecode.Object, onchain, contract.ZVM.DeployedBytecode.ImmutableReferences)
+	dbc := contract.DeployedBytecode()
+	match, err := Match(dbc.Object, onchain, dbc.ImmutableReferences)
 	if err != nil {
 		failJob(jobID, fmt.Sprintf("match: %s", err.Error()))
 		return
@@ -150,8 +151,13 @@ func wrapStandardJSON(req VerifyRequest) StandardJSONInput {
 			"*": {
 				"*": {
 					"abi",
+					// Request both naming conventions so we work against
+					// hypc 0.0.2 (zvm) and 0.2.x+ (qrvm). Unknown keys are
+					// ignored by the compiler.
 					"zvm.deployedBytecode.object",
 					"zvm.deployedBytecode.immutableReferences",
+					"qrvm.deployedBytecode.object",
+					"qrvm.deployedBytecode.immutableReferences",
 					"metadata",
 				},
 			},
