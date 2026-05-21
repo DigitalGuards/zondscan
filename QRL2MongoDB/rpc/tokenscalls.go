@@ -142,6 +142,13 @@ const (
 // ContractDetectionResult is returned by DetectContractType. Fields outside
 // of Standard/Name/Symbol/HasERC165 are only populated for ERC-20 (Decimals,
 // TotalSupply); NFT collections often omit `decimals()` entirely.
+//
+// MetadataURI is best-effort populated for NFT (ERC-721/1155) contracts via
+// the OpenSea-convention contractURI() probe. Empty means either "the contract
+// doesn't implement contractURI" or "the probe failed transiently" - the
+// background metadata fetcher service handles the URI -> JSON resolution
+// separately, so a missing URI at classification time can be filled in on a
+// later reclassification pass without breaking anything.
 type ContractDetectionResult struct {
 	Standard    string // StandardERC20 | StandardERC721 | StandardERC1155 | ""
 	Name        string
@@ -149,6 +156,7 @@ type ContractDetectionResult struct {
 	Decimals    uint8
 	TotalSupply string
 	HasERC165   bool
+	MetadataURI string
 }
 
 // DetectContractType classifies a contract by trying ERC-165 supportsInterface
@@ -173,11 +181,13 @@ func DetectContractType(addr string) (ContractDetectionResult, error) {
 	if supports {
 		name, _ := GetTokenName(addr)     // best-effort; many ERC-1155s omit name()
 		symbol, _ := GetTokenSymbol(addr) // best-effort; many ERC-1155s omit symbol()
+		metaURI, _ := GetContractURI(addr) // best-effort; many collections omit contractURI()
 		return ContractDetectionResult{
-			Standard:  StandardERC1155,
-			Name:      name,
-			Symbol:    symbol,
-			HasERC165: true,
+			Standard:    StandardERC1155,
+			Name:        name,
+			Symbol:      symbol,
+			HasERC165:   true,
+			MetadataURI: metaURI,
 		}, nil
 	}
 
@@ -189,11 +199,13 @@ func DetectContractType(addr string) (ContractDetectionResult, error) {
 	if supports721 {
 		name, _ := GetTokenName(addr)
 		symbol, _ := GetTokenSymbol(addr)
+		metaURI, _ := GetContractURI(addr)
 		return ContractDetectionResult{
-			Standard:  StandardERC721,
-			Name:      name,
-			Symbol:    symbol,
-			HasERC165: true,
+			Standard:    StandardERC721,
+			Name:        name,
+			Symbol:      symbol,
+			HasERC165:   true,
+			MetadataURI: metaURI,
 		}, nil
 	}
 

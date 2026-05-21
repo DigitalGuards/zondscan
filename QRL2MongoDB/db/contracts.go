@@ -129,6 +129,15 @@ func StoreContract(contract models.ContractInfo) error {
 		if merged.BaseURI == "" && contract.BaseURI != "" {
 			merged.BaseURI = contract.BaseURI
 		}
+		// Phase 3a collection metadata: gap-fill only for MetadataURI from
+		// the classifier path. The metadata fetcher service has its own
+		// write path (UpdateContractMetadata) for the *resolved* fields
+		// (Name/Description/Image/ExternalURL/FetchedAt/FetchError); the
+		// classifier never touches those, so a transient classification
+		// blip can't clobber a previously-resolved metadata document.
+		if merged.MetadataURI == "" && contract.MetadataURI != "" {
+			merged.MetadataURI = contract.MetadataURI
+		}
 	} else if !errors.Is(err, mongo.ErrNoDocuments) {
 		configs.Logger.Error("Failed to check for existing contract",
 			zap.String("address", contract.Address),
@@ -224,7 +233,103 @@ func syncerOwnedSet(c models.ContractInfo) bson.M {
 	if c.BaseURI != "" {
 		m["baseURI"] = c.BaseURI
 	}
+	// Phase 3a collection metadata: classifier writes only the URI; the
+	// resolved fields are owned by the fetcher and updated through
+	// UpdateContractMetadata (below). The omitempty pattern protects
+	// existing fetcher state from being clobbered on classifier passes.
+	if c.MetadataURI != "" {
+		m["metadataURI"] = c.MetadataURI
+	}
 	return m
+}
+
+// UpdateContractMetadata writes the resolved off-chain collection metadata
+// for one contract. The fetcher service is the only caller, the classifier
+// path (StoreContract) deliberately doesn't touch these fields. This
+// separation lets a transient classification blip retain the resolved
+// metadata while still allowing the fetcher to record a new fetch attempt's
+// outcome (success or error) without racing the classifier.
+//
+// Empty `name` / `description` / `image` / `externalURL` arguments clear
+// those fields. The expected pattern is:
+//
+//   - Success: pass the parsed values + FetchedAt = now, FetchError = "".
+//   - Failure: pass empty for the four content fields, FetchedAt = "",
+//     FetchError = the reason. Existing content fields are preserved
+//     because the merge sentinel below skips empty content writes.
+//
+// The fetcher records FetchError without blanking previously-resolved
+// content fields, a temporary IPFS gateway 503 should NOT wipe out a
+// successfully-fetched display name from yesterday.
+func UpdateContractMetadata(address, name, description, image, externalURL, fetchedAt, fetchError string) error {
+	address = validation.ConvertToQAddress(address)
+
+	set := bson.M{
+		"metadataFetchedAt":  fetchedAt,
+		"metadataFetchError": fetchError,
+	}
+	// Only overwrite content fields when we have new content. On failure
+	// the four content args are "" and we skip the writes, preserving the
+	// last-good state.
+	if name != "" {
+		set["metadataName"] = name
+	}
+	if description != "" {
+		set["metadataDescription"] = description
+	}
+	if image != "" {
+		set["metadataImage"] = image
+	}
+	if externalURL != "" {
+		set["metadataExternalURL"] = externalURL
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := configs.GetContractsCollection().UpdateOne(
+		ctx,
+		bson.M{"address": address},
+		bson.M{"$set": set},
+	)
+	if err != nil {
+		configs.Logger.Error("Failed to update contract metadata",
+			zap.String("address", address),
+			zap.Error(err))
+		return err
+	}
+	return nil
+}
+
+// GetContractsAwaitingMetadata returns up to `limit` NFT contracts that have
+// a populated MetadataURI but have not yet been fetched successfully
+// (FetchedAt is empty OR FetchError is set). The metadata fetcher service
+// uses this as its work queue.
+func GetContractsAwaitingMetadata(limit int) ([]models.ContractInfo, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	filter := bson.M{
+		"metadataURI":   bson.M{"$ne": ""},
+		"tokenStandard": bson.M{"$in": []string{"ERC-721", "ERC-1155"}},
+		"$or": []bson.M{
+			{"metadataFetchedAt": bson.M{"$in": []interface{}{"", nil}}},
+			{"metadataFetchError": bson.M{"$ne": ""}},
+		},
+	}
+	opts := options.Find().SetLimit(int64(limit))
+
+	cur, err := configs.GetContractsCollection().Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+
+	var out []models.ContractInfo
+	if err := cur.All(ctx, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // standardRank orders TokenStandard values for promote-only merging.
