@@ -669,7 +669,23 @@ func UserRoute(router *gin.Engine) {
 			isTokenFilter = &isToken
 		}
 
-		query, total, err := db.ReturnContracts(page, limit, search, isTokenFilter)
+		// Parse standard filter (optional). Validates against the known
+		// set to keep the BSON query well-typed and prevent arbitrary
+		// strings from being passed as a filter predicate.
+		var standardFilter *string
+		if standardParam := c.Query("standard"); standardParam != "" {
+			switch standardParam {
+			case "ERC-20", "ERC-721", "ERC-1155":
+				standardFilter = &standardParam
+			default:
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error": "invalid standard; expected one of ERC-20, ERC-721, ERC-1155",
+				})
+				return
+			}
+		}
+
+		query, total, err := db.ReturnContracts(page, limit, search, isTokenFilter, standardFilter)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": fmt.Sprintf("Failed to fetch contracts: %v", err),

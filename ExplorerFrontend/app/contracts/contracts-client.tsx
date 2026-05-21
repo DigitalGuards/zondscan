@@ -17,6 +17,7 @@ interface ContractData {
   totalSupply?: string;
   creationBlockNumber?: string;
   isToken: boolean;
+  tokenStandard?: 'ERC-20' | 'ERC-721' | 'ERC-1155' | string;
 }
 
 interface ContractsClientProps {
@@ -24,7 +25,37 @@ interface ContractsClientProps {
   totalContracts: number;
 }
 
-type TabType = 'tokens' | 'contracts';
+// Per-tab → backend filter mapping. ERC-20/721/1155 use the ?standard= filter
+// added in Phase 1; 'contracts' (other) uses ?isToken=false to surface non-
+// token contracts. 'all' has no filter — useful for search-everything.
+type TabType = 'erc20' | 'erc721' | 'erc1155' | 'contracts';
+
+const TAB_TO_STANDARD: Record<TabType, 'ERC-20' | 'ERC-721' | 'ERC-1155' | null> = {
+  erc20: 'ERC-20',
+  erc721: 'ERC-721',
+  erc1155: 'ERC-1155',
+  contracts: null,
+};
+
+const STANDARD_LABEL: Record<string, string> = {
+  'ERC-20': 'Token',
+  'ERC-721': 'NFT',
+  'ERC-1155': 'Multi-Token',
+};
+
+const TAB_RESULT_NOUN: Record<TabType, string> = {
+  erc20: 'tokens',
+  erc721: 'NFT collections',
+  erc1155: 'multi-token collections',
+  contracts: 'contracts',
+};
+
+const TAB_EMPTY_TITLE: Record<TabType, string> = {
+  erc20: 'No tokens found',
+  erc721: 'No NFT collections found',
+  erc1155: 'No multi-token collections found',
+  contracts: 'No contracts found',
+};
 
 const ITEMS_PER_PAGE = 15;
 
@@ -112,14 +143,14 @@ function truncateAddress(addr: string, start = 8, end = 6): string {
 }
 
 export default function ContractsClient({ initialData, totalContracts }: ContractsClientProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('tokens');
+  const [activeTab, setActiveTab] = useState<TabType>('erc20');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(0);
   const [contracts, setContracts] = useState<ContractData[]>(initialData);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(totalContracts);
 
-  const fetchContracts = useCallback(async (page: number, search: string, isToken: boolean | null) => {
+  const fetchContracts = useCallback(async (page: number, search: string, tab: TabType) => {
     try {
       setLoading(true);
       const cleanSearch = search ? search.toLowerCase().replace(/^0x/, '') : undefined;
@@ -133,9 +164,12 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
         params.search = cleanSearch;
       }
 
-      // Filter by isToken based on active tab
-      if (isToken !== null) {
-        params.isToken = isToken;
+      const standard = TAB_TO_STANDARD[tab];
+      if (standard !== null) {
+        params.standard = standard;
+      } else {
+        // 'contracts' tab → non-token contracts only.
+        params.isToken = false;
       }
 
       const response = await axios.get(`${config.handlerUrl}/contracts`, { params });
@@ -155,9 +189,8 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
 
   // Fetch when tab, search, or page changes
   useEffect(() => {
-    const isToken = activeTab === 'tokens' ? true : false;
     const timer = setTimeout(() => {
-      fetchContracts(currentPage, searchQuery, isToken);
+      fetchContracts(currentPage, searchQuery, activeTab);
     }, searchQuery ? 300 : 0);
 
     return () => clearTimeout(timer);
@@ -182,10 +215,13 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
         <p className="text-gray-400">Browse deployed tokens and smart contracts on the QRL Zond network</p>
       </div>
 
-      {/* Tabs */}
-      <div role="tablist" className="flex gap-2 mb-6">
-        <TabButton tab="tokens" label="Tokens" activeTab={activeTab} onSelect={setActiveTab} />
-        <TabButton tab="contracts" label="All Contracts" activeTab={activeTab} onSelect={setActiveTab} />
+      {/* Tabs — QRC-X is the QRL-branded form of the EIP standards; the
+          underlying tokenStandard string stays "ERC-X" in the DB / API. */}
+      <div role="tablist" className="flex flex-wrap gap-2 mb-6">
+        <TabButton tab="erc20" label="Tokens (QRC-20)" activeTab={activeTab} onSelect={setActiveTab} />
+        <TabButton tab="erc721" label="NFTs (QRC-721)" activeTab={activeTab} onSelect={setActiveTab} />
+        <TabButton tab="erc1155" label="Multi-Token (QRC-1155)" activeTab={activeTab} onSelect={setActiveTab} />
+        <TabButton tab="contracts" label="Other Contracts" activeTab={activeTab} onSelect={setActiveTab} />
       </div>
 
       {/* Search */}
@@ -199,7 +235,7 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
           <input
             type="text"
             aria-label="Search contracts"
-            placeholder={activeTab === 'tokens' ? 'Search by token name or address...' : 'Search by contract address...'}
+            placeholder={activeTab === 'contracts' ? 'Search by contract address...' : 'Search by token name or address...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full p-3 pl-10 bg-[#2d2d2d] border border-[#3d3d3d] rounded-lg text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#ffa729] focus:border-transparent"
@@ -209,7 +245,9 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
 
       {/* Results Count */}
       <div className="mb-4 text-sm text-gray-400">
-        {loading ? 'Loading...' : `${total} ${activeTab === 'tokens' ? 'tokens' : 'contracts'} found`}
+        {loading
+          ? 'Loading...'
+          : `${total} ${TAB_RESULT_NOUN[activeTab]} found`}
       </div>
 
       {/* Content */}
@@ -222,13 +260,11 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
           </div>
         ) : contracts.length === 0 ? (
           <EmptyState
-            title={activeTab === 'tokens' ? 'No tokens found' : 'No contracts found'}
+            title={TAB_EMPTY_TITLE[activeTab]}
             description="Try adjusting your search or check back later."
           />
-        ) : activeTab === 'tokens' ? (
-          <TokensTable contracts={contracts} />
         ) : (
-          <ContractsTable contracts={contracts} />
+          <ContractRowsTable contracts={contracts} variant={activeTab} />
         )}
       </div>
 
@@ -290,67 +326,60 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
   );
 }
 
-// Tokens Table Component
-function TokensTable({ contracts }: { contracts: ContractData[] }) {
+// Single source of truth for cell chrome so every tab looks like the same
+// table with a different column subset — the original split-into-three
+// approach gave each tab its own visual identity, which read as four
+// different pages stitched together.
+const TH_BASE = 'px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider';
+const TD_BASE = 'px-4 py-4 whitespace-nowrap';
+
+const TAB_TABLE_LABEL: Record<TabType, string> = {
+  erc20: 'Tokens',
+  erc721: 'NFT collections',
+  erc1155: 'Multi-token collections',
+  contracts: 'Smart contracts',
+};
+
+// ContractRowsTable renders all four tabs through the same chrome — same
+// header bar, same divider, same row hover, same identity cell. Per-tab
+// columns toggle on/off via the `variant` prop, but the visual rhythm
+// stays identical across tabs.
+function ContractRowsTable({
+  contracts,
+  variant,
+}: {
+  contracts: ContractData[];
+  variant: TabType;
+}) {
+  const showDecimalsAndSupply = variant === 'erc20';
   return (
     <div className="overflow-x-auto">
-      <table aria-label="Token contracts" className="min-w-full divide-y divide-[#3d3d3d]">
+      <table aria-label={TAB_TABLE_LABEL[variant]} className="min-w-full divide-y divide-[#3d3d3d]">
         <thead className="bg-[#2d2d2d]/50">
           <tr>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Token
+            <th scope="col" className={TH_BASE}>
+              {variant === 'contracts' ? 'Contract' : variant === 'erc20' ? 'Token' : 'Collection'}
             </th>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Contract Address
-            </th>
-            <th scope="col" className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Decimals
-            </th>
-            <th scope="col" className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Total Supply
-            </th>
-            <th scope="col" className="hidden lg:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Creator
-            </th>
+            <th scope="col" className={TH_BASE}>Contract Address</th>
+            <th scope="col" className={`hidden sm:table-cell ${TH_BASE}`}>Type</th>
+            {showDecimalsAndSupply && (
+              <th scope="col" className={`hidden md:table-cell ${TH_BASE}`}>Decimals</th>
+            )}
+            {showDecimalsAndSupply && (
+              <th scope="col" className={`hidden lg:table-cell ${TH_BASE}`}>Total Supply</th>
+            )}
+            <th scope="col" className={`hidden lg:table-cell ${TH_BASE}`}>Creator</th>
+            <th scope="col" className={`hidden xl:table-cell ${TH_BASE}`}>Created at Block</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-[#3d3d3d]">
-          {contracts.map((contract, index) => (
-            <tr key={contract._id || index} className="hover:bg-[#2d2d2d]/30">
-              <td className="px-4 py-4 whitespace-nowrap">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#ffa729] to-[#ff8c00] flex items-center justify-center text-black font-bold text-sm">
-                    {contract.symbol ? contract.symbol.charAt(0) : '?'}
-                  </div>
-                  <div>
-                    <div className="text-white font-medium">{contract.name || 'Unknown Token'}</div>
-                    <div className="text-gray-500 text-sm">{contract.symbol || '-'}</div>
-                  </div>
-                </div>
-              </td>
-              <td className="px-4 py-4 whitespace-nowrap">
-                <Link
-                  href={`/address/${contract.address}`}
-                  className="text-[#ffa729] hover:underline font-mono text-sm"
-                >
-                  {truncateAddress(contract.address)}
-                </Link>
-              </td>
-              <td className="hidden md:table-cell px-4 py-4 whitespace-nowrap text-gray-300 text-sm">
-                {contract.decimals ?? '-'}
-              </td>
-              <td className="hidden sm:table-cell px-4 py-4 whitespace-nowrap text-gray-300 text-sm font-mono">
-                {formatTotalSupply(contract.totalSupply, contract.decimals)}
-              </td>
-              <td className="hidden lg:table-cell px-4 py-4 whitespace-nowrap">
-                <Link
-                  href={`/address/${contract.creatorAddress}`}
-                  className="text-gray-400 hover:text-[#ffa729] font-mono text-sm"
-                >
-                  {truncateAddress(contract.creatorAddress, 6, 4)}
-                </Link>
-              </td>
-            </tr>
+          {contracts.map((contract, i) => (
+            <ContractRow
+              key={contract._id || i}
+              contract={contract}
+              variant={variant}
+              showDecimalsAndSupply={showDecimalsAndSupply}
+            />
           ))}
         </tbody>
       </table>
@@ -358,70 +387,104 @@ function TokensTable({ contracts }: { contracts: ContractData[] }) {
   );
 }
 
-// All Contracts Table Component
-function ContractsTable({ contracts }: { contracts: ContractData[] }) {
+function ContractRow({
+  contract,
+  variant,
+  showDecimalsAndSupply,
+}: {
+  contract: ContractData;
+  variant: TabType;
+  showDecimalsAndSupply: boolean;
+}) {
+  const isToken = variant !== 'contracts';
+  // Identity cell: avatar + name/symbol stack for tokens; avatar + "Smart
+  // Contract" + truncated address for non-token contracts. Same physical
+  // layout in both cases — only the colour palette + text vary.
+  const avatarSeed = isToken
+    ? (contract.symbol || contract.name || '?')
+    : contract.address.replace(/^Q/i, '');
+  const avatarChar = (avatarSeed.charAt(0) || '?').toUpperCase();
+  const avatarGradient = isToken
+    ? 'from-[#ffa729] to-[#ff8c00]'
+    : 'from-[#5f5f5f] to-[#3d3d3d]';
+  const avatarTextColor = isToken ? 'text-black' : 'text-white';
+
+  const fallbackPrimary =
+    variant === 'erc20' ? 'Unknown Token'
+    : variant === 'erc721' ? 'Unknown Collection'
+    : variant === 'erc1155' ? 'Unknown Collection'
+    : 'Smart Contract';
+  const primary = isToken ? (contract.name || fallbackPrimary) : 'Smart Contract';
+  const secondary = isToken
+    ? (contract.symbol || '-')
+    : truncateAddress(contract.address, 6, 4);
+
+  const typeBadge = (() => {
+    if (variant === 'erc20') return <Badge variant="success">QRC-20</Badge>;
+    if (variant === 'erc721') return <Badge variant="warning">QRC-721 NFT</Badge>;
+    if (variant === 'erc1155') return <Badge variant="warning">QRC-1155</Badge>;
+    return <Badge variant="info">Contract</Badge>;
+  })();
+
   return (
-    <div className="overflow-x-auto">
-      <table aria-label="Smart contracts" className="min-w-full divide-y divide-[#3d3d3d]">
-        <thead className="bg-[#2d2d2d]/50">
-          <tr>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Contract Address
-            </th>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Type
-            </th>
-            <th scope="col" className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Creator
-            </th>
-            <th scope="col" className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Created at Block
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-[#3d3d3d]">
-          {contracts.map((contract, index) => (
-            <tr key={contract._id || index} className="hover:bg-[#2d2d2d]/30">
-              <td className="px-4 py-4 whitespace-nowrap">
-                <Link
-                  href={`/address/${contract.address}`}
-                  className="text-[#ffa729] hover:underline font-mono text-sm"
-                >
-                  <span className="hidden sm:inline">{truncateAddress(contract.address, 10, 8)}</span>
-                  <span className="sm:hidden">{truncateAddress(contract.address, 6, 4)}</span>
-                </Link>
-              </td>
-              <td className="px-4 py-4 whitespace-nowrap">
-                {contract.isToken ? (
-                  <Badge variant="success">Token{contract.symbol ? ` (${contract.symbol})` : ''}</Badge>
-                ) : (
-                  <Badge variant="info">Contract</Badge>
-                )}
-              </td>
-              <td className="hidden sm:table-cell px-4 py-4 whitespace-nowrap">
-                <Link
-                  href={`/address/${contract.creatorAddress}`}
-                  className="text-gray-400 hover:text-[#ffa729] font-mono text-sm"
-                >
-                  {truncateAddress(contract.creatorAddress, 6, 4)}
-                </Link>
-              </td>
-              <td className="hidden md:table-cell px-4 py-4 whitespace-nowrap text-gray-300 text-sm font-mono">
-                {contract.creationBlockNumber ? (
-                  <Link
-                    href={`/block/${formatBlockNumber(contract.creationBlockNumber).replace(/,/g, '')}`}
-                    className="text-gray-400 hover:text-[#ffa729]"
-                  >
-                    #{formatBlockNumber(contract.creationBlockNumber)}
-                  </Link>
-                ) : (
-                  '-'
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <tr className="hover:bg-[#2d2d2d]/30">
+      <td className={TD_BASE}>
+        <div className="flex items-center gap-3">
+          <div
+            className={`w-8 h-8 rounded-full bg-gradient-to-br ${avatarGradient} flex items-center justify-center font-bold text-sm shrink-0 ${avatarTextColor}`}
+          >
+            {avatarChar}
+          </div>
+          <div className="min-w-0">
+            <div className="text-white font-medium truncate">{primary}</div>
+            <div className="text-gray-500 text-sm truncate">{secondary}</div>
+          </div>
+        </div>
+      </td>
+      <td className={TD_BASE}>
+        <Link
+          href={`/address/${contract.address}`}
+          className="text-[#ffa729] hover:underline font-mono text-sm"
+        >
+          <span className="hidden sm:inline">{truncateAddress(contract.address, 10, 8)}</span>
+          <span className="sm:hidden">{truncateAddress(contract.address, 6, 4)}</span>
+        </Link>
+      </td>
+      <td className={`hidden sm:table-cell ${TD_BASE}`}>{typeBadge}</td>
+      {showDecimalsAndSupply && (
+        <td className={`hidden md:table-cell ${TD_BASE} text-gray-300 text-sm`}>
+          {contract.decimals ?? '-'}
+        </td>
+      )}
+      {showDecimalsAndSupply && (
+        <td className={`hidden lg:table-cell ${TD_BASE} text-gray-300 text-sm font-mono`}>
+          {formatTotalSupply(contract.totalSupply, contract.decimals)}
+        </td>
+      )}
+      <td className={`hidden lg:table-cell ${TD_BASE}`}>
+        {contract.creatorAddress ? (
+          <Link
+            href={`/address/${contract.creatorAddress}`}
+            className="text-gray-400 hover:text-[#ffa729] font-mono text-sm"
+          >
+            {truncateAddress(contract.creatorAddress, 6, 4)}
+          </Link>
+        ) : (
+          <span className="text-gray-500 text-sm">-</span>
+        )}
+      </td>
+      <td className={`hidden xl:table-cell ${TD_BASE} text-gray-300 text-sm font-mono`}>
+        {contract.creationBlockNumber ? (
+          <Link
+            href={`/block/${formatBlockNumber(contract.creationBlockNumber).replace(/,/g, '')}`}
+            className="text-gray-400 hover:text-[#ffa729]"
+          >
+            #{formatBlockNumber(contract.creationBlockNumber)}
+          </Link>
+        ) : (
+          '-'
+        )}
+      </td>
+    </tr>
   );
 }

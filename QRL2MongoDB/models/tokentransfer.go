@@ -29,4 +29,14 @@ type TokenTransfer struct {
 	TokenDecimals   uint8  `bson:"tokenDecimals"`
 	TokenName       string `bson:"tokenName"`
 	TransferType    string `bson:"transferType"` // "direct" for direct transfers, "event" for Transfer events
+	// TokenStandard denormalises ContractInfo.TokenStandard for query
+	// convenience (so /token-transfer endpoints can filter by standard
+	// without joining contractCode). Empty for legacy ERC-20 rows.
+	TokenStandard string `bson:"tokenStandard,omitempty" json:"tokenStandard,omitempty"`
+	// TokenID is the per-event uint256 token identifier (decimal string).
+	// Empty for ERC-20; populated for ERC-721 (topic[3]) and ERC-1155
+	// (data field). One row per (id, value) tuple in TransferBatch logs,
+	// so the compound unique index (txHash, contract, logIndex, tokenID)
+	// keeps batch elements distinct.
+	TokenID string `bson:"tokenID,omitempty" json:"tokenID,omitempty"`
 }

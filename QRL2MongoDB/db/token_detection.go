@@ -9,15 +9,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// TokenDetectionResult holds the result of token detection
-type TokenDetectionResult struct {
-	IsToken     bool
-	Name        string
-	Symbol      string
-	Decimals    uint8
-	TotalSupply string
-}
-
 // preserveCreationInfo copies creation metadata from an existing contract to a new contract info.
 // This ensures we don't lose historical data like creator address and creation transaction.
 func preserveCreationInfo(contractInfo *models.ContractInfo, existingContract *models.ContractInfo) {
@@ -30,77 +21,70 @@ func preserveCreationInfo(contractInfo *models.ContractInfo, existingContract *m
 	contractInfo.ContractCode = existingContract.ContractCode
 }
 
-// DetectToken checks if a contract address is a valid ERC20 token
-// by calling the standard ERC20 methods (name, symbol, decimals)
-func DetectToken(contractAddress string) TokenDetectionResult {
-	name, symbol, decimals, isToken := rpc.GetTokenInfo(contractAddress)
-	if !isToken {
-		return TokenDetectionResult{IsToken: false}
-	}
-
-	// Get total supply if it's a token
-	totalSupply, err := rpc.GetTokenTotalSupply(contractAddress)
-	if err != nil {
-		configs.Logger.Debug("Failed to get token total supply",
+// EnsureContractClassified looks the contract up via DetectContractType and
+// persists the (possibly updated) classification.
+//
+// Returns the merged ContractInfo and the detected standard string
+// ("ERC-20"/"ERC-721"/"ERC-1155" or "" for unclassified). Callers should
+// check `standard == ""` to skip non-token logs; the *ContractInfo will still
+// be populated when an existing contract record was preserved.
+//
+// On transient RPC failure DetectContractType returns an error and we return
+// (existing, "") — never demoting a previously-classified contract. The
+// caller's "skip non-token" guard correctly skips this log; the next sighting
+// re-tries and either succeeds (promotion) or stays unclassified (no harm).
+func EnsureContractClassified(contractAddress string, blockNumber string, txHash string) (*models.ContractInfo, string) {
+	detection, detErr := rpc.DetectContractType(contractAddress)
+	if detErr != nil {
+		// Transient probe failure — preserve existing state, don't write
+		// anything that would clobber a previously-good classification.
+		configs.Logger.Debug("Contract type detection failed; preserving existing classification",
 			zap.String("address", contractAddress),
-			zap.Error(err))
+			zap.Error(detErr))
+		existing, _ := GetContract(contractAddress)
+		if existing != nil && existing.TokenStandard != "" {
+			return existing, existing.TokenStandard
+		}
+		return existing, ""
 	}
-
-	return TokenDetectionResult{
-		IsToken:     true,
-		Name:        name,
-		Symbol:      symbol,
-		Decimals:    decimals,
-		TotalSupply: totalSupply,
-	}
-}
-
-// EnsureTokenInDatabase ensures a token contract exists in the database with up-to-date info.
-// If the contract already exists, it preserves existing creation information.
-// Returns the contract info and whether it's a token.
-func EnsureTokenInDatabase(contractAddress string, blockNumber string, txHash string) (*models.ContractInfo, bool) {
-	// First check via RPC if this is actually a token
-	detection := DetectToken(contractAddress)
-	if !detection.IsToken {
-		configs.Logger.Debug("RPC check indicates contract is not a token",
+	if detection.Standard == "" {
+		// Not a recognised standard; not necessarily an error. Don't churn
+		// the DB on every log emission from such a contract.
+		configs.Logger.Debug("Contract is not a recognised token standard",
 			zap.String("address", contractAddress))
-		return nil, false
+		return nil, ""
 	}
 
-	configs.Logger.Debug("RPC check confirms contract is a token",
+	configs.Logger.Debug("Contract classified",
 		zap.String("address", contractAddress),
+		zap.String("standard", detection.Standard),
 		zap.String("name", detection.Name),
 		zap.String("symbol", detection.Symbol))
 
-	// Try to get existing contract from DB to preserve creation information
 	existingContract, err := GetContract(contractAddress)
 	if err != nil {
-		// Log unexpected errors (not just "not found")
-		configs.Logger.Debug("GetContract returned error",
+		configs.Logger.Debug("GetContract returned error (treating as fresh)",
 			zap.String("address", contractAddress),
 			zap.Error(err))
 	}
 
-	// Build the contract info
 	contractInfo := models.ContractInfo{
-		Address:   contractAddress,
-		Status:    "0x1", // Assume successful
-		IsToken:   true,
-		Name:      detection.Name,
-		Symbol:    detection.Symbol,
-		Decimals:  detection.Decimals,
-		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+		Address:       contractAddress,
+		Status:        "0x1",
+		IsToken:       true,
+		Name:          detection.Name,
+		Symbol:        detection.Symbol,
+		Decimals:      detection.Decimals,
+		TotalSupply:   detection.TotalSupply,
+		TokenStandard: detection.Standard,
+		HasERC165:     detection.HasERC165,
+		UpdatedAt:     time.Now().UTC().Format(time.RFC3339),
 	}
 
-	if detection.TotalSupply != "" {
-		contractInfo.TotalSupply = detection.TotalSupply
-	}
-
-	// If this is the first time we're seeing this token, look up the actual
-	// creation transaction from the transfer collection (a fast DB query).
-	// This populates creator info immediately instead of waiting for the
-	// hourly reprocessing job.
 	if existingContract == nil {
+		// First sighting — try to backfill creator info from the transfer
+		// collection now (cheap DB lookup) rather than waiting for the
+		// hourly reprocess job.
 		contractInfo.CreationBlockNumber = blockNumber
 		if creationTx := findCreationTransaction(contractAddress); creationTx != nil {
 			contractInfo.CreationTransaction = creationTx.TxHash
@@ -110,19 +94,17 @@ func EnsureTokenInDatabase(contractAddress string, blockNumber string, txHash st
 			}
 		}
 	} else {
-		// Preserve existing creation information
 		preserveCreationInfo(&contractInfo, existingContract)
 	}
 
-	// Store/merge the contract info
 	if err := StoreContract(contractInfo); err != nil {
-		configs.Logger.Error("Failed to store/update token contract",
+		configs.Logger.Error("Failed to store/update classified contract",
 			zap.String("address", contractAddress),
 			zap.Error(err))
-		return nil, false
+		return nil, ""
 	}
 
-	return &contractInfo, true
+	return &contractInfo, detection.Standard
 }
 
 // GetTokenFromDatabase retrieves token info from database and verifies it's a token.
@@ -137,4 +119,3 @@ func GetTokenFromDatabase(contractAddress string) *models.ContractInfo {
 	}
 	return contract
 }
-

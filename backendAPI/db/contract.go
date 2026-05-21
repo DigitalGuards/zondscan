@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,7 +15,12 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool) ([]models.ContractInfo, int64, error) {
+// ReturnContracts paginates contracts with optional `isToken` and
+// `tokenStandard` filters. `standardFilter` overlays on top of
+// `isTokenFilter` so e.g. `isToken=true,standard=ERC-721` returns the
+// intersection (NFT collections only). Pass nil/empty for either filter to
+// skip that predicate.
+func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool, standardFilter *string) ([]models.ContractInfo, int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -29,17 +35,34 @@ func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool
 		filter = append(filter, bson.E{Key: "isToken", Value: *isTokenFilter})
 	}
 
+	// Add tokenStandard filter if specified. Both filters AND together —
+	// `?isToken=true&standard=ERC-721` returns NFT collections only.
+	if standardFilter != nil && *standardFilter != "" {
+		filter = append(filter, bson.E{Key: "tokenStandard", Value: *standardFilter})
+	}
+
 	// Add search if provided, using correct field names
 	if search != "" {
-		// Normalize the search address to canonical Q-prefix form
+		// Normalize the search address to canonical Q-prefix form (for the
+		// address + creatorAddress exact-match branches).
 		normalizedSearch := normalizeAddress(search)
 
-		// Zond addresses start with 'Q'. Search by normalized address or token name.
+		// Escape regex metacharacters in the user input so a `.` or `*`
+		// in the search term doesn't behave as a wildcard or DoS vector.
+		escaped := regexp.QuoteMeta(search)
+		nameRegex := bson.D{{Key: "$regex", Value: escaped}, {Key: "$options", Value: "i"}}
+
+		// Search by exact address, exact creator address, OR partial
+		// case-insensitive match against name + symbol. Symbol was
+		// previously absent — searching "MQW" missed tokens whose `name`
+		// field held the full project label instead of the ticker (and
+		// vice versa).
 		searchFilter := bson.D{
 			{Key: "$or", Value: bson.A{
-				bson.D{{Key: "address", Value: normalizedSearch}},        // Match contract address
-				bson.D{{Key: "creatorAddress", Value: normalizedSearch}}, // Match creator address
-				bson.D{{Key: "name", Value: bson.D{{Key: "$regex", Value: search}, {Key: "$options", Value: "i"}}}}, // Match token name
+				bson.D{{Key: "address", Value: normalizedSearch}},
+				bson.D{{Key: "creatorAddress", Value: normalizedSearch}},
+				bson.D{{Key: "name", Value: nameRegex}},
+				bson.D{{Key: "symbol", Value: nameRegex}},
 			}},
 		}
 		// Combine with existing filter
