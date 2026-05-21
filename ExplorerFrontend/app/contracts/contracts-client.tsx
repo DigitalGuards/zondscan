@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
@@ -26,6 +27,11 @@ interface ContractData {
   creationBlockNumber?: string;
   isToken: boolean;
   tokenStandard?: 'ERC-20' | 'ERC-721' | 'ERC-1155' | string;
+  // Phase 3a: off-chain collection metadata. metadataName preferred over
+  // on-chain name() when both exist, NFT collections typically leave
+  // name() empty and put the display title in the contractURI JSON.
+  metadataName?: string;
+  metadataImage?: string;
 }
 
 interface ContractsClientProps {
@@ -438,16 +444,18 @@ function ContractRow({
   const avatarTextColor = isToken ? 'text-black' : 'text-white';
 
   // Some standards (ERC-1155 in particular) don't expose name()/symbol(),
-  // so the syncer stores empty strings. Fall back to the truncated address
-  // for the primary line and the standard label for the secondary line so
-  // the row remains identifiable instead of a generic "Unknown".
+  // so the syncer stores empty strings. Phase 3a adds an off-chain name
+  // from contractURI(); prefer it over the on-chain name when present.
+  // Fall through to a truncated address + standard-label so the row
+  // remains identifiable instead of a generic "Unknown".
   const standardFallback =
     variant === 'erc20' ? 'Token'
     : variant === 'erc721' ? 'NFT Collection'
     : variant === 'erc1155' ? 'Multi-Token Collection'
     : 'Contract';
+  const displayName = (contract.metadataName?.trim() || contract.name || '').trim();
   const primary = isToken
-    ? (contract.name || truncateAddress(contract.address, 10, 8))
+    ? (displayName || truncateAddress(contract.address, 10, 8))
     : 'Smart Contract';
   const secondary = isToken
     ? (contract.symbol || standardFallback)
@@ -460,15 +468,28 @@ function ContractRow({
     return <Badge variant="info">Contract</Badge>;
   })();
 
+  // Phase 3a: render the off-chain collection image in the avatar slot
+  // when present. Falls back to the monogram gradient when missing/empty.
+  // Fixed 32px square so the row height doesn't shift while next/image
+  // resolves; `unoptimized` because the wallet backend's IPFS proxy
+  // already streams pre-sized originals (no /_next/image rewrite path).
+  const metaImage = (contract.metadataImage || '').trim();
+
   return (
     <tr className="hover:bg-[#2d2d2d]/30">
       <td className={TD_BASE}>
         <div className="flex items-center gap-3">
-          <div
-            className={`w-8 h-8 rounded-full bg-gradient-to-br ${avatarGradient} flex items-center justify-center font-bold text-sm shrink-0 ${avatarTextColor}`}
-          >
-            {avatarChar}
-          </div>
+          {metaImage ? (
+            <div className="relative w-8 h-8 rounded-full overflow-hidden border border-gray-700/50 bg-black/30 shrink-0">
+              <Image src={metaImage} alt={primary} fill sizes="32px" className="object-cover" unoptimized />
+            </div>
+          ) : (
+            <div
+              className={`w-8 h-8 rounded-full bg-gradient-to-br ${avatarGradient} flex items-center justify-center font-bold text-sm shrink-0 ${avatarTextColor}`}
+            >
+              {avatarChar}
+            </div>
+          )}
           <div className="min-w-0">
             <div className="text-white font-medium truncate">{primary}</div>
             <div className="text-gray-500 text-sm truncate">{secondary}</div>

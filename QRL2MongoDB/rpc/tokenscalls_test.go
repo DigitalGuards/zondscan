@@ -456,6 +456,117 @@ func expectedBalanceOf1155Calldata(holder string, id *big.Int) string {
 	return SIG_BALANCE_OF_1155 + encodeAddressForABI(holder) + w
 }
 
+func TestParseDynamicString(t *testing.T) {
+	// Helper: build an ABI-encoded dynamic string from a Go string.
+	// Layout: [offset=0x20 || length || data right-padded to 32B].
+	encode := func(s string) string {
+		raw := []byte(s)
+		length := len(raw)
+		// Right-pad to next 32-byte boundary.
+		padLen := (32 - length%32) % 32
+		padded := make([]byte, length+padLen)
+		copy(padded, raw)
+		offsetWord := word("20")
+		lengthWord := word(new(big.Int).SetInt64(int64(length)).Text(16))
+		return "0x" + offsetWord + lengthWord + hexEncode(padded)
+	}
+
+	tests := []struct {
+		name    string
+		result  string
+		want    string
+		wantErr bool
+	}{
+		{
+			name:   "happy path short",
+			result: encode("ipfs://Qm.../"),
+			want:   "ipfs://Qm.../",
+		},
+		{
+			name:   "happy path 32 bytes exactly",
+			result: encode("0123456789abcdef0123456789abcdef"),
+			want:   "0123456789abcdef0123456789abcdef",
+		},
+		{
+			name:   "happy path long URI",
+			result: encode("https://example.com/collections/my-nfts/metadata.json?v=2026"),
+			want:   "https://example.com/collections/my-nfts/metadata.json?v=2026",
+		},
+		{
+			name:   "empty string (method exists, returned empty)",
+			result: "0x" + word("20") + word("0"),
+			want:   "",
+		},
+		{
+			name:   "all-zero payload returns empty (no error)",
+			result: "0x" + strings.Repeat("0", 128),
+			want:   "",
+		},
+		{
+			name:    "too-short payload",
+			result:  "0x" + word("20"),
+			wantErr: true,
+		},
+		{
+			name:    "offset points past payload",
+			result:  "0x" + word("ff") + strings.Repeat("0", 64),
+			wantErr: true,
+		},
+		{
+			name:    "length exceeds payload",
+			result:  "0x" + word("20") + word("ff") + strings.Repeat("00", 16),
+			wantErr: true,
+		},
+		{
+			// Adversarial: offset is filled with the maximum signed-int64
+			// value (after the leading zero in the 64-hex-char word).
+			// IsInt64 passes; without the explicit `offset > len(stripped)`
+			// guard, `offset * 2` would overflow to a negative number and
+			// the subsequent slice would panic. With the guard, we return
+			// a clean error.
+			name: "max-int64 offset rejected before multiplication overflow",
+			result: "0x" + "0" + strings.Repeat("7", 1) + strings.Repeat("f", 62) +
+				strings.Repeat("00", 32),
+			wantErr: true,
+		},
+		{
+			// uint256 max as offset trips the IsInt64() branch (>2^63-1).
+			name:    "uint256-max offset rejected (overflows int64)",
+			result:  "0x" + strings.Repeat("f", 64) + strings.Repeat("00", 32),
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseDynamicString(tt.result)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got %q", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// hexEncode is an inline lower-case hex.EncodeToString without importing.
+func hexEncode(b []byte) string {
+	const hexd = "0123456789abcdef"
+	out := make([]byte, len(b)*2)
+	for i, v := range b {
+		out[i*2] = hexd[v>>4]
+		out[i*2+1] = hexd[v&0x0f]
+	}
+	return string(out)
+}
+
 func TestExpectedCalldataSelectors(t *testing.T) {
 	// Sanity: selector + padded uint256 = "0x" + 8 + 64 = 74 chars.
 	got := expectedOwnerOfCalldata(big.NewInt(1))
