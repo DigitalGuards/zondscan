@@ -8,7 +8,7 @@ import QRCodeButton from "../../components/QRCodeButton";
 import ContractTabs from "../../components/ContractTabs";
 import VerifiedBadge from "../../components/VerifiedBadge";
 import type { ContractData } from "../../types/address";
-import { formatAmount } from "../../lib/helpers";
+import { compactTokenIDLabel, formatAmount } from "../../lib/helpers";
 import Breadcrumbs from "../../components/Breadcrumbs";
 
 interface TokenInfo {
@@ -829,8 +829,11 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                                     <Image src={t.image} alt={tokenLabel} fill sizes="40px" className="object-cover" unoptimized />
                                                                 </div>
                                                             ) : (
-                                                                <div className="w-10 h-10 rounded-md bg-gradient-to-br from-[#3a3a3a] to-[#1f1f1f] flex items-center justify-center text-xs font-mono text-gray-300">
-                                                                    #{(t.tokenID.length > 4 ? t.tokenID.slice(-3) : t.tokenID)}
+                                                                <div
+                                                                    className="w-10 h-10 rounded-md bg-gradient-to-br from-[#3a3a3a] to-[#1f1f1f] flex items-center justify-center text-xs font-mono text-gray-300"
+                                                                    title={`#${t.tokenID}`}
+                                                                >
+                                                                    #{compactTokenIDLabel(t.tokenID)}
                                                                 </div>
                                                             )}
                                                         </td>

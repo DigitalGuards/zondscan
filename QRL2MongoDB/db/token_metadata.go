@@ -190,10 +190,14 @@ func UpdateTokenMetadata(
 }
 
 // GetTokensAwaitingMetadata returns up to `limit` token stubs that need a
-// metadata fetch (no FetchedAt and no FetchError). Same "don't auto-retry
-// errors" stance as the contract path: an operator triggers re-fetch in
-// Phase 4; for now an errored row stays put until the next stub-upsert
-// pass overwrites the fetchError on a future transfer.
+// metadata fetch (no FetchedAt and no FetchError).
+//
+// Same "don't auto-retry errors" stance as the contract path: an operator
+// triggers re-fetch in Phase 4. An errored row stays put indefinitely
+// because StubTokenMetadata uses $setOnInsert and is therefore a no-op
+// on every transfer after the first, the upsert never clears the error.
+// Auto-retrying every poll cycle would just clog the queue with the same
+// failure since the underlying URL doesn't change.
 func GetTokensAwaitingMetadata(ctx context.Context, limit int) ([]models.TokenMetadata, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()

@@ -1,6 +1,7 @@
 package synchroniser
 
 import (
+	"encoding/json"
 	"net"
 	"strings"
 	"testing"
@@ -237,6 +238,13 @@ func TestParseTokenMetadataJSON(t *testing.T) {
 			name: "float trait value preserves precision",
 			body: `{"attributes":[{"trait_type":"Rarity","value":0.5}]}`,
 		},
+		{
+			// json.Decoder.UseNumber preserves the exact textual form so
+			// huge integer trait values (e.g. token IDs used as traits in
+			// game NFT schemas) don't round through float64's 2^53 limit.
+			name: "large integer trait value retains full precision",
+			body: `{"attributes":[{"trait_type":"BoundTokenID","value":18446744073709551615}]}`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -280,6 +288,13 @@ func TestParseTokenMetadataJSON(t *testing.T) {
 					t.Errorf("float attr = %+v", got.Attributes)
 				}
 			}
+			if tt.name == "large integer trait value retains full precision" {
+				// 18446744073709551615 = 2^64 - 1, well past 2^53.
+				// Without UseNumber this would round to 1.8446744073709552e+19.
+				if len(got.Attributes) != 1 || got.Attributes[0].Value != "18446744073709551615" {
+					t.Errorf("large-int attr = %+v (want value=\"18446744073709551615\")", got.Attributes)
+				}
+			}
 		})
 	}
 }
@@ -299,6 +314,11 @@ func TestStringifyAttrField(t *testing.T) {
 		{float64(0), "0"},
 		{[]interface{}{1, 2}, ""},
 		{map[string]interface{}{"k": "v"}, ""},
+		// json.Number variants (the UseNumber path).
+		{json.Number("42"), "42"},
+		{json.Number("0.5"), "0.5"},
+		// 2^64 - 1: lossless via json.Number, would lose precision via float64.
+		{json.Number("18446744073709551615"), "18446744073709551615"},
 	}
 	for _, tt := range tests {
 		if got := stringifyAttrField(tt.in); got != tt.want {

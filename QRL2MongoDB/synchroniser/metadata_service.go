@@ -30,6 +30,7 @@ import (
 	"QRL2MongoDB/db"
 	"QRL2MongoDB/models"
 	"QRL2MongoDB/rpc"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -621,9 +622,16 @@ func parseMetadataJSON(body []byte) (metadataDocument, error) {
 // `attributes` array (OpenSea convention: each entry has `trait_type`,
 // `value`, optionally `display_type`). Anything that isn't a clean array
 // of objects is dropped silently, one bad NFT shouldn't fail the rest.
+//
+// Uses json.Decoder.UseNumber() rather than vanilla json.Unmarshal so
+// trait values that are large integers (e.g. token IDs as attribute
+// values, common in game NFT schemas) keep their full precision instead
+// of being rounded through float64 at 2^53.
 func parseTokenMetadataJSON(body []byte) (tokenMetadataDocument, error) {
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
 	var raw map[string]interface{}
-	if err := json.Unmarshal(body, &raw); err != nil {
+	if err := dec.Decode(&raw); err != nil {
 		return tokenMetadataDocument{}, err
 	}
 	stringField := func(key string) string {
@@ -678,10 +686,14 @@ func parseTokenMetadataJSON(body []byte) (tokenMetadataDocument, error) {
 }
 
 // stringifyAttrField coerces an arbitrary JSON value to a string for
-// storage uniformity. Strings pass through trimmed; numbers and bools
-// use their natural representation; nil and objects collapse to "".
-// We deliberately don't json.Marshal nested objects, the attribute
-// model only stores scalars.
+// storage uniformity. Strings pass through trimmed; numbers (preserved as
+// json.Number via Decoder.UseNumber so we keep full precision for big
+// uint256-shaped trait values) pass through verbatim; bools become
+// "true"/"false"; nil and objects collapse to "".
+//
+// Older callers may still feed float64 values when the JSON came from
+// json.Unmarshal instead of json.Decoder.UseNumber; the float64 branch
+// is kept for that compatibility path.
 func stringifyAttrField(v interface{}) string {
 	switch t := v.(type) {
 	case nil:
@@ -693,9 +705,12 @@ func stringifyAttrField(v interface{}) string {
 			return "true"
 		}
 		return "false"
+	case json.Number:
+		// Decoder.UseNumber path: keep the original textual form, no
+		// float64 round-trip. Covers ints past 2^53.
+		return t.String()
 	case float64:
-		// json.Unmarshal yields float64 for numeric values; preserve
-		// integer-ness when possible.
+		// Vanilla Unmarshal fallback; preserve integer-ness when possible.
 		if t == float64(int64(t)) {
 			return strconv.FormatInt(int64(t), 10)
 		}

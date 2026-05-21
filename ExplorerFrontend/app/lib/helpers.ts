@@ -469,6 +469,26 @@ export function formatTokenAmount(amount: string | undefined | null, decimals: n
 }
 
 /**
+ * Compact representation of a long decimal tokenID for a small fixed-size
+ * tile (e.g. a 40px monogram). Returns the id unchanged when it already
+ * fits, otherwise an ellipsis-suffix form like "1234…78" that preserves
+ * the most significant + least significant digits and signals truncation
+ * explicitly. Empty input becomes "?".
+ *
+ * Used by the Tokens tab when a token's off-chain metadata image hasn't
+ * been fetched yet and we render an id-based placeholder.
+ */
+export function compactTokenIDLabel(tokenID: string, maxLen = 5): string {
+  const s = (tokenID ?? '').trim();
+  if (!s) return '?';
+  if (s.length <= maxLen) return s;
+  // Show the first chunk + the last 2 chars + an ellipsis between them.
+  const tail = 2;
+  const head = Math.max(1, maxLen - tail - 1); // -1 for the ellipsis char
+  return s.slice(0, head) + '…' + s.slice(-tail);
+}
+
+/**
  * Normalise an ABI-decoded value tree to use the canonical Q-prefix for
  * QRL v2 addresses. The 0.3.x @theqrl/web3-zond-abi decoder still emits
  * the legacy Z prefix for `address` outputs; every other surface in
