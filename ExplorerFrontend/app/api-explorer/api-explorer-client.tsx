@@ -110,20 +110,20 @@ const endpointGroups: EndpointGroup[] = [
         method: 'GET',
         path: '/address/aggregate/:address',
         description: 'Returns comprehensive data for an address: balance, transaction count, rank, all transactions, internal transactions, contract code, and latest block number.',
-        example: '/address/aggregate/0xabc123...',
+        example: '/address/aggregate/Q6153d37fa4da7193e6219dcbd2bbe62fa12905b1',
       },
       {
         method: 'GET',
         path: '/address/:address/transactions',
         description: 'Returns paginated non-zero transactions for an address.',
         params: 'page (query, default: 1), limit (query, default: 5, max: 100)',
-        example: '/address/0xabc123.../transactions?page=1&limit=10',
+        example: '/address/Q6153d37fa4da7193e6219dcbd2bbe62fa12905b1/transactions?page=1&limit=10',
       },
       {
         method: 'GET',
         path: '/address/:address/tokens',
         description: 'Returns all token balances held by an address. Useful for wallet integration and token auto-discovery.',
-        example: '/address/0xabc123.../tokens',
+        example: '/address/Q6153d37fa4da7193e6219dcbd2bbe62fa12905b1/tokens',
       },
       {
         method: 'POST',
@@ -209,21 +209,21 @@ const endpointGroups: EndpointGroup[] = [
         method: 'GET',
         path: '/token/:address/info',
         description: 'Returns summary information for a token contract (name, symbol, decimals, supply).',
-        example: '/token/0xabc123.../info',
+        example: '/token/Q539f73306bdd4288f93a5e50b4d5bf1a9b07f147/info',
       },
       {
         method: 'GET',
         path: '/token/:address/holders',
         description: 'Returns a paginated list of token holders for a given contract.',
         params: 'page (query, default: 0), limit (query, default: 25, max: 100)',
-        example: '/token/0xabc123.../holders?page=0&limit=25',
+        example: '/token/Q539f73306bdd4288f93a5e50b4d5bf1a9b07f147/holders?page=0&limit=25',
       },
       {
         method: 'GET',
         path: '/token/:address/transfers',
         description: 'Returns a paginated list of token transfers for a given contract. Each row carries `tokenStandard` (ERC-20|ERC-721|ERC-1155) and `tokenID` (decimal uint256, empty for ERC-20). ERC-1155 TransferBatch logs are fanned out to one row per (id, value) tuple, so a batch of N items produces N rows that share txHash + logIndex but differ on tokenID.',
         params: 'page (query, default: 0), limit (query, default: 25, max: 100)',
-        example: '/token/0xabc123.../transfers?page=0&limit=25',
+        example: '/token/Q539f73306bdd4288f93a5e50b4d5bf1a9b07f147/transfers?page=0&limit=25',
       },
     ],
   },
@@ -353,7 +353,7 @@ export default function ApiExplorerClient(): JSX.Element {
             <li>All responses are returned in JSON format</li>
             <li>Numeric blockchain values (balances, block numbers) are typically hex-encoded with a 0x prefix</li>
             <li>Pagination uses <code className="text-gray-300">page</code> and <code className="text-gray-300">limit</code> query parameters (max limit: 100)</li>
-            <li>Addresses accept both 0x and Z-prefixed formats</li>
+            <li>Addresses are Q-prefixed (canonical QRL 2.0 form), e.g. <code className="text-gray-300">Q6153d37fa4da7193e6219dcbd2bbe62fa12905b1</code></li>
             <li>No authentication or API key is required</li>
             <li>Rate limiting may apply to prevent abuse</li>
           </ul>
