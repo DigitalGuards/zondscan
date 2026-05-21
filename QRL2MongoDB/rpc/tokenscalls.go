@@ -1084,6 +1084,90 @@ func GetContractURI(contractAddress string) (string, error) {
 	return uri, nil
 }
 
+// GetTokenURI queries `tokenURI(uint256)` on an ERC-721 contract and returns
+// the raw URI string. Same three-way error contract as the rest of the
+// tokens helpers:
+//   - Contract revert (id never minted, or contract doesn't implement
+//     ERC-721 Metadata): returns ("", nil) so the caller records "no URI"
+//     without treating it as a fetch failure.
+//   - Transport error: returns ("", err); callers preserve existing state.
+//   - Malformed return: returns ("", nil), same "no URI" semantic.
+//
+// The URI is returned exactly as the contract emitted it; the metadata
+// fetcher service handles IPFS gateway resolution + JSON parsing.
+func GetTokenURI(contractAddress string, tokenID *big.Int) (string, error) {
+	idWord, err := encodeUint256ForABI(tokenID)
+	if err != nil {
+		return "", fmt.Errorf("encode tokenID: %w", err)
+	}
+	calldata := SIG_TOKEN_URI + idWord
+
+	result, callErr := CallContractMethod(contractAddress, calldata)
+	if callErr != nil {
+		if strings.HasPrefix(callErr.Error(), "RPC error:") {
+			return "", nil
+		}
+		return "", callErr
+	}
+	uri, decErr := parseDynamicString(result)
+	if decErr != nil {
+		// Same defensive posture as GetContractURI: a malformed return
+		// from one contract must not knock subsequent fetches off course.
+		return "", nil
+	}
+	return uri, nil
+}
+
+// GetERC1155URI queries `uri(uint256)` on an ERC-1155 contract.
+//
+// ERC-1155 spec note: the returned URI may contain the substring `{id}`,
+// which clients must substitute with the lowercase 64-char hex form of the
+// tokenID (so id 42 becomes "000...02a"). This function does that
+// substitution before returning, so the caller can pass the result
+// straight to the metadata fetcher without knowing the spec quirk.
+//
+// Same three-way error contract as GetTokenURI.
+func GetERC1155URI(contractAddress string, tokenID *big.Int) (string, error) {
+	idWord, err := encodeUint256ForABI(tokenID)
+	if err != nil {
+		return "", fmt.Errorf("encode tokenID: %w", err)
+	}
+	calldata := SIG_URI + idWord
+
+	result, callErr := CallContractMethod(contractAddress, calldata)
+	if callErr != nil {
+		if strings.HasPrefix(callErr.Error(), "RPC error:") {
+			return "", nil
+		}
+		return "", callErr
+	}
+	uri, decErr := parseDynamicString(result)
+	if decErr != nil {
+		return "", nil
+	}
+	return substituteERC1155IDTemplate(uri, tokenID), nil
+}
+
+// substituteERC1155IDTemplate replaces the `{id}` placeholder per the
+// ERC-1155 spec: "Clients MUST replace any occurrences of the substring
+// `{id}` in the URI with the actual token ID, in lowercase hexadecimal
+// (with no 0x prefix) and leading-zero-padded to 64 hex characters".
+//
+// Empty input or no placeholder => return unchanged.
+func substituteERC1155IDTemplate(uri string, tokenID *big.Int) string {
+	if uri == "" || !strings.Contains(uri, "{id}") {
+		return uri
+	}
+	h := tokenID.Text(16)
+	if len(h) > 64 {
+		// Shouldn't happen for any realistic tokenID (uint256 max is 64
+		// hex), but truncate-from-left rather than panic if it does.
+		h = h[len(h)-64:]
+	}
+	padded := strings.Repeat("0", 64-len(h)) + h
+	return strings.ReplaceAll(uri, "{id}", padded)
+}
+
 // GetERC1155Balance queries `balanceOf(address,uint256)` on an ERC-1155
 // contract and returns the holder's current per-id balance.
 //

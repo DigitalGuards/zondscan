@@ -8,7 +8,7 @@ import QRCodeButton from "../../components/QRCodeButton";
 import ContractTabs from "../../components/ContractTabs";
 import VerifiedBadge from "../../components/VerifiedBadge";
 import type { ContractData } from "../../types/address";
-import { formatAmount } from "../../lib/helpers";
+import { compactTokenIDLabel, formatAmount } from "../../lib/helpers";
 import Breadcrumbs from "../../components/Breadcrumbs";
 
 interface TokenInfo {
@@ -41,6 +41,12 @@ interface TokenIDSummary {
     tokenStandard?: string;
     blockNumber?: string;
     updatedAt?: string;
+    // Phase 3b: off-chain per-token metadata pulled from contractURI /
+    // tokenURI / uri(id). Absent on tokens whose metadata fetcher pass
+    // hasn't completed or whose contract doesn't implement the getter.
+    name?: string;
+    description?: string;
+    image?: string;
 }
 
 interface TokenTransfer {
@@ -792,30 +798,56 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                     <table aria-label="Token IDs" className="w-full">
                                         <thead className="bg-black/30">
                                             <tr>
-                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Token ID</th>
+                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase w-16"></th>
+                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Token</th>
                                                 <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Holders</th>
                                                 <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase hidden md:table-cell">Standard</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-700/50">
-                                            {tokensList.map((t) => (
-                                                <tr
-                                                    key={t.tokenID}
-                                                    className="hover:bg-white/5 cursor-pointer"
-                                                    onClick={() => {
-                                                        setHolderTokenIDInput(t.tokenID);
-                                                        setHolderTokenIDFilter(t.tokenID);
-                                                        setHoldersPage(0);
-                                                        setActiveTab('holders');
-                                                    }}
-                                                >
-                                                    <td className="px-4 py-3 text-sm font-mono text-accent">#{t.tokenID}</td>
-                                                    <td className="px-4 py-3 text-right text-sm text-white">{t.holderCount}</td>
-                                                    <td className="px-4 py-3 text-right text-xs text-gray-400 hidden md:table-cell">
-                                                        {t.tokenStandard ? t.tokenStandard.replace(/^ERC-/, 'QRC-') : '-'}
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                            {tokensList.map((t) => {
+                                                // Phase 3b: render the off-chain image if the fetcher has
+                                                // populated it; fall back to a #N monogram tile. The "Token"
+                                                // column shows the metadata name when present, otherwise
+                                                // just "#<id>" — keeps unfetched / no-metadata cases clean.
+                                                const tokenLabel = t.name?.trim() || `#${t.tokenID}`;
+                                                const subLabel = t.name?.trim() ? `#${t.tokenID}` : null;
+                                                return (
+                                                    <tr
+                                                        key={t.tokenID}
+                                                        className="hover:bg-white/5 cursor-pointer"
+                                                        onClick={() => {
+                                                            setHolderTokenIDInput(t.tokenID);
+                                                            setHolderTokenIDFilter(t.tokenID);
+                                                            setHoldersPage(0);
+                                                            setActiveTab('holders');
+                                                        }}
+                                                    >
+                                                        <td className="px-4 py-3">
+                                                            {t.image ? (
+                                                                <div className="relative w-10 h-10 rounded-md overflow-hidden border border-gray-700/60 bg-black/30">
+                                                                    <Image src={t.image} alt={tokenLabel} fill sizes="40px" className="object-cover" unoptimized />
+                                                                </div>
+                                                            ) : (
+                                                                <div
+                                                                    className="w-10 h-10 rounded-md bg-gradient-to-br from-[#3a3a3a] to-[#1f1f1f] flex items-center justify-center text-xs font-mono text-gray-300"
+                                                                    title={`#${t.tokenID}`}
+                                                                >
+                                                                    #{compactTokenIDLabel(t.tokenID)}
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm">
+                                                            <div className="text-white">{tokenLabel}</div>
+                                                            {subLabel && <div className="text-xs text-gray-500 font-mono">{subLabel}</div>}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right text-sm text-white">{t.holderCount}</td>
+                                                        <td className="px-4 py-3 text-right text-xs text-gray-400 hidden md:table-cell">
+                                                            {t.tokenStandard ? t.tokenStandard.replace(/^ERC-/, 'QRC-') : '-'}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>
