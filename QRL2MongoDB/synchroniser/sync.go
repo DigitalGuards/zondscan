@@ -98,6 +98,21 @@ func Sync() {
 	var nextBlock string
 	var maxHex string
 
+	// Ensure the token collections + their indexes exist before we start
+	// processing blocks. Pre-Phase-2 this only ran via processInitialBlock,
+	// which is gated on IsCollectionsExist() == false, but the configs init
+	// path creates non-token collections (dailyTransactionsVolume etc), so
+	// IsCollectionsExist returns true on every restart and the gate never
+	// opens. Calling InitializeTokenCollections here is idempotent
+	// (CreateMany no-ops on existing indexes) and guarantees the Phase 2
+	// (contract, holder, tokenID) unique index actually gets created.
+	if err := InitializeTokenCollections(); err != nil {
+		configs.Logger.Error("Failed to initialize token collections at sync start",
+			zap.Error(err))
+		// Continue anyway: the indexes are about correctness, not liveness;
+		// the syncer can still index blocks and we'll log the issue loudly.
+	}
+
 	// DB queries, no retry needed, these are local and don't fail transiently.
 	nextBlock = db.GetLastKnownBlockNumber()
 	if nextBlock == "0x0" {
