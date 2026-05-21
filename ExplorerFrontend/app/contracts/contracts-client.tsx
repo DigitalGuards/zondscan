@@ -409,14 +409,20 @@ function ContractRow({
     : 'from-[#5f5f5f] to-[#3d3d3d]';
   const avatarTextColor = isToken ? 'text-black' : 'text-white';
 
-  const fallbackPrimary =
-    variant === 'erc20' ? 'Unknown Token'
-    : variant === 'erc721' ? 'Unknown Collection'
-    : variant === 'erc1155' ? 'Unknown Collection'
+  // Some standards (ERC-1155 in particular) don't expose name()/symbol(),
+  // so the syncer stores empty strings. Fall back to the truncated address
+  // for the primary line and the standard label for the secondary line so
+  // the row remains identifiable instead of a generic "Unknown".
+  const standardFallback =
+    variant === 'erc20' ? 'Token'
+    : variant === 'erc721' ? 'NFT Collection'
+    : variant === 'erc1155' ? 'Multi-Token Collection'
+    : 'Contract';
+  const primary = isToken
+    ? (contract.name || truncateAddress(contract.address, 10, 8))
     : 'Smart Contract';
-  const primary = isToken ? (contract.name || fallbackPrimary) : 'Smart Contract';
   const secondary = isToken
-    ? (contract.symbol || '-')
+    ? (contract.symbol || standardFallback)
     : truncateAddress(contract.address, 6, 4);
 
   const typeBadge = (() => {
