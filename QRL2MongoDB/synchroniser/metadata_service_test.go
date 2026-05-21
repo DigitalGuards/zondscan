@@ -182,6 +182,131 @@ func TestParseMetadataJSON(t *testing.T) {
 	}
 }
 
+func TestParseTokenMetadataJSON(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		want    tokenMetadataDocument
+		wantErr bool
+	}{
+		{
+			// Attributes content is verified field-by-field in the
+			// name-keyed assertions below; this `want` only carries the
+			// scalar fields for the simple equality cases.
+			name: "OpenSea-style happy path with attributes",
+			body: `{
+				"name":"Sword of Truth #1",
+				"description":"Legendary weapon",
+				"image":"ipfs://QmFoo/1.png",
+				"external_url":"https://example.com/sword/1",
+				"attributes":[
+					{"trait_type":"Damage","value":50,"display_type":"number"},
+					{"trait_type":"Element","value":"Fire"},
+					{"trait_type":"Cursed","value":true}
+				]
+			}`,
+		},
+		{
+			name: "no attributes field",
+			body: `{"name":"Plain","image":"ipfs://x"}`,
+			want: tokenMetadataDocument{Name: "Plain", Image: "ipfs://x"},
+		},
+		{
+			name: "attributes not an array dropped silently",
+			body: `{"name":"X","attributes":"not-an-array"}`,
+			want: tokenMetadataDocument{Name: "X"},
+		},
+		{
+			name: "non-object attrs entries skipped",
+			body: `{"name":"X","attributes":["string", 42, {"trait_type":"OK","value":"v"}]}`,
+			want: tokenMetadataDocument{
+				Name: "X",
+			},
+		},
+		{
+			name:    "malformed JSON returns error",
+			body:    `{"name":`,
+			wantErr: true,
+		},
+		{
+			name: "null literal returns empty doc",
+			body: `null`,
+			want: tokenMetadataDocument{},
+		},
+		{
+			name: "float trait value preserves precision",
+			body: `{"attributes":[{"trait_type":"Rarity","value":0.5}]}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseTokenMetadataJSON([]byte(tt.body))
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got %+v", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			// Spot-check string fields.
+			if tt.name == "OpenSea-style happy path with attributes" {
+				if got.Name != "Sword of Truth #1" || got.Description != "Legendary weapon" ||
+					got.Image != "ipfs://QmFoo/1.png" || got.ExternalURL != "https://example.com/sword/1" {
+					t.Errorf("string fields wrong: %+v", got)
+				}
+				if len(got.Attributes) != 3 {
+					t.Fatalf("attributes count = %d, want 3", len(got.Attributes))
+				}
+				if got.Attributes[0].TraitType != "Damage" || got.Attributes[0].Value != "50" || got.Attributes[0].DisplayType != "number" {
+					t.Errorf("attr[0] = %+v", got.Attributes[0])
+				}
+				if got.Attributes[1].TraitType != "Element" || got.Attributes[1].Value != "Fire" {
+					t.Errorf("attr[1] = %+v", got.Attributes[1])
+				}
+				if got.Attributes[2].TraitType != "Cursed" || got.Attributes[2].Value != "true" {
+					t.Errorf("attr[2] = %+v", got.Attributes[2])
+				}
+			}
+			if tt.name == "non-object attrs entries skipped" {
+				if len(got.Attributes) != 1 {
+					t.Errorf("attributes count = %d, want 1 (the valid object)", len(got.Attributes))
+				}
+			}
+			if tt.name == "float trait value preserves precision" {
+				if len(got.Attributes) != 1 || got.Attributes[0].Value != "0.5" {
+					t.Errorf("float attr = %+v", got.Attributes)
+				}
+			}
+		})
+	}
+}
+
+func TestStringifyAttrField(t *testing.T) {
+	tests := []struct {
+		in   interface{}
+		want string
+	}{
+		{nil, ""},
+		{"hello", "hello"},
+		{"  trim me  ", "trim me"},
+		{true, "true"},
+		{false, "false"},
+		{float64(42), "42"},
+		{float64(0.5), "0.5"},
+		{float64(0), "0"},
+		{[]interface{}{1, 2}, ""},
+		{map[string]interface{}{"k": "v"}, ""},
+	}
+	for _, tt := range tests {
+		if got := stringifyAttrField(tt.in); got != tt.want {
+			t.Errorf("stringifyAttrField(%v) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
 func TestParseMetadataJSONNullLiteral(t *testing.T) {
 	// JSON literal `null` unmarshals into a nil map. The defensive nil
 	// check in stringField keeps the parser from panicking; we just

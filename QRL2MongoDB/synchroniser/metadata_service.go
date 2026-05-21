@@ -28,10 +28,13 @@ package synchroniser
 import (
 	"QRL2MongoDB/configs"
 	"QRL2MongoDB/db"
+	"QRL2MongoDB/models"
+	"QRL2MongoDB/rpc"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"net/url"
@@ -261,16 +264,27 @@ func (s *MetadataService) Stop() {
 
 // tick runs one batch of metadata fetches. Errors per row are logged and
 // recorded on the contractCode document; the tick itself never fails.
+//
+// Phase 3b: every tick also processes a batch of per-token metadata stubs
+// alongside the collection-level batch, sharing the same poll interval +
+// HTTP client + SSRF guard. The two work queues are independent (no
+// cross-row dependencies), so a slow contract-URI fetch doesn't block
+// per-token progress and vice versa.
 func (s *MetadataService) tick(ctx context.Context) {
+	s.tickContracts(ctx)
+	s.tickTokens(ctx)
+}
+
+func (s *MetadataService) tickContracts(ctx context.Context) {
 	rows, err := db.GetContractsAwaitingMetadata(ctx, s.batchSize)
 	if err != nil {
-		configs.Logger.Warn("metadata fetcher: failed to read work queue", zap.Error(err))
+		configs.Logger.Warn("metadata fetcher: failed to read contract work queue", zap.Error(err))
 		return
 	}
 	if len(rows) == 0 {
 		return
 	}
-	configs.Logger.Info("metadata fetcher: processing batch", zap.Int("rows", len(rows)))
+	configs.Logger.Info("metadata fetcher: processing contract batch", zap.Int("rows", len(rows)))
 
 	for _, c := range rows {
 		select {
@@ -282,6 +296,146 @@ func (s *MetadataService) tick(ctx context.Context) {
 		}
 		s.fetchOne(ctx, c.Address, c.MetadataURI)
 	}
+}
+
+// tickTokens runs one batch of per-tokenID metadata fetches. For each stub
+// the fetcher calls tokenURI(id) or uri(id) depending on the contract's
+// recorded standard, resolves the resulting URI through the gateway, parses
+// the JSON, and writes the result. Same "preserve last-good" semantics as
+// the contract path.
+func (s *MetadataService) tickTokens(ctx context.Context) {
+	rows, err := db.GetTokensAwaitingMetadata(ctx, s.batchSize)
+	if err != nil {
+		configs.Logger.Warn("metadata fetcher: failed to read token work queue", zap.Error(err))
+		return
+	}
+	if len(rows) == 0 {
+		return
+	}
+	configs.Logger.Info("metadata fetcher: processing token batch", zap.Int("rows", len(rows)))
+
+	for _, r := range rows {
+		select {
+		case <-ctx.Done():
+			return
+		case <-s.stopCh:
+			return
+		default:
+		}
+		s.fetchOneToken(ctx, r)
+	}
+}
+
+// fetchOneToken resolves the URI for one (contract, tokenID), parses the
+// metadata JSON, and persists the outcome. Same three-step pipeline as
+// fetchOne: resolve scheme -> HTTP GET (SSRF-guarded) -> JSON parse.
+func (s *MetadataService) fetchOneToken(ctx context.Context, stub models.TokenMetadata) {
+	id, ok := new(big.Int).SetString(stub.TokenID, 10)
+	if !ok {
+		s.recordTokenFailure(ctx, stub.ContractAddress, stub.TokenID, "parse tokenID: not a decimal integer")
+		return
+	}
+
+	var (
+		uri    string
+		uriErr error
+	)
+	switch stub.TokenStandard {
+	case rpc.StandardERC721:
+		uri, uriErr = rpc.GetTokenURI(stub.ContractAddress, id)
+	case rpc.StandardERC1155:
+		uri, uriErr = rpc.GetERC1155URI(stub.ContractAddress, id)
+	default:
+		s.recordTokenFailure(ctx, stub.ContractAddress, stub.TokenID,
+			fmt.Sprintf("unsupported standard %q", stub.TokenStandard))
+		return
+	}
+	if uriErr != nil {
+		// Transport error: preserve state, retry on the next tick (because
+		// fetchedAt + fetchError stay empty).
+		configs.Logger.Debug("token URI probe transport error; preserving state",
+			zap.String("contract", stub.ContractAddress),
+			zap.String("tokenID", stub.TokenID),
+			zap.Error(uriErr))
+		return
+	}
+	if uri == "" {
+		s.recordTokenFailure(ctx, stub.ContractAddress, stub.TokenID, "contract returned no URI")
+		return
+	}
+
+	resolved, err := resolveMetadataURI(uri, s.gatewayURL)
+	if err != nil {
+		s.recordTokenFailure(ctx, stub.ContractAddress, stub.TokenID, fmt.Sprintf("resolve: %v", err))
+		return
+	}
+
+	body, fetchErr := s.fetchBody(ctx, resolved)
+	if fetchErr != nil {
+		s.recordTokenFailure(ctx, stub.ContractAddress, stub.TokenID, fmt.Sprintf("fetch: %v", fetchErr))
+		return
+	}
+
+	parsed, parseErr := parseTokenMetadataJSON(body)
+	if parseErr != nil {
+		s.recordTokenFailure(ctx, stub.ContractAddress, stub.TokenID, fmt.Sprintf("parse: %v", parseErr))
+		return
+	}
+
+	imageResolved := ""
+	if parsed.Image != "" {
+		if img, err := resolveMetadataURI(parsed.Image, s.gatewayURL); err == nil {
+			imageResolved = img
+		} else {
+			configs.Logger.Debug("token image URI unresolved",
+				zap.String("contract", stub.ContractAddress),
+				zap.String("tokenID", stub.TokenID),
+				zap.String("image", parsed.Image),
+				zap.Error(err))
+		}
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	if err := db.UpdateTokenMetadata(
+		ctx,
+		stub.ContractAddress,
+		stub.TokenID,
+		uri,
+		parsed.Name,
+		parsed.Description,
+		imageResolved,
+		parsed.ExternalURL,
+		parsed.Attributes,
+		now,
+		"",
+	); err != nil {
+		configs.Logger.Warn("metadata fetcher: token persist failed",
+			zap.String("contract", stub.ContractAddress),
+			zap.String("tokenID", stub.TokenID),
+			zap.Error(err))
+		return
+	}
+	configs.Logger.Info("metadata fetcher: token stored",
+		zap.String("contract", stub.ContractAddress),
+		zap.String("tokenID", stub.TokenID),
+		zap.String("name", parsed.Name),
+		zap.Bool("hasImage", imageResolved != ""),
+		zap.Int("attributes", len(parsed.Attributes)))
+}
+
+func (s *MetadataService) recordTokenFailure(ctx context.Context, contract, tokenID, reason string) {
+	if err := db.UpdateTokenMetadata(ctx, contract, tokenID, "", "", "", "", "", nil, "", reason); err != nil {
+		configs.Logger.Warn("metadata fetcher: failed to record token fetch error",
+			zap.String("contract", contract),
+			zap.String("tokenID", tokenID),
+			zap.String("reason", reason),
+			zap.Error(err))
+		return
+	}
+	configs.Logger.Warn("metadata fetcher: token fetch failed",
+		zap.String("contract", contract),
+		zap.String("tokenID", tokenID),
+		zap.String("reason", reason))
 }
 
 // fetchOne resolves and parses one contract's metadata URI, persisting the
@@ -398,14 +552,26 @@ func (s *MetadataService) fetchBody(ctx context.Context, resolvedURL string) ([]
 }
 
 // metadataDocument is the minimal subset of the NFT metadata schema we
-// care about for Phase 3a. Unknown fields are ignored. Each field is
-// optional; the parser coerces wrong-typed fields to the empty string so
-// one bad entry can't fail the whole record.
+// care about for Phase 3a (collection level). Unknown fields are ignored.
+// Each field is optional; the parser coerces wrong-typed fields to the
+// empty string so one bad entry can't fail the whole record.
 type metadataDocument struct {
 	Name        string `json:"-"`
 	Description string `json:"-"`
 	Image       string `json:"-"`
 	ExternalURL string `json:"-"`
+}
+
+// tokenMetadataDocument extends metadataDocument with the per-token
+// `attributes` array (Phase 3b). Values are coerced to strings for
+// storage uniformity since the OpenSea spec allows mixed types
+// (numeric, string, object) and downstream consumers can re-parse.
+type tokenMetadataDocument struct {
+	Name        string
+	Description string
+	Image       string
+	ExternalURL string
+	Attributes  []models.TokenAttribute
 }
 
 // parseMetadataJSON does a defensive JSON parse: unmarshal into a generic
@@ -449,6 +615,94 @@ func parseMetadataJSON(body []byte) (metadataDocument, error) {
 		ExternalURL: stringField("external_url"),
 	}
 	return doc, nil
+}
+
+// parseTokenMetadataJSON is the Phase 3b variant that also extracts the
+// `attributes` array (OpenSea convention: each entry has `trait_type`,
+// `value`, optionally `display_type`). Anything that isn't a clean array
+// of objects is dropped silently, one bad NFT shouldn't fail the rest.
+func parseTokenMetadataJSON(body []byte) (tokenMetadataDocument, error) {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return tokenMetadataDocument{}, err
+	}
+	stringField := func(key string) string {
+		if raw == nil {
+			return ""
+		}
+		v, ok := raw[key]
+		if !ok || v == nil {
+			return ""
+		}
+		s, ok := v.(string)
+		if !ok {
+			return ""
+		}
+		return strings.TrimSpace(s)
+	}
+
+	out := tokenMetadataDocument{
+		Name:        stringField("name"),
+		Description: stringField("description"),
+		Image:       stringField("image"),
+		ExternalURL: stringField("external_url"),
+	}
+
+	// attributes: []{trait_type, value, display_type?}
+	if raw != nil {
+		if attrsAny, ok := raw["attributes"]; ok {
+			if attrs, isArr := attrsAny.([]interface{}); isArr {
+				const maxAttrs = 64 // defensive: stop a malicious doc from blowing memory
+				for i, a := range attrs {
+					if i >= maxAttrs {
+						break
+					}
+					m, isMap := a.(map[string]interface{})
+					if !isMap {
+						continue
+					}
+					attr := models.TokenAttribute{
+						TraitType:   stringifyAttrField(m["trait_type"]),
+						Value:       stringifyAttrField(m["value"]),
+						DisplayType: stringifyAttrField(m["display_type"]),
+					}
+					if attr.TraitType == "" && attr.Value == "" {
+						continue // empty attr, skip
+					}
+					out.Attributes = append(out.Attributes, attr)
+				}
+			}
+		}
+	}
+	return out, nil
+}
+
+// stringifyAttrField coerces an arbitrary JSON value to a string for
+// storage uniformity. Strings pass through trimmed; numbers and bools
+// use their natural representation; nil and objects collapse to "".
+// We deliberately don't json.Marshal nested objects, the attribute
+// model only stores scalars.
+func stringifyAttrField(v interface{}) string {
+	switch t := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return strings.TrimSpace(t)
+	case bool:
+		if t {
+			return "true"
+		}
+		return "false"
+	case float64:
+		// json.Unmarshal yields float64 for numeric values; preserve
+		// integer-ness when possible.
+		if t == float64(int64(t)) {
+			return strconv.FormatInt(int64(t), 10)
+		}
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	default:
+		return ""
+	}
 }
 
 // CID validation mirrors the wallet backend's IPFS proxy so callers fail

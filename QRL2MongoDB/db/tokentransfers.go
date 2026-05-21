@@ -313,6 +313,15 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 							zap.String("tokenID", row.TokenID),
 							zap.Error(err))
 					}
+					// Phase 3b: $setOnInsert a stub so the metadata fetcher
+					// finds this token on its next poll. Hot path; failure
+					// is non-fatal, the row already lives in tokenTransfers.
+					if err := StubTokenMetadata(context.Background(), contractAddress, row.TokenID, rpc.StandardERC721); err != nil {
+						configs.Logger.Debug("ERC-721 metadata stub upsert failed",
+							zap.String("contractAddress", contractAddress),
+							zap.String("tokenID", row.TokenID),
+							zap.Error(err))
+					}
 				} else {
 					configs.Logger.Warn("ERC-721 transfer row has unparseable tokenID; skipping ownership refresh",
 						zap.String("contractAddress", contractAddress),
@@ -331,6 +340,12 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 						configs.Logger.Warn("ERC-1155 recipient balance refresh failed",
 							zap.String("contractAddress", contractAddress),
 							zap.String("holder", row.To),
+							zap.String("tokenID", row.TokenID),
+							zap.Error(err))
+					}
+					if err := StubTokenMetadata(context.Background(), contractAddress, row.TokenID, rpc.StandardERC1155); err != nil {
+						configs.Logger.Debug("ERC-1155 metadata stub upsert failed",
+							zap.String("contractAddress", contractAddress),
 							zap.String("tokenID", row.TokenID),
 							zap.Error(err))
 					}
