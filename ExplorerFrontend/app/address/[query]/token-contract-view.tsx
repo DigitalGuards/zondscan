@@ -220,8 +220,13 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
     }, [address, handlerUrl, activeTab, transfersPage]);
 
     const decimals = tokenInfo?.decimals ?? contractData.decimals ?? 18;
-    const symbol = tokenInfo?.symbol ?? contractData.symbol ?? 'TOKEN';
-    const name = tokenInfo?.name ?? contractData.name ?? 'Unknown Token';
+    const rawSymbol = tokenInfo?.symbol ?? contractData.symbol ?? '';
+    const rawName = tokenInfo?.name ?? contractData.name ?? '';
+    // ERC-1155 collections often omit name()/symbol(), so fall back to a
+    // truncated address rather than rendering "Unknown Token" / "TOKEN".
+    const addrShort = `${address.slice(0, 10)}...${address.slice(-6)}`;
+    const symbol = rawSymbol || addrShort;
+    const name = rawName || addrShort;
     const totalSupply = tokenInfo?.totalSupply ?? contractData.totalSupply ?? '0';
     const creatorAddress = creationTx?.From || tokenInfo?.creatorAddress || contractData.creatorAddress || '';
     const creationTxHash = tokenInfo?.creationTxHash || contractData.creationTransaction || '';
@@ -262,9 +267,11 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                             <div>
                                 <div className="flex items-center gap-2">
                                     <h1 className="text-xl md:text-2xl font-bold text-white">{name}</h1>
-                                    <span className="px-2 py-0.5 rounded bg-[#ffa729]/20 text-[#ffa729] text-sm font-medium">
-                                        {symbol}
-                                    </span>
+                                    {rawSymbol && (
+                                        <span className="px-2 py-0.5 rounded bg-[#ffa729]/20 text-[#ffa729] text-sm font-medium">
+                                            {rawSymbol}
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="flex items-center gap-2 mt-1">
                                     <span className="text-xs md:text-sm text-gray-400 font-mono">{address}</span>
@@ -293,8 +300,8 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                 title={isNFT ? totalSupply : formatTokenAmount(totalSupply, decimals)}
                             >
                                 {isNFT
-                                    ? (totalSupply !== '0' ? `${totalSupply} ${symbol}` : `- ${symbol}`)
-                                    : `${formatTokenAmount(totalSupply, decimals)} ${symbol}`}
+                                    ? (totalSupply !== '0' ? `${totalSupply}${rawSymbol ? ' ' + rawSymbol : ''}` : '-')
+                                    : `${formatTokenAmount(totalSupply, decimals)}${rawSymbol ? ' ' + rawSymbol : ''}`}
                             </div>
                         </div>
                         <div className="bg-black/20 rounded-lg p-3 md:p-4">
@@ -530,7 +537,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                             <AddressDisplay address={holder.holderAddress} truncate />
                                                         </td>
                                                         <td className="px-4 py-3 text-right text-sm text-white font-mono">
-                                                            {formatTokenAmount(holder.balance, decimals)} {symbol}
+                                                            {formatTokenAmount(holder.balance, decimals)}{rawSymbol ? ' ' + rawSymbol : ''}
                                                         </td>
                                                         <td className="px-4 py-3 text-right text-sm text-gray-400 hidden md:table-cell">
                                                             {sharePercent.toFixed(2)}%
@@ -611,7 +618,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                         <AddressDisplay address={transfer.to} truncate />
                                                     </td>
                                                     <td className="px-4 py-3 text-right text-sm text-white font-mono">
-                                                        {formatTokenAmount(transfer.amount, transfer.tokenDecimals || decimals)} {symbol}
+                                                        {formatTokenAmount(transfer.amount, transfer.tokenDecimals || decimals)}{rawSymbol ? ' ' + rawSymbol : ''}
                                                     </td>
                                                     <td className="px-4 py-3 text-right text-xs text-gray-400 hidden md:table-cell">
                                                         {formatTimestamp(transfer.timestamp)}
