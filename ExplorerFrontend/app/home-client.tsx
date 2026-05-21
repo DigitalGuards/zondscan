@@ -144,13 +144,13 @@ const icons = {
 
 function StatBar({ data }: { data: HomeData }) {
   const stats = [
-    { label: 'Epoch', value: data.epochInfo ? data.epochInfo.headEpoch : '—', icon: icons.epoch },
-    { label: 'Avg Gas Price', value: data.avgGasPriceHex ? `${formatGasPrice(data.avgGasPriceHex)} Shor` : '—', icon: icons.gas },
+    { label: 'Epoch', value: data.epochInfo ? data.epochInfo.headEpoch : ',', icon: icons.epoch },
+    { label: 'Avg Gas Price', value: data.avgGasPriceHex ? `${formatGasPrice(data.avgGasPriceHex)} Shor` : ',', icon: icons.gas },
     { label: 'Block Height', value: formatNumberWithCommas(data.blockHeight.toString()), icon: icons.block },
     { label: 'Validators', value: formatNumberWithCommas(data.validatorCount.toString()), icon: icons.validators },
-    { label: 'Staked QRL', value: data.totalStaked !== '0' ? formatStaked(data.totalStaked) : '—', icon: icons.staked },
+    { label: 'Staked QRL', value: data.totalStaked !== '0' ? formatStaked(data.totalStaked) : ',', icon: icons.staked },
     { label: 'Transactions', value: formatNumberWithCommas(data.totalTransactions.toString()), icon: icons.transactions },
-    { label: 'Market Cap', value: data.marketCap > 0 ? '$' + formatNumberWithCommas(data.marketCap.toString()) : '—', icon: icons.marketCap },
+    { label: 'Market Cap', value: data.marketCap > 0 ? '$' + formatNumberWithCommas(data.marketCap.toString()) : ',', icon: icons.marketCap },
   ];
 
   return (
@@ -336,7 +336,7 @@ function TransactionTable({ txs, loading }: { txs: TxResult[]; loading: boolean 
                         <Link href={`/address/${from}`} className="text-gray-300 hover:text-[#ffa729] hover:underline font-mono truncate">
                           {truncateHash(from, 8, 6)}
                         </Link>
-                      ) : <span className="text-gray-600">—</span>}
+                      ) : <span className="text-gray-600">,</span>}
                     </div>
                     <div className="flex items-center gap-1 text-[12px] truncate">
                       <span className="text-gray-500 w-8 flex-shrink-0">To</span>
@@ -344,7 +344,7 @@ function TransactionTable({ txs, loading }: { txs: TxResult[]; loading: boolean 
                         <Link href={`/address/${to}`} className="text-gray-300 hover:text-[#ffa729] hover:underline font-mono truncate">
                           {truncateHash(to, 8, 6)}
                         </Link>
-                      ) : <span className="text-gray-600">—</span>}
+                      ) : <span className="text-gray-600">,</span>}
                     </div>
                   </div>
 

@@ -52,7 +52,7 @@ func PerIPRateLimit(burst float64, refill float64, window time.Duration) gin.Han
 
 	// Start the janitor once per middleware instance. It walks the map
 	// each `window` and `buckets.Delete`s any entry untouched for longer
-	// than `evictAfter`. Costs O(active IPs) per tick, which is fine — we
+	// than `evictAfter`. Costs O(active IPs) per tick, which is fine, we
 	// never expect more than thousands of concurrent verifiers.
 	go func() {
 		ticker := time.NewTicker(window)

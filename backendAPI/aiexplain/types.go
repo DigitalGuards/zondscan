@@ -26,7 +26,7 @@ type anthropicMessage struct {
 	Content string `json:"content"`
 }
 
-// Anthropic Messages API response — minimal projection. We only ever read
+// Anthropic Messages API response, minimal projection. We only ever read
 // the first text block; if Anthropic changes shape, the unmarshalling will
 // just produce an empty Content string and the caller surfaces an error.
 type anthropicResponse struct {

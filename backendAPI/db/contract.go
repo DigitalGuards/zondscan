@@ -35,7 +35,7 @@ func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool
 		filter = append(filter, bson.E{Key: "isToken", Value: *isTokenFilter})
 	}
 
-	// Add tokenStandard filter if specified. Both filters AND together —
+	// Add tokenStandard filter if specified. Both filters AND together ,
 	// `?isToken=true&standard=ERC-721` returns NFT collections only.
 	if standardFilter != nil && *standardFilter != "" {
 		filter = append(filter, bson.E{Key: "tokenStandard", Value: *standardFilter})
@@ -54,7 +54,7 @@ func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool
 
 		// Search by exact address, exact creator address, OR partial
 		// case-insensitive match against name + symbol. Symbol was
-		// previously absent — searching "MQW" missed tokens whose `name`
+		// previously absent, searching "MQW" missed tokens whose `name`
 		// field held the full project label instead of the ticker (and
 		// vice versa).
 		searchFilter := bson.D{
@@ -161,7 +161,7 @@ func CountContracts() (int64, error) {
 // MarkContractVerified writes the verification result onto the existing
 // contract document using a **targeted $set of only verification fields**.
 // This is the symmetric half of the syncer's field-scoped $set (see
-// QRL2MongoDB/db/contracts.go:syncerOwnedSet) — neither writer ever
+// QRL2MongoDB/db/contracts.go:syncerOwnedSet), neither writer ever
 // touches the other's keys, so concurrent updates can't clobber each
 // other regardless of which thread reads first.
 //
@@ -218,7 +218,7 @@ var ErrAIRegenCap = errors.New("AI regen cap reached")
 // Otherwise it either increments the count within the current window or
 // resets the window start to now with count=1 (rollover case / first regen).
 // Both paths use a single $set/$inc UpdateOne so there's no read-modify-
-// write race between concurrent callers — the loser sees ErrAIRegenCap.
+// write race between concurrent callers, the loser sees ErrAIRegenCap.
 func ReserveAIRegenSlot(address string, limit int, window time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -352,7 +352,7 @@ func GetVerificationJob(jobID string) (*models.ContractVerificationJob, error) {
 	return &job, nil
 }
 
-// UpdateVerificationJob applies a targeted $set to a job document — only
+// UpdateVerificationJob applies a targeted $set to a job document, only
 // the supplied fields are written. Use this for status transitions
 // (pending → compiling → success/failed), error notes, and the result
 // handle. `updatedAt` is stamped automatically.

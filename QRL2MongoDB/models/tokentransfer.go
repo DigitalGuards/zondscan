@@ -3,7 +3,7 @@ package models
 // TokenTransfer represents a token transfer event.
 //
 // LogIndex disambiguates multiple Transfer events within the same tx (a
-// DEX swap typically emits 3 — router → pool → user). Without it the
+// DEX swap typically emits 3, router → pool → user). Without it the
 // `tokenTransfers` collection used to enforce a UNIQUE index on txHash
 // alone, so every event after the first in a given tx silently failed
 // to persist (the InsertOne returned a duplicate-key error and balance
@@ -21,7 +21,7 @@ type TokenTransfer struct {
 	// Stored ALWAYS, including the empty-string sentinel for the
 	// direct-calldata path. The `omitempty` tag would drop the field
 	// when LogIndex is "", and then BSON queries `{logIndex: ""}`
-	// would no longer match those documents — which is exactly what
+	// would no longer match those documents, which is exactly what
 	// TokenTransferExists relies on for idempotent reprocess.
 	LogIndex        string `bson:"logIndex"`
 	Timestamp       string `bson:"timestamp"`

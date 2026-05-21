@@ -161,7 +161,7 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                     {/* Token / NFT Information */}
                                     {contractData.isToken && (
                                         <>
-                                            {/* Standard label — surfaces the QRC-X branding
+                                            {/* Standard label, surfaces the QRC-X branding
                                                 (DB value stays ERC-X). */}
                                             {contractData.tokenStandard && (
                                                 <div>
@@ -192,7 +192,7 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                                 </div>
                                             </div>
 
-                                            {/* Decimals — ERC-20 only */}
+                                            {/* Decimals, ERC-20 only */}
                                             {(contractData.tokenStandard === 'ERC-20' || !contractData.tokenStandard) && (
                                                 <div>
                                                     <div className="text-xs md:text-sm text-gray-400 mb-1">Token Decimals</div>

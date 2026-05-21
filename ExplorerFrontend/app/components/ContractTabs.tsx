@@ -19,11 +19,11 @@ type TabKey = 'code' | 'read' | 'write';
  * Replacement for the old standalone ContractBytecode block on the address
  * page. Three tabs:
  *
- *  - Code  — for verified contracts: source + compiler settings + ABI +
+ *  - Code , for verified contracts: source + compiler settings + ABI +
  *            bytecode (as a sub-section). For unverified: bytecode + a
  *            "Verify & Publish" CTA linking to /verify-contract.
- *  - Read  — `view`/`pure` function dispatcher (M4).
- *  - Write — `nonpayable`/`payable` function dispatcher via the QRL Connect
+ *  - Read , `view`/`pure` function dispatcher (M4).
+ *  - Write, `nonpayable`/`payable` function dispatcher via the QRL Connect
  *            session (M5).
  */
 export default function ContractTabs({ contractData }: ContractTabsProps): JSX.Element {
@@ -109,12 +109,12 @@ function CodeTab({ contractData, parsedAbi }: { contractData: ContractData; pars
 
 function CompilerSettings({ contractData }: { contractData: ContractData }) {
   const rows: Array<[string, React.ReactNode]> = [
-    ['Contract name', contractData.contractName ?? '—'],
-    ['Compiler', contractData.compilerVersion ?? '—'],
+    ['Contract name', contractData.contractName ?? ','],
+    ['Compiler', contractData.compilerVersion ?? ','],
     ['Optimizer', contractData.optimizationEnabled ? `enabled (${contractData.optimizationRuns ?? 0} runs)` : 'disabled'],
-    ['EVM version', contractData.evmVersion ?? '—'],
-    ['License', contractData.license ?? '—'],
-    ['Verified at', contractData.verifiedAt ?? '—'],
+    ['EVM version', contractData.evmVersion ?? ','],
+    ['License', contractData.license ?? ','],
+    ['Verified at', contractData.verifiedAt ?? ','],
   ];
   return (
     <div className="rounded-lg border border-border bg-card-gradient p-3 md:p-4 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-xs md:text-sm">
@@ -160,7 +160,7 @@ function SourcePanel({ contractData }: { contractData: ContractData }) {
 
 function AbiPanel({ abi, raw }: { abi: unknown | null; raw: string }) {
   const [expanded, setExpanded] = useState(false);
-  // Hooks must be called unconditionally — the early return below cannot
+  // Hooks must be called unconditionally, the early return below cannot
   // precede useMemo. raw='' is a cheap input for JSON.stringify so the
   // computed value is harmless when the panel is about to bail.
   const pretty = useMemo(() => {

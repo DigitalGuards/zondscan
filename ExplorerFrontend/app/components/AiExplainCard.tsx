@@ -25,7 +25,7 @@ interface ExplainResponse {
  * hit the MongoDB cache for free until someone clicks "Regenerate".
  *
  * Hard render gate: this component bails to a stub if the contract isn't
- * verified — matching the backend's 403 — so the button never appears on
+ * verified, matching the backend's 403, so the button never appears on
  * unverified contracts and there's no path to spend tokens on bytecode-
  * only addresses.
  */
@@ -148,7 +148,7 @@ export default function AiExplainCard({ contractData }: AiExplainCardProps): JSX
             {explanation}
           </div>
           <div className="text-[10px] text-gray-500">
-            AI-generated summary. May contain inaccuracies. Not financial advice — verify the
+            AI-generated summary. May contain inaccuracies. Not financial advice, verify the
             source code yourself before interacting with this contract.
           </div>
         </>

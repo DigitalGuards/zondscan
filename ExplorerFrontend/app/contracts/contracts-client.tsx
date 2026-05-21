@@ -27,7 +27,7 @@ interface ContractsClientProps {
 
 // Per-tab → backend filter mapping. ERC-20/721/1155 use the ?standard= filter
 // added in Phase 1; 'contracts' (other) uses ?isToken=false to surface non-
-// token contracts. 'all' has no filter — useful for search-everything.
+// token contracts. 'all' has no filter, useful for search-everything.
 type TabType = 'erc20' | 'erc721' | 'erc1155' | 'contracts';
 
 const TAB_TO_STANDARD: Record<TabType, 'ERC-20' | 'ERC-721' | 'ERC-1155' | null> = {
@@ -62,7 +62,7 @@ const ITEMS_PER_PAGE = 15;
 // Hoisted out of the render body so each ContractsClient render doesn't
 // allocate a brand-new component identity. React 19 (and the new
 // react-hooks/error-boundaries rule) flag in-render component creation as
-// a bug — every new identity loses state and re-mounts children.
+// a bug, every new identity loses state and re-mounts children.
 function TabButton({
   tab,
   label,
@@ -196,7 +196,7 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
     return () => clearTimeout(timer);
   }, [activeTab, searchQuery, currentPage, fetchContracts]);
 
-  // Reset page when tab or search changes — adjusting state on prop/state
+  // Reset page when tab or search changes, adjusting state on prop/state
   // change instead of writing it in an effect (set-state-in-effect).
   const [prevReset, setPrevReset] = useState<string>(`${activeTab}|${searchQuery}`);
   const resetKey = `${activeTab}|${searchQuery}`;
@@ -215,7 +215,7 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
         <p className="text-gray-400">Browse deployed tokens and smart contracts on the QRL Zond network</p>
       </div>
 
-      {/* Tabs — QRC-X is the QRL-branded form of the EIP standards; the
+      {/* Tabs, QRC-X is the QRL-branded form of the EIP standards; the
           underlying tokenStandard string stays "ERC-X" in the DB / API. */}
       <div role="tablist" className="flex flex-wrap gap-2 mb-6">
         <TabButton tab="erc20" label="Tokens (QRC-20)" activeTab={activeTab} onSelect={setActiveTab} />
@@ -327,7 +327,7 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
 }
 
 // Single source of truth for cell chrome so every tab looks like the same
-// table with a different column subset — the original split-into-three
+// table with a different column subset, the original split-into-three
 // approach gave each tab its own visual identity, which read as four
 // different pages stitched together.
 const TH_BASE = 'px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider';
@@ -340,7 +340,7 @@ const TAB_TABLE_LABEL: Record<TabType, string> = {
   contracts: 'Smart contracts',
 };
 
-// ContractRowsTable renders all four tabs through the same chrome — same
+// ContractRowsTable renders all four tabs through the same chrome, same
 // header bar, same divider, same row hover, same identity cell. Per-tab
 // columns toggle on/off via the `variant` prop, but the visual rhythm
 // stays identical across tabs.
@@ -399,7 +399,7 @@ function ContractRow({
   const isToken = variant !== 'contracts';
   // Identity cell: avatar + name/symbol stack for tokens; avatar + "Smart
   // Contract" + truncated address for non-token contracts. Same physical
-  // layout in both cases — only the colour palette + text vary.
+  // layout in both cases, only the colour palette + text vary.
   const avatarSeed = isToken
     ? (contract.symbol || contract.name || '?')
     : contract.address.replace(/^Q/i, '');

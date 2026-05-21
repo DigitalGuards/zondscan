@@ -12,7 +12,7 @@ import (
 )
 
 // GasHistoryCollection is one document per block, sized for short-range
-// queries by the /gas API. We don't store all of history here — the
+// queries by the /gas API. We don't store all of history here, the
 // `blocks` collection already has that. This collection is shaped for fast
 // scans on a small (≤ 7d) timeseries.
 const GasHistoryCollection = "gasHistory"
@@ -60,11 +60,11 @@ func UpdateGasHistory() error {
 		}
 	}
 
-	// Scan new blocks newest→oldest? No — oldest→newest, capped, so we don't
+	// Scan new blocks newest→oldest? No, oldest→newest, capped, so we don't
 	// blow memory if the syncer has just caught up from a deep backfill. The
 	// retention sweep below will trim any historical excess.
 	// Block documents store these fields in lowercase BSON (gasused, gaslimit,
-	// basefeepergas) — both the projection paths and the local struct tags
+	// basefeepergas), both the projection paths and the local struct tags
 	// below need to match that exactly.
 	blockOpts := options.Find().
 		SetProjection(bson.M{
@@ -117,7 +117,7 @@ func UpdateGasHistory() error {
 			continue
 		}
 		ts := HexToInt64(b.Result.Timestamp)
-		// Skip blocks with a malformed timestamp — they'd corrupt the
+		// Skip blocks with a malformed timestamp, they'd corrupt the
 		// retention sweep below.
 		if ts <= 0 {
 			skippedTs++

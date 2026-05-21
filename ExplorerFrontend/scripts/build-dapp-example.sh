@@ -8,7 +8,7 @@ set -euo pipefail
 # Set SKIP_DAPP_EXAMPLE=1 to bypass entirely (useful for fast local builds).
 
 if [[ "${SKIP_DAPP_EXAMPLE:-0}" == "1" ]]; then
-  echo "[dapp-example] SKIP_DAPP_EXAMPLE=1 — skipping build"
+  echo "[dapp-example] SKIP_DAPP_EXAMPLE=1, skipping build"
   exit 0
 fi
 

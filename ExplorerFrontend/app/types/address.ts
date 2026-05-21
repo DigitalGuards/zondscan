@@ -5,7 +5,7 @@ import type { Transaction, InternalTransaction } from './transaction';
  *
  * Verification fields below are written exclusively by the backend verify
  * endpoint (M2). Until a contract is verified, `verified` is `false` and
- * the optional source/abi/compiler fields are absent — matching the Go
+ * the optional source/abi/compiler fields are absent, matching the Go
  * struct's `omitempty` bson tags.
  */
 export interface ContractData {
@@ -40,7 +40,7 @@ export interface ContractData {
   verificationMethod?: string;
   verifiedAt?: string;
 
-  // M6a — populated only after a user has triggered the on-demand AI
+  // M6a, populated only after a user has triggered the on-demand AI
   // explanation. Frontend treats absence as "not generated yet"; the
   // AiExplainCard renders a button instead of the cached body.
   aiExplanation?: string;

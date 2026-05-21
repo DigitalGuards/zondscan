@@ -31,7 +31,7 @@ import (
 // concurrent verification write, the whole-doc $set would clobber the
 // freshly-written verification fields with stale empties from the
 // in-memory copy. Switching to a field-scoped $set listing only the
-// syncer-owned fields makes that race impossible by construction —
+// syncer-owned fields makes that race impossible by construction ,
 // the syncer literally cannot touch verification keys.
 func StoreContract(contract models.ContractInfo) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -80,7 +80,7 @@ func StoreContract(contract models.ContractInfo) error {
 		// identified as a token (Name/Symbol/Decimals populated from a
 		// successful RPC probe), we never demote it back. The previous
 		// logic clobbered Name/Symbol/Decimals/TotalSupply to empty whenever
-		// `GetTokenInfo` returned `isToken=false` — and that path also
+		// `GetTokenInfo` returned `isToken=false`, and that path also
 		// returns false on every *transient* RPC error (name()/symbol()
 		// timeout, decode failure, node failover blip). Real-world symptom
 		// was real ERC-20 tokens flickering to empty `name`/`symbol` in the
@@ -91,7 +91,7 @@ func StoreContract(contract models.ContractInfo) error {
 		//     value is empty (fills gaps from a richer probe);
 		//   - never clears non-empty token metadata.
 		// Re-classification (true → false) is intentionally NOT a side
-		// effect of any read path — it must be an explicit operator action.
+		// effect of any read path, it must be an explicit operator action.
 		if contract.IsToken {
 			merged.IsToken = true
 			if merged.Name == "" && contract.Name != "" {
@@ -118,7 +118,7 @@ func StoreContract(contract models.ContractInfo) error {
 		if standardRank(contract.TokenStandard) > standardRank(merged.TokenStandard) {
 			merged.TokenStandard = contract.TokenStandard
 		}
-		// HasERC165 latches true forever — a contract that ever responded
+		// HasERC165 latches true forever, a contract that ever responded
 		// to supportsInterface didn't UN-implement ERC-165 later. Skip the
 		// flag flip on transient probe failures (those return HasERC165=false).
 		if contract.HasERC165 {
@@ -139,14 +139,14 @@ func StoreContract(contract models.ContractInfo) error {
 	// IsToken back-compat: any classified standard implies isToken=true so
 	// the legacy `?isToken=true` API filter continues to surface NFT
 	// collections alongside ERC-20s. Applied in BOTH the merge and the
-	// fresh-write path — callers that set TokenStandard without IsToken
+	// fresh-write path, callers that set TokenStandard without IsToken
 	// (e.g. backfill scripts) still produce correct rows.
 	if merged.TokenStandard != "" {
 		merged.IsToken = true
 	}
 
 	// Stamp updatedAt once for both code paths (merge + first-write).
-	// Live indexing — the wall clock is the right source here.
+	// Live indexing, the wall clock is the right source here.
 	merged.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 
 	opts := options.Update().SetUpsert(true)
@@ -166,7 +166,7 @@ func StoreContract(contract models.ContractInfo) error {
 
 // syncerOwnedSet returns the $set payload for fields the syncer is allowed
 // to write. Verification fields (verified / sourceCode / abi / ...) are
-// deliberately absent — they belong exclusively to the backend verify
+// deliberately absent, they belong exclusively to the backend verify
 // endpoint. Keep this list in sync with the non-verification fields on
 // models.ContractInfo; any field added to the model that the syncer also
 // populates must be added here.
@@ -178,7 +178,7 @@ func StoreContract(contract models.ContractInfo) error {
 //     trust-critical fields. Adding a new SYNCER-owned field and
 //     forgetting to add it here results in a visible omission (easy to
 //     spot in tests / data sampling). The inverted shape would default
-//     to "syncer may write any new field" — a new VERIFICATION field
+//     to "syncer may write any new field", a new VERIFICATION field
 //     forgotten in the delete list would get silently clobbered. Silent
 //     trust-store corruption is the much worse failure mode.
 //  2. bson.Marshal + bson.Unmarshal per write is real overhead in the
@@ -211,7 +211,7 @@ func syncerOwnedSet(c models.ContractInfo) bson.M {
 	if c.MaxTxLimit != "" {
 		m["maxTxLimit"] = c.MaxTxLimit
 	}
-	// NFT classification — omit when empty/false so the document stays clean
+	// NFT classification, omit when empty/false so the document stays clean
 	// for non-token contracts AND a transient blip that produces zero values
 	// can't clobber a previously-set value (writing `false` would overwrite
 	// `true`; omitting the key leaves the existing value untouched).
@@ -382,7 +382,7 @@ func IsAddressContract(address string) bool {
 			zap.String("address", address))
 
 		// Classify (ERC-20 / 721 / 1155 / unknown). Transient probe
-		// failures are logged but non-fatal — StoreContract preserves
+		// failures are logged but non-fatal, StoreContract preserves
 		// any previously-good classification through its merge.
 		detection, detErr := rpc.DetectContractType(address)
 		if detErr != nil {
@@ -507,7 +507,7 @@ func ReprocessIncompleteContracts() error {
 		}
 
 		// Get token information if missing. ReprocessIncompleteContracts
-		// is the hourly self-heal pass — a fresh DetectContractType probe
+		// is the hourly self-heal pass, a fresh DetectContractType probe
 		// also picks up NFT contracts we previously couldn't classify
 		// (`tokenStandard` migration of legacy rows).
 		if !contract.IsToken && contract.Name == "" && contract.Symbol == "" {

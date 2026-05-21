@@ -57,7 +57,7 @@ func RequestHandler() {
 	// Trust only the local reverse proxy when reading X-Forwarded-For /
 	// X-Real-IP. Without this, gin.New() defaults to trusting all proxies
 	// and `c.ClientIP()` returns the first IP in any client-supplied XFF
-	// header — letting an attacker pick a fresh per-IP rate-limit bucket
+	// header, letting an attacker pick a fresh per-IP rate-limit bucket
 	// per request just by sending `X-Forwarded-For: <random>`. In prod,
 	// nginx terminates TLS and reaches us over loopback, so loopback +
 	// link-local IPv6 are the only legitimate proxy hops.
@@ -83,7 +83,7 @@ func RequestHandler() {
 	router.Use(recoveryMiddleware()) // Custom recovery middleware
 	router.Use(monitorMiddleware())  // Request monitoring middleware
 
-	// CORS — scope to the explorer's own origins. POST endpoints
+	// CORS, scope to the explorer's own origins. POST endpoints
 	// (/contract/verify, /contract/call, /contract/explain) are not safe
 	// to expose to arbitrary web origins: a third-party page could fire
 	// off Anthropic-billed explain calls under the visitor's IP. The
@@ -120,7 +120,7 @@ func RequestHandler() {
 	}
 	log.Println("MongoDB connection successful")
 
-	// Init the contract-verification singleton before routes register —
+	// Init the contract-verification singleton before routes register ,
 	// the handlers tolerate a nil verifier (503 response) so a missing
 	// HYPC_RUNNER env never blocks the rest of the backend from booting.
 	if err := verification.Init(); err != nil {
@@ -130,7 +130,7 @@ func RequestHandler() {
 	}
 
 	// Init the AI explainer singleton. Same nil-tolerance pattern as the
-	// verifier — handlers return 503 when Default() is nil, so a missing
+	// verifier, handlers return 503 when Default() is nil, so a missing
 	// API key never blocks the rest of the backend.
 	if err := aiexplain.Init(); err != nil {
 		log.Printf("Contract AI explainer disabled: %v", err)

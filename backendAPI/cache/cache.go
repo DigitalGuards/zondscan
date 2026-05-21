@@ -4,7 +4,7 @@
 // /address/aggregate).
 //
 // Without this layer, every page-view fans out into 1-8 MongoDB queries,
-// and the homepage polls every 30 s — so at modest concurrency the same
+// and the homepage polls every 30 s, so at modest concurrency the same
 // queries are run hundreds of times per second. With the cache, identical
 // requests within the TTL window are served from memory, and the
 // singleflight Group ensures only ONE goroutine recomputes a key when it
@@ -27,7 +27,7 @@ type entry struct {
 	expires time.Time
 }
 
-// TTLCache is concurrent-safe. Zero value is not usable — call New().
+// TTLCache is concurrent-safe. Zero value is not usable, call New().
 type TTLCache struct {
 	mu    sync.RWMutex
 	store map[string]entry

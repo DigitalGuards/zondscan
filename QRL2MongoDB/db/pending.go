@@ -32,7 +32,7 @@ func UpsertPendingTransaction(tx *models.PendingTransaction) error {
 		configs.Logger.Error("Failed to unmarshal pending transaction", zap.Error(err))
 		return err
 	}
-	// status must only be written on initial insert — otherwise a stale
+	// status must only be written on initial insert, otherwise a stale
 	// mempool entry can revert a row that was already marked mined back to
 	// "pending". Explicit transitions go through UpdatePendingTransactionStatus.
 	delete(setFields, "createdAt")
@@ -82,7 +82,7 @@ func UpdatePendingTransactionStatus(hash string, status string) error {
 	return nil
 }
 
-// CleanupOldPendingTransactions removes rows that haven't been seen recently —
+// CleanupOldPendingTransactions removes rows that haven't been seen recently ,
 // both genuinely-pending rows the node has forgotten about, and "mined"
 // tombstones that have aged out. The tombstones must be cleaned here too;
 // the per-status helpers (UpdatePendingTransactionsInBlock,

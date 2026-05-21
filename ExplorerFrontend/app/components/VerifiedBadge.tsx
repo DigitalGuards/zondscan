@@ -8,7 +8,7 @@ interface VerifiedBadgeProps {
 }
 
 /**
- * Small green pill rendered next to verified-contract titles. Visual only —
+ * Small green pill rendered next to verified-contract titles. Visual only ,
  * the parent must already have determined `contractData.verified === true`
  * before mounting this.
  */

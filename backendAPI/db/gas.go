@@ -25,7 +25,7 @@ var (
 )
 
 // hexToBig parses a "0x"-prefixed hex string into a *big.Int. Empty / malformed
-// input yields 0 — gas math should never panic on a missing field.
+// input yields 0, gas math should never panic on a missing field.
 func hexToBig(s string) *big.Int {
 	b := new(big.Int)
 	if s == "" {
@@ -41,7 +41,7 @@ func hexToBig(s string) *big.Int {
 
 // BlockGasSample is the minimal projection we need from each block for the gas
 // page and ETA math. Block documents are stored with lowercase BSON keys
-// (gasused, gaslimit, basefeepergas, gasprice on tx) — match that exactly.
+// (gasused, gaslimit, basefeepergas, gasprice on tx), match that exactly.
 type BlockGasSample struct {
 	BlockNumberInt int64 `bson:"blockNumberInt"`
 	Result         struct {
@@ -202,7 +202,7 @@ func GetPendingMempoolSnapshot() ([]MempoolSample, error) {
 
 // GetRecentTransactionGasPrices returns the gasPrice of the last `n`
 // transactions network-wide, walking the blocks collection newest-first and
-// unwinding tx arrays until n prices are collected — bounded by `maxBlocks`
+// unwinding tx arrays until n prices are collected, bounded by `maxBlocks`
 // so a totally empty chain doesn't scan forever. This keeps the headline
 // "Avg Gas Price" meaningful on quiet testnets where the last 30 blocks may
 // have zero txs but a tx from two hours ago is still useful signal.
@@ -333,7 +333,7 @@ func MempoolGasPriceHistogram(samples []MempoolSample, bins int) []GasPriceBucke
 	values := make([]float64, 0, len(samples))
 	for _, s := range samples {
 		gp := hexToBig(s.GasPrice)
-		// Shor = Planck / 10^9. float64 lossiness is fine here — this is for
+		// Shor = Planck / 10^9. float64 lossiness is fine here, this is for
 		// a histogram, not accounting.
 		q := new(big.Int).Quo(gp, bigShor)
 		values = append(values, float64(q.Int64()))

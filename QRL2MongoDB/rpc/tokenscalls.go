@@ -23,10 +23,10 @@ const (
 	SIG_BALANCE            = "0x70a08231" // balanceOf(address)
 	SIG_SUPPLY             = "0x18160ddd" // totalSupply()
 	SIG_SUPPORTS_INTERFACE = "0x01ffc9a7" // supportsInterface(bytes4)
-	SIG_OWNER_OF           = "0x6352211e" // ownerOf(uint256) — ERC-721
-	SIG_BALANCE_OF_1155    = "0x00fdd58e" // balanceOf(address,uint256) — ERC-1155
-	SIG_TOKEN_URI          = "0xc87b56dd" // tokenURI(uint256) — ERC-721Metadata
-	SIG_URI                = "0x0e89341c" // uri(uint256) — ERC-1155MetadataURI
+	SIG_OWNER_OF           = "0x6352211e" // ownerOf(uint256), ERC-721
+	SIG_BALANCE_OF_1155    = "0x00fdd58e" // balanceOf(address,uint256), ERC-1155
+	SIG_TOKEN_URI          = "0xc87b56dd" // tokenURI(uint256), ERC-721Metadata
+	SIG_URI                = "0x0e89341c" // uri(uint256), ERC-1155MetadataURI
 )
 
 // ERC-165 interface IDs, as the 4-byte XOR of the interface's method selectors.
@@ -155,7 +155,7 @@ type ContractDetectionResult struct {
 // the ERC-20 name+symbol+decimals triad otherwise.
 //
 // Error contract: a non-nil error means the *probe itself* failed (transport
-// blip, etc.) — the caller MUST bail without writing classification fields,
+// blip, etc.), the caller MUST bail without writing classification fields,
 // to preserve the C5 promote-only invariant established in #88. A nil error
 // with Standard=="" simply means "we can't tell what this is" (and that IS
 // safe to write; the merge in StoreContract treats "" as no-op).
@@ -198,7 +198,7 @@ func DetectContractType(addr string) (ContractDetectionResult, error) {
 
 	// Either probe confirmed the contract responds to ERC-165 (it just
 	// doesn't support either NFT interface). Record that, then fall through
-	// to ERC-20 detection — some hybrid contracts (rare) declare ERC-165
+	// to ERC-20 detection, some hybrid contracts (rare) declare ERC-165
 	// without being ERC-721/1155 and ARE ERC-20.
 	erc165Known := hasERC165 || hasERC165From721
 
@@ -209,7 +209,7 @@ func DetectContractType(addr string) (ContractDetectionResult, error) {
 	}
 	totalSupply, err := GetTokenTotalSupply(addr)
 	if err != nil {
-		// totalSupply RPC failure is non-fatal — the triad already
+		// totalSupply RPC failure is non-fatal, the triad already
 		// classified this as ERC-20. Leave TotalSupply empty; the merge
 		// in StoreContract won't demote an existing value.
 		totalSupply = ""
@@ -638,9 +638,9 @@ func ParseTransferEvent(log models.Log) (string, string, *big.Int, error) {
 //   - supports    : contract declared support for the queried interface
 //   - hasERC165   : contract returned a well-formed bool32 (i.e. it implements
 //     ERC-165 at all). A `false, true` result means "ERC-165 contract, doesn't
-//     implement this interface" — useful to skip later probes.
+//     implement this interface", useful to skip later probes.
 //   - err         : transport-level failure (timeout, network down, etc).
-//     The caller MUST check err and bail without classifying — a transient
+//     The caller MUST check err and bail without classifying, a transient
 //     blip never demotes existing state (mirrors the C5 promote-only
 //     invariant in db/contracts.go:StoreContract).
 //
@@ -649,7 +649,7 @@ func ParseTransferEvent(log models.Log) (string, string, *big.Int, error) {
 // any unknown selector, and that's the discriminator we rely on.
 //
 // Calldata layout per ABI spec is selector + interfaceID (right-padded to
-// 32 bytes), NOT left-padded — `bytes4` is a fixed-length type and the
+// 32 bytes), NOT left-padded, `bytes4` is a fixed-length type and the
 // ABI pads fixed types on the right with zero bytes.
 func SupportsInterface(addr string, interfaceID [4]byte) (supports, hasERC165 bool, err error) {
 	calldata := SIG_SUPPORTS_INTERFACE + hex.EncodeToString(interfaceID[:]) + strings.Repeat("0", 56)
@@ -728,7 +728,7 @@ func ParseERC721Transfer(log models.Log) (from, to string, tokenID *big.Int, err
 // ParseERC1155TransferSingle decodes an ERC-1155 TransferSingle(operator, from, to, id, value) log.
 //
 // Layout: 4 topics [sig, operator, from, to], data = abi.encode(uint256 id, uint256 value).
-// The operator is dropped — callers care about the (from, to) pair, not who
+// The operator is dropped, callers care about the (from, to) pair, not who
 // orchestrated the transfer.
 func ParseERC1155TransferSingle(log models.Log) (from, to string, id, value *big.Int, err error) {
 	if len(log.Topics) != 4 {

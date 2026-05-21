@@ -30,13 +30,13 @@ func preserveCreationInfo(contractInfo *models.ContractInfo, existingContract *m
 // be populated when an existing contract record was preserved.
 //
 // On transient RPC failure DetectContractType returns an error and we return
-// (existing, "") — never demoting a previously-classified contract. The
+// (existing, ""), never demoting a previously-classified contract. The
 // caller's "skip non-token" guard correctly skips this log; the next sighting
 // re-tries and either succeeds (promotion) or stays unclassified (no harm).
 func EnsureContractClassified(contractAddress string, blockNumber string, txHash string) (*models.ContractInfo, string) {
 	detection, detErr := rpc.DetectContractType(contractAddress)
 	if detErr != nil {
-		// Transient probe failure — preserve existing state, don't write
+		// Transient probe failure, preserve existing state, don't write
 		// anything that would clobber a previously-good classification.
 		configs.Logger.Debug("Contract type detection failed; preserving existing classification",
 			zap.String("address", contractAddress),
@@ -82,7 +82,7 @@ func EnsureContractClassified(contractAddress string, blockNumber string, txHash
 	}
 
 	if existingContract == nil {
-		// First sighting — try to backfill creator info from the transfer
+		// First sighting, try to backfill creator info from the transfer
 		// collection now (cheap DB lookup) rather than waiting for the
 		// hourly reprocess job.
 		contractInfo.CreationBlockNumber = blockNumber

@@ -94,7 +94,7 @@ export interface TokenTransferInfo {
   tokenName: string;
   tokenSymbol: string;
   tokenDecimals: number;
-  /** ERC-20 | ERC-721 | ERC-1155 — drives the row's badge in transaction-view. */
+  /** ERC-20 | ERC-721 | ERC-1155, drives the row's badge in transaction-view. */
   tokenStandard?: TokenStandard | string;
   /** uint256 decimal string. Populated for ERC-721 + ERC-1155 transfers. */
   tokenID?: string;
@@ -157,7 +157,7 @@ export interface PendingTransaction {
  * Calculate the number of confirmations for a transaction. Clamped to >=0:
  * if the backend's latestBlock is briefly stale relative to the tx's own
  * block, we'd otherwise return a negative count and badge the (mined) tx
- * as "Pending" with "-N Confirmations" — confusing UX.
+ * as "Pending" with "-N Confirmations", confusing UX.
  */
 export function getConfirmations(txBlockNumber?: string | number, latestBlock?: number): number | null {
   if (!txBlockNumber || !latestBlock) return null;

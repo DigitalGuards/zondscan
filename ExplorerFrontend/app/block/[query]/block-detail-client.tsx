@@ -151,7 +151,7 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
       } catch (err) {
         // A 404 just means the block hasn't been synced yet (or doesn't
         // exist). Treat that as an informational state, not a console
-        // error — Next.js dev mode promotes console.error to a red
+        // error, Next.js dev mode promotes console.error to a red
         // overlay which makes a benign "future block" feel like a bug.
         if (axios.isAxiosError(err) && (err.response?.status === 404 || err.response?.status === 400)) {
           // 404 → block hasn't been synced; 400 → unparseable block id

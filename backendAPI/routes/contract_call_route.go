@@ -15,7 +15,7 @@ import (
 )
 
 // contract-call gas cap. The node treats this as "if your call gas-uses
-// more than X, fail" — a hard ceiling against pathological reads that
+// more than X, fail", a hard ceiling against pathological reads that
 // would tie up the node. 50M is comfortably above any real read flow.
 const contractCallGasCap = uint64(50_000_000)
 
@@ -32,10 +32,10 @@ const contractCallMaxDataBytes = 8 * 1024 // 8 KiB raw hex = ~4 KiB decoded
 // primitive Etherscan uses to back its "Read Contract" tab. Open-ended
 // reads of view/pure functions are read-only and have no on-chain side
 // effects, but the proxy must still cap (a) the request rate per IP, (b)
-// the data payload size, (c) the gas cap, and (d) the per-call timeout —
+// the data payload size, (c) the gas cap, and (d) the per-call timeout ,
 // all together, those bound how much node work an attacker can elicit.
 func RegisterContractCallRoute(router *gin.Engine) {
-	// 60 calls/min/IP — generous for a Read tab where each click on a view
+	// 60 calls/min/IP, generous for a Read tab where each click on a view
 	// function fires one call. The token bucket bursts at 60 too.
 	callLimiter := middleware.PerIPRateLimit(60, 60, time.Minute)
 
@@ -103,7 +103,7 @@ func RegisterContractCallRoute(router *gin.Engine) {
 			return
 		}
 		if rpcErr != nil {
-			// Surface the upstream error verbatim — "execution reverted"
+			// Surface the upstream error verbatim, "execution reverted"
 			// is the most common case and clients (Read tab) display it.
 			c.JSON(http.StatusOK, gin.H{
 				"error":   rpcErr.Message,

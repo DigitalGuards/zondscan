@@ -106,7 +106,7 @@ func FetchOnChainCode(ctx context.Context, address string) (string, error) {
 // used at compile time, so a verifier that compiles via "Foo.hyp" cannot
 // recover the same hash as a deployer that compiled via "contract.hyp"
 // even when the source content is byte-identical. We strip the trailer
-// from both sides before comparing — the masking step that follows then
+// from both sides before comparing, the masking step that follows then
 // gives us a byte-equal compare of the code body, which is the security-
 // relevant payload.
 func Match(compiledHex, onChainHex string, immRefs map[string][]ImmutableRange) (MatchOutcome, error) {
@@ -189,7 +189,7 @@ func Match(compiledHex, onChainHex string, immRefs map[string][]ImmutableRange) 
 		return out, nil
 	}
 
-	// Same length but bytes differ — surface the first diff offset.
+	// Same length but bytes differ, surface the first diff offset.
 	for i := range cb {
 		if cb[i] != ob[i] {
 			out.DiffByteOffset = i
@@ -208,7 +208,7 @@ func Match(compiledHex, onChainHex string, immRefs map[string][]ImmutableRange) 
 //
 //   - len(b) < 2                    no length bytes
 //   - cborLen <= 0                  garbage / no trailer claimed
-//   - cborLen+2 >= len(b)           would strip the entire code body —
+//   - cborLen+2 >= len(b)           would strip the entire code body ,
 //                                   two such inputs would compare equal
 //                                   even when their code bodies differ
 //   - cborLen > 1024                real metadata is well under 100 B; a

@@ -17,7 +17,7 @@ export default [
     files: ["**/*.{js,jsx,mjs,ts,tsx,mts,cts}"],
     settings: {
       // Pin React version to bypass eslint-plugin-react@7.37's
-      // detectReactVersion() helper, which calls context.getFilename() — a
+      // detectReactVersion() helper, which calls context.getFilename(), a
       // method ESLint 10 removed. Without this pin, every load of a
       // react/* rule crashes:
       //   "Error while loading rule 'react/no-direct-mutation-state':

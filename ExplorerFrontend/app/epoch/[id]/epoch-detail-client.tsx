@@ -165,7 +165,7 @@ export default function EpochDetailClient({ epochId }: { epochId: string }): JSX
                     {timeAgo(data.timestamp)}
                     <span className="text-gray-500 ml-2">({formatTimestamp(data.timestamp)})</span>
                   </span>
-                ) : '—'}
+                ) : ','}
               </SummaryRow>
               <SummaryRow label="Validators">{formatNumberWithCommas(data.validatorsCount.toString())}</SummaryRow>
               <SummaryRow label="Active">{formatNumberWithCommas(data.activeCount.toString())}</SummaryRow>
@@ -220,7 +220,7 @@ export default function EpochDetailClient({ epochId }: { epochId: string }): JSX
                           <StatusBadge status={slot.status} />
                         </td>
                         <td className="px-4 py-2 text-gray-400 tabular-nums">
-                          {isProposed ? timeAgo(timestamp) : '—'}
+                          {isProposed ? timeAgo(timestamp) : ','}
                         </td>
                         <td className="px-4 py-2 hidden sm:table-cell">
                           {isProposed && proposer ? (
@@ -228,14 +228,14 @@ export default function EpochDetailClient({ epochId }: { epochId: string }): JSX
                               {truncateHash(proposer, 8, 6)}
                             </Link>
                           ) : (
-                            <span className="text-gray-600">—</span>
+                            <span className="text-gray-600">,</span>
                           )}
                         </td>
                         <td className="px-4 py-2 text-gray-300 tabular-nums">
-                          {isProposed ? slot.transactions : '—'}
+                          {isProposed ? slot.transactions : ','}
                         </td>
                         <td className="px-4 py-2 text-gray-400 tabular-nums hidden md:table-cell">
-                          {isProposed && slot.gasUsed ? formatGasUsed(slot.gasUsed) : '—'}
+                          {isProposed && slot.gasUsed ? formatGasUsed(slot.gasUsed) : ','}
                         </td>
                       </tr>
                     );
