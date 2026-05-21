@@ -583,7 +583,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                     inputMode="numeric"
                                     placeholder="e.g. 1"
                                     value={holderTokenIDInput}
-                                    onChange={(e) => setHolderTokenIDInput(e.target.value)}
+                                    onChange={(e) => setHolderTokenIDInput(e.target.value.replace(/[^0-9]/g, ''))}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') {
                                             setHoldersPage(0);

@@ -157,6 +157,23 @@ func GetTokenHolders(contractAddress, tokenID string, page, limit int) ([]models
 	skip := int64(page * limit)
 	lim := int64(limit)
 
+	// uint256 balances can be up to 78 digits, well past Decimal128's
+	// 34-digit limit. A raw $toDecimal would throw on extreme values; both
+	// paths below avoid that. The tokenID-scoped path sorts by string
+	// (length, lex) which gives correct numeric order for any uint256
+	// without Decimal128 at all. The aggregated path needs $sum so it
+	// keeps Decimal128 but wraps the $toDecimal in $convert with onError=0,
+	// any single oversized balance falls back to 0 for sort purposes only
+	// (the original string is still in the row).
+	safeDecimalBalance := bson.M{
+		"$convert": bson.M{
+			"input":   "$balance",
+			"to":      "decimal",
+			"onError": 0,
+			"onNull":  0,
+		},
+	}
+
 	// tokenID-scoped path: rows already represent (holder, id) tuples, no
 	// grouping needed.
 	if tokenID != "" {
@@ -166,10 +183,15 @@ func GetTokenHolders(contractAddress, tokenID string, page, limit int) ([]models
 		}
 		pipeline := []bson.M{
 			{"$match": matchStage},
-			{"$addFields": bson.M{"balanceDecimal": bson.M{"$toDecimal": "$balance"}}},
-			{"$sort": bson.M{"balanceDecimal": -1}},
+			{
+				"$addFields": bson.M{
+					"balanceLen": bson.M{"$strLenCP": bson.M{"$ifNull": []interface{}{"$balance", ""}}},
+				},
+			},
+			{"$sort": bson.D{{Key: "balanceLen", Value: -1}, {Key: "balance", Value: -1}}},
 			{"$skip": skip},
 			{"$limit": lim},
+			{"$project": bson.M{"balanceLen": 0}},
 		}
 		cursor, err := collection.Aggregate(ctx, pipeline)
 		if err != nil {
@@ -195,7 +217,7 @@ func GetTokenHolders(contractAddress, tokenID string, page, limit int) ([]models
 		"$group": bson.M{
 			"_id":             "$holderAddress",
 			"contractAddress": bson.M{"$first": "$contractAddress"},
-			"balanceDecimal":  bson.M{"$sum": bson.M{"$toDecimal": "$balance"}},
+			"balanceDecimal":  bson.M{"$sum": safeDecimalBalance},
 			"blockNumber":     bson.M{"$max": "$blockNumber"},
 			"updatedAt":       bson.M{"$max": "$updatedAt"},
 			"tokenStandard":   bson.M{"$first": "$tokenStandard"},
@@ -282,10 +304,25 @@ func GetTokenIDs(contractAddress string, page, limit int) ([]TokenIDSummary, int
 
 	collection := configs.GetCollection(configs.DB, "tokenBalances")
 
-	groupStage := bson.M{
+	// Two-stage group to count distinct (tokenID, holder) pairs per id
+	// without holding the holder list in memory. First stage collapses
+	// duplicate (id, holder) rows; second stage counts them per id. Avoids
+	// the $addToSet array-build that would OOM on hot ERC-1155 collections.
+	firstGroup := bson.M{
 		"$group": bson.M{
-			"_id":           "$tokenID",
-			"holders":       bson.M{"$addToSet": "$holderAddress"},
+			"_id": bson.M{
+				"tokenID":       "$tokenID",
+				"holderAddress": "$holderAddress",
+			},
+			"tokenStandard": bson.M{"$first": "$tokenStandard"},
+			"blockNumber":   bson.M{"$max": "$blockNumber"},
+			"updatedAt":     bson.M{"$max": "$updatedAt"},
+		},
+	}
+	secondGroup := bson.M{
+		"$group": bson.M{
+			"_id":           "$_id.tokenID",
+			"holderCount":   bson.M{"$sum": 1},
 			"tokenStandard": bson.M{"$first": "$tokenStandard"},
 			"blockNumber":   bson.M{"$max": "$blockNumber"},
 			"updatedAt":     bson.M{"$max": "$updatedAt"},
@@ -295,7 +332,8 @@ func GetTokenIDs(contractAddress string, page, limit int) ([]TokenIDSummary, int
 	// Total count of distinct ids.
 	countPipeline := []bson.M{
 		{"$match": matchStage},
-		groupStage,
+		firstGroup,
+		secondGroup,
 		{"$count": "total"},
 	}
 	countCursor, err := collection.Aggregate(ctx, countPipeline)
@@ -314,36 +352,32 @@ func GetTokenIDs(contractAddress string, page, limit int) ([]TokenIDSummary, int
 		totalCount = countResult[0].Total
 	}
 
+	// Sort key: full uint256 IDs can be up to 78 digits, well past
+	// Decimal128's 34-digit limit, so $convert-to-decimal will throw on
+	// extreme values. Sort by (string length DESC of "1" -> "01" no, we
+	// want ASC numeric order so shorter-len first, then lex). Lexicographic
+	// sort on equal-length numeric strings matches numeric sort, so the
+	// (len, lex) tuple gives correct numeric ascending order for the full
+	// uint256 range without involving Decimal128.
 	pipeline := []bson.M{
 		{"$match": matchStage},
-		groupStage,
+		firstGroup,
+		secondGroup,
 		{
 			"$project": bson.M{
 				"_id":           0,
 				"tokenID":       "$_id",
-				"holderCount":   bson.M{"$size": "$holders"},
+				"holderCount":   1,
 				"tokenStandard": 1,
 				"blockNumber":   1,
 				"updatedAt":     1,
-				// Sort key: cast tokenID to decimal so "10" > "2" (string
-				// sort would have put "10" before "2"). big-ints up to
-				// uint256 fit in Mongo's Decimal128 (up to 34 sig digits)
-				// for sorting purposes; the response keeps the original
-				// string for full precision.
-				"sortKey": bson.M{
-					"$convert": bson.M{
-						"input":   "$_id",
-						"to":      "decimal",
-						"onError": "0",
-						"onNull":  "0",
-					},
-				},
+				"tokenIDLen":    bson.M{"$strLenCP": bson.M{"$ifNull": []interface{}{"$_id", ""}}},
 			},
 		},
-		{"$sort": bson.M{"sortKey": 1}},
+		{"$sort": bson.D{{Key: "tokenIDLen", Value: 1}, {Key: "tokenID", Value: 1}}},
 		{"$skip": int64(page * limit)},
 		{"$limit": int64(limit)},
-		{"$project": bson.M{"sortKey": 0}},
+		{"$project": bson.M{"tokenIDLen": 0}},
 	}
 
 	cursor, err := collection.Aggregate(ctx, pipeline)

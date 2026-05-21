@@ -700,20 +700,62 @@ func InitializeTokenBalancesCollection() error {
 	}
 
 	// Drop the prior 2-tuple unique once the new 3-tuple unique is online.
-	// The legacy index was auto-named by Mongo when configs.ConnectDB created
-	// it (no explicit SetName), so we drop by its conventional auto-generated
-	// name `contractAddress_1_holderAddress_1`. IndexNotFound is fine on
-	// fresh deployments.
-	legacyName := "contractAddress_1_holderAddress_1"
-	if _, err := collection.Indexes().DropOne(ctx, legacyName); err != nil {
-		msg := err.Error()
-		if !strings.Contains(msg, "IndexNotFound") &&
-			!strings.Contains(msg, "ns does not exist") &&
-			!strings.Contains(msg, "NamespaceNotFound") {
-			configs.Logger.Warn("Could not drop legacy 2-tuple unique; new 3-tuple unique still active",
-				zap.String("indexName", legacyName),
-				zap.Error(err))
+	// We can't rely on the legacy index name because different MongoDB
+	// versions / manual creators may have named it differently (the
+	// `configs.ConnectDB` path historically created it without an explicit
+	// SetName, so Mongo auto-generated something like
+	// `contractAddress_1_holderAddress_1`, but that's not a guarantee).
+	// Iterate every index on the collection, match on the key spec instead,
+	// and drop any (contractAddress, holderAddress) unique. The new 3-tuple
+	// unique is keyed on three fields so it can't be confused.
+	if cursor, err := collection.Indexes().List(ctx); err == nil {
+		defer cursor.Close(ctx)
+		for cursor.Next(ctx) {
+			var idx struct {
+				Name   string `bson:"name"`
+				Key    bson.D `bson:"key"`
+				Unique bool   `bson:"unique"`
+			}
+			if decErr := cursor.Decode(&idx); decErr != nil {
+				continue
+			}
+			if len(idx.Key) != 2 {
+				continue
+			}
+			// Match on the (contractAddress, holderAddress) key pair, in
+			// either order, regardless of direction. The legacy unique
+			// always pinned both to ascending (1), but matching by name
+			// only would miss any variant.
+			haveContract := false
+			haveHolder := false
+			for _, e := range idx.Key {
+				switch e.Key {
+				case "contractAddress":
+					haveContract = true
+				case "holderAddress":
+					haveHolder = true
+				}
+			}
+			if !haveContract || !haveHolder {
+				continue
+			}
+			if _, dErr := collection.Indexes().DropOne(ctx, idx.Name); dErr != nil {
+				msg := dErr.Error()
+				if !strings.Contains(msg, "IndexNotFound") &&
+					!strings.Contains(msg, "ns does not exist") &&
+					!strings.Contains(msg, "NamespaceNotFound") {
+					configs.Logger.Warn("Could not drop legacy 2-tuple unique; new 3-tuple unique still active",
+						zap.String("indexName", idx.Name),
+						zap.Error(dErr))
+				}
+			} else {
+				configs.Logger.Info("Dropped legacy 2-tuple tokenBalances index",
+					zap.String("indexName", idx.Name))
+			}
 		}
+	} else {
+		configs.Logger.Warn("Could not list tokenBalances indexes for migration; new 3-tuple unique still active",
+			zap.Error(err))
 	}
 
 	// Also retire the vestigial pre-Phase-2 indexes that targeted a non-
