@@ -195,10 +195,9 @@ func processTokenContract(targetAddress string, txHash string, blockNumber strin
 			zap.String("amount", amount))
 
 		// Idempotent: the direct-calldata path uses logIndex="" (there's
-		// no originating log). The unique tuple for replay-detection is
-		// (txHash, contractAddress, ""). On a re-process of the same
-		// tx → skip the write so we don't grow duplicate rows.
-		exists, err := TokenTransferExists(txHash, targetAddress, "")
+		// no originating log) and tokenID="" (ERC-20 only). The unique
+		// tuple for replay-detection is (txHash, contractAddress, "", "").
+		exists, err := TokenTransferExists(txHash, targetAddress, "", "")
 		if err == nil && exists {
 			configs.Logger.Debug("Skipping duplicate direct token transfer",
 				zap.String("txHash", txHash),
@@ -251,12 +250,10 @@ func processTokenContract(targetAddress string, txHash string, blockNumber strin
 
 	transfers := rpc.ProcessTransferLogs(receipt)
 	for _, transferEvent := range transfers {
-		// Idempotent dedupe: a re-process of the same tx must not
-		// duplicate the log-derived row. Key is
-		// (txHash, contractAddress, logIndex). The same check inside
-		// ProcessBlockTokenTransfers exists for the initial-sync path;
-		// this is the steady-state mirror.
-		exists, err := TokenTransferExists(txHash, targetAddress, transferEvent.LogIndex)
+		// Idempotent dedupe of the log-derived row. processTokenContract
+		// runs only on ERC-20 contracts (the legacy ProcessTransferLogs
+		// path), so tokenID is always "" here.
+		exists, err := TokenTransferExists(txHash, targetAddress, transferEvent.LogIndex, "")
 		if err != nil {
 			configs.Logger.Error("Failed to check duplicate token transfer",
 				zap.String("txHash", txHash),
