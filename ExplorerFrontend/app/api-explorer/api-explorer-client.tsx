@@ -201,9 +201,9 @@ const endpointGroups: EndpointGroup[] = [
       {
         method: 'GET',
         path: '/contracts',
-        description: 'Returns a paginated list of smart contracts. Supports search and token filtering.',
-        params: 'page (query, default: 0), limit (query, default: 10, max: 100), search (query), isToken (query, true/false)',
-        example: '/contracts?page=0&limit=10&isToken=true',
+        description: 'Returns a paginated list of smart contracts. Supports search, token/standard filtering, and substring match on name or symbol. The `standard` filter (Phase 1 NFT support) returns only contracts classified as the given EIP standard; `isToken=true` is the looser superset (matches all three token standards).',
+        params: 'page (query, default: 0), limit (query, default: 10, max: 100), search (query, matches address, creator address, name, or symbol — case-insensitive), isToken (query, true/false), standard (query, ERC-20|ERC-721|ERC-1155 — invalid value → 400)',
+        example: '/contracts?page=0&limit=10&standard=ERC-721',
       },
       {
         method: 'GET',
@@ -221,14 +221,14 @@ const endpointGroups: EndpointGroup[] = [
       {
         method: 'GET',
         path: '/token/:address/transfers',
-        description: 'Returns a paginated list of token transfers for a given contract.',
+        description: 'Returns a paginated list of token transfers for a given contract. Each row carries `tokenStandard` (ERC-20|ERC-721|ERC-1155) and `tokenID` (decimal uint256, empty for ERC-20). ERC-1155 TransferBatch logs are fanned out to one row per (id, value) tuple, so a batch of N items produces N rows that share txHash + logIndex but differ on tokenID.',
         params: 'page (query, default: 0), limit (query, default: 25, max: 100)',
         example: '/token/0xabc123.../transfers?page=0&limit=25',
       },
     ],
   },
   {
-    category: 'Contract Verification (M1-M3)',
+    category: 'Contract Verification',
     endpoints: [
       {
         method: 'GET',
@@ -252,7 +252,7 @@ const endpointGroups: EndpointGroup[] = [
     ],
   },
   {
-    category: 'Contract Interaction (M4-M6)',
+    category: 'Contract Interaction',
     endpoints: [
       {
         method: 'POST',
