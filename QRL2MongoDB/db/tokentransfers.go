@@ -122,24 +122,29 @@ func GetTokenTransfersByAddress(address string, skip, limit int64) ([]models.Tok
 	return transfers, nil
 }
 
-// TokenTransferExists checks if a token transfer already exists in the database
-func TokenTransferExists(txHash string, contractAddress string, from string, to string) (bool, error) {
+// TokenTransferExists checks if a specific token transfer log already
+// exists in the database. logIndex is the disambiguator within a tx so
+// multi-transfer txs (DEX swaps, batch mints, fee-skim contracts that
+// emit Transfer twice for the same from/to) can be dedup-checked at
+// log granularity rather than tx-level. The legacy four-arg signature
+// would collide on self-transfers (from == to) and any tx with two
+// transfers sharing the same from+to.
+func TokenTransferExists(txHash string, logIndex string) (bool, error) {
 	collection := configs.GetCollection(configs.DB, "tokenTransfers")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	filter := bson.M{
-		"txHash":          txHash,
-		"contractAddress": contractAddress,
-		"from":            from,
-		"to":              to,
+		"txHash":   txHash,
+		"logIndex": logIndex,
 	}
 
 	count, err := collection.CountDocuments(ctx, filter)
 	if err != nil {
 		configs.Logger.Error("Failed to check if token transfer exists",
 			zap.String("txHash", txHash),
+			zap.String("logIndex", logIndex),
 			zap.Error(err))
 		return false, err
 	}
@@ -213,8 +218,10 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 		// Extract amount
 		amount := log.Data
 
-		// Check if this transfer already exists
-		exists, err := TokenTransferExists(log.TransactionHash, contractAddress, from, to)
+		// Check if this specific log already persisted (idempotent on
+		// reprocess). Per-log granularity matters: a single tx can emit
+		// many Transfer events; dedup by tx+logIndex, not tx alone.
+		exists, err := TokenTransferExists(log.TransactionHash, log.LogIndex)
 		if err != nil {
 			configs.Logger.Error("Failed to check if token transfer exists",
 				zap.String("txHash", log.TransactionHash),
@@ -254,6 +261,7 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 			Amount:          amount,
 			BlockNumber:     blockNumber,
 			TxHash:          log.TransactionHash,
+			LogIndex:        log.LogIndex,
 			Timestamp:       blockTimestamp,
 			TokenSymbol:     contract.Symbol,
 			TokenDecimals:   contract.Decimals,
@@ -305,6 +313,22 @@ func InitializeTokenTransfersCollection() error {
 
 	configs.Logger.Info("Initializing tokenTransfers collection and indexes")
 
+	// Migration: the previous schema enforced a UNIQUE index on `txHash`
+	// alone, which silently dropped every Transfer event after the first
+	// within any tx that emitted more than one (DEX swaps, batch mints,
+	// fee-skim contracts). Drop it if it's still around — DropOne returns
+	// IndexNotFound on fresh deployments and that's fine.
+	if _, err := collection.Indexes().DropOne(ctx, "txHash_idx"); err != nil {
+		msg := err.Error()
+		// Acceptable: index never existed, or collection doesn't yet.
+		if !strings.Contains(msg, "IndexNotFound") &&
+			!strings.Contains(msg, "ns does not exist") &&
+			!strings.Contains(msg, "NamespaceNotFound") {
+			configs.Logger.Warn("Could not drop legacy unique txHash_idx — continuing; new index creation may also fail",
+				zap.Error(err))
+		}
+	}
+
 	// Create indexes for token transfers collection.
 	// CreateMany does not drop existing indexes and is idempotent.
 	indexes := []mongo.IndexModel{
@@ -330,8 +354,17 @@ func InitializeTokenTransfersCollection() error {
 			Options: options.Index().SetName("to_block_idx"),
 		},
 		{
-			Keys:    bson.D{{Key: "txHash", Value: 1}},
-			Options: options.Index().SetName("txHash_idx").SetUnique(true),
+			// Non-unique. Provides a fast lookup path for
+			// TokenTransferExists(txHash, logIndex) and for any /tx/:hash
+			// → transfers query. Dedup is enforced at the application
+			// layer via TokenTransferExists before insert; a unique
+			// constraint here would re-introduce the original bug for
+			// the legacy direct-calldata path (which writes logIndex="").
+			Keys: bson.D{
+				{Key: "txHash", Value: 1},
+				{Key: "logIndex", Value: 1},
+			},
+			Options: options.Index().SetName("txHash_logIndex_idx"),
 		},
 	}
 
