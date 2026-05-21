@@ -14,7 +14,12 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool) ([]models.ContractInfo, int64, error) {
+// ReturnContracts paginates contracts with optional `isToken` and
+// `tokenStandard` filters. `standardFilter` overlays on top of
+// `isTokenFilter` so e.g. `isToken=true,standard=ERC-721` returns the
+// intersection (NFT collections only). Pass nil/empty for either filter to
+// skip that predicate.
+func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool, standardFilter *string) ([]models.ContractInfo, int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -27,6 +32,12 @@ func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool
 	// Add isToken filter if specified
 	if isTokenFilter != nil {
 		filter = append(filter, bson.E{Key: "isToken", Value: *isTokenFilter})
+	}
+
+	// Add tokenStandard filter if specified. Both filters AND together —
+	// `?isToken=true&standard=ERC-721` returns NFT collections only.
+	if standardFilter != nil && *standardFilter != "" {
+		filter = append(filter, bson.E{Key: "tokenStandard", Value: *standardFilter})
 	}
 
 	// Add search if provided, using correct field names

@@ -17,6 +17,7 @@ interface ContractData {
   totalSupply?: string;
   creationBlockNumber?: string;
   isToken: boolean;
+  tokenStandard?: 'ERC-20' | 'ERC-721' | 'ERC-1155' | string;
 }
 
 interface ContractsClientProps {
@@ -24,7 +25,37 @@ interface ContractsClientProps {
   totalContracts: number;
 }
 
-type TabType = 'tokens' | 'contracts';
+// Per-tab → backend filter mapping. ERC-20/721/1155 use the ?standard= filter
+// added in Phase 1; 'contracts' (other) uses ?isToken=false to surface non-
+// token contracts. 'all' has no filter — useful for search-everything.
+type TabType = 'erc20' | 'erc721' | 'erc1155' | 'contracts';
+
+const TAB_TO_STANDARD: Record<TabType, 'ERC-20' | 'ERC-721' | 'ERC-1155' | null> = {
+  erc20: 'ERC-20',
+  erc721: 'ERC-721',
+  erc1155: 'ERC-1155',
+  contracts: null,
+};
+
+const STANDARD_LABEL: Record<string, string> = {
+  'ERC-20': 'Token',
+  'ERC-721': 'NFT',
+  'ERC-1155': 'Multi-Token',
+};
+
+const TAB_RESULT_NOUN: Record<TabType, string> = {
+  erc20: 'tokens',
+  erc721: 'NFT collections',
+  erc1155: 'multi-token collections',
+  contracts: 'contracts',
+};
+
+const TAB_EMPTY_TITLE: Record<TabType, string> = {
+  erc20: 'No tokens found',
+  erc721: 'No NFT collections found',
+  erc1155: 'No multi-token collections found',
+  contracts: 'No contracts found',
+};
 
 const ITEMS_PER_PAGE = 15;
 
@@ -112,14 +143,14 @@ function truncateAddress(addr: string, start = 8, end = 6): string {
 }
 
 export default function ContractsClient({ initialData, totalContracts }: ContractsClientProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('tokens');
+  const [activeTab, setActiveTab] = useState<TabType>('erc20');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(0);
   const [contracts, setContracts] = useState<ContractData[]>(initialData);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(totalContracts);
 
-  const fetchContracts = useCallback(async (page: number, search: string, isToken: boolean | null) => {
+  const fetchContracts = useCallback(async (page: number, search: string, tab: TabType) => {
     try {
       setLoading(true);
       const cleanSearch = search ? search.toLowerCase().replace(/^0x/, '') : undefined;
@@ -133,9 +164,12 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
         params.search = cleanSearch;
       }
 
-      // Filter by isToken based on active tab
-      if (isToken !== null) {
-        params.isToken = isToken;
+      const standard = TAB_TO_STANDARD[tab];
+      if (standard !== null) {
+        params.standard = standard;
+      } else {
+        // 'contracts' tab → non-token contracts only.
+        params.isToken = false;
       }
 
       const response = await axios.get(`${config.handlerUrl}/contracts`, { params });
@@ -155,9 +189,8 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
 
   // Fetch when tab, search, or page changes
   useEffect(() => {
-    const isToken = activeTab === 'tokens' ? true : false;
     const timer = setTimeout(() => {
-      fetchContracts(currentPage, searchQuery, isToken);
+      fetchContracts(currentPage, searchQuery, activeTab);
     }, searchQuery ? 300 : 0);
 
     return () => clearTimeout(timer);
@@ -183,9 +216,11 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
       </div>
 
       {/* Tabs */}
-      <div role="tablist" className="flex gap-2 mb-6">
-        <TabButton tab="tokens" label="Tokens" activeTab={activeTab} onSelect={setActiveTab} />
-        <TabButton tab="contracts" label="All Contracts" activeTab={activeTab} onSelect={setActiveTab} />
+      <div role="tablist" className="flex flex-wrap gap-2 mb-6">
+        <TabButton tab="erc20" label="ERC-20" activeTab={activeTab} onSelect={setActiveTab} />
+        <TabButton tab="erc721" label="NFTs (ERC-721)" activeTab={activeTab} onSelect={setActiveTab} />
+        <TabButton tab="erc1155" label="Multi-Token (ERC-1155)" activeTab={activeTab} onSelect={setActiveTab} />
+        <TabButton tab="contracts" label="Other Contracts" activeTab={activeTab} onSelect={setActiveTab} />
       </div>
 
       {/* Search */}
@@ -199,7 +234,7 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
           <input
             type="text"
             aria-label="Search contracts"
-            placeholder={activeTab === 'tokens' ? 'Search by token name or address...' : 'Search by contract address...'}
+            placeholder={activeTab === 'contracts' ? 'Search by contract address...' : 'Search by token name or address...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full p-3 pl-10 bg-[#2d2d2d] border border-[#3d3d3d] rounded-lg text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#ffa729] focus:border-transparent"
@@ -209,7 +244,9 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
 
       {/* Results Count */}
       <div className="mb-4 text-sm text-gray-400">
-        {loading ? 'Loading...' : `${total} ${activeTab === 'tokens' ? 'tokens' : 'contracts'} found`}
+        {loading
+          ? 'Loading...'
+          : `${total} ${TAB_RESULT_NOUN[activeTab]} found`}
       </div>
 
       {/* Content */}
@@ -222,13 +259,18 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
           </div>
         ) : contracts.length === 0 ? (
           <EmptyState
-            title={activeTab === 'tokens' ? 'No tokens found' : 'No contracts found'}
+            title={TAB_EMPTY_TITLE[activeTab]}
             description="Try adjusting your search or check back later."
           />
-        ) : activeTab === 'tokens' ? (
+        ) : activeTab === 'contracts' ? (
+          <ContractsTable contracts={contracts} />
+        ) : activeTab === 'erc20' ? (
           <TokensTable contracts={contracts} />
         ) : (
-          <ContractsTable contracts={contracts} />
+          <NFTsTable
+            contracts={contracts}
+            standard={activeTab === 'erc721' ? 'ERC-721' : 'ERC-1155'}
+          />
         )}
       </div>
 
@@ -358,6 +400,79 @@ function TokensTable({ contracts }: { contracts: ContractData[] }) {
   );
 }
 
+// NFT / Multi-Token Table Component.
+//
+// Shares the visual identity of TokensTable but drops decimals + totalSupply
+// (ERC-20-specific) and surfaces the standard badge inline so a user
+// scanning the page knows whether each row is 721 or 1155.
+function NFTsTable({
+  contracts,
+  standard,
+}: {
+  contracts: ContractData[];
+  standard: 'ERC-721' | 'ERC-1155';
+}) {
+  const label = STANDARD_LABEL[standard] ?? standard;
+  return (
+    <div className="overflow-x-auto">
+      <table aria-label={`${label} collections`} className="min-w-full divide-y divide-[#3d3d3d]">
+        <thead className="bg-[#2d2d2d]/50">
+          <tr>
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Collection
+            </th>
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Contract Address
+            </th>
+            <th scope="col" className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Standard
+            </th>
+            <th scope="col" className="hidden lg:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Creator
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[#3d3d3d]">
+          {contracts.map((contract, index) => (
+            <tr key={contract._id || index} className="hover:bg-[#2d2d2d]/30">
+              <td className="px-4 py-4 whitespace-nowrap">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#ffa729] to-[#ff8c00] flex items-center justify-center text-black font-bold text-sm">
+                    {contract.symbol ? contract.symbol.charAt(0) : '?'}
+                  </div>
+                  <div>
+                    <div className="text-white font-medium">{contract.name || 'Unknown Collection'}</div>
+                    <div className="text-gray-500 text-sm">{contract.symbol || '-'}</div>
+                  </div>
+                </div>
+              </td>
+              <td className="px-4 py-4 whitespace-nowrap">
+                <Link
+                  href={`/address/${contract.address}`}
+                  className="text-[#ffa729] hover:underline font-mono text-sm"
+                >
+                  {truncateAddress(contract.address)}
+                </Link>
+              </td>
+              <td className="hidden sm:table-cell px-4 py-4 whitespace-nowrap">
+                <Badge variant="warning">{standard === 'ERC-721' ? 'QRC-721' : 'QRC-1155'}</Badge>
+              </td>
+              <td className="hidden lg:table-cell px-4 py-4 whitespace-nowrap">
+                <Link
+                  href={`/address/${contract.creatorAddress}`}
+                  className="text-gray-400 hover:text-[#ffa729] font-mono text-sm"
+                >
+                  {truncateAddress(contract.creatorAddress, 6, 4)}
+                </Link>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // All Contracts Table Component
 function ContractsTable({ contracts }: { contracts: ContractData[] }) {
   return (
@@ -392,8 +507,12 @@ function ContractsTable({ contracts }: { contracts: ContractData[] }) {
                 </Link>
               </td>
               <td className="px-4 py-4 whitespace-nowrap">
-                {contract.isToken ? (
-                  <Badge variant="success">Token{contract.symbol ? ` (${contract.symbol})` : ''}</Badge>
+                {contract.tokenStandard === 'ERC-721' ? (
+                  <Badge variant="warning">NFT (QRC-721){contract.symbol ? ` · ${contract.symbol}` : ''}</Badge>
+                ) : contract.tokenStandard === 'ERC-1155' ? (
+                  <Badge variant="warning">Multi-Token (QRC-1155){contract.symbol ? ` · ${contract.symbol}` : ''}</Badge>
+                ) : contract.isToken ? (
+                  <Badge variant="success">Token (QRC-20){contract.symbol ? ` · ${contract.symbol}` : ''}</Badge>
                 ) : (
                   <Badge variant="info">Contract</Badge>
                 )}
