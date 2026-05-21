@@ -221,9 +221,15 @@ const endpointGroups: EndpointGroup[] = [
       {
         method: 'GET',
         path: '/token/:address/tokens',
-        description: 'Phase 2: returns the distinct tokenID list minted on an NFT contract with holder count per id. Empty list for ERC-20 contracts. Useful for browsing the catalog of an ERC-721/1155 collection or for downstream Phase 3 metadata lookups.',
+        description: 'Phase 2 + 3b: returns the distinct tokenID list minted on an NFT contract with holder count per id. Each row also carries `name` + `image` + `description` from the per-token off-chain metadata when the metadata fetcher has resolved it (otherwise those fields are absent and the UI falls back to a "#<id>" label). Empty list for ERC-20 contracts.',
         params: 'page (query, default: 0), limit (query, default: 25, max: 100)',
         example: '/token/Q539f73306bdd4288f93a5e50b4d5bf1a9b07f147/tokens?page=0&limit=25',
+      },
+      {
+        method: 'GET',
+        path: '/token/:address/:id',
+        description: 'Phase 3b: per-token metadata document for one (contract, tokenID) tuple. Returns the resolved name / description / image / external_url plus the OpenSea-style attribute list. 400 if id is not a decimal integer, 404 if the token has no stub yet (contract isn\'t an NFT, or that id has never been transferred).',
+        example: '/token/Q539f73306bdd4288f93a5e50b4d5bf1a9b07f147/1',
       },
       {
         method: 'GET',
