@@ -306,19 +306,36 @@ func UpdateContractMetadata(ctx context.Context, address, name, description, ima
 
 // GetContractsAwaitingMetadata returns up to `limit` NFT contracts that have
 // a populated MetadataURI but have not yet been fetched successfully
-// (FetchedAt is empty OR FetchError is set). The metadata fetcher service
-// uses this as its work queue and passes its shutdown-aware ctx so a pm2
-// stop cancels an in-flight read promptly.
+// (FetchedAt is empty AND FetchError is empty/missing). The metadata
+// fetcher service uses this as its work queue and passes its shutdown-aware
+// ctx so a pm2 stop cancels an in-flight read promptly.
+//
+// Filter notes:
+//   - MetadataURI must EXIST and be non-empty. The naked `$ne: ""` form
+//     matches docs where the field is missing entirely (Mongo treats
+//     missing fields as null and null != ""), which would pull in every
+//     unclassified NFT and trigger an "empty URI" loop.
+//   - We do NOT retry rows that already have a metadataFetchError set,
+//     transient gateway errors get retried on a manual operator action
+//     (admin endpoint in Phase 4); the auto-loop would re-attempt every
+//     30s with the same outcome and clog the work queue. The next
+//     classifier pass naturally clears the error by overwriting it.
 func GetContractsAwaitingMetadata(ctx context.Context, limit int) ([]models.ContractInfo, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	filter := bson.M{
-		"metadataURI":   bson.M{"$ne": ""},
+		"metadataURI":   bson.M{"$exists": true, "$ne": ""},
 		"tokenStandard": bson.M{"$in": []string{"ERC-721", "ERC-1155"}},
-		"$or": []bson.M{
-			{"metadataFetchedAt": bson.M{"$in": []interface{}{"", nil}}},
-			{"metadataFetchError": bson.M{"$ne": ""}},
+		"$and": []bson.M{
+			{"$or": []bson.M{
+				{"metadataFetchedAt": bson.M{"$exists": false}},
+				{"metadataFetchedAt": ""},
+			}},
+			{"$or": []bson.M{
+				{"metadataFetchError": bson.M{"$exists": false}},
+				{"metadataFetchError": ""},
+			}},
 		},
 	}
 	opts := options.Find().SetLimit(int64(limit))
