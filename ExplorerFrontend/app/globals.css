@@ -155,7 +155,22 @@
 }
 
 @utility page-content {
-  @apply max-w-[1200px] mx-auto px-4;
+  /* Shared by every <route>/layout.tsx wrapper. Bumped from 1200 → 1536
+     so detail pages can use the full breadth of widescreen monitors and
+     list/index pages get a consistent gutter. Inner views may further
+     constrain with `detail-content` (same cap) for uniform pillarboxing. */
+  @apply max-w-screen-2xl mx-auto px-4;
+}
+
+/* Vertical spacing for tx / address / contract detail content. Width
+   and horizontal centring come from `page-content` (every
+   <route>/layout.tsx already wraps in it) — adding max-width / mx-auto
+   here would be redundant, and horizontal padding would stack on top
+   of page-content's px-4 and produce a wider gutter on detail pages
+   than on index pages (breadcrumb misalignment when navigating). Just
+   the per-breakpoint vertical rhythm lives here. */
+@utility detail-content {
+  @apply py-3 md:py-6 lg:py-8;
 }
 
 @utility section-title {
