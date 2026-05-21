@@ -297,7 +297,7 @@ export default function ApiExplorerClient(): JSX.Element {
 
         <div className="space-y-4">
           {endpointGroups.map((group, groupIndex) => (
-            <Disclosure as="div" key={groupIndex} defaultOpen={groupIndex === 0}>
+            <Disclosure as="div" key={groupIndex}>
               {({ open }) => (
                 <>
                   <Disclosure.Button className="flex w-full items-center justify-between px-4 py-3 bg-[#2d2d2d] rounded-lg text-left hover:bg-[#333] transition-colors">
