@@ -133,7 +133,13 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                             <div className="card-simple p-3 md:p-4 lg:p-6 space-y-3 md:space-y-4">
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <h3 className="text-base md:text-lg font-semibold text-accent">
-                                        {contractData.isToken ? 'Token Contract' : 'Contract'} Information
+                                        {contractData.tokenStandard === 'ERC-721'
+                                            ? 'NFT Collection'
+                                            : contractData.tokenStandard === 'ERC-1155'
+                                              ? 'Multi-Token Collection'
+                                              : contractData.isToken
+                                                ? 'Token Contract'
+                                                : 'Contract'} Information
                                     </h3>
                                     {contractData.verified && <VerifiedBadge />}
                                 </div>
@@ -152,32 +158,48 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                         </div>
                                     </div>
 
-                                    {/* Token Information */}
+                                    {/* Token / NFT Information */}
                                     {contractData.isToken && (
                                         <>
-                                            {/* Token Name */}
+                                            {/* Standard label (ERC-20 / ERC-721 / ERC-1155) */}
+                                            {contractData.tokenStandard && (
+                                                <div>
+                                                    <div className="text-xs md:text-sm text-gray-400 mb-1">Token Standard</div>
+                                                    <div className="text-xs md:text-sm text-gray-300">
+                                                        {contractData.tokenStandard}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Name */}
                                             <div>
-                                                <div className="text-xs md:text-sm text-gray-400 mb-1">Token Name</div>
+                                                <div className="text-xs md:text-sm text-gray-400 mb-1">
+                                                    {contractData.tokenStandard === 'ERC-20' || !contractData.tokenStandard ? 'Token Name' : 'Collection Name'}
+                                                </div>
                                                 <div className="text-xs md:text-sm text-gray-300">
                                                     {contractData.name || 'Unknown'}
                                                 </div>
                                             </div>
 
-                                            {/* Token Symbol */}
+                                            {/* Symbol */}
                                             <div>
-                                                <div className="text-xs md:text-sm text-gray-400 mb-1">Token Symbol</div>
+                                                <div className="text-xs md:text-sm text-gray-400 mb-1">
+                                                    {contractData.tokenStandard === 'ERC-20' || !contractData.tokenStandard ? 'Token Symbol' : 'Collection Symbol'}
+                                                </div>
                                                 <div className="text-xs md:text-sm text-gray-300">
                                                     {contractData.symbol || 'Unknown'}
                                                 </div>
                                             </div>
 
-                                            {/* Token Decimals */}
-                                            <div>
-                                                <div className="text-xs md:text-sm text-gray-400 mb-1">Token Decimals</div>
-                                                <div className="text-xs md:text-sm text-gray-300">
-                                                    {contractData.decimals || '0'}
+                                            {/* Decimals — ERC-20 only */}
+                                            {(contractData.tokenStandard === 'ERC-20' || !contractData.tokenStandard) && (
+                                                <div>
+                                                    <div className="text-xs md:text-sm text-gray-400 mb-1">Token Decimals</div>
+                                                    <div className="text-xs md:text-sm text-gray-300">
+                                                        {contractData.decimals || '0'}
+                                                    </div>
                                                 </div>
-                                            </div>
+                                            )}
                                         </>
                                     )}
 

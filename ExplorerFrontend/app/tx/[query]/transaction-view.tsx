@@ -212,70 +212,98 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
       )}
 
       {/* Token Transfer Section */}
-      {transaction.tokenTransfer && (
+      {transaction.tokenTransfer && (() => {
+        const tt = transaction.tokenTransfer;
+        // Per-standard presentation. The header badge reflects the chain
+        // standard (QRC-20 / QRC-721 / QRC-1155); ERC-721 transfers always
+        // move exactly one token, so we surface the tokenID rather than an
+        // ABI-encoded amount.
+        const standard = tt.tokenStandard;
+        const headerLabel =
+          standard === 'ERC-721' ? 'NFT Transfer'
+          : standard === 'ERC-1155' ? 'Multi-Token Transfer'
+          : 'Token Transfer';
+        const badgeText =
+          standard === 'ERC-721' ? 'QRC-721'
+          : standard === 'ERC-1155' ? 'QRC-1155'
+          : 'QRC-20';
+        const isNFT = standard === 'ERC-721' || standard === 'ERC-1155';
+        return (
         <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
           <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
             <div className="flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
               </svg>
-              <h2 className="text-[15px] font-semibold text-[#ffa729]">Token Transfer</h2>
-              <Badge variant="brand">QRC-20</Badge>
+              <h2 className="text-[15px] font-semibold text-[#ffa729]">{headerLabel}</h2>
+              <Badge variant={isNFT ? 'warning' : 'brand'}>{badgeText}</Badge>
             </div>
           </div>
           <div className="p-4 sm:p-6">
-            <DetailRow label="Token">
+            <DetailRow label={standard === 'ERC-721' ? 'Collection' : standard === 'ERC-1155' ? 'Collection' : 'Token'}>
               <Link
-                href={`/address/${transaction.tokenTransfer.contractAddress}`}
+                href={`/address/${tt.contractAddress}`}
                 className="text-[#ffa729] hover:text-[#ffb84d] font-medium transition-colors"
               >
-                {transaction.tokenTransfer.tokenName} ({transaction.tokenTransfer.tokenSymbol})
+                {tt.tokenName || tt.tokenSymbol || tt.contractAddress} {tt.tokenSymbol ? `(${tt.tokenSymbol})` : ''}
               </Link>
             </DetailRow>
-            <DetailRow label="Amount">
-              <span className="font-semibold text-white">
-                {formatTokenAmount(transaction.tokenTransfer.amount, transaction.tokenTransfer.tokenDecimals)}
-              </span>
-              <span className="text-[#ffa729] ml-2 text-sm">{transaction.tokenTransfer.tokenSymbol}</span>
-            </DetailRow>
+            {tt.tokenID && (
+              <DetailRow label="Token ID" mono>
+                <span className="font-semibold text-white">#{tt.tokenID}</span>
+              </DetailRow>
+            )}
+            {standard !== 'ERC-721' && (
+              <DetailRow label="Amount">
+                <span className="font-semibold text-white">
+                  {standard === 'ERC-1155'
+                    ? tt.amount
+                    : formatTokenAmount(tt.amount, tt.tokenDecimals)}
+                </span>
+                {tt.tokenSymbol && (
+                  <span className="text-[#ffa729] ml-2 text-sm">{tt.tokenSymbol}</span>
+                )}
+              </DetailRow>
+            )}
             <DetailRow label="From" mono>
-              {isZeroAddress(transaction.tokenTransfer.from) ? (
+              {isZeroAddress(tt.from) ? (
                 <div className="flex items-center gap-2">
                   <Badge variant="success">Mint</Badge>
                   <span className="text-sm text-gray-400">
                     via{' '}
                     <Link
-                      href={`/address/${transaction.tokenTransfer.contractAddress}`}
+                      href={`/address/${tt.contractAddress}`}
                       className="text-[#ffa729] hover:text-[#ffb84d] transition-colors"
                     >
-                      {transaction.tokenTransfer.tokenName} Contract
+                      {tt.tokenName || 'Contract'}
                     </Link>
                   </span>
                 </div>
               ) : (
                 <Link
-                  href={`/address/${transaction.tokenTransfer.from}`}
+                  href={`/address/${tt.from}`}
                   className="text-gray-200 hover:text-[#ffa729] transition-colors break-all"
                 >
-                  {displayAddr(transaction.tokenTransfer.from)}
+                  {displayAddr(tt.from)}
                 </Link>
               )}
             </DetailRow>
             <DetailRow label="To" mono>
-              {isZeroAddress(transaction.tokenTransfer.to) ? (
+              {isZeroAddress(tt.to) ? (
                 <Badge variant="error">Burn</Badge>
               ) : (
                 <Link
-                  href={`/address/${transaction.tokenTransfer.to}`}
+                  href={`/address/${tt.to}`}
                   className="text-gray-200 hover:text-[#ffa729] transition-colors break-all"
                 >
-                  {displayAddr(transaction.tokenTransfer.to)}
+                  {displayAddr(tt.to)}
                 </Link>
               )}
             </DetailRow>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
