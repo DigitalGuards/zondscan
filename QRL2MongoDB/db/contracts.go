@@ -572,7 +572,13 @@ func ReprocessIncompleteContracts() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Find contracts with missing information, including bare "Q" creator addresses
+	// Find contracts with missing information, including bare "Q" creator
+	// addresses. Phase 3a adds an NFT branch: collections classified before
+	// the contractURI probe shipped have an empty metadataURI, the
+	// fetcher's work-queue filter (metadataURI != "" AND fetchedAt == "")
+	// would never include them, so the hourly reprocess pass picks them
+	// up here and re-probes contractURI(). $or fans out across the same
+	// query, no extra round-trip.
 	filter := bson.M{
 		"$or": []bson.M{
 			{"contractCode": ""},
@@ -580,6 +586,13 @@ func ReprocessIncompleteContracts() error {
 			{"isToken": false, "name": "", "symbol": ""},
 			{"creatorAddress": "Q"},
 			{"creatorAddress": ""},
+			{
+				"tokenStandard": bson.M{"$in": []string{"ERC-721", "ERC-1155"}},
+				"$or": []bson.M{
+					{"metadataURI": bson.M{"$exists": false}},
+					{"metadataURI": ""},
+				},
+			},
 		},
 	}
 
