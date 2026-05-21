@@ -34,6 +34,17 @@ type ContractInfo struct {
 	HasERC165     bool   `json:"hasERC165,omitempty" bson:"hasERC165,omitempty"`
 	BaseURI       string `json:"baseURI,omitempty" bson:"baseURI,omitempty"`
 
+	// Collection-level off-chain metadata (Phase 3a). Mirrors
+	// QRL2MongoDB/models/contract.go. Written by the syncer's metadata
+	// fetcher service; the backend holds them for read-through to clients.
+	MetadataURI         string `json:"metadataURI,omitempty" bson:"metadataURI,omitempty"`
+	MetadataName        string `json:"metadataName,omitempty" bson:"metadataName,omitempty"`
+	MetadataDescription string `json:"metadataDescription,omitempty" bson:"metadataDescription,omitempty"`
+	MetadataImage       string `json:"metadataImage,omitempty" bson:"metadataImage,omitempty"`
+	MetadataExternalURL string `json:"metadataExternalURL,omitempty" bson:"metadataExternalURL,omitempty"`
+	MetadataFetchedAt   string `json:"metadataFetchedAt,omitempty" bson:"metadataFetchedAt,omitempty"`
+	MetadataFetchError  string `json:"metadataFetchError,omitempty" bson:"metadataFetchError,omitempty"`
+
 	// Source-verification fields. `verified` defaults to false (omitted from
 	// omitempty so it is always present in the JSON shape clients consume).
 	// Everything else uses omitempty so unverified contracts stay clean.

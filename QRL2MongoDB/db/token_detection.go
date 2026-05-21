@@ -78,6 +78,7 @@ func EnsureContractClassified(contractAddress string, blockNumber string, txHash
 		TotalSupply:   detection.TotalSupply,
 		TokenStandard: detection.Standard,
 		HasERC165:     detection.HasERC165,
+		MetadataURI:   detection.MetadataURI,
 		UpdatedAt:     time.Now().UTC().Format(time.RFC3339),
 	}
 

@@ -27,6 +27,7 @@ const (
 	SIG_BALANCE_OF_1155    = "0x00fdd58e" // balanceOf(address,uint256), ERC-1155
 	SIG_TOKEN_URI          = "0xc87b56dd" // tokenURI(uint256), ERC-721Metadata
 	SIG_URI                = "0x0e89341c" // uri(uint256), ERC-1155MetadataURI
+	SIG_CONTRACT_URI       = "0xe8a3d485" // contractURI(), OpenSea convention
 )
 
 // ERC-165 interface IDs, as the 4-byte XOR of the interface's method selectors.
@@ -141,6 +142,13 @@ const (
 // ContractDetectionResult is returned by DetectContractType. Fields outside
 // of Standard/Name/Symbol/HasERC165 are only populated for ERC-20 (Decimals,
 // TotalSupply); NFT collections often omit `decimals()` entirely.
+//
+// MetadataURI is best-effort populated for NFT (ERC-721/1155) contracts via
+// the OpenSea-convention contractURI() probe. Empty means either "the contract
+// doesn't implement contractURI" or "the probe failed transiently" - the
+// background metadata fetcher service handles the URI -> JSON resolution
+// separately, so a missing URI at classification time can be filled in on a
+// later reclassification pass without breaking anything.
 type ContractDetectionResult struct {
 	Standard    string // StandardERC20 | StandardERC721 | StandardERC1155 | ""
 	Name        string
@@ -148,6 +156,7 @@ type ContractDetectionResult struct {
 	Decimals    uint8
 	TotalSupply string
 	HasERC165   bool
+	MetadataURI string
 }
 
 // DetectContractType classifies a contract by trying ERC-165 supportsInterface
@@ -172,11 +181,13 @@ func DetectContractType(addr string) (ContractDetectionResult, error) {
 	if supports {
 		name, _ := GetTokenName(addr)     // best-effort; many ERC-1155s omit name()
 		symbol, _ := GetTokenSymbol(addr) // best-effort; many ERC-1155s omit symbol()
+		metaURI, _ := GetContractURI(addr) // best-effort; many collections omit contractURI()
 		return ContractDetectionResult{
-			Standard:  StandardERC1155,
-			Name:      name,
-			Symbol:    symbol,
-			HasERC165: true,
+			Standard:    StandardERC1155,
+			Name:        name,
+			Symbol:      symbol,
+			HasERC165:   true,
+			MetadataURI: metaURI,
 		}, nil
 	}
 
@@ -188,11 +199,13 @@ func DetectContractType(addr string) (ContractDetectionResult, error) {
 	if supports721 {
 		name, _ := GetTokenName(addr)
 		symbol, _ := GetTokenSymbol(addr)
+		metaURI, _ := GetContractURI(addr)
 		return ContractDetectionResult{
-			Standard:  StandardERC721,
-			Name:      name,
-			Symbol:    symbol,
-			HasERC165: true,
+			Standard:    StandardERC721,
+			Name:        name,
+			Symbol:      symbol,
+			HasERC165:   true,
+			MetadataURI: metaURI,
 		}, nil
 	}
 
@@ -953,6 +966,122 @@ func GetERC721Owner(contractAddress string, tokenID *big.Int) (string, error) {
 		return "", callErr
 	}
 	return parseAddressFromWord(result)
+}
+
+// parseDynamicString decodes the ABI-encoded `bytes`/`string` return value of
+// a no-argument view function (e.g. name(), symbol(), contractURI()).
+//
+// The ABI layout for a single dynamic return value is:
+//
+//	[ offset (32B) || length (32B) || data (length bytes, right-padded to 32B) ]
+//
+// `result` is the raw `qrl_call` result with or without the "0x" prefix.
+// Empty or all-zero results return ("", nil), the caller treats that as
+// "method returned empty" which is distinct from a transport / decode error.
+//
+// Defensive against malformed payloads: every offset / length read is
+// bounds-checked against the available hex chars, so a truncated response
+// returns a clean error instead of panicking.
+func parseDynamicString(result string) (string, error) {
+	stripped := strings.TrimPrefix(result, "0x")
+
+	// Empty or all-zero is treated as "method exists but returned empty
+	// string"; not an error so callers can record `metadataURI=""` as a
+	// successful probe (no URI set on chain).
+	if len(stripped) == 0 || strings.TrimLeft(stripped, "0") == "" {
+		return "", nil
+	}
+
+	// Minimum payload: 32 bytes offset + 32 bytes length = 128 hex chars.
+	if len(stripped) < 128 {
+		return "", fmt.Errorf("dynamic string payload too short: %d hex chars", len(stripped))
+	}
+
+	// ABI words are 256 bits; strconv.ParseInt caps at 64. Real offsets are
+	// tiny (start at 0x20 = 32 bytes for one dynamic return), but an
+	// attacker-crafted return value could fill the full 32-byte word to try
+	// to crash the decoder. Parse as big.Int, reject negatives + anything
+	// outside int64, then bound against the payload size BEFORE the *2
+	// multiplication so an offset near math.MaxInt64 can't overflow
+	// startPos into a negative number that would silently bypass the
+	// subsequent slice-bounds check and panic on `stripped[startPos:...]`.
+	offsetInt := new(big.Int)
+	if _, ok := offsetInt.SetString(stripped[:64], 16); !ok {
+		return "", fmt.Errorf("invalid offset word")
+	}
+	if !offsetInt.IsInt64() || offsetInt.Sign() < 0 {
+		return "", fmt.Errorf("offset out of int64 range")
+	}
+	offset := offsetInt.Int64()
+	// `offset` is a byte index into the payload; `len(stripped)` is hex
+	// chars (2x byte count). The check `offset > len(stripped)` is a
+	// generous upper bound that's still tight enough to prevent the
+	// multiplication overflow, the next bounds check below handles the
+	// precise condition.
+	if offset > int64(len(stripped)) {
+		return "", fmt.Errorf("offset out of bounds: offset=%d payload=%d", offset, len(stripped)/2)
+	}
+	startPos := offset * 2
+	if startPos+64 > int64(len(stripped)) {
+		return "", fmt.Errorf("string length word out of bounds: offset=%d payload=%d", offset, len(stripped)/2)
+	}
+
+	lengthInt := new(big.Int)
+	if _, ok := lengthInt.SetString(stripped[startPos:startPos+64], 16); !ok {
+		return "", fmt.Errorf("invalid length word")
+	}
+	if !lengthInt.IsInt64() || lengthInt.Sign() < 0 {
+		return "", fmt.Errorf("length out of int64 range")
+	}
+	length := lengthInt.Int64()
+	// Cap at a sane upper bound; nothing legitimate is going to return a
+	// multi-MB string from a view call, and an attacker could otherwise
+	// force a huge allocation.
+	const maxDynamicStringBytes = 1 << 20 // 1 MiB
+	if length > maxDynamicStringBytes {
+		return "", fmt.Errorf("dynamic string length %d exceeds cap %d", length, maxDynamicStringBytes)
+	}
+	if startPos+64+length*2 > int64(len(stripped)) {
+		return "", fmt.Errorf("string data out of bounds: declared length=%d available=%d", length, (int64(len(stripped))-startPos-64)/2)
+	}
+
+	dataHex := stripped[startPos+64 : startPos+64+length*2]
+	bytes, err := hex.DecodeString(dataHex)
+	if err != nil {
+		return "", fmt.Errorf("hex decode failed: %w", err)
+	}
+	return string(bytes), nil
+}
+
+// GetContractURI queries `contractURI()` on a contract (OpenSea convention
+// for collection-level NFT metadata) and returns the raw URI string.
+//
+// Three-way error contract, mirrors SupportsInterface / GetERC721Owner:
+//   - Contract revert (the contract doesn't implement contractURI, which is
+//     true of most collections): returns ("", nil) so the caller can record
+//     "no collection metadata" without treating it as a fetch failure.
+//   - Transport error: returns ("", err); callers preserve existing state
+//     (C5 promote-only invariant).
+//   - Empty / malformed return: returns ("", nil), same "no URI" semantic.
+//
+// The returned URI is whatever the contract emitted, no IPFS gateway
+// resolution happens here, the metadata service does that.
+func GetContractURI(contractAddress string) (string, error) {
+	result, callErr := CallContractMethod(contractAddress, SIG_CONTRACT_URI)
+	if callErr != nil {
+		if strings.HasPrefix(callErr.Error(), "RPC error:") {
+			return "", nil
+		}
+		return "", callErr
+	}
+	uri, decErr := parseDynamicString(result)
+	if decErr != nil {
+		// Malformed return word, treat as "no URI" rather than failing the
+		// caller; we never want a single misbehaving contract to throw off
+		// classification of every contract that comes after.
+		return "", nil
+	}
+	return uri, nil
 }
 
 // GetERC1155Balance queries `balanceOf(address,uint256)` on an ERC-1155

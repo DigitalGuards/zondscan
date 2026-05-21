@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import CopyButton from "../../components/CopyButton";
 import QRCodeButton from "../../components/QRCodeButton";
@@ -267,11 +268,19 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
     const decimals = tokenInfo?.decimals ?? contractData.decimals ?? 18;
     const rawSymbol = tokenInfo?.symbol ?? contractData.symbol ?? '';
     const rawName = tokenInfo?.name ?? contractData.name ?? '';
+    // Phase 3a: prefer the off-chain metadata-name over the on-chain
+    // name() because most NFT collections leave name() empty and put the
+    // human-readable title in the contractURI JSON instead. The on-chain
+    // symbol still wins for the badge (collection JSONs don't carry one).
+    const metaName = contractData.metadataName?.trim() || '';
+    const metaImage = contractData.metadataImage?.trim() || '';
+    const metaDescription = contractData.metadataDescription?.trim() || '';
+    const metaExternalURL = contractData.metadataExternalURL?.trim() || '';
     // ERC-1155 collections often omit name()/symbol(), so fall back to a
     // truncated address rather than rendering "Unknown Token" / "TOKEN".
     const addrShort = `${address.slice(0, 10)}...${address.slice(-6)}`;
     const symbol = rawSymbol || addrShort;
-    const name = rawName || addrShort;
+    const name = metaName || rawName || addrShort;
     const totalSupply = tokenInfo?.totalSupply ?? contractData.totalSupply ?? '0';
     const creatorAddress = creationTx?.From || tokenInfo?.creatorAddress || contractData.creatorAddress || '';
     const creationTxHash = tokenInfo?.creationTxHash || contractData.creationTransaction || '';
@@ -325,19 +334,52 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                     {/* Token Identity */}
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-gray-700">
                         <div className="flex items-center gap-4">
-                            {/* Token Icon */}
-                            <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-gradient-to-br from-[#ffa729] to-[#ff6b00] flex items-center justify-center text-xl md:text-2xl font-bold text-white">
-                                {symbol.charAt(0)}
-                            </div>
+                            {/* Token Icon. Phase 3a: render the off-chain
+                                metadata image when present, fall back to the
+                                first-character monogram. Fixed 64px square so
+                                the layout doesn't shift while the next/image
+                                loader resolves. */}
+                            {metaImage ? (
+                                <div className="relative w-12 h-12 md:w-16 md:h-16 rounded-full overflow-hidden border border-gray-700 bg-black/30">
+                                    <Image
+                                        src={metaImage}
+                                        alt={name}
+                                        fill
+                                        sizes="64px"
+                                        className="object-cover"
+                                        unoptimized
+                                    />
+                                </div>
+                            ) : (
+                                <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-gradient-to-br from-[#ffa729] to-[#ff6b00] flex items-center justify-center text-xl md:text-2xl font-bold text-white">
+                                    {symbol.charAt(0)}
+                                </div>
+                            )}
                             <div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                     <h1 className="text-xl md:text-2xl font-bold text-white">{name}</h1>
                                     {rawSymbol && (
                                         <span className="px-2 py-0.5 rounded bg-[#ffa729]/20 text-[#ffa729] text-sm font-medium">
                                             {rawSymbol}
                                         </span>
                                     )}
+                                    {metaExternalURL && (
+                                        <a
+                                            href={metaExternalURL}
+                                            target="_blank"
+                                            rel="noreferrer noopener nofollow"
+                                            className="text-xs text-gray-400 hover:text-accent underline"
+                                            title="External URL from contract metadata"
+                                        >
+                                            site ↗
+                                        </a>
+                                    )}
                                 </div>
+                                {metaDescription && (
+                                    <p className="text-xs md:text-sm text-gray-300 mt-1 line-clamp-2 max-w-prose">
+                                        {metaDescription}
+                                    </p>
+                                )}
                                 <div className="flex items-center gap-2 mt-1">
                                     <span className="text-xs md:text-sm text-gray-400 font-mono">{address}</span>
                                     <CopyButton value={address} label="Copy address" />
