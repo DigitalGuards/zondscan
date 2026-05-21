@@ -2,10 +2,18 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import config from '../../config';
 import Badge from '../components/Badge';
 import EmptyState from '../components/EmptyState';
+
+const TAB_TYPES = ['erc20', 'erc721', 'erc1155', 'contracts'] as const;
+function parseTab(raw: string | null): TabType {
+  return (TAB_TYPES as readonly string[]).includes(raw ?? '')
+    ? (raw as TabType)
+    : 'erc20';
+}
 
 interface ContractData {
   _id: string;
@@ -143,7 +151,27 @@ function truncateAddress(addr: string, start = 8, end = 6): string {
 }
 
 export default function ContractsClient({ initialData, totalContracts }: ContractsClientProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('erc20');
+  // URL-backed active tab so deep-links like /contracts?tab=erc1155 land on
+  // the right pane and breadcrumb back-steps from contract detail pages
+  // return the user to the section they came from. URL is the source of
+  // truth; clicking a tab pushes a replace() so the back button stays
+  // useful for in-page navigation.
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlTab = parseTab(searchParams.get('tab'));
+  const [activeTab, setActiveTabState] = useState<TabType>(urlTab);
+  const setActiveTab = useCallback((t: TabType) => {
+    setActiveTabState(t);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', t);
+    router.replace(`/contracts?${params.toString()}`, { scroll: false });
+  }, [router, searchParams]);
+  // Keep state in sync when the URL changes from outside (back/forward,
+  // breadcrumb click on a different tab).
+  useEffect(() => {
+    if (urlTab !== activeTab) setActiveTabState(urlTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlTab]);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(0);
   const [contracts, setContracts] = useState<ContractData[]>(initialData);
