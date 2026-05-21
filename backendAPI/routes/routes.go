@@ -844,14 +844,18 @@ func UserRoute(router *gin.Engine) {
 		c.JSON(http.StatusOK, info)
 	})
 
-	// Get token holders with pagination
+	// Get token holders with pagination. Phase 2: optional `?tokenID=`
+	// query param filters to holders of a specific NFT tokenID. When
+	// absent, holders are aggregated across all ids (one row per distinct
+	// holder, balance is the cross-id total). ERC-20 behaviour unchanged.
 	router.GET("/token/:address/holders", func(c *gin.Context) {
 		address := c.Param("address")
+		tokenID := c.Query("tokenID")
 		page, limit := getPaginationParams(c, 0, 25)
 
-		holders, totalCount, err := db.GetTokenHolders(address, page, limit)
+		holders, totalCount, err := db.GetTokenHolders(address, tokenID, page, limit)
 		if err != nil {
-			log.Printf("Error fetching token holders for %s: %v", address, err)
+			log.Printf("Error fetching token holders for %s (tokenID=%q): %v", address, tokenID, err)
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "Failed to fetch token holders",
 			})
@@ -864,6 +868,31 @@ func UserRoute(router *gin.Engine) {
 			TotalHolders:    totalCount,
 			Page:            page,
 			Limit:           limit,
+		})
+	})
+
+	// Phase 2: list distinct tokenIDs minted on an NFT contract, with the
+	// number of holders for each id. Paginated by `?page=&limit=` like the
+	// other token endpoints. Returns an empty list for ERC-20 contracts.
+	router.GET("/token/:address/tokens", func(c *gin.Context) {
+		address := c.Param("address")
+		page, limit := getPaginationParams(c, 0, 25)
+
+		tokens, totalCount, err := db.GetTokenIDs(address, page, limit)
+		if err != nil {
+			log.Printf("Error fetching tokenIDs for %s: %v", address, err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to fetch tokenIDs",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"contractAddress": address,
+			"tokens":          tokens,
+			"totalTokenIDs":   totalCount,
+			"page":            page,
+			"limit":           limit,
 		})
 	})
 

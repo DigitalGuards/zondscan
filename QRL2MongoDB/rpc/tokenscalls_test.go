@@ -231,6 +231,251 @@ func TestParseERC1155TransferSingle(t *testing.T) {
 	}
 }
 
+func TestEncodeAddressForABI(t *testing.T) {
+	tests := []struct {
+		name string
+		addr string
+		want string
+	}{
+		{
+			name: "Q-prefix lowercase",
+			addr: aliceAddr,
+			want: strings.Repeat("0", 24) + "6153d37fa4da7193e6219dcbd2bbe62fa12905b1",
+		},
+		{
+			name: "0x-prefix uppercase canonicalised to lowercase",
+			addr: "0x6153D37FA4DA7193E6219DCBD2BBE62FA12905B1",
+			want: strings.Repeat("0", 24) + "6153d37fa4da7193e6219dcbd2bbe62fa12905b1",
+		},
+		{
+			name: "no prefix",
+			addr: "6153d37fa4da7193e6219dcbd2bbe62fa12905b1",
+			want: strings.Repeat("0", 24) + "6153d37fa4da7193e6219dcbd2bbe62fa12905b1",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := encodeAddressForABI(tt.addr)
+			if got != tt.want {
+				t.Errorf("encodeAddressForABI(%s)\n got %s\nwant %s", tt.addr, got, tt.want)
+			}
+			if len(got) != 64 {
+				t.Errorf("encoded length = %d, want 64", len(got))
+			}
+		})
+	}
+}
+
+func TestEncodeUint256ForABI(t *testing.T) {
+	maxUint256 := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1))
+
+	tests := []struct {
+		name    string
+		v       *big.Int
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "zero",
+			v:    big.NewInt(0),
+			want: strings.Repeat("0", 64),
+		},
+		{
+			name: "42",
+			v:    big.NewInt(42),
+			want: strings.Repeat("0", 62) + "2a",
+		},
+		{
+			name: "uint256 max",
+			v:    maxUint256,
+			want: strings.Repeat("f", 64),
+		},
+		{
+			name:    "nil",
+			v:       nil,
+			wantErr: true,
+		},
+		{
+			name:    "negative",
+			v:       big.NewInt(-1),
+			wantErr: true,
+		},
+		{
+			name:    "exceeds 32 bytes",
+			v:       new(big.Int).Lsh(big.NewInt(1), 256),
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := encodeUint256ForABI(tt.v)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got %q", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("got %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseAddressFromWord(t *testing.T) {
+	aliceRaw := strings.TrimPrefix(strings.ToLower(aliceAddr), "q")
+
+	tests := []struct {
+		name     string
+		result   string
+		wantAddr string
+		wantErr  bool
+	}{
+		{
+			name:     "happy path: alice's address padded",
+			result:   "0x" + strings.Repeat("0", 24) + aliceRaw,
+			wantAddr: aliceAddr,
+		},
+		{
+			name:     "zero address returns empty (no owner)",
+			result:   "0x" + strings.Repeat("0", 64),
+			wantAddr: "",
+		},
+		{
+			name:     "no 0x prefix accepted",
+			result:   strings.Repeat("0", 24) + aliceRaw,
+			wantAddr: aliceAddr,
+		},
+		{
+			name:    "too-short response",
+			result:  "0x" + aliceRaw,
+			wantErr: true,
+		},
+		{
+			name:    "nonzero high bytes (malformed)",
+			result:  "0x" + "ff" + strings.Repeat("0", 22) + aliceRaw,
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseAddressFromWord(tt.result)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got %q", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !strings.EqualFold(got, tt.wantAddr) {
+				t.Errorf("got %s, want %s", got, tt.wantAddr)
+			}
+		})
+	}
+}
+
+func TestParseUint256FromWord(t *testing.T) {
+	maxHex := strings.Repeat("f", 64)
+	maxUint256 := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1))
+
+	tests := []struct {
+		name    string
+		result  string
+		want    string
+		wantErr bool
+	}{
+		{
+			name:   "happy path: 100",
+			result: "0x" + word("64"),
+			want:   "100",
+		},
+		{
+			name:   "zero",
+			result: "0x" + strings.Repeat("0", 64),
+			want:   "0",
+		},
+		{
+			name:   "uint256 max",
+			result: "0x" + maxHex,
+			want:   maxUint256.String(),
+		},
+		{
+			name:    "too short",
+			result:  "0x" + word("64")[:32],
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseUint256FromWord(tt.result)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got %v", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got.String() != tt.want {
+				t.Errorf("got %s, want %s", got.String(), tt.want)
+			}
+		})
+	}
+}
+
+// Ensure encodeAddressForABI + parseAddressFromWord round-trip cleanly.
+func TestAddressWordRoundTrip(t *testing.T) {
+	for _, addr := range []string{aliceAddr, bobAddr, opAddr} {
+		encoded := encodeAddressForABI(addr)
+		decoded, err := parseAddressFromWord("0x" + encoded)
+		if err != nil {
+			t.Fatalf("decode %s: %v", addr, err)
+		}
+		if !strings.EqualFold(decoded, addr) {
+			t.Errorf("round-trip: got %s, want %s", decoded, addr)
+		}
+	}
+}
+
+// Helper to construct calldata that GetERC721Owner / GetERC1155Balance would
+// emit. Used below by tests that verify the request payload (selector +
+// padding) the helpers send to CallContractMethod.
+func expectedOwnerOfCalldata(id *big.Int) string {
+	w, _ := encodeUint256ForABI(id)
+	return SIG_OWNER_OF + w
+}
+
+func expectedBalanceOf1155Calldata(holder string, id *big.Int) string {
+	w, _ := encodeUint256ForABI(id)
+	return SIG_BALANCE_OF_1155 + encodeAddressForABI(holder) + w
+}
+
+func TestExpectedCalldataSelectors(t *testing.T) {
+	// Sanity: selector + padded uint256 = "0x" + 8 + 64 = 74 chars.
+	got := expectedOwnerOfCalldata(big.NewInt(1))
+	if len(got) != 74 {
+		t.Errorf("ownerOf calldata length = %d, want 74 (%q)", len(got), got)
+	}
+	if !strings.HasPrefix(got, SIG_OWNER_OF) {
+		t.Errorf("ownerOf calldata missing selector prefix: %q", got)
+	}
+
+	// Sanity: selector + padded address + padded uint256 = "0x" + 8 + 64 + 64 = 138.
+	got1155 := expectedBalanceOf1155Calldata(aliceAddr, big.NewInt(1))
+	if len(got1155) != 138 {
+		t.Errorf("balanceOf(addr,id) calldata length = %d, want 138 (%q)", len(got1155), got1155)
+	}
+	if !strings.HasPrefix(got1155, SIG_BALANCE_OF_1155) {
+		t.Errorf("balanceOf(addr,id) calldata missing selector prefix: %q", got1155)
+	}
+}
+
 func TestParseERC1155TransferBatch(t *testing.T) {
 	// Construct data: offsets at words 0-1, ids array at offset 0x40,
 	// values array at offset (0x40 + 32 + len_ids*32).
