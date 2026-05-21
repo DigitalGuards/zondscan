@@ -155,7 +155,22 @@
 }
 
 @utility page-content {
-  @apply max-w-[1200px] mx-auto px-4;
+  /* Shared by every <route>/layout.tsx wrapper. Bumped from 1200 → 1536
+     so detail pages can use the full breadth of widescreen monitors and
+     list/index pages get a consistent gutter. Inner views may further
+     constrain with `detail-content` (same cap) for uniform pillarboxing. */
+  @apply max-w-screen-2xl mx-auto px-4;
+}
+
+/* Shared wrapper for tx / address / contract detail pages. Previously
+   each detail surface defined its own cap (900px wallet, 1152px tx,
+   1200px contract) and per-breakpoint padding, which made the cards
+   feel inconsistently sized between pages and stayed cramped on
+   widescreen monitors. One utility, one max-width, one padding rhythm.
+   Cap matches Tailwind's `container` at the 2xl breakpoint so a 1920×
+   1080 viewport leaves ~10% margin on each side. */
+@utility detail-content {
+  @apply max-w-screen-2xl mx-auto px-3 sm:px-6 md:px-8 py-3 md:py-6 lg:py-8;
 }
 
 @utility section-title {

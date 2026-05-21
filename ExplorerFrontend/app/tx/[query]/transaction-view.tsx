@@ -96,7 +96,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
     isMobile ? `${addr.slice(0, 10)}...${addr.slice(-8)}` : addr;
 
   return (
-    <div className="p-4 sm:p-8 max-w-6xl mx-auto">
+    <div className="detail-content">
       <Breadcrumbs items={[
         { label: 'Transactions', href: '/transactions/1' },
         { label: `${transaction.hash.slice(0, 10)}...${transaction.hash.slice(-6)}` },

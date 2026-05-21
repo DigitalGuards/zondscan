@@ -87,7 +87,7 @@ export default function AddressView({ addressData, addressSegment }: AddressView
     }
 
     return (
-        <div className="py-3 md:py-6 lg:py-8 px-3 md:px-6 lg:px-8 max-w-[900px] mx-auto">
+        <div className="detail-content">
             <Breadcrumbs items={[
                 { label: 'Address' },
                 { label: `${addressSegment.slice(0, 10)}...${addressSegment.slice(-6)}` },
