@@ -18,7 +18,12 @@ type TokenTransfer struct {
 	Amount          string `bson:"amount"`
 	BlockNumber     string `bson:"blockNumber"`
 	TxHash          string `bson:"txHash"`
-	LogIndex        string `bson:"logIndex,omitempty"`
+	// Stored ALWAYS, including the empty-string sentinel for the
+	// direct-calldata path. The `omitempty` tag would drop the field
+	// when LogIndex is "", and then BSON queries `{logIndex: ""}`
+	// would no longer match those documents — which is exactly what
+	// TokenTransferExists relies on for idempotent reprocess.
+	LogIndex        string `bson:"logIndex"`
 	Timestamp       string `bson:"timestamp"`
 	TokenSymbol     string `bson:"tokenSymbol"`
 	TokenDecimals   uint8  `bson:"tokenDecimals"`

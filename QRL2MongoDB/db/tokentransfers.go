@@ -122,28 +122,35 @@ func GetTokenTransfersByAddress(address string, skip, limit int64) ([]models.Tok
 	return transfers, nil
 }
 
-// TokenTransferExists checks if a specific token transfer log already
-// exists in the database. logIndex is the disambiguator within a tx so
-// multi-transfer txs (DEX swaps, batch mints, fee-skim contracts that
-// emit Transfer twice for the same from/to) can be dedup-checked at
-// log granularity rather than tx-level. The legacy four-arg signature
-// would collide on self-transfers (from == to) and any tx with two
-// transfers sharing the same from+to.
-func TokenTransferExists(txHash string, logIndex string) (bool, error) {
+// TokenTransferExists checks if a specific token transfer is already
+// persisted. The dedupe key is (txHash, contractAddress, logIndex):
+//
+//   - txHash + logIndex alone collide across token contracts when a
+//     single tx routes through multiple tokens (a swap that transfers
+//     tokenA at log 0 and tokenB at log 1 → both rows distinct on
+//     logIndex, but the legacy direct-calldata path writes logIndex=""
+//     for every contract it touches in the same tx, so contractAddress
+//     is what keeps them apart).
+//   - The legacy four-arg form (txHash + contractAddress + from + to)
+//     collided on self-transfers (from == to) and on identical
+//     bridge-style transfers within one tx.
+func TokenTransferExists(txHash string, contractAddress string, logIndex string) (bool, error) {
 	collection := configs.GetCollection(configs.DB, "tokenTransfers")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	filter := bson.M{
-		"txHash":   txHash,
-		"logIndex": logIndex,
+		"txHash":          txHash,
+		"contractAddress": contractAddress,
+		"logIndex":        logIndex,
 	}
 
 	count, err := collection.CountDocuments(ctx, filter)
 	if err != nil {
 		configs.Logger.Error("Failed to check if token transfer exists",
 			zap.String("txHash", txHash),
+			zap.String("contractAddress", contractAddress),
 			zap.String("logIndex", logIndex),
 			zap.Error(err))
 		return false, err
@@ -219,9 +226,10 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 		amount := log.Data
 
 		// Check if this specific log already persisted (idempotent on
-		// reprocess). Per-log granularity matters: a single tx can emit
-		// many Transfer events; dedup by tx+logIndex, not tx alone.
-		exists, err := TokenTransferExists(log.TransactionHash, log.LogIndex)
+		// reprocess). Per-(tx, contract, logIndex) granularity matters:
+		// a single tx may emit Transfer events from multiple token
+		// contracts in any order.
+		exists, err := TokenTransferExists(log.TransactionHash, contractAddress, log.LogIndex)
 		if err != nil {
 			configs.Logger.Error("Failed to check if token transfer exists",
 				zap.String("txHash", log.TransactionHash),
@@ -355,16 +363,18 @@ func InitializeTokenTransfersCollection() error {
 		},
 		{
 			// Non-unique. Provides a fast lookup path for
-			// TokenTransferExists(txHash, logIndex) and for any /tx/:hash
-			// → transfers query. Dedup is enforced at the application
-			// layer via TokenTransferExists before insert; a unique
-			// constraint here would re-introduce the original bug for
-			// the legacy direct-calldata path (which writes logIndex="").
+			// TokenTransferExists(txHash, contractAddress, logIndex)
+			// and for any /tx/:hash → transfers query. Dedup is enforced
+			// at the application layer via TokenTransferExists before
+			// insert; a unique constraint here would re-introduce the
+			// original bug for the legacy direct-calldata path (which
+			// writes logIndex="").
 			Keys: bson.D{
 				{Key: "txHash", Value: 1},
+				{Key: "contractAddress", Value: 1},
 				{Key: "logIndex", Value: 1},
 			},
-			Options: options.Index().SetName("txHash_logIndex_idx"),
+			Options: options.Index().SetName("txHash_contract_logIndex_idx"),
 		},
 	}
 
