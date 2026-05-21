@@ -110,11 +110,39 @@ func StoreContract(contract models.ContractInfo) error {
 		// `contract.IsToken == false` is a no-op for IsToken + token
 		// metadata; keep existing values intact.
 
+		// TokenStandard promotion ladder: "" → ERC-20 → ERC-721/1155.
+		// Same promote-only rationale as IsToken: a transient RPC blip
+		// must never demote a previously-classified contract. ERC-1155
+		// outranks ERC-721 so dual-impl edge cases (rare) pick the
+		// broader standard. The merge never moves DOWN the ladder.
+		if standardRank(contract.TokenStandard) > standardRank(merged.TokenStandard) {
+			merged.TokenStandard = contract.TokenStandard
+		}
+		// HasERC165 latches true forever — a contract that ever responded
+		// to supportsInterface didn't UN-implement ERC-165 later. Skip the
+		// flag flip on transient probe failures (those return HasERC165=false).
+		if contract.HasERC165 {
+			merged.HasERC165 = true
+		}
+		// BaseURI is gap-fill only (Phase 3 will populate it from tokenURI
+		// / uri probes). Never overwrite or clear.
+		if merged.BaseURI == "" && contract.BaseURI != "" {
+			merged.BaseURI = contract.BaseURI
+		}
 	} else if !errors.Is(err, mongo.ErrNoDocuments) {
 		configs.Logger.Error("Failed to check for existing contract",
 			zap.String("address", contract.Address),
 			zap.Error(err))
 		return err
+	}
+
+	// IsToken back-compat: any classified standard implies isToken=true so
+	// the legacy `?isToken=true` API filter continues to surface NFT
+	// collections alongside ERC-20s. Applied in BOTH the merge and the
+	// fresh-write path — callers that set TokenStandard without IsToken
+	// (e.g. backfill scripts) still produce correct rows.
+	if merged.TokenStandard != "" {
+		merged.IsToken = true
 	}
 
 	// Stamp updatedAt once for both code paths (merge + first-write).
@@ -183,7 +211,36 @@ func syncerOwnedSet(c models.ContractInfo) bson.M {
 	if c.MaxTxLimit != "" {
 		m["maxTxLimit"] = c.MaxTxLimit
 	}
+	// NFT classification — omit when empty/false so the document stays clean
+	// for non-token contracts AND a transient blip that produces zero values
+	// can't clobber a previously-set value (writing `false` would overwrite
+	// `true`; omitting the key leaves the existing value untouched).
+	if c.TokenStandard != "" {
+		m["tokenStandard"] = c.TokenStandard
+	}
+	if c.HasERC165 {
+		m["hasERC165"] = true
+	}
+	if c.BaseURI != "" {
+		m["baseURI"] = c.BaseURI
+	}
 	return m
+}
+
+// standardRank orders TokenStandard values for promote-only merging.
+// Higher rank = stricter / more specific classification. Promotions go
+// up the ladder; demotions are silently dropped.
+func standardRank(s string) int {
+	switch s {
+	case "ERC-1155":
+		return 3
+	case "ERC-721":
+		return 2
+	case "ERC-20":
+		return 1
+	default:
+		return 0
+	}
 }
 
 // GetContract retrieves contract information from the database
@@ -247,29 +304,28 @@ func processContracts(tx *models.Transaction) (string, string, string, bool) {
 					zap.Error(err))
 			}
 
-			// Get token information
-			name, symbol, decimals, isToken := rpc.GetTokenInfo(contractAddress)
-
-			// Get total supply if it's a token
-			var totalSupply string
-			if isToken {
-				totalSupply, err = rpc.GetTokenTotalSupply(contractAddress)
-				if err != nil {
-					configs.Logger.Error("Failed to get token total supply",
-						zap.String("address", contractAddress),
-						zap.Error(err))
-				}
+			// Classify the contract (ERC-20 / ERC-721 / ERC-1155 / unknown).
+			// On transient probe failure the result is zero-valued; the
+			// StoreContract merge's promote-only invariant prevents that
+			// from clobbering a previously-good classification.
+			detection, detErr := rpc.DetectContractType(contractAddress)
+			if detErr != nil {
+				configs.Logger.Warn("Contract type detection failed; storing without classification",
+					zap.String("address", contractAddress),
+					zap.Error(detErr))
 			}
 
 			// Store complete contract information
 			contract := models.ContractInfo{
 				Address:             contractAddress,
 				Status:              statusTx,
-				IsToken:             isToken,
-				Name:                name,
-				Symbol:              symbol,
-				Decimals:            decimals,
-				TotalSupply:         totalSupply,
+				IsToken:             detection.Standard != "",
+				Name:                detection.Name,
+				Symbol:              detection.Symbol,
+				Decimals:            detection.Decimals,
+				TotalSupply:         detection.TotalSupply,
+				TokenStandard:       detection.Standard,
+				HasERC165:           detection.HasERC165,
 				ContractCode:        contractCode,
 				CreatorAddress:      tx.From,
 				CreationTransaction: tx.Hash,
@@ -325,18 +381,14 @@ func IsAddressContract(address string) bool {
 		configs.Logger.Info("Detected existing contract",
 			zap.String("address", address))
 
-		// Get token information
-		name, symbol, decimals, isToken := rpc.GetTokenInfo(address)
-
-		// Get total supply if it's a token
-		var totalSupply string
-		if isToken {
-			totalSupply, err = rpc.GetTokenTotalSupply(address)
-			if err != nil {
-				configs.Logger.Error("Failed to get token total supply",
-					zap.String("address", address),
-					zap.Error(err))
-			}
+		// Classify (ERC-20 / 721 / 1155 / unknown). Transient probe
+		// failures are logged but non-fatal — StoreContract preserves
+		// any previously-good classification through its merge.
+		detection, detErr := rpc.DetectContractType(address)
+		if detErr != nil {
+			configs.Logger.Warn("Contract type detection failed; storing without classification",
+				zap.String("address", address),
+				zap.Error(detErr))
 		}
 
 		// First try to get existing contract from both collections to preserve creation data
@@ -344,15 +396,17 @@ func IsAddressContract(address string) bool {
 
 		// Create base contract info
 		contract := models.ContractInfo{
-			Address:      address,
-			Status:       "0x1", // Assume successful
-			IsToken:      isToken,
-			Name:         name,
-			Symbol:       symbol,
-			Decimals:     decimals,
-			TotalSupply:  totalSupply,
-			ContractCode: code,
-			UpdatedAt:    time.Now().UTC().Format(time.RFC3339),
+			Address:       address,
+			Status:        "0x1", // Assume successful
+			IsToken:       detection.Standard != "",
+			Name:          detection.Name,
+			Symbol:        detection.Symbol,
+			Decimals:      detection.Decimals,
+			TotalSupply:   detection.TotalSupply,
+			TokenStandard: detection.Standard,
+			HasERC165:     detection.HasERC165,
+			ContractCode:  code,
+			UpdatedAt:     time.Now().UTC().Format(time.RFC3339),
 		}
 
 		// If we have existing contract data, preserve the creation information
@@ -452,24 +506,24 @@ func ReprocessIncompleteContracts() error {
 			}
 		}
 
-		// Get token information if missing
+		// Get token information if missing. ReprocessIncompleteContracts
+		// is the hourly self-heal pass — a fresh DetectContractType probe
+		// also picks up NFT contracts we previously couldn't classify
+		// (`tokenStandard` migration of legacy rows).
 		if !contract.IsToken && contract.Name == "" && contract.Symbol == "" {
-			name, symbol, decimals, isToken := rpc.GetTokenInfo(contract.Address)
-			if isToken {
-				contract.IsToken = isToken
-				contract.Name = name
-				contract.Symbol = symbol
-				contract.Decimals = decimals
-
-				// Get total supply for new tokens
-				totalSupply, err := rpc.GetTokenTotalSupply(contract.Address)
-				if err != nil {
-					configs.Logger.Error("Failed to get token total supply",
-						zap.String("address", contract.Address),
-						zap.Error(err))
-				} else {
-					contract.TotalSupply = totalSupply
-				}
+			detection, detErr := rpc.DetectContractType(contract.Address)
+			if detErr != nil {
+				configs.Logger.Debug("Contract type detection failed during reprocess; skipping",
+					zap.String("address", contract.Address),
+					zap.Error(detErr))
+			} else if detection.Standard != "" {
+				contract.IsToken = true
+				contract.Name = detection.Name
+				contract.Symbol = detection.Symbol
+				contract.Decimals = detection.Decimals
+				contract.TotalSupply = detection.TotalSupply
+				contract.TokenStandard = detection.Standard
+				contract.HasERC165 = detection.HasERC165
 			}
 		} else if contract.IsToken && contract.TotalSupply == "" {
 			// Get total supply for token with missing supply

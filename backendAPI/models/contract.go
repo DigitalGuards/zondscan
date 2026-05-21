@@ -26,6 +26,14 @@ type ContractInfo struct {
 	TotalSupply            string `json:"totalSupply" bson:"totalSupply"`
 	UpdatedAt              string `json:"updatedAt" bson:"updatedAt"`
 
+	// NFT / multi-token fields — mirror QRL2MongoDB/models/contract.go.
+	// Written exclusively by the syncer; held here only for round-trip
+	// preservation and to allow the /contracts endpoint to filter on
+	// `?standard=ERC-721`.
+	TokenStandard string `json:"tokenStandard,omitempty" bson:"tokenStandard,omitempty"`
+	HasERC165     bool   `json:"hasERC165,omitempty" bson:"hasERC165,omitempty"`
+	BaseURI       string `json:"baseURI,omitempty" bson:"baseURI,omitempty"`
+
 	// Source-verification fields. `verified` defaults to false (omitted from
 	// omitempty so it is always present in the JSON shape clients consume).
 	// Everything else uses omitempty so unverified contracts stay clean.

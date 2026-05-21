@@ -131,6 +131,99 @@ func CallContractMethod(contractAddress string, methodSig string) (string, error
 	return result.Result, nil
 }
 
+// Canonical TokenStandard values persisted on ContractInfo.TokenStandard.
+const (
+	StandardERC20   = "ERC-20"
+	StandardERC721  = "ERC-721"
+	StandardERC1155 = "ERC-1155"
+)
+
+// ContractDetectionResult is returned by DetectContractType. Fields outside
+// of Standard/Name/Symbol/HasERC165 are only populated for ERC-20 (Decimals,
+// TotalSupply); NFT collections often omit `decimals()` entirely.
+type ContractDetectionResult struct {
+	Standard    string // StandardERC20 | StandardERC721 | StandardERC1155 | ""
+	Name        string
+	Symbol      string
+	Decimals    uint8
+	TotalSupply string
+	HasERC165   bool
+}
+
+// DetectContractType classifies a contract by trying ERC-165 supportsInterface
+// first (the cheap, definitive signal for ERC-721/1155) and falling back to
+// the ERC-20 name+symbol+decimals triad otherwise.
+//
+// Error contract: a non-nil error means the *probe itself* failed (transport
+// blip, etc.) — the caller MUST bail without writing classification fields,
+// to preserve the C5 promote-only invariant established in #88. A nil error
+// with Standard=="" simply means "we can't tell what this is" (and that IS
+// safe to write; the merge in StoreContract treats "" as no-op).
+//
+// Detection order picks the broader standard first so ERC-1155 implementations
+// that ALSO satisfy ERC-721 are categorised as ERC-1155 (matches the plan's
+// dual-impl tie-breaker).
+func DetectContractType(addr string) (ContractDetectionResult, error) {
+	// Try ERC-1155 first (broader spec).
+	supports, hasERC165, err := SupportsInterface(addr, InterfaceIDERC1155)
+	if err != nil {
+		return ContractDetectionResult{}, fmt.Errorf("supportsInterface(ERC-1155): %w", err)
+	}
+	if supports {
+		name, _ := GetTokenName(addr)     // best-effort; many ERC-1155s omit name()
+		symbol, _ := GetTokenSymbol(addr) // best-effort; many ERC-1155s omit symbol()
+		return ContractDetectionResult{
+			Standard:  StandardERC1155,
+			Name:      name,
+			Symbol:    symbol,
+			HasERC165: true,
+		}, nil
+	}
+
+	// Try ERC-721.
+	supports721, hasERC165From721, err := SupportsInterface(addr, InterfaceIDERC721)
+	if err != nil {
+		return ContractDetectionResult{}, fmt.Errorf("supportsInterface(ERC-721): %w", err)
+	}
+	if supports721 {
+		name, _ := GetTokenName(addr)
+		symbol, _ := GetTokenSymbol(addr)
+		return ContractDetectionResult{
+			Standard:  StandardERC721,
+			Name:      name,
+			Symbol:    symbol,
+			HasERC165: true,
+		}, nil
+	}
+
+	// Either probe confirmed the contract responds to ERC-165 (it just
+	// doesn't support either NFT interface). Record that, then fall through
+	// to ERC-20 detection — some hybrid contracts (rare) declare ERC-165
+	// without being ERC-721/1155 and ARE ERC-20.
+	erc165Known := hasERC165 || hasERC165From721
+
+	// Fall back to the original ERC-20 name+symbol+decimals triad.
+	name, symbol, decimals, isERC20 := GetTokenInfo(addr)
+	if !isERC20 {
+		return ContractDetectionResult{HasERC165: erc165Known}, nil
+	}
+	totalSupply, err := GetTokenTotalSupply(addr)
+	if err != nil {
+		// totalSupply RPC failure is non-fatal — the triad already
+		// classified this as ERC-20. Leave TotalSupply empty; the merge
+		// in StoreContract won't demote an existing value.
+		totalSupply = ""
+	}
+	return ContractDetectionResult{
+		Standard:    StandardERC20,
+		Name:        name,
+		Symbol:      symbol,
+		Decimals:    decimals,
+		TotalSupply: totalSupply,
+		HasERC165:   erc165Known,
+	}, nil
+}
+
 // GetTokenInfo attempts to determine if a contract is an ERC20 token and returns its details
 func GetTokenInfo(contractAddress string) (string, string, uint8, bool) {
 	zap.L().Info("Checking if contract is a token", zap.String("address", contractAddress))
