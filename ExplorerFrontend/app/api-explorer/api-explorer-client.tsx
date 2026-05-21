@@ -201,14 +201,14 @@ const endpointGroups: EndpointGroup[] = [
       {
         method: 'GET',
         path: '/contracts',
-        description: 'Returns a paginated list of smart contracts. Supports search, token/standard filtering, and substring match on name or symbol. The `standard` filter (Phase 1 NFT support) returns only contracts classified as the given EIP standard; `isToken=true` is the looser superset (matches all three token standards).',
-        params: 'page (query, default: 0), limit (query, default: 10, max: 100), search (query, matches address, creator address, name, or symbol, case-insensitive), isToken (query, true/false), standard (query, ERC-20|ERC-721|ERC-1155, invalid value → 400)',
+        description: 'Returns a paginated list of smart contracts. Supports search, token/standard filtering, and substring match on name, symbol, or off-chain metadataName. The `standard` filter (Phase 1 NFT support) returns only contracts classified as the given EIP standard; `isToken=true` is the looser superset (matches all three token standards). Phase 3a: each row includes optional `metadataName` / `metadataImage` / `metadataDescription` / `metadataExternalURL` populated from the contract\'s `contractURI()` getter via the IPFS gateway.',
+        params: 'page (query, default: 0), limit (query, default: 10, max: 100), search (query, matches address, creator address, name, symbol, or metadataName, case-insensitive), isToken (query, true/false), standard (query, ERC-20|ERC-721|ERC-1155, invalid value → 400)',
         example: '/contracts?page=0&limit=10&standard=ERC-721',
       },
       {
         method: 'GET',
         path: '/token/:address/info',
-        description: 'Returns summary information for a token contract (name, symbol, decimals, supply).',
+        description: 'Returns summary information for a token contract (name, symbol, decimals, supply). Phase 3a: the underlying contract document also carries `metadataName` / `metadataImage` / `metadataDescription` / `metadataExternalURL` resolved from `contractURI()`, available on the /contracts list rows and on the address-page contract document.',
         example: '/token/Q539f73306bdd4288f93a5e50b4d5bf1a9b07f147/info',
       },
       {

@@ -25,6 +25,20 @@ export interface ContractData {
   symbol: string;
   updatedAt: string;
 
+  /** Phase 3a: off-chain collection metadata fetched from contractURI()
+   *  via the IPFS gateway. The image URL is pre-resolved to an HTTPS
+   *  URL renderable directly via next/image; the syncer never persists
+   *  bare `ipfs://...` here so the frontend doesn't have to deal with it.
+   *  All fields are absent ("not fetched yet") on contracts whose
+   *  `contractURI()` reverts or whose fetcher pass hasn't run. */
+  metadataURI?: string;
+  metadataName?: string;
+  metadataDescription?: string;
+  metadataImage?: string;
+  metadataExternalURL?: string;
+  metadataFetchedAt?: string;
+  metadataFetchError?: string;
+
   // Source verification (added by M1, populated by M2+)
   verified: boolean;
   sourceCode?: string;

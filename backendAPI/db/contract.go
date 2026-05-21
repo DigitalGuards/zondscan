@@ -53,16 +53,18 @@ func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool
 		nameRegex := bson.D{{Key: "$regex", Value: escaped}, {Key: "$options", Value: "i"}}
 
 		// Search by exact address, exact creator address, OR partial
-		// case-insensitive match against name + symbol. Symbol was
-		// previously absent, searching "MQW" missed tokens whose `name`
-		// field held the full project label instead of the ticker (and
-		// vice versa).
+		// case-insensitive match against name + symbol + metadataName.
+		// Symbol was previously absent, searching "MQW" missed tokens whose
+		// `name` field held the full project label instead of the ticker.
+		// Phase 3a adds metadataName so a user searching by the off-chain
+		// display title hits the row even when on-chain name() is empty.
 		searchFilter := bson.D{
 			{Key: "$or", Value: bson.A{
 				bson.D{{Key: "address", Value: normalizedSearch}},
 				bson.D{{Key: "creatorAddress", Value: normalizedSearch}},
 				bson.D{{Key: "name", Value: nameRegex}},
 				bson.D{{Key: "symbol", Value: nameRegex}},
+				bson.D{{Key: "metadataName", Value: nameRegex}},
 			}},
 		}
 		// Combine with existing filter
