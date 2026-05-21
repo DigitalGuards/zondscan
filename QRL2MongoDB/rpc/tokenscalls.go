@@ -445,7 +445,10 @@ func GetTransactionReceipt(txHash string) (*models.TransactionReceipt, error) {
 	return &receipt, nil
 }
 
-// ProcessTransferLogs processes Transfer events from transaction logs
+// ProcessTransferLogs processes Transfer events from transaction logs.
+// LogIndex on the returned events is the originating log's index inside
+// the receipt; callers persist it so multi-transfer txs (a swap that
+// emits 3 Transfer events) don't dedup-collide on tx hash alone.
 func ProcessTransferLogs(receipt *models.TransactionReceipt) []TransferEvent {
 	var transfers []TransferEvent
 
@@ -460,9 +463,10 @@ func ProcessTransferLogs(receipt *models.TransactionReceipt) []TransferEvent {
 			}
 
 			transfers = append(transfers, TransferEvent{
-				From:   from,
-				To:     to,
-				Amount: amount.String(),
+				From:     from,
+				To:       to,
+				Amount:   amount.String(),
+				LogIndex: log.LogIndex,
 			})
 		}
 	}
@@ -471,9 +475,10 @@ func ProcessTransferLogs(receipt *models.TransactionReceipt) []TransferEvent {
 }
 
 type TransferEvent struct {
-	From   string
-	To     string
-	Amount string
+	From     string
+	To       string
+	Amount   string
+	LogIndex string
 }
 
 // TrimLeftZeros trims leading zeros from hex string

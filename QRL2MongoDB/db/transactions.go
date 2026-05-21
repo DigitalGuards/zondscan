@@ -254,6 +254,7 @@ func processTokenContract(targetAddress string, txHash string, blockNumber strin
 			Amount:          transferEvent.Amount,
 			BlockNumber:     blockNumber,
 			TxHash:          txHash,
+			LogIndex:        transferEvent.LogIndex,
 			Timestamp:       blockTimestamp,
 			TokenSymbol:     contract.Symbol,
 			TokenDecimals:   contract.Decimals,
