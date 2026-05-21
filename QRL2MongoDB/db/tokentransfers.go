@@ -275,12 +275,24 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 			}
 			tokenTransfersFound++
 
-			// Phase 1 balance maintenance: ERC-20 only. Per-tokenID NFT
-			// ownership lands in Phase 2 (with the (contract, holder,
-			// tokenID) schema rewrite), counting NFT "balances" with
-			// the current (contract, holder) schema would either lose
-			// per-id info or over-count, so we deliberately skip.
-			if standard == rpc.StandardERC20 {
+			// Per-standard balance maintenance.
+			//
+			// ERC-20: refresh sender + recipient via the existing helper
+			// (RPC-confirmed balanceOf, full-precision string storage).
+			//
+			// ERC-721: the row's transfer ALREADY happened on chain by the
+			// time we got the log. ownerOf is global truth, so a single
+			// StoreERC721Ownership call refreshes the (contract, tokenID)
+			// row to point at the new holder AND clears the prior holder's
+			// row through the single-owner-invariant branch.
+			//
+			// ERC-1155: refresh both sides of the transfer with balanceOf
+			// (per id). Zero balance deletes the row (sparse storage).
+			// Errors are logged but non-fatal, the underlying tokenTransfer
+			// row is already persisted, balance refresh is reconcilable
+			// next time the holder transacts.
+			switch standard {
+			case rpc.StandardERC20:
 				if err := StoreTokenBalance(contractAddress, row.From, row.Amount, blockNumber); err != nil {
 					configs.Logger.Error("Failed to update sender token balance",
 						zap.String("address", row.From),
@@ -292,6 +304,40 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 						zap.String("address", row.To),
 						zap.String("contractAddress", contractAddress),
 						zap.Error(err))
+				}
+			case rpc.StandardERC721:
+				if id, ok := new(big.Int).SetString(row.TokenID, 10); ok {
+					if err := StoreERC721Ownership(contractAddress, id, blockNumber); err != nil {
+						configs.Logger.Warn("ERC-721 ownership refresh failed; will retry on next transfer",
+							zap.String("contractAddress", contractAddress),
+							zap.String("tokenID", row.TokenID),
+							zap.Error(err))
+					}
+				} else {
+					configs.Logger.Warn("ERC-721 transfer row has unparseable tokenID; skipping ownership refresh",
+						zap.String("contractAddress", contractAddress),
+						zap.String("tokenID", row.TokenID))
+				}
+			case rpc.StandardERC1155:
+				if id, ok := new(big.Int).SetString(row.TokenID, 10); ok {
+					if err := StoreERC1155Balance(contractAddress, row.From, id, blockNumber); err != nil {
+						configs.Logger.Warn("ERC-1155 sender balance refresh failed",
+							zap.String("contractAddress", contractAddress),
+							zap.String("holder", row.From),
+							zap.String("tokenID", row.TokenID),
+							zap.Error(err))
+					}
+					if err := StoreERC1155Balance(contractAddress, row.To, id, blockNumber); err != nil {
+						configs.Logger.Warn("ERC-1155 recipient balance refresh failed",
+							zap.String("contractAddress", contractAddress),
+							zap.String("holder", row.To),
+							zap.String("tokenID", row.TokenID),
+							zap.Error(err))
+					}
+				} else {
+					configs.Logger.Warn("ERC-1155 transfer row has unparseable tokenID; skipping balance refresh",
+						zap.String("contractAddress", contractAddress),
+						zap.String("tokenID", row.TokenID))
 				}
 			}
 		}
@@ -569,8 +615,33 @@ func InitializeTokenTransfersCollection() error {
 	return nil
 }
 
-// InitializeTokenBalancesCollection ensures the token balances collection is set up with proper indexes.
-// Uses CreateMany which is a no-op for indexes that already exist, safe to call on every restart.
+// InitializeTokenBalancesCollection sets up tokenBalances indexes, including
+// the Phase 2 per-tokenID migration.
+//
+// Index plan:
+//
+//   - UNIQUE (contractAddress, holderAddress, tokenID): primary key. Legacy
+//     ERC-20 rows lack `tokenID`, Mongo treats missing fields as `null` for
+//     index purposes, so the legacy (contract, holder, null) rows remain
+//     unique by extension of the prior (contract, holder) unique. No
+//     migration collision.
+//   - secondary (contractAddress, tokenID, holderAddress): drives per-id
+//     holder lookups (`/token/<addr>/holders?tokenID=`).
+//   - secondary (holderAddress) and (contractAddress): unchanged, support
+//     address-page and token-page sweeps.
+//
+// Phase 2 migration:
+//
+//   - Create the new 3-tuple unique BEFORE dropping the legacy 2-tuple unique.
+//     A partial failure (e.g. transient duplicate-key on legacy data) leaves
+//     the old unique in place, never an unguarded collection.
+//   - Drop the legacy index by name only after the new one is online. Errors
+//     other than IndexNotFound are warnings; the new unique is the source of
+//     truth either way.
+//
+// Note on the old `address_idx` / `contract_address_idx` indexes from #88:
+// those targeted a non-existent `address` field (storage writes
+// `holderAddress`). They were vestigial, the Phase 2 reset drops them.
 func InitializeTokenBalancesCollection() error {
 	collection := configs.GetTokenBalancesCollection()
 
@@ -579,23 +650,42 @@ func InitializeTokenBalancesCollection() error {
 
 	configs.Logger.Info("Initializing tokenBalances collection and indexes")
 
-	// Create indexes for token balances collection.
-	// CreateMany does not drop existing indexes and is idempotent.
 	indexes := []mongo.IndexModel{
 		{
+			// Phase 2 primary key: per-(contract, holder, tokenID) ownership.
+			// Legacy ERC-20 rows (no tokenID field) collapse to a null third
+			// key, which the prior (contract, holder) unique already kept
+			// distinct, so this is non-disruptive on existing data.
 			Keys: bson.D{
 				{Key: "contractAddress", Value: 1},
-				{Key: "address", Value: 1},
+				{Key: "holderAddress", Value: 1},
+				{Key: "tokenID", Value: 1},
 			},
-			Options: options.Index().SetName("contract_address_idx").SetUnique(true),
+			Options: options.Index().
+				SetName("contract_holder_tokenID_idx").
+				SetUnique(true).
+				SetBackground(true),
 		},
 		{
+			// Per-id holder lookups: powers /token/<addr>/holders?tokenID=.
 			Keys: bson.D{
-				{Key: "address", Value: 1},
+				{Key: "contractAddress", Value: 1},
+				{Key: "tokenID", Value: 1},
+				{Key: "holderAddress", Value: 1},
 			},
-			Options: options.Index().SetName("address_idx"),
+			Options: options.Index().
+				SetName("contract_tokenID_holder_idx").
+				SetBackground(true),
 		},
 		{
+			// Address-page sweep: list every token row a holder owns.
+			Keys: bson.D{
+				{Key: "holderAddress", Value: 1},
+			},
+			Options: options.Index().SetName("holder_idx"),
+		},
+		{
+			// Token-page sweep: list every holder/row for a contract.
 			Keys: bson.D{
 				{Key: "contractAddress", Value: 1},
 			},
@@ -603,11 +693,85 @@ func InitializeTokenBalancesCollection() error {
 		},
 	}
 
-	_, err := collection.Indexes().CreateMany(ctx, indexes)
-	if err != nil {
+	if _, err := collection.Indexes().CreateMany(ctx, indexes); err != nil {
 		configs.Logger.Error("Failed to create indexes for token balances",
 			zap.Error(err))
 		return err
+	}
+
+	// Drop the prior 2-tuple unique once the new 3-tuple unique is online.
+	// We can't rely on the legacy index name because different MongoDB
+	// versions / manual creators may have named it differently (the
+	// `configs.ConnectDB` path historically created it without an explicit
+	// SetName, so Mongo auto-generated something like
+	// `contractAddress_1_holderAddress_1`, but that's not a guarantee).
+	// Iterate every index on the collection, match on the key spec instead,
+	// and drop any (contractAddress, holderAddress) unique. The new 3-tuple
+	// unique is keyed on three fields so it can't be confused.
+	if cursor, err := collection.Indexes().List(ctx); err == nil {
+		defer cursor.Close(ctx)
+		for cursor.Next(ctx) {
+			var idx struct {
+				Name   string `bson:"name"`
+				Key    bson.D `bson:"key"`
+				Unique bool   `bson:"unique"`
+			}
+			if decErr := cursor.Decode(&idx); decErr != nil {
+				continue
+			}
+			if len(idx.Key) != 2 {
+				continue
+			}
+			// Match on the (contractAddress, holderAddress) key pair, in
+			// either order, regardless of direction. The legacy unique
+			// always pinned both to ascending (1), but matching by name
+			// only would miss any variant.
+			haveContract := false
+			haveHolder := false
+			for _, e := range idx.Key {
+				switch e.Key {
+				case "contractAddress":
+					haveContract = true
+				case "holderAddress":
+					haveHolder = true
+				}
+			}
+			if !haveContract || !haveHolder {
+				continue
+			}
+			if _, dErr := collection.Indexes().DropOne(ctx, idx.Name); dErr != nil {
+				msg := dErr.Error()
+				if !strings.Contains(msg, "IndexNotFound") &&
+					!strings.Contains(msg, "ns does not exist") &&
+					!strings.Contains(msg, "NamespaceNotFound") {
+					configs.Logger.Warn("Could not drop legacy 2-tuple unique; new 3-tuple unique still active",
+						zap.String("indexName", idx.Name),
+						zap.Error(dErr))
+				}
+			} else {
+				configs.Logger.Info("Dropped legacy 2-tuple tokenBalances index",
+					zap.String("indexName", idx.Name))
+			}
+		}
+	} else {
+		configs.Logger.Warn("Could not list tokenBalances indexes for migration; new 3-tuple unique still active",
+			zap.Error(err))
+	}
+
+	// Also retire the vestigial pre-Phase-2 indexes that targeted a non-
+	// existent `address` field. Safe to drop, the new indexes cover the
+	// same access patterns through `holderAddress`.
+	for _, name := range []string{"contract_address_idx", "address_idx"} {
+		if _, err := collection.Indexes().DropOne(ctx, name); err != nil {
+			msg := err.Error()
+			if !strings.Contains(msg, "IndexNotFound") &&
+				!strings.Contains(msg, "ns does not exist") &&
+				!strings.Contains(msg, "NamespaceNotFound") {
+				configs.Logger.Warn("Could not drop vestigial tokenBalances index",
+					zap.String("indexName", name),
+					zap.Error(err))
+			}
+		}
 	}
 
 	configs.Logger.Info("Successfully initialized tokenBalances collection and indexes")

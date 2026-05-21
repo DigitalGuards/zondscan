@@ -1,12 +1,20 @@
 package models
 
-// TokenBalance represents a token holding for a specific address
+// TokenBalance represents a token holding for a specific address.
+//
+// Phase 2: NFT collections store one row per (contract, holder, tokenID) so
+// the same struct serves ERC-20 (TokenID empty), ERC-721 (Balance="1" per id),
+// and ERC-1155 (Balance is per-id quantity as a decimal string). Legacy
+// pre-Phase-2 rows have no TokenID / TokenStandard fields, the omitempty
+// tags keep their JSON shape stable.
 type TokenBalance struct {
 	ContractAddress string `json:"contractAddress" bson:"contractAddress"`
 	HolderAddress   string `json:"holderAddress" bson:"holderAddress"`
 	Balance         string `json:"balance" bson:"balance"`
 	BlockNumber     string `json:"blockNumber" bson:"blockNumber"`
 	UpdatedAt       string `json:"updatedAt" bson:"updatedAt"`
+	TokenID         string `json:"tokenID,omitempty" bson:"tokenID,omitempty"`
+	TokenStandard   string `json:"tokenStandard,omitempty" bson:"tokenStandard,omitempty"`
 	// Token metadata (populated via aggregation)
 	Name     string `json:"name,omitempty" bson:"name,omitempty"`
 	Symbol   string `json:"symbol,omitempty" bson:"symbol,omitempty"`
