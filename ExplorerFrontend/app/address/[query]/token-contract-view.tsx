@@ -314,7 +314,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                 {isNFT ? 'Standard' : 'Decimals'}
                             </div>
                             <div className="text-sm md:text-base font-semibold text-white">
-                                {isNFT ? (tokenStandard ?? '-') : decimals}
+                                {isNFT ? (tokenStandard?.replace(/^ERC-/, 'QRC-') ?? '-') : decimals}
                             </div>
                         </div>
                     </div>

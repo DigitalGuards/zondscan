@@ -161,12 +161,13 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                     {/* Token / NFT Information */}
                                     {contractData.isToken && (
                                         <>
-                                            {/* Standard label (ERC-20 / ERC-721 / ERC-1155) */}
+                                            {/* Standard label — surfaces the QRC-X branding
+                                                (DB value stays ERC-X). */}
                                             {contractData.tokenStandard && (
                                                 <div>
                                                     <div className="text-xs md:text-sm text-gray-400 mb-1">Token Standard</div>
                                                     <div className="text-xs md:text-sm text-gray-300">
-                                                        {contractData.tokenStandard}
+                                                        {contractData.tokenStandard.replace(/^ERC-/, 'QRC-')}
                                                     </div>
                                                 </div>
                                             )}
