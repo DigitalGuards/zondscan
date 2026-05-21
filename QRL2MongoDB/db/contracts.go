@@ -646,6 +646,22 @@ func ReprocessIncompleteContracts() error {
 			}
 		}
 
+		// Phase 3a backfill: NFT contracts that were classified before the
+		// metadataURI probe shipped have an empty MetadataURI. The fetcher
+		// service needs a populated URI to enqueue work, so the hourly
+		// reprocess pass also re-probes contractURI() for any NFT row
+		// missing it. Best-effort: a contract-revert (most collections
+		// don't implement contractURI) returns ("", nil) and we leave the
+		// field empty; transient failures don't demote existing state.
+		if (contract.TokenStandard == rpc.StandardERC721 || contract.TokenStandard == rpc.StandardERC1155) && contract.MetadataURI == "" {
+			if uri, err := rpc.GetContractURI(contract.Address); err == nil && uri != "" {
+				contract.MetadataURI = uri
+				configs.Logger.Info("Backfilled contractURI for NFT collection",
+					zap.String("address", contract.Address),
+					zap.String("metadataURI", uri))
+			}
+		}
+
 		// Restore original creation information to ensure it's not lost
 		// Only restore if the original had values and current values are empty
 		if creatorAddress != "" && creatorAddress != "Q" && contract.CreatorAddress == "" {
