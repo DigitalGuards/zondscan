@@ -1000,8 +1000,11 @@ func parseDynamicString(result string) (string, error) {
 	// ABI words are 256 bits; strconv.ParseInt caps at 64. Real offsets are
 	// tiny (start at 0x20 = 32 bytes for one dynamic return), but an
 	// attacker-crafted return value could fill the full 32-byte word to try
-	// to crash the decoder. Parse as big.Int and reject anything that
-	// doesn't fit a signed int64 before downcasting.
+	// to crash the decoder. Parse as big.Int, reject negatives + anything
+	// outside int64, then bound against the payload size BEFORE the *2
+	// multiplication so an offset near math.MaxInt64 can't overflow
+	// startPos into a negative number that would silently bypass the
+	// subsequent slice-bounds check and panic on `stripped[startPos:...]`.
 	offsetInt := new(big.Int)
 	if _, ok := offsetInt.SetString(stripped[:64], 16); !ok {
 		return "", fmt.Errorf("invalid offset word")
@@ -1010,6 +1013,14 @@ func parseDynamicString(result string) (string, error) {
 		return "", fmt.Errorf("offset out of int64 range")
 	}
 	offset := offsetInt.Int64()
+	// `offset` is a byte index into the payload; `len(stripped)` is hex
+	// chars (2x byte count). The check `offset > len(stripped)` is a
+	// generous upper bound that's still tight enough to prevent the
+	// multiplication overflow, the next bounds check below handles the
+	// precise condition.
+	if offset > int64(len(stripped)) {
+		return "", fmt.Errorf("offset out of bounds: offset=%d payload=%d", offset, len(stripped)/2)
+	}
 	startPos := offset * 2
 	if startPos+64 > int64(len(stripped)) {
 		return "", fmt.Errorf("string length word out of bounds: offset=%d payload=%d", offset, len(stripped)/2)

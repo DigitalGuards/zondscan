@@ -517,6 +517,24 @@ func TestParseDynamicString(t *testing.T) {
 			result:  "0x" + word("20") + word("ff") + strings.Repeat("00", 16),
 			wantErr: true,
 		},
+		{
+			// Adversarial: offset is filled with the maximum signed-int64
+			// value (after the leading zero in the 64-hex-char word).
+			// IsInt64 passes; without the explicit `offset > len(stripped)`
+			// guard, `offset * 2` would overflow to a negative number and
+			// the subsequent slice would panic. With the guard, we return
+			// a clean error.
+			name: "max-int64 offset rejected before multiplication overflow",
+			result: "0x" + "0" + strings.Repeat("7", 1) + strings.Repeat("f", 62) +
+				strings.Repeat("00", 32),
+			wantErr: true,
+		},
+		{
+			// uint256 max as offset trips the IsInt64() branch (>2^63-1).
+			name:    "uint256-max offset rejected (overflows int64)",
+			result:  "0x" + strings.Repeat("f", 64) + strings.Repeat("00", 32),
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
