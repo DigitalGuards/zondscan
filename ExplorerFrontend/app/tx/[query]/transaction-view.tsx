@@ -245,7 +245,8 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                 href={`/address/${tt.contractAddress}`}
                 className="text-[#ffa729] hover:text-[#ffb84d] font-medium transition-colors"
               >
-                {tt.tokenName || tt.tokenSymbol || tt.contractAddress} {tt.tokenSymbol ? `(${tt.tokenSymbol})` : ''}
+                {tt.tokenName || tt.tokenSymbol || tt.contractAddress}
+                {tt.tokenName && tt.tokenSymbol && tt.tokenSymbol !== tt.tokenName ? ` (${tt.tokenSymbol})` : ''}
               </Link>
             </DetailRow>
             {tt.tokenID && (
