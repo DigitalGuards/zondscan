@@ -216,11 +216,21 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 			zap.String("contractAddress", contractAddress),
 			zap.String("txHash", log.TransactionHash))
 
-		// Use the consolidated token detection logic
-		contract, isToken := EnsureTokenInDatabase(contractAddress, blockNumber, log.TransactionHash)
-		if !isToken || contract == nil {
-			configs.Logger.Debug("Contract is not a token, skipping",
+		// Use the consolidated contract classification logic.
+		// Phase 1: still ERC-20-only dispatch downstream; ERC-721/1155
+		// classification is persisted but transfer decoding will land in
+		// the next commit. Until then, skip non-ERC-20 logs to avoid
+		// writing garbage rows for events we don't yet decode.
+		contract, standard := EnsureContractClassified(contractAddress, blockNumber, log.TransactionHash)
+		if standard == "" || contract == nil {
+			configs.Logger.Debug("Contract is not a recognised token standard, skipping",
 				zap.String("address", contractAddress))
+			continue
+		}
+		if standard != rpc.StandardERC20 {
+			configs.Logger.Debug("Skipping non-ERC-20 standard until dispatch lands",
+				zap.String("address", contractAddress),
+				zap.String("standard", standard))
 			continue
 		}
 
