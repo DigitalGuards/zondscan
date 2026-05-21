@@ -121,7 +121,7 @@ export default function PendingTransactionView({ pendingTx }: PendingTransaction
   }, [statusQuery.data?.status]);
   const elapsedSec = Math.max(0, nowSec - (pendingTx.createdAt ?? nowSec));
 
-  // ── ETA countdown — seeded from each poll, ticks down every second ─────
+  // ── ETA countdown, seeded from each poll, ticks down every second ─────
   // Adjusting-state-on-prop-change: detect a new poll value mid-render and
   // resync without writing state inside an effect (set-state-in-effect).
   const [etaRemaining, setEtaRemaining] = useState<number | null>(null);
@@ -202,7 +202,7 @@ export default function PendingTransactionView({ pendingTx }: PendingTransaction
             )}
           </div>
           <p className="text-[11px] text-gray-500">
-            Auto-refreshing every 5s — this page will navigate to the confirmed transaction once it&apos;s included in a block.
+            Auto-refreshing every 5s, this page will navigate to the confirmed transaction once it&apos;s included in a block.
           </p>
         </div>
 

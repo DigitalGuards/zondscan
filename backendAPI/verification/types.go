@@ -9,7 +9,7 @@ import "encoding/json"
 // `imports` map keyed by the path the source uses for the import (e.g.
 // "./Context.hyp" → the Context.hyp content). The Go layer wraps both
 // into a Hyperion standard-JSON `sources` map before invoking the
-// runner — users never see standard-JSON directly in v1.
+// runner, users never see standard-JSON directly in v1.
 type VerifyRequest struct {
 	Address              string            `json:"address" binding:"required"`
 	SourceCode           string            `json:"sourceCode" binding:"required"`
@@ -33,7 +33,7 @@ type VerifyEnqueueResponse struct {
 	Address string `json:"address"`
 }
 
-// CompilerInfoResponse is the body of GET /contract/compiler-info — the
+// CompilerInfoResponse is the body of GET /contract/compiler-info, the
 // single pinned hypc build the backend is willing to verify against.
 type CompilerInfoResponse struct {
 	Language string `json:"language"`
@@ -41,7 +41,7 @@ type CompilerInfoResponse struct {
 }
 
 // StandardJSONInput is the Hyperion standard-JSON shape we feed to the
-// runner. Mirrors the Solidity standard-JSON layout — see
+// runner. Mirrors the Solidity standard-JSON layout, see
 // theQRL/hyperion docs for details.
 type StandardJSONInput struct {
 	Language string                              `json:"language"`

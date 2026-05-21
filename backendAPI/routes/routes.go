@@ -113,7 +113,7 @@ func UserRoute(router *gin.Engine) {
 				return
 			}
 
-			// Mined tx whose tombstone was already swept — return 404 in the
+			// Mined tx whose tombstone was already swept, return 404 in the
 			// same shape as the tombstone branch below. The frontend treats
 			// any non-200 from this endpoint as "not pending" and fetches
 			// /tx/:hash for the mined payload, so returning the mined details
@@ -135,7 +135,7 @@ func UserRoute(router *gin.Engine) {
 			return
 		}
 
-		// If the row is a tombstone for a mined tx, return 404 — let the
+		// If the row is a tombstone for a mined tx, return 404, let the
 		// frontend fall back to /tx/<hash>. Don't delete here: the tombstone
 		// protects against a stale mempool poll re-inserting the row as
 		// "pending". CleanupOldPendingTransactions sweeps it after maxAge.
@@ -152,7 +152,7 @@ func UserRoute(router *gin.Engine) {
 	})
 
 	router.GET("/overview", func(c *gin.Context) {
-		// /overview is the homepage hero data — 8 separate Mongo round-trips
+		// /overview is the homepage hero data, 8 separate Mongo round-trips
 		// per request. Cache the assembled payload for 10 s so N concurrent
 		// pageviews fan into 1 backend computation.
 		v, err := routeCache.GetOrCompute("overview", 10*time.Second, func() (interface{}, error) {
@@ -479,7 +479,7 @@ func UserRoute(router *gin.Engine) {
 	})
 
 	router.GET("/richlist", func(c *gin.Context) {
-		// Richlist (top wallets by balance) changes slowly — 30 s TTL.
+		// Richlist (top wallets by balance) changes slowly, 30 s TTL.
 		v, err := routeCache.GetOrCompute("richlist", 30*time.Second, func() (interface{}, error) {
 			return gin.H{"richlist": db.ReturnRichlist()}, nil
 		})
@@ -519,7 +519,7 @@ func UserRoute(router *gin.Engine) {
 
 	router.GET("/blocksizes", func(c *gin.Context) {
 		// Block-size aggregate is a precomputed collection refreshed by the
-		// syncer's periodic task — safe to cache for longer.
+		// syncer's periodic task, safe to cache for longer.
 		v, err := routeCache.GetOrCompute("blocksizes", 30*time.Second, func() (interface{}, error) {
 			query, err := db.ReturnBlockSizes()
 			if err != nil {
@@ -635,14 +635,14 @@ func UserRoute(router *gin.Engine) {
 	})
 
 	router.GET("/transactions", func(c *gin.Context) {
-		// Network-wide latest-transactions feed. Hot path on the homepage —
+		// Network-wide latest-transactions feed. Hot path on the homepage ,
 		// every visitor's 30s refresh hits this. Cache for 5s so the burst
 		// fans into one Mongo round-trip.
 		v, err := routeCache.GetOrCompute("latest-txs", 5*time.Second, func() (interface{}, error) {
 			query, qerr := db.ReturnLatestTransactions()
 			if qerr != nil {
 				// Return the error so the cache doesn't store an empty
-				// payload — the next caller will retry against Mongo
+				// payload, the next caller will retry against Mongo
 				// instead of being served stale junk for 5s.
 				log.Printf("error fetching latest transactions: %v", qerr)
 				return nil, qerr
@@ -928,7 +928,7 @@ func UserRoute(router *gin.Engine) {
 			num := new(big.Int).Add(mp.GasAhead, new(big.Int).Sub(avgGas, big.NewInt(1)))
 			blocksAhead := new(big.Int).Quo(num, avgGas).Int64()
 			etaSec := float64(blocksAhead) * blockStats.AvgBlockTimeSec
-			// At minimum one block-time of wait — gasAhead = 0 still means we
+			// At minimum one block-time of wait, gasAhead = 0 still means we
 			// wait for the next block to be produced.
 			if etaSec < blockStats.AvgBlockTimeSec {
 				etaSec = blockStats.AvgBlockTimeSec
@@ -982,7 +982,7 @@ func UserRoute(router *gin.Engine) {
 			// and surfaced for callers that care.
 			recentTxPrices, err := db.GetRecentTransactionGasPrices(20, 500)
 			if err != nil {
-				// Don't fail the whole summary — fall back to the 30-block
+				// Don't fail the whole summary, fall back to the 30-block
 				// window median if the wider walk fails.
 				recentTxPrices = nil
 			}

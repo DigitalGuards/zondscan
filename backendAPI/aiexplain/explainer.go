@@ -42,16 +42,16 @@ type Explainer struct {
 }
 
 // systemPrompt frames the LLM as a neutral describer. No safety analysis,
-// no implementation feedback, no opinions — just factual observations
+// no implementation feedback, no opinions, just factual observations
 // about what the contract is and what it does. The summary is intentionally
 // short so it complements rather than competes with the source / ABI panels.
 const systemPrompt = `You are summarising a verified smart contract on the QRL Zond v2 blockchain. Produce a short factual description of what the contract is. Do NOT include opinions, safety analysis, risk assessments, recommendations, access-control discussion, or implementation feedback. Just neutral observations.
 
 Output Markdown with only these sections:
 
-**Purpose** — one sentence describing what this contract is.
-**What it does** — 2-4 short bullets, descriptive and factual only.
-**Standard** — only when the contract clearly matches a well-known token standard (ERC-20, ERC-721, ERC-1155, etc.); name the standard. Omit this section otherwise.
+**Purpose**, one sentence describing what this contract is.
+**What it does**, 2-4 short bullets, descriptive and factual only.
+**Standard**, only when the contract clearly matches a well-known token standard (ERC-20, ERC-721, ERC-1155, etc.); name the standard. Omit this section otherwise.
 
 Keep the entire answer under 150 words. Never add sections on risks, security, access control, audit notes, or implementation quality.`
 
@@ -83,7 +83,7 @@ func (e *Explainer) Explain(ctx context.Context, address string, regenerate bool
 	// Regen path: reserve a slot atomically before spending Anthropic
 	// credit. ReserveRegenSlot returns ErrRegenCap when the rolling 7-day
 	// cap is hit; we surface that as a typed error the HTTP layer maps to
-	// 429. Initial generations skip this check — only regenerate=true
+	// 429. Initial generations skip this check, only regenerate=true
 	// passes through here.
 	if regenerate {
 		if err := db.ReserveAIRegenSlot(address, RegenLimitPerWindow, RegenWindow); err != nil {
@@ -115,7 +115,7 @@ func (e *Explainer) Explain(ctx context.Context, address string, regenerate bool
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	if err := db.SaveContractExplanation(address, text, model, now); err != nil {
-		// Persistence failure isn't fatal — return the freshly-generated
+		// Persistence failure isn't fatal, return the freshly-generated
 		// answer so the user gets something. Just log via the caller.
 		return &ExplainResponse{
 			Address:     c.ContractAddress,

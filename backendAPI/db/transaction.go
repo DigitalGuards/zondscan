@@ -343,7 +343,7 @@ func CountTransactions(address string) (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Normalize to canonical Q-prefix — matches syncer write format.
+	// Normalize to canonical Q-prefix, matches syncer write format.
 	normalizedAddress := normalizeAddress(address)
 
 	filter := primitive.D{{Key: "$or", Value: []primitive.D{

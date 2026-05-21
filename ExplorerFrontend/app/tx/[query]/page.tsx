@@ -106,7 +106,7 @@ export default async function TransactionPage({ params }: PageProps): Promise<JS
   }
 
   // redirect() throws a NEXT_REDIRECT sentinel that the framework must
-  // receive uncaught — keep this call outside any try/catch.
+  // receive uncaught, keep this call outside any try/catch.
   if (await isPendingTransaction(txHash)) {
     redirect(`/pending/tx/${txHash}`);
   }

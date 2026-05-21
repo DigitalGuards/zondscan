@@ -372,7 +372,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                         </div>
 
                         {/* Contract Code (verified source / ABI / bytecode) + Read / Write tabs.
-                            Replaces the standalone bytecode block on token pages too — same
+                            Replaces the standalone bytecode block on token pages too, same
                             behaviour as the address page, just nested inside the Overview tab. */}
                         {contractData.contractCode && (
                             <div>
@@ -384,7 +384,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                     // Forward the whole contractData and only override
                                     // the few required-string fields that ContractData
                                     // wants non-optional. Avoids hand-listing every
-                                    // optional verification field — adding a new field
+                                    // optional verification field, adding a new field
                                     // to ContractData just flows through.
                                     contractData={{
                                         ...contractData,

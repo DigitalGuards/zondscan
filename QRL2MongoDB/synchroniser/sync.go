@@ -98,7 +98,7 @@ func Sync() {
 	var nextBlock string
 	var maxHex string
 
-	// DB queries — no retry needed, these are local and don't fail transiently.
+	// DB queries, no retry needed, these are local and don't fail transiently.
 	nextBlock = db.GetLastKnownBlockNumber()
 	if nextBlock == "0x0" {
 		nextBlock = db.GetLatestBlockNumberFromDB()
@@ -124,7 +124,7 @@ func Sync() {
 
 	nextBlock = utils.AddHexNumbers(nextBlock, "0x1")
 
-	// Only the RPC call can fail transiently — retry with exponential backoff.
+	// Only the RPC call can fail transiently, retry with exponential backoff.
 	for retries := 0; retries < 5; retries++ {
 		maxHex, err = rpc.GetLatestBlock()
 		if err == nil {
@@ -225,7 +225,7 @@ func Sync() {
 
 	// Signal that initial sync is done so mempool polling can begin
 	atomic.StoreInt32(&initialSyncComplete, 1)
-	configs.Logger.Info("Initial sync flag set — mempool polling enabled")
+	configs.Logger.Info("Initial sync flag set, mempool polling enabled")
 
 	configs.Logger.Info("Starting continuous block monitoring...")
 	singleBlockInsertion()

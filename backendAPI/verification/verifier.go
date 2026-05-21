@@ -43,7 +43,7 @@ func (v *Verifier) RunAsync(jobID string, req VerifyRequest) {
 
 func (v *Verifier) run(ctx context.Context, jobID string, req VerifyRequest) {
 	if err := db.UpdateVerificationJob(jobID, bson.M{"status": models.VerificationJobCompiling}); err != nil {
-		// Status transition failures aren't fatal — the rest of the run
+		// Status transition failures aren't fatal, the rest of the run
 		// continues and the client will see the eventual terminal state.
 		// But we log so persistent mongo issues don't go unnoticed.
 		log.Printf("verifier: failed to mark job %s compiling: %v", jobID, err)
@@ -142,7 +142,7 @@ func wrapStandardJSON(req VerifyRequest) StandardJSONInput {
 	}
 
 	// hypc 0.2.x treats "no optimizer block" and "optimizer: {enabled:false}"
-	// as different inputs — the latter still applies a baseline optimization
+	// as different inputs, the latter still applies a baseline optimization
 	// pass that shrinks output by ~100 bytes. Since the standard CLI flow
 	// (`hypc --bin` with no flags) omits the optimizer entirely, we mirror
 	// that for the "optimizer off" path. Explicit enable still includes the
@@ -241,7 +241,7 @@ func AlreadyVerified(address string) (bool, error) {
 // HasPendingJob returns true when a job for `address` is currently
 // pending or compiling. Used to reject duplicate submissions.
 func HasPendingJob(address string) (bool, error) {
-	// Walk through (limited) — only a tiny number of jobs per contract
+	// Walk through (limited), only a tiny number of jobs per contract
 	// are expected in practice.
 	for _, status := range []models.VerificationJobStatus{models.VerificationJobPending, models.VerificationJobCompiling} {
 		jobs, err := db.FindVerificationJobsByAddress(address, status, 1)
@@ -256,7 +256,7 @@ func HasPendingJob(address string) (bool, error) {
 }
 
 // ErrAlreadyVerified is returned by Enqueue when the contract is already
-// verified — callers should treat this as success (idempotency).
+// verified, callers should treat this as success (idempotency).
 var ErrAlreadyVerified = errors.New("verification: address already verified")
 
 // ErrDuplicateJob is returned by Enqueue when a pending job already exists

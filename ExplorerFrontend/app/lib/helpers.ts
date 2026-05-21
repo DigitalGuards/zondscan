@@ -69,7 +69,7 @@ export function toFixed(x: number | string | undefined | null): string {
 
 /**
  * Parse a "0x"-prefixed hex string into a bigint. Returns 0n on missing or
- * malformed input — gas-stats math should never throw on a dropped field.
+ * malformed input, gas-stats math should never throw on a dropped field.
  */
 export function hexToBigInt(s: string | undefined | null): bigint {
   if (!s) return BigInt(0);
@@ -97,7 +97,7 @@ export function hexToNumber(s: string | undefined | null): number {
  * Format a hex gas count (gasUsed / gasLimit) as a thousands-separated decimal.
  */
 export function formatBigGas(s: string | undefined | null): string {
-  if (!s) return '—';
+  if (!s) return ',';
   const v = hexToBigInt(s);
   if (v === BigInt(0)) return '0';
   return v.toLocaleString('en-US');

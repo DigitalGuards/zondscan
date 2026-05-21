@@ -47,7 +47,7 @@ function gasCostUsd(gasPriceHex: string | undefined, gasUnits: number, qrlUsd: n
 }
 
 function formatUsdCost(usd: number | null): string {
-  if (usd === null) return '—';
+  if (usd === null) return ',';
   if (usd === 0) return '$0';
   if (usd < 0.000001) return `$${usd.toExponential(2)}`;
   if (usd < 0.01) return `$${usd.toFixed(8).replace(/0+$/, '').replace(/\.$/, '')}`;
@@ -84,7 +84,7 @@ function GasUsedChart({ rows, range }: { rows: GasHistoryRow[]; range: '24h' | '
   if (points.length < 2) {
     return (
       <div className="text-center text-gray-500 text-sm py-12">
-        Not enough gas history yet — check back after the syncer has run its periodic task.
+        Not enough gas history yet, check back after the syncer has run its periodic task.
       </div>
     );
   }
@@ -271,32 +271,32 @@ export default function GasClient(): JSX.Element {
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
         <StatCard
           label="Avg Gas Price"
-          value={summary ? `${formatGasPrice(summary.avgGasPriceHex)} Shor` : '—'}
+          value={summary ? `${formatGasPrice(summary.avgGasPriceHex)} Shor` : ','}
           sub={summary ? `≈ ${formatUsdCost(gasCostUsd(summary.avgGasPriceHex, 21000, summary.qrlUsdPrice))} per transfer` : 'median of last 20 transactions'}
         />
         <StatCard
           label="Avg Block Time"
-          value={summary ? `${summary.avgBlockTimeSec.toFixed(1)}s` : '—'}
+          value={summary ? `${summary.avgBlockTimeSec.toFixed(1)}s` : ','}
           sub="last 30 blocks"
         />
         <StatCard
           label="Mempool Size"
-          value={summary ? summary.pendingCount.toString() : '—'}
+          value={summary ? summary.pendingCount.toString() : ','}
           sub="pending transactions"
         />
         <StatCard
           label="Avg Gas Used"
-          value={summary ? formatBigGas(summary.avgGasUsedHex) : '—'}
+          value={summary ? formatBigGas(summary.avgGasUsedHex) : ','}
           sub="per block, last 30"
         />
         <StatCard
           label="Last Block"
-          value={summary ? hexToNumber(summary.lastBlockNumberHex).toLocaleString() : '—'}
+          value={summary ? hexToNumber(summary.lastBlockNumberHex).toLocaleString() : ','}
           sub={summary ? `${formatBigGas(summary.lastGasUsedHex)} / ${formatBigGas(summary.lastGasLimitHex)} gas` : ''}
         />
         <StatCard
           label="Gas Limit Utilization"
-          value={utilization !== null ? `${utilization.toFixed(1)}%` : '—'}
+          value={utilization !== null ? `${utilization.toFixed(1)}%` : ','}
           sub="last block"
         />
       </div>

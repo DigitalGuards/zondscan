@@ -6,7 +6,7 @@ package models
 // The verification fields at the bottom are written **only** by the backend
 // verify endpoint (see backendAPI/db/contract.go:MarkContractVerified). The
 // syncer (QRL2MongoDB) treats them as opaque pass-through state and must
-// never write into them — see QRL2MongoDB/db/contracts.go:StoreContract for
+// never write into them, see QRL2MongoDB/db/contracts.go:StoreContract for
 // the field-scoped $set that enforces this invariant.
 //
 // New verification fields MUST be mirrored in QRL2MongoDB/models/contract.go
@@ -26,7 +26,7 @@ type ContractInfo struct {
 	TotalSupply            string `json:"totalSupply" bson:"totalSupply"`
 	UpdatedAt              string `json:"updatedAt" bson:"updatedAt"`
 
-	// NFT / multi-token fields — mirror QRL2MongoDB/models/contract.go.
+	// NFT / multi-token fields, mirror QRL2MongoDB/models/contract.go.
 	// Written exclusively by the syncer; held here only for round-trip
 	// preservation and to allow the /contracts endpoint to filter on
 	// `?standard=ERC-721`.
@@ -53,7 +53,7 @@ type ContractInfo struct {
 
 	// M6a AI explanation cache. Populated only when an authorised user has
 	// triggered POST /contract/explain/:address. The syncer must NOT write
-	// into these — kept off the syncer's allow-list in
+	// into these, kept off the syncer's allow-list in
 	// QRL2MongoDB/db/contracts.go:StoreContract.
 	AIExplanation      string `json:"aiExplanation,omitempty" bson:"aiExplanation,omitempty"`
 	AIExplanationAt    string `json:"aiExplanationAt,omitempty" bson:"aiExplanationAt,omitempty"`

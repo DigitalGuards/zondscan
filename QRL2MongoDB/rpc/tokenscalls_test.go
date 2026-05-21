@@ -86,7 +86,7 @@ func TestParseERC721Transfer(t *testing.T) {
 			wantTokenID: new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1)).String(),
 		},
 		{
-			name: "wrong topic count (3 — looks like ERC-20)",
+			name: "wrong topic count (3, looks like ERC-20)",
 			log: models.Log{
 				Topics: []string{
 					TransferEventSignature,
@@ -321,7 +321,7 @@ func TestParseERC1155TransferBatch(t *testing.T) {
 					topic(aliceAddr),
 					topic(bobAddr),
 				},
-				// offset_ids = 0x40, offset_values = 0x60, length_ids = (cap+1) — but no data
+				// offset_ids = 0x40, offset_values = 0x60, length_ids = (cap+1), but no data
 				Data: "0x" + word("40") + word("60") + word(big.NewInt(maxBatchArrayLen+1).Text(16)),
 			},
 			wantErr: true,

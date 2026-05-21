@@ -10,7 +10,7 @@ export default function NotFound(): JSX.Element {
             <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
           </svg>
         }
-        title="404 — Page not found"
+        title="404, Page not found"
         description="The block, transaction, or address you're looking for doesn't exist or may have been removed."
         actionLabel="Return home"
         actionHref="/"

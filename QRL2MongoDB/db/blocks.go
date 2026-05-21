@@ -64,7 +64,7 @@ func GetLatestBlockFromDB() *models.ZondDatabaseBlock {
 	ctx, cancel := context.WithTimeout(context.Background(), DBTimeout)
 	defer cancel()
 
-	// Sort by blockNumberInt (numeric) — hex strings on result.number /
+	// Sort by blockNumberInt (numeric), hex strings on result.number /
 	// result.timestamp lex-sort wrong at width boundaries.
 	findOptions := options.FindOne().
 		SetProjection(bson.M{"result.number": 1, "result.timestamp": 1}).
@@ -236,7 +236,7 @@ func StoreLastKnownBlockNumber(blockNumber string) error {
 	// not the lexicographic hex string comparison that would produce wrong
 	// ordering (e.g. "0x9" sorts after "0x10" lexicographically).
 	//
-	// Also accept docs that don't yet have block_number_int — legacy rows
+	// Also accept docs that don't yet have block_number_int, legacy rows
 	// written by an older syncer were missing the field, which made the
 	// $lt match nothing and silently froze sync_state. The early-return
 	// guard above (existing.BlockNumber >= new) already prevents
@@ -297,7 +297,7 @@ func GetLastKnownBlockNumberFromInitialSync() string {
 	}
 
 	// If no record exists, find the oldest block in the DB. Sort ascending by
-	// blockNumberInt — sorting by result.number (hex string) would lex-sort
+	// blockNumberInt, sorting by result.number (hex string) would lex-sort
 	// "0x10" before "0x9" and return the wrong "oldest" block.
 	var block models.ZondDatabaseBlock
 	findOptions := options.FindOne().SetProjection(bson.M{"result.number": 1}).SetSort(bson.M{"blockNumberInt": 1})
@@ -531,7 +531,7 @@ func InsertManyBlockDocuments(blocks []interface{}) {
 }
 
 // Rollback removes all blocks after the given block number and updates the sync state.
-// Filter on blockNumberInt (numeric), NOT result.number (hex string) — lex comparison
+// Filter on blockNumberInt (numeric), NOT result.number (hex string), lex comparison
 // on hex strings produces wrong results (e.g. "0xa" > "0x100" lexicographically),
 // which would leave stale blocks above the rollback point during chain reorgs and
 // silently corrupt the chain view.
@@ -539,7 +539,7 @@ func Rollback(blockNumber string) error {
 	// Validate the input BEFORE building the filter. HexToInt64 / HexToInt
 	// both silently return 0 on parse failure (empty string, missing 0x,
 	// non-hex chars). With a $gt: 0 filter, a malformed blockNumber would
-	// delete every block except genesis — strictly worse than the original
+	// delete every block except genesis, strictly worse than the original
 	// lex-sort bug we were fixing. Parse explicitly so we get an error path,
 	// and reject negative values defensively (e.g. "0x-10" → -16 via
 	// strconv) which would also widen the filter dangerously.

@@ -131,7 +131,7 @@ func GetTokenTransfersByAddress(address string, skip, limit int64) ([]models.Tok
 //     emits 3 Transfer events) don't collide on (txHash, contract) alone.
 //   - tokenID was added with NFT support: ERC-1155 TransferBatch logs
 //     produce N rows per log (one per (id, value) tuple) that share the
-//     same (txHash, contract, logIndex) — only tokenID distinguishes them.
+//     same (txHash, contract, logIndex), only tokenID distinguishes them.
 //
 // Legacy rows pre-date the LogIndex and TokenID fields, so a missing-field
 // match is needed for the empty-string sentinel paths (direct-calldata
@@ -158,7 +158,7 @@ func TokenTransferExists(txHash, contractAddress, logIndex, tokenID string) (boo
 	}
 	if tokenID == "" {
 		// `omitempty` on the new TokenID field strips it for ERC-20 writes,
-		// and pre-NFT rows never had the field — both must match this clause.
+		// and pre-NFT rows never had the field, both must match this clause.
 		andClauses = append(andClauses, bson.M{"$or": []bson.M{
 			{"tokenID": ""},
 			{"tokenID": bson.M{"$exists": false}},
@@ -190,7 +190,7 @@ func TokenTransferExists(txHash, contractAddress, logIndex, tokenID string) (boo
 // We pull all three event signatures in a single qrl_getLogs call (OR-matched
 // on topic[0]), classify the emitting contract via supportsInterface, then
 // dispatch to a per-standard decoder. ERC-20/721 share the same topic[0] so
-// the (standard, topicCount) tuple is the disambiguator — relying on the
+// the (standard, topicCount) tuple is the disambiguator, relying on the
 // contract's persisted classification rather than per-event guesswork
 // closes the topic-0 ambiguity surface.
 func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error {
@@ -277,7 +277,7 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 
 			// Phase 1 balance maintenance: ERC-20 only. Per-tokenID NFT
 			// ownership lands in Phase 2 (with the (contract, holder,
-			// tokenID) schema rewrite) — counting NFT "balances" with
+			// tokenID) schema rewrite), counting NFT "balances" with
 			// the current (contract, holder) schema would either lose
 			// per-id info or over-count, so we deliberately skip.
 			if standard == rpc.StandardERC20 {
@@ -306,7 +306,7 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 
 // decodeTransferLog dispatches a transfer log to the correct per-standard
 // decoder. The (standard, topic0, len(topics)) triple disambiguates the
-// ERC-20/ERC-721 topic-0 collision without ever guessing — the contract's
+// ERC-20/ERC-721 topic-0 collision without ever guessing, the contract's
 // persisted classification (from supportsInterface) is the source of truth.
 //
 // Returns a non-nil error only on truly mismatched shapes (e.g. a 4-topic
@@ -366,7 +366,7 @@ func decodeERC20TransferRow(log models.Log, base models.TokenTransfer) ([]models
 
 // decodeERC721TransferRow produces a single TokenTransfer for an ERC-721
 // Transfer log (4 topics, tokenID in topic[3], data empty).
-// Amount is the canonical "1" — every ERC-721 transfer moves exactly one
+// Amount is the canonical "1", every ERC-721 transfer moves exactly one
 // token, so aggregate "transfers moved" queries stay consistent.
 func decodeERC721TransferRow(log models.Log, base models.TokenTransfer) ([]models.TokenTransfer, error) {
 	from, to, tokenID, err := rpc.ParseERC721Transfer(log)
@@ -396,7 +396,7 @@ func decodeERC1155TransferSingleRow(log models.Log, base models.TokenTransfer) (
 }
 
 // decodeERC1155TransferBatchRows fans a single TransferBatch log out to N
-// rows — one per (id, value) tuple. The compound unique index
+// rows, one per (id, value) tuple. The compound unique index
 // (txHash, contract, logIndex, tokenID) keeps the rows distinct on replay.
 func decodeERC1155TransferBatchRows(log models.Log, base models.TokenTransfer) ([]models.TokenTransfer, error) {
 	from, to, ids, values, err := rpc.ParseERC1155TransferBatch(log)
@@ -464,7 +464,7 @@ func normalizeAddress(addr string) string {
 }
 
 // InitializeTokenTransfersCollection ensures the token transfers collection is set up with proper indexes.
-// Uses CreateMany which is a no-op for indexes that already exist — safe to call on every restart.
+// Uses CreateMany which is a no-op for indexes that already exist, safe to call on every restart.
 func InitializeTokenTransfersCollection() error {
 	collection := configs.GetTokenTransfersCollection()
 
@@ -474,7 +474,7 @@ func InitializeTokenTransfersCollection() error {
 	configs.Logger.Info("Initializing tokenTransfers collection and indexes")
 
 	// Drop the long-gone txHash-only unique (pre-#88). DropOne returns
-	// IndexNotFound on fresh deployments — acceptable.
+	// IndexNotFound on fresh deployments, acceptable.
 	if _, err := collection.Indexes().DropOne(ctx, "txHash_idx"); err != nil {
 		msg := err.Error()
 		if !strings.Contains(msg, "IndexNotFound") &&
@@ -490,11 +490,11 @@ func InitializeTokenTransfersCollection() error {
 	// data, etc.) we want to leave the old unique in place; only after
 	// the new one is online do we drop the old.
 	//
-	// Legacy rows (pre-tokenID) lack the field — Mongo treats missing
+	// Legacy rows (pre-tokenID) lack the field, Mongo treats missing
 	// fields as `null` for index uniqueness. Since the prior 3-tuple
 	// unique guaranteed at most one (txHash, contract, logIndex) row,
 	// the 4-tuple `(txHash, contract, logIndex, null)` is also unique
-	// by extension — no migration collision on existing data.
+	// by extension, no migration collision on existing data.
 	indexes := []mongo.IndexModel{
 		{
 			Keys: bson.D{
@@ -554,7 +554,7 @@ func InitializeTokenTransfersCollection() error {
 	}
 
 	// Now that the new unique is online, retire the prior 3-tuple unique
-	// from #88. Missing on fresh deployments — IndexNotFound is fine.
+	// from #88. Missing on fresh deployments, IndexNotFound is fine.
 	if _, err := collection.Indexes().DropOne(ctx, "txHash_contract_logIndex_idx"); err != nil {
 		msg := err.Error()
 		if !strings.Contains(msg, "IndexNotFound") &&
@@ -570,7 +570,7 @@ func InitializeTokenTransfersCollection() error {
 }
 
 // InitializeTokenBalancesCollection ensures the token balances collection is set up with proper indexes.
-// Uses CreateMany which is a no-op for indexes that already exist — safe to call on every restart.
+// Uses CreateMany which is a no-op for indexes that already exist, safe to call on every restart.
 func InitializeTokenBalancesCollection() error {
 	collection := configs.GetTokenBalancesCollection()
 

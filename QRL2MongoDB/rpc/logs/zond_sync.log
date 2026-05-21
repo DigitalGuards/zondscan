@@ -1,0 +1,97 @@
+May  21 10:49:51	[INFO]	logger/logger.go:51	Logger initialized	{"file": "logs/zond_sync.log", "level": "info"}
+May  21 10:50:18	[INFO]	logger/logger.go:51	Logger initialized	{"file": "logs/zond_sync.log", "level": "info"}
+May  21 10:50:18	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "dailyTransactionsVolume"}
+May  21 10:50:18	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "coingecko"}
+May  21 10:50:18	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "priceHistory"}
+May  21 10:50:18	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "walletCount"}
+May  21 10:50:18	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "totalCirculatingSupply"}
+May  21 10:50:18	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "tokenBalances"}
+May  21 10:50:18	[INFO]	configs/setup.go:311	Token transfers collection initialized with indexes
+May  21 10:50:18	[INFO]	configs/setup.go:342	Price history collection initialized with timestamp index
+May  21 10:50:18	[INFO]	configs/setup.go:357	Transfer collection initialized with blockTimestamp index
+May  21 10:50:18	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "blocks"}
+May  21 10:50:18	[INFO]	configs/setup.go:377	Blocks collection initialized with blockNumberInt index
+May  21 10:50:18	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "validators"}
+May  21 10:50:18	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "contractCode"}
+May  21 10:50:18	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "transactionByAddress"}
+May  21 10:50:18	[WARN]	configs/setup.go:216	Could not set up validator	{"collection": "internalTransactionByAddress", "error": "(NamespaceNotFound) ns does not exist"}
+May  21 10:50:18	[WARN]	configs/setup.go:216	Could not set up validator	{"collection": "contracts", "error": "(NamespaceNotFound) ns does not exist"}
+May  21 10:50:18	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "addresses"}
+May  21 10:50:18	[INFO]	configs/setup.go:399	Addresses collection initialized with unique id index
+May  21 10:50:18	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "walletCount"}
+May  21 10:50:18	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "dailyTransactionsVolume"}
+May  21 10:50:18	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "totalCirculatingSupply"}
+May  21 10:50:18	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "sync_state"}
+May  21 10:50:18	[INFO]	configs/setup.go:456	All collections initialized successfully
+May  21 10:56:22	[INFO]	logger/logger.go:51	Logger initialized	{"file": "logs/zond_sync.log", "level": "info"}
+May  21 10:56:22	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "dailyTransactionsVolume"}
+May  21 10:56:22	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "coingecko"}
+May  21 10:56:22	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "priceHistory"}
+May  21 10:56:22	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "walletCount"}
+May  21 10:56:22	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "totalCirculatingSupply"}
+May  21 10:56:22	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "tokenBalances"}
+May  21 10:56:22	[INFO]	configs/setup.go:311	Token transfers collection initialized with indexes
+May  21 10:56:22	[INFO]	configs/setup.go:342	Price history collection initialized with timestamp index
+May  21 10:56:22	[INFO]	configs/setup.go:357	Transfer collection initialized with blockTimestamp index
+May  21 10:56:22	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "blocks"}
+May  21 10:56:22	[INFO]	configs/setup.go:377	Blocks collection initialized with blockNumberInt index
+May  21 10:56:22	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "validators"}
+May  21 10:56:22	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "contractCode"}
+May  21 10:56:22	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "transactionByAddress"}
+May  21 10:56:22	[WARN]	configs/setup.go:216	Could not set up validator	{"collection": "internalTransactionByAddress", "error": "(NamespaceNotFound) ns does not exist"}
+May  21 10:56:22	[WARN]	configs/setup.go:216	Could not set up validator	{"collection": "contracts", "error": "(NamespaceNotFound) ns does not exist"}
+May  21 10:56:22	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "addresses"}
+May  21 10:56:22	[INFO]	configs/setup.go:399	Addresses collection initialized with unique id index
+May  21 10:56:22	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "walletCount"}
+May  21 10:56:22	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "dailyTransactionsVolume"}
+May  21 10:56:22	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "totalCirculatingSupply"}
+May  21 10:56:22	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "sync_state"}
+May  21 10:56:22	[INFO]	configs/setup.go:456	All collections initialized successfully
+May  21 11:01:09	[INFO]	logger/logger.go:51	Logger initialized	{"file": "logs/zond_sync.log", "level": "info"}
+May  21 11:01:09	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "dailyTransactionsVolume"}
+May  21 11:01:09	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "coingecko"}
+May  21 11:01:09	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "priceHistory"}
+May  21 11:01:09	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "walletCount"}
+May  21 11:01:09	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "totalCirculatingSupply"}
+May  21 11:01:09	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "tokenBalances"}
+May  21 11:01:09	[INFO]	configs/setup.go:311	Token transfers collection initialized with indexes
+May  21 11:01:09	[INFO]	configs/setup.go:342	Price history collection initialized with timestamp index
+May  21 11:01:09	[INFO]	configs/setup.go:357	Transfer collection initialized with blockTimestamp index
+May  21 11:01:09	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "blocks"}
+May  21 11:01:09	[INFO]	configs/setup.go:377	Blocks collection initialized with blockNumberInt index
+May  21 11:01:09	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "validators"}
+May  21 11:01:09	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "contractCode"}
+May  21 11:01:09	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "transactionByAddress"}
+May  21 11:01:09	[WARN]	configs/setup.go:216	Could not set up validator	{"collection": "internalTransactionByAddress", "error": "(NamespaceNotFound) ns does not exist"}
+May  21 11:01:09	[WARN]	configs/setup.go:216	Could not set up validator	{"collection": "contracts", "error": "(NamespaceNotFound) ns does not exist"}
+May  21 11:01:09	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "addresses"}
+May  21 11:01:09	[INFO]	configs/setup.go:399	Addresses collection initialized with unique id index
+May  21 11:01:09	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "walletCount"}
+May  21 11:01:09	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "dailyTransactionsVolume"}
+May  21 11:01:09	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "totalCirculatingSupply"}
+May  21 11:01:09	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "sync_state"}
+May  21 11:01:09	[INFO]	configs/setup.go:456	All collections initialized successfully
+May  21 11:50:11	[INFO]	logger/logger.go:51	Logger initialized	{"file": "logs/zond_sync.log", "level": "info"}
+May  21 11:50:11	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "dailyTransactionsVolume"}
+May  21 11:50:11	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "coingecko"}
+May  21 11:50:11	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "priceHistory"}
+May  21 11:50:11	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "walletCount"}
+May  21 11:50:11	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "totalCirculatingSupply"}
+May  21 11:50:11	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "tokenBalances"}
+May  21 11:50:11	[INFO]	configs/setup.go:311	Token transfers collection initialized with indexes
+May  21 11:50:11	[INFO]	configs/setup.go:342	Price history collection initialized with timestamp index
+May  21 11:50:11	[INFO]	configs/setup.go:357	Transfer collection initialized with blockTimestamp index
+May  21 11:50:11	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "blocks"}
+May  21 11:50:11	[INFO]	configs/setup.go:377	Blocks collection initialized with blockNumberInt index
+May  21 11:50:11	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "validators"}
+May  21 11:50:11	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "contractCode"}
+May  21 11:50:11	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "transactionByAddress"}
+May  21 11:50:11	[WARN]	configs/setup.go:216	Could not set up validator	{"collection": "internalTransactionByAddress", "error": "(NamespaceNotFound) ns does not exist"}
+May  21 11:50:11	[WARN]	configs/setup.go:216	Could not set up validator	{"collection": "contracts", "error": "(NamespaceNotFound) ns does not exist"}
+May  21 11:50:11	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "addresses"}
+May  21 11:50:11	[INFO]	configs/setup.go:399	Addresses collection initialized with unique id index
+May  21 11:50:11	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "walletCount"}
+May  21 11:50:11	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "dailyTransactionsVolume"}
+May  21 11:50:11	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "totalCirculatingSupply"}
+May  21 11:50:11	[INFO]	configs/setup.go:221	Updated validator for collection	{"collection": "sync_state"}
+May  21 11:50:11	[INFO]	configs/setup.go:456	All collections initialized successfully

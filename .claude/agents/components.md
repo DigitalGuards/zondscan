@@ -74,11 +74,11 @@ Sourced from [component.gallery](https://component.gallery) and enriched with pr
 
 **Also known as:** Arrow toggle  ·  Collapse  ·  Collapsible sections  ·  Collapsible  ·  Details  ·  Disclosure  ·  Expandable  ·  Expander
 
-A vertically stacked set of collapsible sections — each heading toggles between showing a short label and revealing the full content beneath it.
+A vertically stacked set of collapsible sections, each heading toggles between showing a short label and revealing the full content beneath it.
 
 **Best practices:**
 - Use for long-form content that benefits from progressive disclosure
-- Keep headings concise and scannable — they are the primary navigation
+- Keep headings concise and scannable, they are the primary navigation
 - Allow multiple sections open simultaneously unless space is critically limited
 - Include a subtle expand/collapse icon (chevron) aligned consistently on the right
 - Animate open/close with a short ease-out transition (150–250 ms)
@@ -100,7 +100,7 @@ A prominent message used to communicate important information or status changes 
 
 **Best practices:**
 - Use semantic color coding: red for errors, amber for warnings, green for success, blue for info
-- Include a clear, actionable message — not just a status label
+- Include a clear, actionable message, not just a status label
 - Provide a dismiss action for non-critical alerts
 - Position inline alerts close to the relevant content, not floating arbitrarily
 - Use an icon alongside color to ensure accessibility for color-blind users
@@ -140,11 +140,11 @@ A visual representation of a user, typically displayed as a photo, illustration,
 A compact label that sits within or near a larger component to convey status, category, or other metadata.
 
 **Best practices:**
-- Keep badge text to one or two words — they are labels, not sentences
+- Keep badge text to one or two words, they are labels, not sentences
 - Use a limited palette of badge colors mapped to clear semantics
 - Ensure sufficient contrast between badge text and background (WCAG AA minimum)
 - Use pill shape (fully rounded corners) for status badges, rounded rectangles for tags
-- Avoid overusing badges — if everything is badged, nothing stands out
+- Avoid overusing badges, if everything is badged, nothing stands out
 
 **Common layouts:**
 - Status indicator on a table row (Active, Pending, Archived)
@@ -177,13 +177,13 @@ A trail of links that shows where the current page sits within the site's naviga
 
 ## Button
 
-An interactive control that triggers an action — submitting a form, opening a dialog, toggling visibility.
+An interactive control that triggers an action, submitting a form, opening a dialog, toggling visibility.
 
 **Best practices:**
 - Establish a clear visual hierarchy: primary (filled), secondary (outlined), tertiary (text-only)
 - Use verb-first labels: 'Save changes', 'Create project', not 'Okay' or 'Submit'
 - Minimum touch target of 44×44 px; desktop buttons at least 36 px tall
-- Show a loading spinner inside the button during async actions — disable to prevent double-clicks
+- Show a loading spinner inside the button during async actions, disable to prevent double-clicks
 - Limit to one primary button per visible viewport section
 - Ensure focus ring is visible and high-contrast for keyboard users
 
@@ -202,7 +202,7 @@ An interactive control that triggers an action — submitting a form, opening a 
 A container that groups related buttons together as a single visual unit.
 
 **Best practices:**
-- Group only related actions — unrelated buttons should be separated
+- Group only related actions, unrelated buttons should be separated
 - Visually connect buttons with shared border or tight spacing (1–2 px gap)
 - Clearly indicate the active/selected state in toggle-style groups
 - Keep the group to 2–5 buttons; more options warrant a dropdown or overflow menu
@@ -223,9 +223,9 @@ A self-contained content block representing a single entity such as a contact, a
 
 **Best practices:**
 - Use a single, clear visual hierarchy within each card: media → title → meta → action
-- Keep cards a consistent height in grid layouts — use line clamping for variable text
+- Keep cards a consistent height in grid layouts, use line clamping for variable text
 - Make the entire card clickable when it represents a navigable entity
-- Use subtle elevation (shadow) or a border — not both simultaneously
+- Use subtle elevation (shadow) or a border, not both simultaneously
 - Limit card content to essential info; let the detail page carry the rest
 
 **Common layouts:**
@@ -247,7 +247,7 @@ A component that cycles through multiple content slides, navigable via swipe, sc
 - Support swipe gestures on touch devices
 - Auto-advance only if the user hasn't interacted; pause on hover/focus
 - Show a peek of the next slide to signal scrollability
-- Keep slide count manageable (3–7) — carousels with many slides have low engagement
+- Keep slide count manageable (3–7), carousels with many slides have low engagement
 - Ensure accessibility: each slide should be reachable via keyboard
 
 **Common layouts:**
@@ -260,7 +260,7 @@ A component that cycles through multiple content slides, navigable via swipe, sc
 
 ## Checkbox
 
-A selection control — use in groups for multi-select from a list, or standalone for a single on/off choice.
+A selection control, use in groups for multi-select from a list, or standalone for a single on/off choice.
 
 **Best practices:**
 - Use checkboxes for multi-select, not single toggles (use a switch for on/off)
@@ -381,13 +381,13 @@ A panel that slides in from a screen edge to reveal secondary content or actions
 
 **Also known as:** Select menu
 
-A menu triggered by a button that reveals a list of actions or navigation options — unlike a select, it is not a form input.
+A menu triggered by a button that reveals a list of actions or navigation options, unlike a select, it is not a form input.
 
 **Best practices:**
 - Group related items with separators and optional group headings
 - Support keyboard navigation: arrow keys to move, Enter to select, Escape to close
 - Keep the menu to 7±2 items; use sub-menus or search for longer lists
-- Position the menu to avoid viewport overflow — flip to top if near bottom edge
+- Position the menu to avoid viewport overflow, flip to top if near bottom edge
 - Indicate destructive actions in red and place them last, separated
 
 **Common layouts:**
@@ -406,7 +406,7 @@ A placeholder shown when a view has no data to display, typically paired with a 
 - Include a clear illustration or icon to soften the empty feeling
 - Write a helpful headline explaining the empty state
 - Provide a primary CTA that guides the user toward the next step
-- Avoid blame — frame it positively ('No projects yet' not 'You have no projects')
+- Avoid blame, frame it positively ('No projects yet' not 'You have no projects')
 - Show the empty state in-place within the container, not as a full-page takeover
 
 **Common layouts:**
@@ -437,7 +437,7 @@ A container that groups related form fields under a shared label or legend.
 
 **Also known as:** Attachment  ·  Download
 
-A visual representation of a file — such as an uploaded attachment or a downloadable document.
+A visual representation of a file, such as an uploaded attachment or a downloadable document.
 
 **Best practices:**
 - Show file type icon, name, and size clearly
@@ -481,7 +481,7 @@ A region at the bottom of a page or section containing copyright info, legal lin
 **Best practices:**
 - Organize links into clear columns by category
 - Include essential legal links: Privacy Policy, Terms of Service
-- Keep the footer visually distinct but not distracting — muted background
+- Keep the footer visually distinct but not distracting, muted background
 - Include social links and a newsletter signup if appropriate
 - Ensure the footer is accessible and links are keyboard-navigable
 
@@ -498,12 +498,12 @@ A region at the bottom of a page or section containing copyright info, legal lin
 A collection of input controls that allows users to enter and submit structured data.
 
 **Best practices:**
-- Use a single-column layout for most forms — it's faster to scan
+- Use a single-column layout for most forms, it's faster to scan
 - Place labels above inputs for mobile-friendly forms
 - Group related fields with visual proximity and optional fieldset headings
 - Show inline validation on blur, not on every keystroke
 - Disable the submit button until required fields are valid, or show clear errors on submit
-- Keep forms as short as possible — ask only what's necessary
+- Keep forms as short as possible, ask only what's necessary
 
 **Common layouts:**
 - Sign-up form with name, email, password, and CTA
@@ -538,8 +538,8 @@ A title element that introduces and labels a content section.
 
 **Best practices:**
 - Use a strict heading hierarchy (h1 → h2 → h3) for accessibility and SEO
-- Limit to one h1 per page — it's the page title
-- Keep headings concise and descriptive — they're the outline of your content
+- Limit to one h1 per page, it's the page title
+- Keep headings concise and descriptive, they're the outline of your content
 - Use consistent sizing, weight, and spacing across heading levels
 
 **Common layouts:**
@@ -556,11 +556,11 @@ A title element that introduces and labels a content section.
 A prominent banner near the top of a page, typically featuring a full-width image or illustration with a headline.
 
 **Best practices:**
-- Lead with a compelling headline — clarity over cleverness
+- Lead with a compelling headline, clarity over cleverness
 - Limit to one primary CTA and optionally one secondary CTA
 - Use a high-quality image or illustration that reinforces the message
 - Ensure text contrast against the background image (overlay or safe text zone)
-- Keep hero height proportional — it should invite scrolling, not dominate the viewport
+- Keep hero height proportional, it should invite scrolling, not dominate the viewport
 
 **Common layouts:**
 - Split hero: headline + CTA on left, product screenshot on right
@@ -577,7 +577,7 @@ A small graphic symbol that communicates the purpose or meaning of an interface 
 **Best practices:**
 - Use a consistent icon style throughout the product (outlined or filled, not mixed)
 - Size icons to align with adjacent text (typically 16–24 px)
-- Pair icons with text labels for clarity — icon-only buttons need tooltips
+- Pair icons with text labels for clarity, icon-only buttons need tooltips
 - Use aria-hidden='true' for decorative icons and aria-label for functional ones
 
 **Common layouts:**
@@ -619,7 +619,7 @@ A text element that identifies and describes a form input.
 - Always associate labels with their form inputs (htmlFor / id pairing)
 - Place labels above the input for vertical forms, beside for horizontal
 - Mark required fields clearly (asterisk or 'required' text)
-- Keep label text concise — use helper text for additional guidance
+- Keep label text concise, use helper text for additional guidance
 
 **Common layouts:**
 - Form field with label above and helper text below
@@ -632,10 +632,10 @@ A text element that identifies and describes a form input.
 
 **Also known as:** Anchor  ·  Hyperlink
 
-A clickable reference to another resource — either an external page or a location within the current document.
+A clickable reference to another resource, either an external page or a location within the current document.
 
 **Best practices:**
-- Make link text descriptive — avoid 'click here' or 'learn more' in isolation
+- Make link text descriptive, avoid 'click here' or 'learn more' in isolation
 - Underline links in body text for discoverability; nav links may rely on context
 - Use a distinct color from surrounding text (but avoid pure blue if it clashes with your palette)
 - Show a visited state for content-heavy pages to aid navigation
@@ -654,7 +654,7 @@ A clickable reference to another resource — either an external page or a locat
 A component that groups related items into an ordered or unordered sequence.
 
 **Best practices:**
-- Use consistent vertical rhythm — equal spacing between list items
+- Use consistent vertical rhythm, equal spacing between list items
 - For interactive lists, ensure each row has a clear hover and active state
 - Include dividers between items in dense lists; omit them in spacious ones
 - Support keyboard navigation when the list is interactive
@@ -672,14 +672,14 @@ A component that groups related items into an ordered or unordered sequence.
 
 **Also known as:** Dialog  ·  Popup  ·  Modal window
 
-An overlay that demands the user's attention — interaction is required before returning to the content beneath.
+An overlay that demands the user's attention, interaction is required before returning to the content beneath.
 
 **Best practices:**
-- Use modals sparingly — only for actions that require immediate attention or focused input
+- Use modals sparingly, only for actions that require immediate attention or focused input
 - Always provide a clear close mechanism: X button, Cancel, and Escape key
 - Trap focus within the modal while it's open for accessibility
 - Return focus to the trigger element when the modal closes
-- Keep modal content concise — if it needs scrolling, consider a full page instead
+- Keep modal content concise, if it needs scrolling, consider a full page instead
 - Use a semi-transparent backdrop to dim the underlying content
 
 **Common layouts:**
@@ -732,14 +732,14 @@ A control for navigating between pages of content when data is split across mult
 
 ## Popover
 
-A floating panel that appears on click near its trigger element — unlike a tooltip, it can contain interactive content.
+A floating panel that appears on click near its trigger element, unlike a tooltip, it can contain interactive content.
 
 **Best practices:**
 - Trigger via click, not hover, to support touch devices and accessibility
 - Position intelligently to avoid clipping at viewport edges
 - Include a subtle arrow/caret pointing to the trigger element
 - Dismiss when clicking outside or pressing Escape
-- Keep popover content brief — it's not a modal
+- Keep popover content brief, it's not a modal
 
 **Common layouts:**
 - Color picker dropdown triggered by a swatch
@@ -759,7 +759,7 @@ A horizontal indicator showing how far a long-running task has progressed toward
 - Show a determinate bar when progress is measurable, indeterminate when unknown
 - Include a percentage label for accessibility and clarity
 - Use color to indicate state: blue/green for normal, red for error, amber for warning
-- Animate smoothly — avoid jarring jumps between values
+- Animate smoothly, avoid jarring jumps between values
 - Keep the bar visually proportional to its container (not too thin to see)
 
 **Common layouts:**
@@ -778,7 +778,7 @@ A visual display of how far a user has advanced through a multi-step process.
 
 **Best practices:**
 - Clearly distinguish completed, current, and upcoming steps
-- Use numbered or labeled steps — not just dots
+- Use numbered or labeled steps, not just dots
 - Allow users to click back to completed steps if the flow permits
 - Keep the total step count visible so users know the scope
 - Vertically stack steps on mobile for readability
@@ -795,12 +795,12 @@ A visual display of how far a user has advanced through a multi-step process.
 
 **Also known as:** Pull quote  ·  Block quote
 
-A styled block for displaying quotations — from a person, an external source, or a highlighted passage.
+A styled block for displaying quotations, from a person, an external source, or a highlighted passage.
 
 **Best practices:**
-- Use a distinct visual treatment — large quotation marks, left border, or italic text
+- Use a distinct visual treatment, large quotation marks, left border, or italic text
 - Always attribute the quote to its source
-- Keep pull quotes short — they're attention-grabbers, not paragraphs
+- Keep pull quotes short, they're attention-grabbers, not paragraphs
 
 **Common layouts:**
 - Testimonial block with photo, quote, name, and title
@@ -819,7 +819,7 @@ A selection control where the user picks exactly one option from a predefined se
 - Use radio buttons for mutually exclusive choices (select one from many)
 - Always pre-select a sensible default when possible
 - Group under a fieldset with a legend describing the choice
-- Stack vertically for more than 2 options — horizontal only for 2–3 short-label options
+- Stack vertically for more than 2 options, horizontal only for 2–3 short-label options
 - Provide sufficient spacing between options (at least 8 px) for easy tapping
 
 **Common layouts:**
@@ -854,7 +854,7 @@ A control that displays or captures a star-based score for a product or item.
 A WYSIWYG editing surface for creating and formatting rich text content.
 
 **Best practices:**
-- Provide a minimal default toolbar — reveal advanced formatting on demand
+- Provide a minimal default toolbar, reveal advanced formatting on demand
 - Support keyboard shortcuts for common formatting (Cmd+B, Cmd+I)
 - Ensure pasted content is sanitized to prevent layout-breaking HTML
 - Show a word/character count for content with limits
@@ -891,10 +891,10 @@ A text field designed for entering search queries to find content.
 
 **Also known as:** Toggle button group
 
-A compact row of mutually exclusive options — a hybrid of button groups, radio buttons, and tabs for switching views.
+A compact row of mutually exclusive options, a hybrid of button groups, radio buttons, and tabs for switching views.
 
 **Best practices:**
-- Limit to 2–5 segments — more options warrant tabs or a dropdown
+- Limit to 2–5 segments, more options warrant tabs or a dropdown
 - Use equal-width segments for visual balance
 - Animate the selection indicator sliding between options
 - Ensure the selected state has strong contrast against unselected
@@ -933,10 +933,10 @@ A form input that shows the current selection when collapsed and reveals a scrol
 
 **Also known as:** Divider  ·  Horizontal rule  ·  Vertical rule
 
-A visual divider — typically a horizontal or vertical line — used to separate content sections.
+A visual divider, typically a horizontal or vertical line, used to separate content sections.
 
 **Best practices:**
-- Use subtle, low-contrast separators — they guide the eye, not dominate it
+- Use subtle, low-contrast separators, they guide the eye, not dominate it
 - Prefer spacing over separators when grouping is already clear
 - Use horizontal rules between content sections, vertical rules between columns
 
@@ -955,8 +955,8 @@ A low-fidelity placeholder that mimics the shape of content while it loads, typi
 
 **Best practices:**
 - Match the skeleton shape to the actual content layout as closely as possible
-- Use a subtle shimmer/pulse animation to indicate loading — not a spinner
-- Avoid skeletons for very fast loads (<300 ms) — they add visual noise
+- Use a subtle shimmer/pulse animation to indicate loading, not a spinner
+- Avoid skeletons for very fast loads (<300 ms), they add visual noise
 - Show skeleton immediately on navigation; replace atomically when data arrives
 - Use muted, low-contrast colors (light gray on white) for skeleton blocks
 
@@ -974,7 +974,7 @@ Hidden navigation links that let keyboard users jump directly to the main conten
 
 **Best practices:**
 - Make it the first focusable element in the DOM
-- Visually hidden until focused — then clearly visible
+- Visually hidden until focused, then clearly visible
 - Link to the main content area with a descriptive label ('Skip to main content')
 
 **Common layouts:**
@@ -1061,7 +1061,7 @@ A numeric input with increment and decrement buttons for adjusting a value.
 
 ## Table
 
-A structured grid of rows and columns for displaying data — often called a data table when it supports sorting and filtering.
+A structured grid of rows and columns for displaying data, often called a data table when it supports sorting and filtering.
 
 **Best practices:**
 - Use a sticky header row for scrollable tables
@@ -1150,9 +1150,9 @@ A brief, non-blocking notification that appears in a floating layer above the in
 - Auto-dismiss after 4–6 seconds for non-critical toasts
 - Allow manual dismissal with a close button or swipe
 - Stack multiple toasts with the newest on top
-- Position in a consistent corner — bottom-right is most common for desktop
+- Position in a consistent corner, bottom-right is most common for desktop
 - Include an action link for undoable operations ('Undo' for delete)
-- Limit to one line of text — toasts are for brief confirmations
+- Limit to one line of text, toasts are for brief confirmations
 
 **Common layouts:**
 - Success toast after saving a form ('Changes saved')
@@ -1166,14 +1166,14 @@ A brief, non-blocking notification that appears in a floating layer above the in
 
 **Also known as:** Switch  ·  Lightswitch  ·  Toggle button
 
-A binary switch control that toggles between two states — typically on and off.
+A binary switch control that toggles between two states, typically on and off.
 
 **Best practices:**
 - Use for binary on/off settings that take effect immediately
 - Label the toggle with what it controls, not 'On/Off'
 - Show the current state visually (color, position) and with an optional text label
 - Size the toggle to be easily tappable (44+ px wide)
-- Avoid using toggles inside forms that require a Save action — use checkboxes instead
+- Avoid using toggles inside forms that require a Save action, use checkboxes instead
 
 **Common layouts:**
 - Settings row with label on the left and toggle on the right
@@ -1190,7 +1190,7 @@ A binary switch control that toggles between two states — typically on and off
 A small floating label that reveals supplementary information about an element, typically on hover.
 
 **Best practices:**
-- Use tooltips for supplementary info — never for essential content
+- Use tooltips for supplementary info, never for essential content
 - Trigger on hover (desktop) and long-press (mobile); avoid click-to-show
 - Show after a short delay (~300 ms) and hide on mouse leave
 - Keep tooltip text to a single sentence or a few words
@@ -1252,7 +1252,7 @@ Content that is hidden visually but remains accessible to screen readers and oth
 
 **Best practices:**
 - Use for screen-reader-only text that provides context invisible users don't need
-- Never use display:none or visibility:hidden — use a clip-rect technique
+- Never use display:none or visibility:hidden, use a clip-rect technique
 - Apply to skip links, icon-only button labels, and form field instructions
 
 **Common layouts:**

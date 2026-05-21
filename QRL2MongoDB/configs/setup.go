@@ -394,7 +394,7 @@ func initializeCollections(db *mongo.Database) {
 		},
 	)
 	if err != nil {
-		Logger.Warn("Could not create unique index on addresses.id (duplicates may exist — run dedup)", zap.Error(err))
+		Logger.Warn("Could not create unique index on addresses.id (duplicates may exist, run dedup)", zap.Error(err))
 	} else {
 		Logger.Info("Addresses collection initialized with unique id index")
 	}

@@ -16,7 +16,7 @@ import (
 //	AI_EXPLAIN_SOURCE_MAX_BYTES  truncate source before sending (default 32 KiB).
 //
 // Init returns a non-nil error iff the API key is missing or empty. The
-// rest of the backend boots regardless — routes/explain returns 503 when
+// rest of the backend boots regardless, routes/explain returns 503 when
 // Default() is nil.
 const (
 	envAPIKey         = "EXPERT_ANALIST_CLAUDE_HAIKU"
@@ -33,7 +33,7 @@ var (
 func Init() error {
 	apiKey := os.Getenv(envAPIKey)
 	if apiKey == "" {
-		log.Printf("WARN: contract AI explainer disabled — %s not set", envAPIKey)
+		log.Printf("WARN: contract AI explainer disabled, %s not set", envAPIKey)
 		return errMissingKey
 	}
 
@@ -62,7 +62,7 @@ func Default() *Explainer {
 	return def
 }
 
-// errMissingKey is a sentinel — callers don't need to compare against it,
+// errMissingKey is a sentinel, callers don't need to compare against it,
 // but the typed error keeps the Init() signature honest.
 var errMissingKey = errMissingKeyVal{}
 

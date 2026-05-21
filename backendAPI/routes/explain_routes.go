@@ -15,7 +15,7 @@ import (
 )
 
 // RegisterContractExplainRoute wires POST /contract/explain/:address onto
-// the supplied router. Always registered — when the explainer isn't
+// the supplied router. Always registered, when the explainer isn't
 // configured (missing EXPERT_ANALIST_CLAUDE_HAIKU), the handler returns
 // 503 so the rest of the backend keeps working.
 //
@@ -58,7 +58,7 @@ func RegisterContractExplainRoute(router *gin.Engine) {
 			// cache write failed; we want to log that case but still hand
 			// the result to the client.
 			if resp != nil {
-				log.Printf("explain: %s — cache write failed but result delivered: %v", addr, err)
+				log.Printf("explain: %s, cache write failed but result delivered: %v", addr, err)
 				c.JSON(http.StatusOK, resp)
 				return
 			}
@@ -66,7 +66,7 @@ func RegisterContractExplainRoute(router *gin.Engine) {
 			case errors.Is(err, aiexplain.ErrNotFound):
 				c.JSON(http.StatusNotFound, gin.H{"error": "address is not a known contract"})
 			case errors.Is(err, aiexplain.ErrNotVerified):
-				c.JSON(http.StatusForbidden, gin.H{"error": "contract is not verified — only verified contracts can be analysed"})
+				c.JSON(http.StatusForbidden, gin.H{"error": "contract is not verified, only verified contracts can be analysed"})
 			case errors.Is(err, aiexplain.ErrRegenCap):
 				c.JSON(http.StatusTooManyRequests, gin.H{
 					"error": "regeneration cap reached: 5 regenerations per contract per 7-day window. Try again later.",
@@ -74,7 +74,7 @@ func RegisterContractExplainRoute(router *gin.Engine) {
 			default:
 				// Log the wrapped error server-side (may include Anthropic
 				// status / response details) but return a generic public
-				// message — internal error strings can leak provider config
+				// message, internal error strings can leak provider config
 				// hints (quota messages, model id) that aren't useful to
 				// API consumers.
 				log.Printf("explain: %s failed: %v", addr, err)

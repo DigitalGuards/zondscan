@@ -223,7 +223,7 @@ func CallDebugTraceTransaction(hash string) DebugTraceResult {
 		return emptyTrace(err)
 	}
 
-	// debug_traceTransaction is a primary-only method — public/foundation nodes
+	// debug_traceTransaction is a primary-only method, public/foundation nodes
 	// don't expose the debug_ namespace. Pin to the primary URL so we don't
 	// surface a misleading "method not found" by failing over.
 	primary := Endpoints().PrimaryURL()
@@ -322,7 +322,7 @@ func CallDebugTraceTransaction(hash string) DebugTraceResult {
 			hexStr := strings.TrimPrefix(tracerResponse.Result.Output, "0x")
 			hexStr = strings.TrimLeft(hexStr, "0")
 
-			if len(tracerResponse.Result.Output) == 42 { // "0x" + 40 chars — an address
+			if len(tracerResponse.Result.Output) == 42 { // "0x" + 40 chars, an address
 				res.Output = 1
 			} else if hexStr == "" {
 				res.Output = 0
@@ -597,7 +597,7 @@ func GetCode(address string, blockNrOrHash string) (string, error) {
 
 // ZondGetBlockLogs retrieves logs for a specific block with an optional
 // topic[0] filter. When `topic0Filters` has >1 entry the values are
-// OR-matched against topic[0] — the standard JSON-RPC encoding is a
+// OR-matched against topic[0], the standard JSON-RPC encoding is a
 // nested array `[[t0a, t0b, ...]]` (the outer position is the topic index,
 // the inner array is the candidate set for that position).
 func ZondGetBlockLogs(blockNumber string, topic0Filters []string) (*models.ZondLogsResponse, error) {

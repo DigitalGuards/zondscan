@@ -24,7 +24,7 @@ const STATUS_LABEL: Record<ConnectionStatus, string> = {
  * Pair-with-wallet button used by the Write contract tab. On click, opens a
  * modal with a QR code + deep-link URI from `@qrlwallet/connect`. After a
  * successful handshake the wallet's address is surfaced upward via
- * `onAccount`. Closing the modal doesn't disconnect — only the explicit
+ * `onAccount`. Closing the modal doesn't disconnect, only the explicit
  * Disconnect button does.
  *
  * The QRLConnect instance is a module-level singleton (see
@@ -112,7 +112,7 @@ export default function ConnectButton({ onAccount, onProvider }: ConnectButtonPr
       qrl.off('disconnect', onDisconnect);
       qrl.off('statusChanged', onStatusChanged);
     };
-    // `account` is read once at mount only — listing it would re-attach
+    // `account` is read once at mount only, listing it would re-attach
     // listeners on every account change, which is wrong.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onAccount, onProvider]);

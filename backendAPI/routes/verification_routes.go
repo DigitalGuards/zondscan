@@ -16,7 +16,7 @@ import (
 )
 
 // RegisterVerificationRoutes wires the three contract-verification
-// endpoints onto the supplied router. Always registered — when the
+// endpoints onto the supplied router. Always registered, when the
 // verifier isn't configured, individual handlers return 503 so the rest
 // of the backend keeps working.
 func RegisterVerificationRoutes(router *gin.Engine) {
@@ -64,7 +64,7 @@ func RegisterVerificationRoutes(router *gin.Engine) {
 		}
 		if req.CompilerVersion != "" && req.CompilerVersion != v.Compiler.BuildID {
 			c.JSON(http.StatusBadRequest, gin.H{
-				"error":           "unsupported compilerVersion — see /contract/compiler-info",
+				"error":           "unsupported compilerVersion, see /contract/compiler-info",
 				"supportedBuild":  v.Compiler.BuildID,
 				"requestedBuild":  req.CompilerVersion,
 			})
@@ -139,7 +139,7 @@ func RegisterVerificationRoutes(router *gin.Engine) {
 // newJobID returns a short opaque token (16 hex chars). Crypto random is
 // overkill for an externally-opaque handle but it's free and keeps callers
 // from guessing other users' jobs. A rand.Read failure on Linux/macOS
-// means /dev/urandom is unreadable — the process is unsalvageable, so
+// means /dev/urandom is unreadable, the process is unsalvageable, so
 // panic rather than continue with a degenerate ID.
 func newJobID() string {
 	var buf [8]byte

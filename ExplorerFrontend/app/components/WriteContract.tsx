@@ -31,7 +31,7 @@ interface WriteContractProps {
  * paired wallet to broadcast the transaction over the QRL Connect relay. The
  * wallet returns the broadcast tx hash, which we link to the local explorer.
  *
- * Wallet submits — the explorer never sees the signed payload and never
+ * Wallet submits, the explorer never sees the signed payload and never
  * touches a node directly for write paths. Matches the protocol used by the
  * dApp example and keeps the explorer trust boundary narrow.
  */

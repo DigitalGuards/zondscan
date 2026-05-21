@@ -11,7 +11,7 @@ import (
 )
 
 // anthropicEndpoint is the Messages API endpoint. Pinned by the SDK
-// version contract — Anthropic guarantees stability per `anthropic-version`
+// version contract, Anthropic guarantees stability per `anthropic-version`
 // header below, so we don't have to follow API churn.
 const anthropicEndpoint = "https://api.anthropic.com/v1/messages"
 
@@ -36,7 +36,7 @@ type Client struct {
 }
 
 // NewClient builds a Client. apiKey is required; pass empty model to use
-// the default. The HTTP client uses a tight per-call timeout — Anthropic
+// the default. The HTTP client uses a tight per-call timeout, Anthropic
 // is usually under 5s for Haiku but a slow run shouldn't tie up the gin
 // goroutine for minutes.
 func NewClient(apiKey, model string, maxTokens int) *Client {
@@ -58,7 +58,7 @@ func NewClient(apiKey, model string, maxTokens int) *Client {
 // the first content block. ctx governs the full lifecycle: cancel it from
 // the caller side to abort.
 //
-// We don't stream — the response is short enough that buffering is fine
+// We don't stream, the response is short enough that buffering is fine
 // and avoids the SSE plumbing overhead.
 func (c *Client) Generate(ctx context.Context, system, user string) (string, string, error) {
 	body, err := json.Marshal(anthropicRequest{
@@ -110,7 +110,7 @@ func (c *Client) Generate(ctx context.Context, system, user string) (string, str
 }
 
 // truncate caps the displayed length of a log message safely against
-// multi-byte UTF-8 input — slicing a string by byte index could split a
+// multi-byte UTF-8 input, slicing a string by byte index could split a
 // codepoint and produce invalid UTF-8 in logs.
 func truncate(s string, n int) string {
 	runes := []rune(s)

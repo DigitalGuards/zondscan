@@ -31,7 +31,7 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic';
 
 export default async function RichlistPage(): Promise<JSX.Element> {
-  // Richlist changes slowly (balance rankings) — 30 s revalidate is plenty
+  // Richlist changes slowly (balance rankings), 30 s revalidate is plenty
   // fresh and keeps a single backend call serving N concurrent pageloads.
   const response = await fetch(config.handlerUrl + "/richlist", { next: { revalidate: 30 } });
   if (!response.ok) {
