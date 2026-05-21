@@ -64,6 +64,16 @@ type ContractInfo struct {
 	MaxWalletAmount string `bson:"maxWalletAmount,omitempty" json:"maxWalletAmount,omitempty"`
 	MaxTxLimit      string `bson:"maxTxLimit,omitempty" json:"maxTxLimit,omitempty"`
 
+	// NFT / multi-token classification — written exclusively by the syncer
+	// (see db/contracts.go:syncerOwnedSet). `tokenStandard` is one of
+	// "ERC-20" / "ERC-721" / "ERC-1155" or empty for unclassified contracts.
+	// `hasERC165` records whether supportsInterface returned a well-formed
+	// answer — once true we skip re-probing the ERC-165 path. `baseURI` is
+	// Phase 3 territory (tokenURI rendering) and stays empty until populated.
+	TokenStandard string `bson:"tokenStandard,omitempty" json:"tokenStandard,omitempty"`
+	HasERC165     bool   `bson:"hasERC165,omitempty" json:"hasERC165,omitempty"`
+	BaseURI       string `bson:"baseURI,omitempty" json:"baseURI,omitempty"`
+
 	// Source-verification fields — mirror backendAPI/models/contract.go.
 	// Written exclusively by the backend verify endpoint; the syncer
 	// holds them only for round-trip preservation.

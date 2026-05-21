@@ -14,6 +14,11 @@ export interface ContractData {
   contractCode: string;
   creationTransaction: string;
   isToken: boolean;
+  /** ERC-20 / ERC-721 / ERC-1155 / empty for unclassified. Drives the
+   *  "Token Contract" / "NFT Collection" / "Multi-Token Collection"
+   *  header in address-view + token-contract-view. */
+  tokenStandard?: 'ERC-20' | 'ERC-721' | 'ERC-1155' | string;
+  hasERC165?: boolean;
   status: string;
   decimals: number;
   name: string;

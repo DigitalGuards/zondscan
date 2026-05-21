@@ -78,6 +78,12 @@ interface OptionalInternalTransactionFields {
 export type InternalTransaction = BaseInternalTransaction & OptionalInternalTransactionFields;
 
 /**
+ * Token standard tag persisted on contract + transfer rows. Empty for
+ * legacy un-classified rows; new rows are always one of the three.
+ */
+export type TokenStandard = 'ERC-20' | 'ERC-721' | 'ERC-1155';
+
+/**
  * Token transfer information for a transaction
  */
 export interface TokenTransferInfo {
@@ -88,6 +94,10 @@ export interface TokenTransferInfo {
   tokenName: string;
   tokenSymbol: string;
   tokenDecimals: number;
+  /** ERC-20 | ERC-721 | ERC-1155 — drives the row's badge in transaction-view. */
+  tokenStandard?: TokenStandard | string;
+  /** uint256 decimal string. Populated for ERC-721 + ERC-1155 transfers. */
+  tokenID?: string;
 }
 
 /**
@@ -112,6 +122,7 @@ export interface TransactionDetails {
     name: string;
     symbol: string;
     decimals: number;
+    tokenStandard?: TokenStandard | string;
   };
   tokenTransfer?: TokenTransferInfo;
 }

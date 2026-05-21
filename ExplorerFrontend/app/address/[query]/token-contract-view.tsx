@@ -225,6 +225,17 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
     const totalSupply = tokenInfo?.totalSupply ?? contractData.totalSupply ?? '0';
     const creatorAddress = creationTx?.From || tokenInfo?.creatorAddress || contractData.creatorAddress || '';
     const creationTxHash = tokenInfo?.creationTxHash || contractData.creationTransaction || '';
+    const tokenStandard = contractData.tokenStandard;
+    const isNFT = tokenStandard === 'ERC-721' || tokenStandard === 'ERC-1155';
+    const badgeLabel =
+        tokenStandard === 'ERC-721'
+            ? 'QRC-721 NFT'
+            : tokenStandard === 'ERC-1155'
+              ? 'QRC-1155 Multi-Token'
+              : 'QRC-20 Token';
+    const badgeClasses = isNFT
+        ? 'bg-purple-500/20 text-purple-300'
+        : 'bg-green-500/20 text-green-400';
 
     const tabs = [
         { id: 'overview', label: 'Overview' },
@@ -262,17 +273,28 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                 </div>
                             </div>
                         </div>
-                        <div className="px-3 py-1.5 rounded-lg bg-green-500/20 text-green-400 text-sm font-medium self-start">
-                            QRC-20 Token
+                        <div className={`px-3 py-1.5 rounded-lg text-sm font-medium self-start ${badgeClasses}`}>
+                            {badgeLabel}
                         </div>
                     </div>
 
-                    {/* Token Stats Grid */}
+                    {/* Token Stats Grid. Decimals hidden for NFT collections (no
+                        fractional units); for ERC-1155 totalSupply is the
+                        operator's reported aggregate and may not be meaningful
+                        per-id (Phase 2 will surface per-id supply on the holders
+                        endpoint). */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div className="bg-black/20 rounded-lg p-3 md:p-4">
-                            <div className="text-xs md:text-sm text-gray-400 mb-1">Total Supply</div>
-                            <div className="text-sm md:text-base font-semibold text-white truncate" title={formatTokenAmount(totalSupply, decimals)}>
-                                {formatTokenAmount(totalSupply, decimals)} {symbol}
+                            <div className="text-xs md:text-sm text-gray-400 mb-1">
+                                {tokenStandard === 'ERC-721' ? 'Total Items' : 'Total Supply'}
+                            </div>
+                            <div
+                                className="text-sm md:text-base font-semibold text-white truncate"
+                                title={isNFT ? totalSupply : formatTokenAmount(totalSupply, decimals)}
+                            >
+                                {isNFT
+                                    ? (totalSupply !== '0' ? `${totalSupply} ${symbol}` : `- ${symbol}`)
+                                    : `${formatTokenAmount(totalSupply, decimals)} ${symbol}`}
                             </div>
                         </div>
                         <div className="bg-black/20 rounded-lg p-3 md:p-4">
@@ -288,9 +310,11 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                             </div>
                         </div>
                         <div className="bg-black/20 rounded-lg p-3 md:p-4">
-                            <div className="text-xs md:text-sm text-gray-400 mb-1">Decimals</div>
+                            <div className="text-xs md:text-sm text-gray-400 mb-1">
+                                {isNFT ? 'Standard' : 'Decimals'}
+                            </div>
                             <div className="text-sm md:text-base font-semibold text-white">
-                                {decimals}
+                                {isNFT ? (tokenStandard?.replace(/^ERC-/, 'QRC-') ?? '-') : decimals}
                             </div>
                         </div>
                     </div>
