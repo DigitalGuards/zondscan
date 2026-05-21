@@ -248,10 +248,26 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
         { id: 'transfers', label: `Transfers${tokenInfo ? ` (${tokenInfo.transferCount})` : ''}` },
     ];
 
+    // Three-step breadcrumb: Home > Contracts > <standard tab> > <this contract>.
+    // The middle step deep-links back to the /contracts page with the
+    // correct tab pre-selected so a back-step lands the user where they
+    // came from.
+    const tabHref =
+        tokenStandard === 'ERC-721'  ? '/contracts?tab=erc721'
+      : tokenStandard === 'ERC-1155' ? '/contracts?tab=erc1155'
+      : tokenStandard === 'ERC-20'   ? '/contracts?tab=erc20'
+      :                                '/contracts';
+    const tabLabel =
+        tokenStandard === 'ERC-721'  ? 'NFTs'
+      : tokenStandard === 'ERC-1155' ? 'Multi-Token'
+      : tokenStandard === 'ERC-20'   ? 'Tokens'
+      :                                'All';
+
     return (
         <div className="detail-content">
             <Breadcrumbs items={[
                 { label: 'Contracts', href: '/contracts' },
+                { label: tabLabel, href: tabHref },
                 { label: `${symbol || address.slice(0, 10) + '...' + address.slice(-6)}` },
             ]} />
             {/* Token Header Card */}
