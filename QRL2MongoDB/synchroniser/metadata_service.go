@@ -32,12 +32,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"go.uber.org/zap"
@@ -108,12 +110,107 @@ func NewMetadataService() *MetadataService {
 	}
 	return &MetadataService{
 		gatewayURL:   cfg.gatewayURL,
-		httpClient:   &http.Client{Timeout: cfg.fetchTimeout},
+		httpClient:   newSafeHTTPClient(cfg.fetchTimeout),
 		pollInterval: cfg.pollInterval,
 		batchSize:    cfg.batchSize,
 		maxBodyBytes: cfg.maxBodyBytes,
 		stopCh:       make(chan struct{}),
 	}
+}
+
+// newSafeHTTPClient builds an http.Client whose Transport refuses to connect
+// to private / loopback / link-local / multicast / unspecified IPs. The
+// Dialer's Control hook fires after DNS resolution and before the socket
+// connects, so it also catches DNS-rebinding attacks where a hostname
+// resolves to a public IP at validation time but a private one when the
+// dial actually runs.
+//
+// This is the SSRF perimeter for the metadata fetcher: any URL whose host
+// resolves to a forbidden range gets a connection error from net.Dial,
+// surfaced as a normal HTTP error to fetchBody. We never reach the
+// dangerous endpoint.
+func newSafeHTTPClient(timeout time.Duration) *http.Client {
+	dialer := &net.Dialer{
+		Timeout:   timeout,
+		KeepAlive: 30 * time.Second,
+		Control: func(network, address string, _ syscall.RawConn) error {
+			host, _, err := net.SplitHostPort(address)
+			if err != nil {
+				return err
+			}
+			ip := net.ParseIP(host)
+			if ip == nil {
+				return fmt.Errorf("ssrf-guard: unresolvable host %q", host)
+			}
+			if isForbiddenIP(ip) {
+				return fmt.Errorf("ssrf-guard: refusing to connect to %s", ip.String())
+			}
+			return nil
+		},
+	}
+	return &http.Client{
+		Timeout: timeout,
+		Transport: &http.Transport{
+			DialContext:         dialer.DialContext,
+			TLSHandshakeTimeout: timeout,
+			// Disable connection reuse so a previously-allowed IP can't be
+			// re-targeted by a later DNS rebind for the same hostname.
+			DisableKeepAlives: true,
+		},
+	}
+}
+
+// extraBlockedCIDRs lists ranges Go's net.IP.IsPrivate / IsLoopback /
+// IsLinkLocal* don't cover but that we still don't want a server-side
+// fetcher hitting. Kept as a package var so tests can extend it.
+var extraBlockedCIDRs = mustParseCIDRs(
+	"100.64.0.0/10",   // CGNAT
+	"192.0.0.0/24",    // IETF Protocol Assignments
+	"198.18.0.0/15",   // Network interconnect device benchmark
+	"192.0.2.0/24",    // TEST-NET-1
+	"198.51.100.0/24", // TEST-NET-2
+	"203.0.113.0/24",  // TEST-NET-3
+	"240.0.0.0/4",     // Reserved
+	"fc00::/7",        // IPv6 ULA
+	"fe80::/10",       // IPv6 link-local
+	"100::/64",        // IPv6 discard prefix
+	"2001:db8::/32",   // IPv6 docs prefix
+)
+
+func mustParseCIDRs(s ...string) []*net.IPNet {
+	nets := make([]*net.IPNet, 0, len(s))
+	for _, c := range s {
+		_, n, err := net.ParseCIDR(c)
+		if err != nil {
+			panic(fmt.Sprintf("invalid extra-blocked CIDR %q: %v", c, err))
+		}
+		nets = append(nets, n)
+	}
+	return nets
+}
+
+// isForbiddenIP returns true if `ip` is in a range the metadata fetcher must
+// never connect to. Combines Go's stdlib helpers with explicit additional
+// CIDRs (CGNAT, IETF reserved, IPv6 ULA, etc) that the stdlib doesn't flag.
+func isForbiddenIP(ip net.IP) bool {
+	if ip == nil {
+		return true
+	}
+	if ip.IsLoopback() ||
+		ip.IsPrivate() ||
+		ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() ||
+		ip.IsMulticast() ||
+		ip.IsUnspecified() ||
+		ip.IsInterfaceLocalMulticast() {
+		return true
+	}
+	for _, n := range extraBlockedCIDRs {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // Start launches the polling goroutine. Idempotent in the sense that
@@ -165,7 +262,7 @@ func (s *MetadataService) Stop() {
 // tick runs one batch of metadata fetches. Errors per row are logged and
 // recorded on the contractCode document; the tick itself never fails.
 func (s *MetadataService) tick(ctx context.Context) {
-	rows, err := db.GetContractsAwaitingMetadata(s.batchSize)
+	rows, err := db.GetContractsAwaitingMetadata(ctx, s.batchSize)
 	if err != nil {
 		configs.Logger.Warn("metadata fetcher: failed to read work queue", zap.Error(err))
 		return
@@ -192,7 +289,7 @@ func (s *MetadataService) tick(ctx context.Context) {
 func (s *MetadataService) fetchOne(ctx context.Context, address, uri string) {
 	resolved, err := resolveMetadataURI(uri, s.gatewayURL)
 	if err != nil {
-		s.recordFailure(address, fmt.Sprintf("resolve: %v", err))
+		s.recordFailure(ctx, address, fmt.Sprintf("resolve: %v", err))
 		return
 	}
 
@@ -203,13 +300,13 @@ func (s *MetadataService) fetchOne(ctx context.Context, address, uri string) {
 
 	body, fetchErr := s.fetchBody(ctx, resolved)
 	if fetchErr != nil {
-		s.recordFailure(address, fmt.Sprintf("fetch: %v", fetchErr))
+		s.recordFailure(ctx, address, fmt.Sprintf("fetch: %v", fetchErr))
 		return
 	}
 
 	parsed, parseErr := parseMetadataJSON(body)
 	if parseErr != nil {
-		s.recordFailure(address, fmt.Sprintf("parse: %v", parseErr))
+		s.recordFailure(ctx, address, fmt.Sprintf("parse: %v", parseErr))
 		return
 	}
 
@@ -234,6 +331,7 @@ func (s *MetadataService) fetchOne(ctx context.Context, address, uri string) {
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	if err := db.UpdateContractMetadata(
+		ctx,
 		address,
 		parsed.Name,
 		parsed.Description,
@@ -254,10 +352,10 @@ func (s *MetadataService) fetchOne(ctx context.Context, address, uri string) {
 		zap.Bool("hasImage", imageResolved != ""))
 }
 
-func (s *MetadataService) recordFailure(address, reason string) {
+func (s *MetadataService) recordFailure(ctx context.Context, address, reason string) {
 	// Pass empty content args so the existing name/image survives a transient
 	// gateway error.
-	if err := db.UpdateContractMetadata(address, "", "", "", "", "", reason); err != nil {
+	if err := db.UpdateContractMetadata(ctx, address, "", "", "", "", "", reason); err != nil {
 		configs.Logger.Warn("metadata fetcher: failed to record fetch error",
 			zap.String("address", address),
 			zap.String("reason", reason),
@@ -314,12 +412,26 @@ type metadataDocument struct {
 // map, then pull out the string fields we care about, ignoring any non-
 // string variants. This lets a malformed `description: ["foo", "bar"]`
 // reduce to an empty description rather than failing the entire record.
+//
+// Two sentinel cases for which we still return an empty doc + nil error
+// rather than a JSON-shape error:
+//
+//   - the JSON literal `null`, which unmarshals into a nil map; reading
+//     `raw[key]` from a nil map is safe in Go but the explicit check keeps
+//     the intent obvious and silences static analysis warnings;
+//   - top-level scalars or arrays, where Unmarshal fails with a type
+//     mismatch error - those still fail loudly.
 func parseMetadataJSON(body []byte) (metadataDocument, error) {
 	var raw map[string]interface{}
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return metadataDocument{}, err
 	}
 	stringField := func(key string) string {
+		// Reading from a nil map is safe in Go, but the explicit branch
+		// avoids any ambiguity for future readers.
+		if raw == nil {
+			return ""
+		}
 		v, ok := raw[key]
 		if !ok || v == nil {
 			return ""

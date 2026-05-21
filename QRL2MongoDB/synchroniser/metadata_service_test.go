@@ -1,6 +1,7 @@
 package synchroniser
 
 import (
+	"net"
 	"strings"
 	"testing"
 )
@@ -178,6 +179,86 @@ func TestParseMetadataJSON(t *testing.T) {
 				t.Errorf("ExternalURL = %q, want %q", got.ExternalURL, tt.wantExtURL)
 			}
 		})
+	}
+}
+
+func TestParseMetadataJSONNullLiteral(t *testing.T) {
+	// JSON literal `null` unmarshals into a nil map. The defensive nil
+	// check in stringField keeps the parser from panicking; we just
+	// return an empty doc + nil error.
+	doc, err := parseMetadataJSON([]byte("null"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if doc.Name != "" || doc.Description != "" || doc.Image != "" || doc.ExternalURL != "" {
+		t.Errorf("expected empty doc, got %+v", doc)
+	}
+}
+
+func TestIsForbiddenIP(t *testing.T) {
+	tests := []struct {
+		ip   string
+		want bool
+	}{
+		// Public, allowed
+		{"8.8.8.8", false},
+		{"1.1.1.1", false},
+		{"209.250.255.226", false}, // QRL Foundation public RPC
+		{"46.62.169.114", false},   // Our testnet node
+		{"2606:4700:4700::1111", false}, // Cloudflare DNS over IPv6
+
+		// Loopback
+		{"127.0.0.1", true},
+		{"127.0.0.53", true},
+		{"::1", true},
+
+		// RFC1918 private
+		{"10.0.0.1", true},
+		{"172.16.0.1", true},
+		{"172.31.255.255", true},
+		{"192.168.1.1", true},
+
+		// Link-local
+		{"169.254.169.254", true}, // AWS/GCP metadata!
+		{"fe80::1", true},
+
+		// CGNAT
+		{"100.64.0.1", true},
+		{"100.127.255.254", true},
+
+		// Multicast / unspecified
+		{"224.0.0.1", true},
+		{"0.0.0.0", true},
+		{"::", true},
+
+		// IPv6 ULA
+		{"fc00::1", true},
+		{"fd12:3456::1", true},
+
+		// IETF reserved / docs
+		{"192.0.2.1", true},
+		{"198.51.100.1", true},
+		{"203.0.113.5", true},
+		{"240.0.0.1", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.ip, func(t *testing.T) {
+			ip := net.ParseIP(tt.ip)
+			if ip == nil {
+				t.Fatalf("bad test fixture: cannot parse %q", tt.ip)
+			}
+			if got := isForbiddenIP(ip); got != tt.want {
+				t.Errorf("isForbiddenIP(%s) = %v, want %v", tt.ip, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestForbiddenIPRejectsNil documents the nil-input behaviour: refuse,
+// don't crash, callers that fail to resolve a hostname must not dial.
+func TestForbiddenIPRejectsNil(t *testing.T) {
+	if !isForbiddenIP(nil) {
+		t.Error("isForbiddenIP(nil) = false, want true (refuse-by-default)")
 	}
 }
 

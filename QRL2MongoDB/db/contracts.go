@@ -244,24 +244,27 @@ func syncerOwnedSet(c models.ContractInfo) bson.M {
 }
 
 // UpdateContractMetadata writes the resolved off-chain collection metadata
-// for one contract. The fetcher service is the only caller, the classifier
+// for one contract. The fetcher service is the only caller; the classifier
 // path (StoreContract) deliberately doesn't touch these fields. This
 // separation lets a transient classification blip retain the resolved
 // metadata while still allowing the fetcher to record a new fetch attempt's
 // outcome (success or error) without racing the classifier.
 //
-// Empty `name` / `description` / `image` / `externalURL` arguments clear
-// those fields. The expected pattern is:
+// Empty `name` / `description` / `image` / `externalURL` arguments PRESERVE
+// the existing database values (last-good state). Only `fetchedAt` and
+// `fetchError` are always written, so an operator can see the latest probe
+// result without blowing away previously-fetched content. The expected
+// pattern is:
 //
 //   - Success: pass the parsed values + FetchedAt = now, FetchError = "".
 //   - Failure: pass empty for the four content fields, FetchedAt = "",
 //     FetchError = the reason. Existing content fields are preserved
 //     because the merge sentinel below skips empty content writes.
 //
-// The fetcher records FetchError without blanking previously-resolved
-// content fields, a temporary IPFS gateway 503 should NOT wipe out a
-// successfully-fetched display name from yesterday.
-func UpdateContractMetadata(address, name, description, image, externalURL, fetchedAt, fetchError string) error {
+// The caller-supplied ctx scopes both timeout and cancellation. The fetcher
+// passes the shutdown-aware ctx so a pm2 stop interrupts an in-flight write
+// instead of leaking a 10s context.Background goroutine.
+func UpdateContractMetadata(ctx context.Context, address, name, description, image, externalURL, fetchedAt, fetchError string) error {
 	address = validation.ConvertToQAddress(address)
 
 	set := bson.M{
@@ -284,7 +287,7 @@ func UpdateContractMetadata(address, name, description, image, externalURL, fetc
 		set["metadataExternalURL"] = externalURL
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	_, err := configs.GetContractsCollection().UpdateOne(
@@ -304,9 +307,10 @@ func UpdateContractMetadata(address, name, description, image, externalURL, fetc
 // GetContractsAwaitingMetadata returns up to `limit` NFT contracts that have
 // a populated MetadataURI but have not yet been fetched successfully
 // (FetchedAt is empty OR FetchError is set). The metadata fetcher service
-// uses this as its work queue.
-func GetContractsAwaitingMetadata(limit int) ([]models.ContractInfo, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+// uses this as its work queue and passes its shutdown-aware ctx so a pm2
+// stop cancels an in-flight read promptly.
+func GetContractsAwaitingMetadata(ctx context.Context, limit int) ([]models.ContractInfo, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	filter := bson.M{

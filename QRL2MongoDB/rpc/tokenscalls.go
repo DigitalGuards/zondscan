@@ -997,19 +997,32 @@ func parseDynamicString(result string) (string, error) {
 		return "", fmt.Errorf("dynamic string payload too short: %d hex chars", len(stripped))
 	}
 
-	offset, err := strconv.ParseInt(stripped[:64], 16, 64)
-	if err != nil || offset < 0 {
-		return "", fmt.Errorf("invalid offset word: %w", err)
+	// ABI words are 256 bits; strconv.ParseInt caps at 64. Real offsets are
+	// tiny (start at 0x20 = 32 bytes for one dynamic return), but an
+	// attacker-crafted return value could fill the full 32-byte word to try
+	// to crash the decoder. Parse as big.Int and reject anything that
+	// doesn't fit a signed int64 before downcasting.
+	offsetInt := new(big.Int)
+	if _, ok := offsetInt.SetString(stripped[:64], 16); !ok {
+		return "", fmt.Errorf("invalid offset word")
 	}
+	if !offsetInt.IsInt64() || offsetInt.Sign() < 0 {
+		return "", fmt.Errorf("offset out of int64 range")
+	}
+	offset := offsetInt.Int64()
 	startPos := offset * 2
 	if startPos+64 > int64(len(stripped)) {
 		return "", fmt.Errorf("string length word out of bounds: offset=%d payload=%d", offset, len(stripped)/2)
 	}
 
-	length, err := strconv.ParseInt(stripped[startPos:startPos+64], 16, 64)
-	if err != nil || length < 0 {
-		return "", fmt.Errorf("invalid length word: %w", err)
+	lengthInt := new(big.Int)
+	if _, ok := lengthInt.SetString(stripped[startPos:startPos+64], 16); !ok {
+		return "", fmt.Errorf("invalid length word")
 	}
+	if !lengthInt.IsInt64() || lengthInt.Sign() < 0 {
+		return "", fmt.Errorf("length out of int64 range")
+	}
+	length := lengthInt.Int64()
 	// Cap at a sane upper bound; nothing legitimate is going to return a
 	// multi-MB string from a view call, and an attacker could otherwise
 	// force a huge allocation.
