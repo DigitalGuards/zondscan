@@ -233,7 +233,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
     ];
 
     return (
-        <div className="py-3 md:py-6 lg:py-8 px-3 md:px-6 lg:px-8 max-w-[1200px] mx-auto">
+        <div className="detail-content">
             <Breadcrumbs items={[
                 { label: 'Contracts', href: '/contracts' },
                 { label: `${symbol || address.slice(0, 10) + '...' + address.slice(-6)}` },
