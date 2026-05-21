@@ -194,38 +194,49 @@ func processTokenContract(targetAddress string, txHash string, blockNumber strin
 			zap.String("to", recipient),
 			zap.String("amount", amount))
 
-		// Store token transfer
-		transfer := models.TokenTransfer{
-			ContractAddress: targetAddress,
-			From:            from,
-			To:              recipient,
-			Amount:          amount,
-			BlockNumber:     blockNumber,
-			TxHash:          txHash,
-			Timestamp:       blockTimestamp,
-			TokenSymbol:     contract.Symbol,
-			TokenDecimals:   contract.Decimals,
-			TokenName:       contract.Name,
-			TransferType:    "direct",
-		}
-		if err := StoreTokenTransfer(transfer); err != nil {
-			configs.Logger.Error("Failed to store token transfer",
+		// Idempotent: the direct-calldata path uses logIndex="" (there's
+		// no originating log). The unique tuple for replay-detection is
+		// (txHash, contractAddress, ""). On a re-process of the same
+		// tx → skip the write so we don't grow duplicate rows.
+		exists, err := TokenTransferExists(txHash, targetAddress, "")
+		if err == nil && exists {
+			configs.Logger.Debug("Skipping duplicate direct token transfer",
 				zap.String("txHash", txHash),
-				zap.Error(err))
-		}
+				zap.String("contract", targetAddress))
+		} else {
+			// Store token transfer
+			transfer := models.TokenTransfer{
+				ContractAddress: targetAddress,
+				From:            from,
+				To:              recipient,
+				Amount:          amount,
+				BlockNumber:     blockNumber,
+				TxHash:          txHash,
+				Timestamp:       blockTimestamp,
+				TokenSymbol:     contract.Symbol,
+				TokenDecimals:   contract.Decimals,
+				TokenName:       contract.Name,
+				TransferType:    "direct",
+			}
+			if err := StoreTokenTransfer(transfer); err != nil {
+				configs.Logger.Error("Failed to store token transfer",
+					zap.String("txHash", txHash),
+					zap.Error(err))
+			}
 
-		// Update token balances
-		if err := StoreTokenBalance(targetAddress, from, amount, blockNumber); err != nil {
-			configs.Logger.Error("Failed to store token balance for sender",
-				zap.String("contract", targetAddress),
-				zap.String("holder", from),
-				zap.Error(err))
-		}
-		if err := StoreTokenBalance(targetAddress, recipient, amount, blockNumber); err != nil {
-			configs.Logger.Error("Failed to store token balance for recipient",
-				zap.String("contract", targetAddress),
-				zap.String("holder", recipient),
-				zap.Error(err))
+			// Update token balances
+			if err := StoreTokenBalance(targetAddress, from, amount, blockNumber); err != nil {
+				configs.Logger.Error("Failed to store token balance for sender",
+					zap.String("contract", targetAddress),
+					zap.String("holder", from),
+					zap.Error(err))
+			}
+			if err := StoreTokenBalance(targetAddress, recipient, amount, blockNumber); err != nil {
+				configs.Logger.Error("Failed to store token balance for recipient",
+					zap.String("contract", targetAddress),
+					zap.String("holder", recipient),
+					zap.Error(err))
+			}
 		}
 	}
 
@@ -240,6 +251,28 @@ func processTokenContract(targetAddress string, txHash string, blockNumber strin
 
 	transfers := rpc.ProcessTransferLogs(receipt)
 	for _, transferEvent := range transfers {
+		// Idempotent dedupe: a re-process of the same tx must not
+		// duplicate the log-derived row. Key is
+		// (txHash, contractAddress, logIndex). The same check inside
+		// ProcessBlockTokenTransfers exists for the initial-sync path;
+		// this is the steady-state mirror.
+		exists, err := TokenTransferExists(txHash, targetAddress, transferEvent.LogIndex)
+		if err != nil {
+			configs.Logger.Error("Failed to check duplicate token transfer",
+				zap.String("txHash", txHash),
+				zap.String("contract", targetAddress),
+				zap.String("logIndex", transferEvent.LogIndex),
+				zap.Error(err))
+			continue
+		}
+		if exists {
+			configs.Logger.Debug("Skipping duplicate token transfer event",
+				zap.String("txHash", txHash),
+				zap.String("contract", targetAddress),
+				zap.String("logIndex", transferEvent.LogIndex))
+			continue
+		}
+
 		configs.Logger.Info("Found token transfer event",
 			zap.String("contract", targetAddress),
 			zap.String("from", transferEvent.From),
@@ -254,6 +287,7 @@ func processTokenContract(targetAddress string, txHash string, blockNumber strin
 			Amount:          transferEvent.Amount,
 			BlockNumber:     blockNumber,
 			TxHash:          txHash,
+			LogIndex:        transferEvent.LogIndex,
 			Timestamp:       blockTimestamp,
 			TokenSymbol:     contract.Symbol,
 			TokenDecimals:   contract.Decimals,

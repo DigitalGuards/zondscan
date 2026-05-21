@@ -122,8 +122,19 @@ func GetTokenTransfersByAddress(address string, skip, limit int64) ([]models.Tok
 	return transfers, nil
 }
 
-// TokenTransferExists checks if a token transfer already exists in the database
-func TokenTransferExists(txHash string, contractAddress string, from string, to string) (bool, error) {
+// TokenTransferExists checks if a specific token transfer is already
+// persisted. The dedupe key is (txHash, contractAddress, logIndex):
+//
+//   - txHash + logIndex alone collide across token contracts when a
+//     single tx routes through multiple tokens (a swap that transfers
+//     tokenA at log 0 and tokenB at log 1 → both rows distinct on
+//     logIndex, but the legacy direct-calldata path writes logIndex=""
+//     for every contract it touches in the same tx, so contractAddress
+//     is what keeps them apart).
+//   - The legacy four-arg form (txHash + contractAddress + from + to)
+//     collided on self-transfers (from == to) and on identical
+//     bridge-style transfers within one tx.
+func TokenTransferExists(txHash string, contractAddress string, logIndex string) (bool, error) {
 	collection := configs.GetCollection(configs.DB, "tokenTransfers")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -132,14 +143,28 @@ func TokenTransferExists(txHash string, contractAddress string, from string, to 
 	filter := bson.M{
 		"txHash":          txHash,
 		"contractAddress": contractAddress,
-		"from":            from,
-		"to":              to,
+	}
+	// Pre-fix documents (written before LogIndex existed on the model)
+	// have NO `logIndex` field at all. In Mongo a query `{logIndex: ""}`
+	// does NOT match documents where the field is missing, so a direct-
+	// calldata reprocess of any legacy tx would always return false here
+	// and write a duplicate. For the empty-string sentinel (legacy direct
+	// path) match both the explicit "" and missing-field cases.
+	if logIndex == "" {
+		filter["$or"] = []bson.M{
+			{"logIndex": ""},
+			{"logIndex": bson.M{"$exists": false}},
+		}
+	} else {
+		filter["logIndex"] = logIndex
 	}
 
 	count, err := collection.CountDocuments(ctx, filter)
 	if err != nil {
 		configs.Logger.Error("Failed to check if token transfer exists",
 			zap.String("txHash", txHash),
+			zap.String("contractAddress", contractAddress),
+			zap.String("logIndex", logIndex),
 			zap.Error(err))
 		return false, err
 	}
@@ -213,8 +238,11 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 		// Extract amount
 		amount := log.Data
 
-		// Check if this transfer already exists
-		exists, err := TokenTransferExists(log.TransactionHash, contractAddress, from, to)
+		// Check if this specific log already persisted (idempotent on
+		// reprocess). Per-(tx, contract, logIndex) granularity matters:
+		// a single tx may emit Transfer events from multiple token
+		// contracts in any order.
+		exists, err := TokenTransferExists(log.TransactionHash, contractAddress, log.LogIndex)
 		if err != nil {
 			configs.Logger.Error("Failed to check if token transfer exists",
 				zap.String("txHash", log.TransactionHash),
@@ -254,6 +282,7 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 			Amount:          amount,
 			BlockNumber:     blockNumber,
 			TxHash:          log.TransactionHash,
+			LogIndex:        log.LogIndex,
 			Timestamp:       blockTimestamp,
 			TokenSymbol:     contract.Symbol,
 			TokenDecimals:   contract.Decimals,
@@ -305,6 +334,22 @@ func InitializeTokenTransfersCollection() error {
 
 	configs.Logger.Info("Initializing tokenTransfers collection and indexes")
 
+	// Migration: the previous schema enforced a UNIQUE index on `txHash`
+	// alone, which silently dropped every Transfer event after the first
+	// within any tx that emitted more than one (DEX swaps, batch mints,
+	// fee-skim contracts). Drop it if it's still around — DropOne returns
+	// IndexNotFound on fresh deployments and that's fine.
+	if _, err := collection.Indexes().DropOne(ctx, "txHash_idx"); err != nil {
+		msg := err.Error()
+		// Acceptable: index never existed, or collection doesn't yet.
+		if !strings.Contains(msg, "IndexNotFound") &&
+			!strings.Contains(msg, "ns does not exist") &&
+			!strings.Contains(msg, "NamespaceNotFound") {
+			configs.Logger.Warn("Could not drop legacy unique txHash_idx — continuing; new index creation may also fail",
+				zap.Error(err))
+		}
+	}
+
 	// Create indexes for token transfers collection.
 	// CreateMany does not drop existing indexes and is idempotent.
 	indexes := []mongo.IndexModel{
@@ -330,8 +375,28 @@ func InitializeTokenTransfersCollection() error {
 			Options: options.Index().SetName("to_block_idx"),
 		},
 		{
-			Keys:    bson.D{{Key: "txHash", Value: 1}},
-			Options: options.Index().SetName("txHash_idx").SetUnique(true),
+			// Unique. The tuple (txHash, contractAddress, logIndex) is
+			// mathematically unique on chain: log indices are unique
+			// within a tx, and the direct-calldata path emits at most
+			// one row per (tx, contract) with logIndex="". This index
+			// is the hard floor against race-condition double-inserts
+			// (two workers concurrently processing the same tx, or the
+			// application-level TokenTransferExists check missing a
+			// row due to read-after-write timing). The previous bug
+			// (C1 from today's review) was the wrong key shape
+			// (`txHash` alone), not "uniqueness was the problem".
+			// On legacy data: existing rows have no `logIndex` field;
+			// Mongo treats that as `null` for uniqueness purposes, and
+			// because the old broken `txHash_idx` UNIQUE constraint
+			// had already prevented multi-row scenarios within a tx,
+			// there are at most one such row per (txHash, contract,
+			// null) tuple — no migration collision.
+			Keys: bson.D{
+				{Key: "txHash", Value: 1},
+				{Key: "contractAddress", Value: 1},
+				{Key: "logIndex", Value: 1},
+			},
+			Options: options.Index().SetName("txHash_contract_logIndex_idx").SetUnique(true),
 		},
 	}
 

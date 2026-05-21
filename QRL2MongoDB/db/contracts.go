@@ -76,9 +76,24 @@ func StoreContract(contract models.ContractInfo) error {
 			merged.Status = contract.Status
 		}
 
-		// For token info, update if the new info seems more complete or explicitly provided
-		merged.IsToken = contract.IsToken
+		// Token classification is promote-only: once a contract has been
+		// identified as a token (Name/Symbol/Decimals populated from a
+		// successful RPC probe), we never demote it back. The previous
+		// logic clobbered Name/Symbol/Decimals/TotalSupply to empty whenever
+		// `GetTokenInfo` returned `isToken=false` — and that path also
+		// returns false on every *transient* RPC error (name()/symbol()
+		// timeout, decode failure, node failover blip). Real-world symptom
+		// was real ERC-20 tokens flickering to empty `name`/`symbol` in the
+		// explorer during node hiccups, then restoring on the next
+		// interaction that succeeded. Now the merge:
+		//   - flips IsToken only false → true;
+		//   - copies Name/Symbol/Decimals/TotalSupply only when the existing
+		//     value is empty (fills gaps from a richer probe);
+		//   - never clears non-empty token metadata.
+		// Re-classification (true → false) is intentionally NOT a side
+		// effect of any read path — it must be an explicit operator action.
 		if contract.IsToken {
+			merged.IsToken = true
 			if merged.Name == "" && contract.Name != "" {
 				merged.Name = contract.Name
 			}
@@ -91,13 +106,9 @@ func StoreContract(contract models.ContractInfo) error {
 			if merged.TotalSupply == "" && contract.TotalSupply != "" {
 				merged.TotalSupply = contract.TotalSupply
 			}
-		} else {
-			// If it's not a token according to new info, clear token fields
-			merged.Name = ""
-			merged.Symbol = ""
-			merged.Decimals = 0
-			merged.TotalSupply = ""
 		}
+		// `contract.IsToken == false` is a no-op for IsToken + token
+		// metadata; keep existing values intact.
 
 	} else if !errors.Is(err, mongo.ErrNoDocuments) {
 		configs.Logger.Error("Failed to check for existing contract",
