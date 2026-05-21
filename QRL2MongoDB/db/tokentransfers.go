@@ -143,7 +143,20 @@ func TokenTransferExists(txHash string, contractAddress string, logIndex string)
 	filter := bson.M{
 		"txHash":          txHash,
 		"contractAddress": contractAddress,
-		"logIndex":        logIndex,
+	}
+	// Pre-fix documents (written before LogIndex existed on the model)
+	// have NO `logIndex` field at all. In Mongo a query `{logIndex: ""}`
+	// does NOT match documents where the field is missing, so a direct-
+	// calldata reprocess of any legacy tx would always return false here
+	// and write a duplicate. For the empty-string sentinel (legacy direct
+	// path) match both the explicit "" and missing-field cases.
+	if logIndex == "" {
+		filter["$or"] = []bson.M{
+			{"logIndex": ""},
+			{"logIndex": bson.M{"$exists": false}},
+		}
+	} else {
+		filter["logIndex"] = logIndex
 	}
 
 	count, err := collection.CountDocuments(ctx, filter)
@@ -362,19 +375,28 @@ func InitializeTokenTransfersCollection() error {
 			Options: options.Index().SetName("to_block_idx"),
 		},
 		{
-			// Non-unique. Provides a fast lookup path for
-			// TokenTransferExists(txHash, contractAddress, logIndex)
-			// and for any /tx/:hash → transfers query. Dedup is enforced
-			// at the application layer via TokenTransferExists before
-			// insert; a unique constraint here would re-introduce the
-			// original bug for the legacy direct-calldata path (which
-			// writes logIndex="").
+			// Unique. The tuple (txHash, contractAddress, logIndex) is
+			// mathematically unique on chain: log indices are unique
+			// within a tx, and the direct-calldata path emits at most
+			// one row per (tx, contract) with logIndex="". This index
+			// is the hard floor against race-condition double-inserts
+			// (two workers concurrently processing the same tx, or the
+			// application-level TokenTransferExists check missing a
+			// row due to read-after-write timing). The previous bug
+			// (C1 from today's review) was the wrong key shape
+			// (`txHash` alone), not "uniqueness was the problem".
+			// On legacy data: existing rows have no `logIndex` field;
+			// Mongo treats that as `null` for uniqueness purposes, and
+			// because the old broken `txHash_idx` UNIQUE constraint
+			// had already prevented multi-row scenarios within a tx,
+			// there are at most one such row per (txHash, contract,
+			// null) tuple — no migration collision.
 			Keys: bson.D{
 				{Key: "txHash", Value: 1},
 				{Key: "contractAddress", Value: 1},
 				{Key: "logIndex", Value: 1},
 			},
-			Options: options.Index().SetName("txHash_contract_logIndex_idx"),
+			Options: options.Index().SetName("txHash_contract_logIndex_idx").SetUnique(true),
 		},
 	}
 
