@@ -874,6 +874,8 @@ func UserRoute(router *gin.Engine) {
 	// Phase 2: list distinct tokenIDs minted on an NFT contract, with the
 	// number of holders for each id. Paginated by `?page=&limit=` like the
 	// other token endpoints. Returns an empty list for ERC-20 contracts.
+	// Phase 3b: each row also carries `name` + `image` + `description`
+	// when off-chain metadata has been fetched.
 	router.GET("/token/:address/tokens", func(c *gin.Context) {
 		address := c.Param("address")
 		page, limit := getPaginationParams(c, 0, 25)
@@ -894,6 +896,35 @@ func UserRoute(router *gin.Engine) {
 			"page":            page,
 			"limit":           limit,
 		})
+	})
+
+	// Phase 3b: per-token off-chain metadata. Returns the full metadata
+	// document for one (contract, tokenID), including OpenSea-style
+	// attributes. 404 if no stub exists (e.g. the contract isn't an NFT
+	// or that id has never been transferred). 400 if `id` isn't a
+	// decimal integer, this also guards against accidental collision
+	// with the sibling static-segment routes (/info, /holders, etc),
+	// although Gin's router already gives them priority by tree shape.
+	router.GET("/token/:address/:id", func(c *gin.Context) {
+		address := c.Param("address")
+		tokenID := c.Param("id")
+
+		if _, ok := new(big.Int).SetString(tokenID, 10); !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "tokenID must be a decimal integer"})
+			return
+		}
+
+		meta, err := db.GetTokenMetadata(address, tokenID)
+		if err != nil {
+			log.Printf("Error fetching token metadata for %s/%s: %v", address, tokenID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch token metadata"})
+			return
+		}
+		if meta == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Token not found"})
+			return
+		}
+		c.JSON(http.StatusOK, meta)
 	})
 
 	// Get token transfers with pagination
