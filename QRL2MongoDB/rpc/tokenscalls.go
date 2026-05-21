@@ -852,3 +852,136 @@ func decodeUint256Array(data string, startHex uint64) ([]*big.Int, error) {
 	}
 	return out, nil
 }
+
+// encodeAddressForABI strips the Q/0x prefix from `addr` and left-pads it to a
+// 32-byte word for ABI encoding. Caller is responsible for passing a validated
+// address; the upstream `validation.IsValidAddress` check is enforced where
+// callers source addresses from log topics or user input.
+func encodeAddressForABI(addr string) string {
+	raw := strings.ToLower(validation.StripAddressPrefix(addr))
+	if len(raw) > 64 {
+		raw = raw[len(raw)-64:]
+	}
+	return strings.Repeat("0", 64-len(raw)) + raw
+}
+
+// encodeUint256ForABI left-pads `v` to a 32-byte uint256 word.
+// Negative values are rejected (uint256 has no sign).
+func encodeUint256ForABI(v *big.Int) (string, error) {
+	if v == nil {
+		return "", fmt.Errorf("uint256 cannot be nil")
+	}
+	if v.Sign() < 0 {
+		return "", fmt.Errorf("uint256 cannot be negative: %s", v.String())
+	}
+	h := v.Text(16)
+	if len(h) > 64 {
+		return "", fmt.Errorf("uint256 exceeds 32 bytes: %s", v.String())
+	}
+	return strings.Repeat("0", 64-len(h)) + h, nil
+}
+
+// parseAddressFromWord decodes the rightmost 32-byte word of `result` into a
+// canonical Q-prefix lowercase address. Returns ("", nil) if the word is the
+// zero address, callers interpret that as "no owner" (sparse storage).
+func parseAddressFromWord(result string) (string, error) {
+	stripped := strings.TrimPrefix(result, "0x")
+	if len(stripped) < 64 {
+		return "", fmt.Errorf("address word too short: %d hex chars", len(stripped))
+	}
+	word := stripped[len(stripped)-64:]
+	// All-zero word is the zero address: treat as "no owner".
+	if strings.TrimLeft(word, "0") == "" {
+		return "", nil
+	}
+	addrHex := word[len(word)-40:]
+	// The high 12 bytes (24 hex chars) must be zero for a valid 20-byte address.
+	if strings.TrimLeft(word[:24], "0") != "" {
+		return "", fmt.Errorf("address word has nonzero high bytes: %s", word)
+	}
+	addr := "Q" + strings.ToLower(addrHex)
+	if !validation.IsValidAddress(addr) {
+		return "", fmt.Errorf("invalid address derived from word: %s", addr)
+	}
+	return addr, nil
+}
+
+// parseUint256FromWord decodes the rightmost 32-byte word of `result` into a
+// *big.Int. Returns nil + error when the word is shorter than 32 bytes or
+// fails hex parsing.
+func parseUint256FromWord(result string) (*big.Int, error) {
+	stripped := strings.TrimPrefix(result, "0x")
+	if len(stripped) < 64 {
+		return nil, fmt.Errorf("uint256 word too short: %d hex chars", len(stripped))
+	}
+	word := stripped[len(stripped)-64:]
+	v := new(big.Int)
+	if _, ok := v.SetString(word, 16); !ok {
+		return nil, fmt.Errorf("failed to parse uint256 from word: %s", word)
+	}
+	return v, nil
+}
+
+// GetERC721Owner queries `ownerOf(uint256)` on an ERC-721 contract and returns
+// the current owner's Q-prefix address.
+//
+// Three-way error contract (mirrors SupportsInterface):
+//   - Contract revert (burned or never-minted id): returns ("", nil), callers
+//     treat as "no current owner" and delete any stale balance row.
+//   - Transport error: returns ("", err), callers preserve existing state to
+//     uphold the C5 promote-only invariant.
+//   - Zero address / empty word: returns ("", nil), same "no owner" semantics.
+//
+// TODO(scale): one RPC call per ERC-721 transfer. Testnet handles it; mainnet
+// at high NFT volume would want an event-delta accumulator with periodic
+// reconciliation instead.
+func GetERC721Owner(contractAddress string, tokenID *big.Int) (string, error) {
+	idWord, err := encodeUint256ForABI(tokenID)
+	if err != nil {
+		return "", fmt.Errorf("encode tokenID: %w", err)
+	}
+	calldata := SIG_OWNER_OF + idWord
+
+	result, callErr := CallContractMethod(contractAddress, calldata)
+	if callErr != nil {
+		// JSON-RPC error => contract reverted (typical for burned/unminted ids).
+		// Anything else (transport, marshalling) is transient; propagate so the
+		// caller can preserve existing state.
+		if strings.HasPrefix(callErr.Error(), "RPC error:") {
+			return "", nil
+		}
+		return "", callErr
+	}
+	return parseAddressFromWord(result)
+}
+
+// GetERC1155Balance queries `balanceOf(address,uint256)` on an ERC-1155
+// contract and returns the holder's current per-id balance.
+//
+// Three-way error contract:
+//   - Contract revert: returns (big.NewInt(0), nil), treated as "no balance"
+//     (sparse storage; caller deletes the row).
+//   - Transport error: returns (nil, err), caller preserves existing state.
+//   - Empty / zero return: returns (big.NewInt(0), nil), same as revert.
+//
+// TODO(scale): one RPC call per (from, to) side of an ERC-1155 transfer.
+// Same accumulator/reconciliation concern as GetERC721Owner above.
+func GetERC1155Balance(contractAddress, holderAddress string, tokenID *big.Int) (*big.Int, error) {
+	if !validation.IsValidAddress(holderAddress) {
+		return nil, fmt.Errorf("invalid holder address: %s", holderAddress)
+	}
+	idWord, err := encodeUint256ForABI(tokenID)
+	if err != nil {
+		return nil, fmt.Errorf("encode tokenID: %w", err)
+	}
+	calldata := SIG_BALANCE_OF_1155 + encodeAddressForABI(holderAddress) + idWord
+
+	result, callErr := CallContractMethod(contractAddress, calldata)
+	if callErr != nil {
+		if strings.HasPrefix(callErr.Error(), "RPC error:") {
+			return big.NewInt(0), nil
+		}
+		return nil, callErr
+	}
+	return parseUint256FromWord(result)
+}
