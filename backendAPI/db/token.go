@@ -393,16 +393,45 @@ func GetTokenIDs(contractAddress string, page, limit int) ([]TokenIDSummary, int
 	if summaries == nil {
 		summaries = make([]TokenIDSummary, 0)
 	}
+
+	// Phase 3b enrichment: pull per-token name + image from tokenMetadata.
+	// One $in query against the paginated id list, then a per-row merge.
+	// Skipped silently if the lookup fails; the response is still useful
+	// without metadata.
+	if len(summaries) > 0 {
+		ids := make([]string, 0, len(summaries))
+		for _, s := range summaries {
+			ids = append(ids, s.TokenID)
+		}
+		if meta, mErr := GetTokenMetadataMap(contractAddress, ids); mErr == nil {
+			for i := range summaries {
+				if m, ok := meta[summaries[i].TokenID]; ok && m != nil {
+					summaries[i].Name = m.Name
+					summaries[i].Description = m.Description
+					summaries[i].Image = m.Image
+				}
+			}
+		}
+	}
+
 	return summaries, totalCount, nil
 }
 
 // TokenIDSummary is one row in the GET /token/:addr/tokens response.
+//
+// Phase 3b adds the optional metadata fields (Name + Image + Description)
+// pulled from the per-token tokenMetadata collection. They are populated
+// inline by GetTokenIDs after the distinct-id aggregation completes, so
+// the response is a single payload instead of a roundtrip per row.
 type TokenIDSummary struct {
 	TokenID       string `json:"tokenID" bson:"tokenID"`
 	HolderCount   int    `json:"holderCount" bson:"holderCount"`
 	TokenStandard string `json:"tokenStandard,omitempty" bson:"tokenStandard,omitempty"`
 	BlockNumber   string `json:"blockNumber,omitempty" bson:"blockNumber,omitempty"`
 	UpdatedAt     string `json:"updatedAt,omitempty" bson:"updatedAt,omitempty"`
+	Name          string `json:"name,omitempty" bson:"name,omitempty"`
+	Description   string `json:"description,omitempty" bson:"description,omitempty"`
+	Image         string `json:"image,omitempty" bson:"image,omitempty"`
 }
 
 // GetTokenTransfers returns all transfers for a specific token contract with pagination
