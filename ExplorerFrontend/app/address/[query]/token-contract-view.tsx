@@ -29,6 +29,17 @@ interface TokenHolder {
     balance: string;
     blockNumber: string;
     updatedAt: string;
+    // Phase 2: per-id storage for NFT collections. Always absent for ERC-20.
+    tokenID?: string;
+    tokenStandard?: 'ERC-20' | 'ERC-721' | 'ERC-1155' | string;
+}
+
+interface TokenIDSummary {
+    tokenID: string;
+    holderCount: number;
+    tokenStandard?: string;
+    blockNumber?: string;
+    updatedAt?: string;
 }
 
 interface TokenTransfer {
@@ -128,7 +139,7 @@ const formatTimestamp = (timestamp: string): string => {
 };
 
 export default function TokenContractView({ address, contractData, handlerUrl }: TokenContractViewProps) {
-    const [activeTab, setActiveTab] = useState<'overview' | 'holders' | 'transfers'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'holders' | 'transfers' | 'tokens'>('overview');
     const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null);
     const [holders, setHolders] = useState<TokenHolder[]>([]);
     const [transfers, setTransfers] = useState<TokenTransfer[]>([]);
@@ -138,6 +149,13 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
     const [transfersPage, setTransfersPage] = useState(0);
     const [loading, setLoading] = useState(true);
     const [creationTx, setCreationTx] = useState<CreationTxData | null>(null);
+    // Phase 2: NFT-specific state. holderTokenIDFilter narrows /holders to
+    // a single tokenID; tokensList drives the new "Tokens" tab listing.
+    const [holderTokenIDFilter, setHolderTokenIDFilter] = useState<string>('');
+    const [holderTokenIDInput, setHolderTokenIDInput] = useState<string>('');
+    const [tokensList, setTokensList] = useState<TokenIDSummary[]>([]);
+    const [tokensTotal, setTokensTotal] = useState(0);
+    const [tokensPage, setTokensPage] = useState(0);
     const limit = 25;
 
     // Fetch token info
@@ -177,14 +195,20 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
         fetchCreationTx();
     }, [tokenInfo?.creationTxHash, contractData.creationTransaction, handlerUrl]);
 
-    // Fetch holders when tab is active
+    // Fetch holders when tab is active. Phase 2: append ?tokenID= when the
+    // filter is set so the backend returns rows for that specific id only.
     useEffect(() => {
         if (activeTab !== 'holders') return;
 
         const fetchHolders = async () => {
             setLoading(true);
             try {
-                const res = await fetch(`${handlerUrl}/token/${address}/holders?page=${holdersPage}&limit=${limit}`);
+                const qs = new URLSearchParams({
+                    page: String(holdersPage),
+                    limit: String(limit),
+                });
+                if (holderTokenIDFilter) qs.set('tokenID', holderTokenIDFilter);
+                const res = await fetch(`${handlerUrl}/token/${address}/holders?${qs.toString()}`);
                 if (res.ok) {
                     const data = await res.json();
                     setHolders(data.holders || []);
@@ -196,7 +220,28 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
             setLoading(false);
         };
         fetchHolders();
-    }, [address, handlerUrl, activeTab, holdersPage]);
+    }, [address, handlerUrl, activeTab, holdersPage, holderTokenIDFilter]);
+
+    // Fetch tokens (distinct tokenID list) when the tokens tab is active.
+    useEffect(() => {
+        if (activeTab !== 'tokens') return;
+
+        const fetchTokens = async () => {
+            setLoading(true);
+            try {
+                const res = await fetch(`${handlerUrl}/token/${address}/tokens?page=${tokensPage}&limit=${limit}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setTokensList(data.tokens || []);
+                    setTokensTotal(data.totalTokenIDs || 0);
+                }
+            } catch (error) {
+                console.error('Failed to fetch tokens:', error);
+            }
+            setLoading(false);
+        };
+        fetchTokens();
+    }, [address, handlerUrl, activeTab, tokensPage]);
 
     // Fetch transfers when tab is active
     useEffect(() => {
@@ -242,11 +287,15 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
         ? 'bg-purple-500/20 text-purple-300'
         : 'bg-green-500/20 text-green-400';
 
-    const tabs = [
+    const tabs: { id: typeof activeTab; label: string }[] = [
         { id: 'overview', label: 'Overview' },
         { id: 'holders', label: `Holders${tokenInfo ? ` (${tokenInfo.holderCount})` : ''}` },
         { id: 'transfers', label: `Transfers${tokenInfo ? ` (${tokenInfo.transferCount})` : ''}` },
     ];
+    // Phase 2: only NFT collections have a meaningful per-id list.
+    if (isNFT) {
+        tabs.push({ id: 'tokens', label: 'Tokens' });
+    }
 
     // Three-step breadcrumb: Home > Contracts > <standard tab> > <this contract>.
     // The middle step deep-links back to the /contracts page with the
@@ -520,6 +569,58 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                 {/* Holders Tab */}
                 {activeTab === 'holders' && (
                     <div>
+                        {/* Phase 2: per-tokenID filter for NFT collections. The input
+                            debounces locally and only sets the actual filter on submit,
+                            so each keystroke doesn't trigger a network request. */}
+                        {isNFT && (
+                            <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-gray-700 bg-black/20">
+                                <label htmlFor="tokenIDFilter" className="text-xs text-gray-400">
+                                    Filter by tokenID:
+                                </label>
+                                <input
+                                    id="tokenIDFilter"
+                                    type="text"
+                                    inputMode="numeric"
+                                    placeholder="e.g. 1"
+                                    value={holderTokenIDInput}
+                                    onChange={(e) => setHolderTokenIDInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            setHoldersPage(0);
+                                            setHolderTokenIDFilter(holderTokenIDInput.trim());
+                                        }
+                                    }}
+                                    className="px-2 py-1 rounded bg-black/40 border border-gray-700 text-sm text-white font-mono w-32"
+                                />
+                                <button
+                                    onClick={() => {
+                                        setHoldersPage(0);
+                                        setHolderTokenIDFilter(holderTokenIDInput.trim());
+                                    }}
+                                    className="px-3 py-1 rounded bg-[#ffa729]/20 text-[#ffa729] text-sm hover:bg-[#ffa729]/30"
+                                >
+                                    Apply
+                                </button>
+                                {holderTokenIDFilter && (
+                                    <button
+                                        onClick={() => {
+                                            setHolderTokenIDInput('');
+                                            setHolderTokenIDFilter('');
+                                            setHoldersPage(0);
+                                        }}
+                                        className="px-3 py-1 rounded bg-gray-700 text-sm hover:bg-gray-600"
+                                    >
+                                        Clear
+                                    </button>
+                                )}
+                                {holderTokenIDFilter && (
+                                    <span className="text-xs text-gray-400">
+                                        Showing holders of tokenID <span className="font-mono text-white">{holderTokenIDFilter}</span>
+                                    </span>
+                                )}
+                            </div>
+                        )}
+
                         {loading ? (
                             <div className="p-8 text-center text-gray-400">Loading holders...</div>
                         ) : holders.length === 0 ? (
@@ -532,32 +633,70 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                             <tr>
                                                 <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">#</th>
                                                 <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Address</th>
+                                                {isNFT && holderTokenIDFilter === '' && (
+                                                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase hidden md:table-cell">
+                                                        {tokenStandard === 'ERC-721' ? 'NFTs owned' : 'Total quantity'}
+                                                    </th>
+                                                )}
+                                                {isNFT && holderTokenIDFilter !== '' && (
+                                                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Token ID</th>
+                                                )}
                                                 <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Balance</th>
-                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase hidden md:table-cell">Share</th>
+                                                {!isNFT && (
+                                                    <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase hidden md:table-cell">Share</th>
+                                                )}
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-700/50">
                                             {holders.map((holder, idx) => {
                                                 const totalSupplyBigInt = totalSupply ? BigInt(totalSupply) : BigInt(0);
-                                                const share = totalSupplyBigInt > BigInt(0) && holder.balance
-                                                    ? ((BigInt(holder.balance) * BigInt(10000)) / totalSupplyBigInt)
-                                                    : BigInt(0);
-                                                const sharePercent = Number(share) / 100;
+                                                let sharePercent = 0;
+                                                try {
+                                                    const share = totalSupplyBigInt > BigInt(0) && holder.balance
+                                                        ? ((BigInt(holder.balance) * BigInt(10000)) / totalSupplyBigInt)
+                                                        : BigInt(0);
+                                                    sharePercent = Number(share) / 100;
+                                                } catch {
+                                                    sharePercent = 0;
+                                                }
+
+                                                const rowKey = holder.tokenID
+                                                    ? `${holder.holderAddress}-${holder.tokenID}`
+                                                    : holder.holderAddress;
+
+                                                // ERC-721 balance column is the per-id "1"; show
+                                                // a count instead in the aggregated view (which is
+                                                // the sum coming from the backend).
+                                                const balanceCell = isNFT
+                                                    ? holder.balance
+                                                    : `${formatTokenAmount(holder.balance, decimals)}${rawSymbol ? ' ' + rawSymbol : ''}`;
 
                                                 return (
-                                                    <tr key={holder.holderAddress} className="hover:bg-white/5">
+                                                    <tr key={rowKey} className="hover:bg-white/5">
                                                         <td className="px-4 py-3 text-sm text-gray-400">
                                                             {holdersPage * limit + idx + 1}
                                                         </td>
                                                         <td className="px-4 py-3">
                                                             <AddressDisplay address={holder.holderAddress} truncate />
                                                         </td>
+                                                        {isNFT && holderTokenIDFilter === '' && (
+                                                            <td className="px-4 py-3 text-left text-sm text-gray-300 font-mono hidden md:table-cell">
+                                                                {holder.balance}
+                                                            </td>
+                                                        )}
+                                                        {isNFT && holderTokenIDFilter !== '' && (
+                                                            <td className="px-4 py-3 text-left text-sm text-white font-mono">
+                                                                #{holder.tokenID ?? holderTokenIDFilter}
+                                                            </td>
+                                                        )}
                                                         <td className="px-4 py-3 text-right text-sm text-white font-mono">
-                                                            {formatTokenAmount(holder.balance, decimals)}{rawSymbol ? ' ' + rawSymbol : ''}
+                                                            {balanceCell}
                                                         </td>
-                                                        <td className="px-4 py-3 text-right text-sm text-gray-400 hidden md:table-cell">
-                                                            {sharePercent.toFixed(2)}%
-                                                        </td>
+                                                        {!isNFT && (
+                                                            <td className="px-4 py-3 text-right text-sm text-gray-400 hidden md:table-cell">
+                                                                {sharePercent.toFixed(2)}%
+                                                            </td>
+                                                        )}
                                                     </tr>
                                                 );
                                             })}
@@ -584,6 +723,80 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                 aria-label="Go to next page"
                                                 onClick={() => setHoldersPage(p => p + 1)}
                                                 disabled={(holdersPage + 1) * limit >= holdersTotal}
+                                                className="px-3 py-1 rounded bg-gray-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600"
+                                            >
+                                                Next
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                )}
+
+                {/* Tokens Tab. Phase 2: lists every distinct tokenID minted
+                    on this NFT contract, with the holder count for each id.
+                    Clicking a row jumps to the holders tab filtered to that id. */}
+                {activeTab === 'tokens' && (
+                    <div>
+                        {loading ? (
+                            <div className="p-8 text-center text-gray-400">Loading tokens...</div>
+                        ) : tokensList.length === 0 ? (
+                            <div className="p-8 text-center text-gray-400">No tokens have been minted yet</div>
+                        ) : (
+                            <>
+                                <div className="overflow-x-auto">
+                                    <table aria-label="Token IDs" className="w-full">
+                                        <thead className="bg-black/30">
+                                            <tr>
+                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Token ID</th>
+                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Holders</th>
+                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase hidden md:table-cell">Standard</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-700/50">
+                                            {tokensList.map((t) => (
+                                                <tr
+                                                    key={t.tokenID}
+                                                    className="hover:bg-white/5 cursor-pointer"
+                                                    onClick={() => {
+                                                        setHolderTokenIDInput(t.tokenID);
+                                                        setHolderTokenIDFilter(t.tokenID);
+                                                        setHoldersPage(0);
+                                                        setActiveTab('holders');
+                                                    }}
+                                                >
+                                                    <td className="px-4 py-3 text-sm font-mono text-accent">#{t.tokenID}</td>
+                                                    <td className="px-4 py-3 text-right text-sm text-white">{t.holderCount}</td>
+                                                    <td className="px-4 py-3 text-right text-xs text-gray-400 hidden md:table-cell">
+                                                        {t.tokenStandard ? t.tokenStandard.replace(/^ERC-/, 'QRC-') : '-'}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {/* Pagination */}
+                                {tokensTotal > limit && (
+                                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-700">
+                                        <div className="text-sm text-gray-400">
+                                            Showing {tokensPage * limit + 1} - {Math.min((tokensPage + 1) * limit, tokensTotal)} of {tokensTotal}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button
+                                                aria-label="Go to previous page"
+                                                onClick={() => setTokensPage(p => Math.max(0, p - 1))}
+                                                disabled={tokensPage === 0}
+                                                className="px-3 py-1 rounded bg-gray-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600"
+                                            >
+                                                Previous
+                                            </button>
+                                            <button
+                                                aria-label="Go to next page"
+                                                onClick={() => setTokensPage(p => p + 1)}
+                                                disabled={(tokensPage + 1) * limit >= tokensTotal}
                                                 className="px-3 py-1 rounded bg-gray-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600"
                                             >
                                                 Next

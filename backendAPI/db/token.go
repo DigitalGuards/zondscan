@@ -64,7 +64,9 @@ func GetTokenBalancesByAddress(address string) ([]models.TokenBalance, error) {
 				"preserveNullAndEmptyArrays": true,
 			},
 		},
-		// Project final structure with token metadata
+		// Project final structure with token metadata. Phase 2: include
+		// tokenID + tokenStandard so the address page can render NFT
+		// holdings per (collection, tokenID) row.
 		{
 			"$project": bson.M{
 				"contractAddress": 1,
@@ -72,6 +74,8 @@ func GetTokenBalancesByAddress(address string) ([]models.TokenBalance, error) {
 				"balance":         1,
 				"blockNumber":     1,
 				"updatedAt":       1,
+				"tokenID":         1,
+				"tokenStandard":   1,
 				"name":            "$tokenInfo.name",
 				"symbol":          "$tokenInfo.symbol",
 				"decimals":        "$tokenInfo.decimals",
@@ -126,43 +130,121 @@ func normalizeAddressBoth(address string) []string {
 	return []string{normalizeAddress(address)}
 }
 
-// GetTokenHolders returns all holders of a specific token contract with pagination
-func GetTokenHolders(contractAddress string, page, limit int) ([]models.TokenBalance, int, error) {
+// GetTokenHolders returns all holders of a specific token contract with pagination.
+//
+// Phase 2: when `tokenID` is empty, holders are aggregated across all ids
+// (one row per distinct holder; balance is the sum of per-id quantities,
+// useful for ERC-1155 "how many copies in total" or ERC-721 "how many NFTs
+// owned"). When `tokenID` is set, only rows for that specific id are
+// returned (one per holder of that id).
+//
+// ERC-20 behaviour is unchanged: rows already have a null tokenID, so the
+// aggregate-by-holder path produces the same shape as before, one row per
+// (contract, holder) with the existing balance string.
+func GetTokenHolders(contractAddress, tokenID string, page, limit int) ([]models.TokenBalance, int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	contractVariants := normalizeAddressBoth(contractAddress)
-	contractFilter := bson.M{"contractAddress": bson.M{"$in": contractVariants}}
+	matchStage := bson.M{"contractAddress": bson.M{"$in": contractVariants}}
+	if tokenID != "" {
+		matchStage["tokenID"] = tokenID
+	}
+
 	collection := configs.GetCollection(configs.DB, "tokenBalances")
 
-	// Count total holders
-	totalCount, err := collection.CountDocuments(ctx, contractFilter)
+	// Pagination skip+limit (decimal-sorted by balance, descending).
+	skip := int64(page * limit)
+	lim := int64(limit)
+
+	// tokenID-scoped path: rows already represent (holder, id) tuples, no
+	// grouping needed.
+	if tokenID != "" {
+		totalCount, err := collection.CountDocuments(ctx, matchStage)
+		if err != nil {
+			return nil, 0, err
+		}
+		pipeline := []bson.M{
+			{"$match": matchStage},
+			{"$addFields": bson.M{"balanceDecimal": bson.M{"$toDecimal": "$balance"}}},
+			{"$sort": bson.M{"balanceDecimal": -1}},
+			{"$skip": skip},
+			{"$limit": lim},
+		}
+		cursor, err := collection.Aggregate(ctx, pipeline)
+		if err != nil {
+			return nil, 0, err
+		}
+		defer cursor.Close(ctx)
+
+		var holders []models.TokenBalance
+		if err := cursor.All(ctx, &holders); err != nil {
+			return nil, 0, err
+		}
+		if holders == nil {
+			holders = make([]models.TokenBalance, 0)
+		}
+		return holders, int(totalCount), nil
+	}
+
+	// Aggregated-by-holder path (no tokenID filter).
+	// $group collapses the per-id rows; balanceSum is the cross-id total.
+	// For ERC-20 (no tokenID rows) each holder already has one row, so the
+	// sum equals the row's balance.
+	groupStage := bson.M{
+		"$group": bson.M{
+			"_id":             "$holderAddress",
+			"contractAddress": bson.M{"$first": "$contractAddress"},
+			"balanceDecimal":  bson.M{"$sum": bson.M{"$toDecimal": "$balance"}},
+			"blockNumber":     bson.M{"$max": "$blockNumber"},
+			"updatedAt":       bson.M{"$max": "$updatedAt"},
+			"tokenStandard":   bson.M{"$first": "$tokenStandard"},
+		},
+	}
+
+	// Distinct-holder count. Mongo doesn't have a clean "$count after $group"
+	// alongside the paginated cursor, so issue a separate aggregation that
+	// stops at $count.
+	countPipeline := []bson.M{
+		{"$match": matchStage},
+		groupStage,
+		{"$count": "total"},
+	}
+	countCursor, err := collection.Aggregate(ctx, countPipeline)
 	if err != nil {
 		return nil, 0, err
 	}
+	defer countCursor.Close(ctx)
+	var countResult []struct {
+		Total int `bson:"total"`
+	}
+	if err := countCursor.All(ctx, &countResult); err != nil {
+		return nil, 0, err
+	}
+	totalCount := 0
+	if len(countResult) > 0 {
+		totalCount = countResult[0].Total
+	}
 
-	// Aggregation pipeline to get holders sorted by balance
 	pipeline := []bson.M{
+		{"$match": matchStage},
+		groupStage,
+		// Reshape grouped doc back into TokenBalance.
 		{
-			"$match": contractFilter,
-		},
-		// Convert balance to decimal for proper sorting
-		{
-			"$addFields": bson.M{
-				"balanceDecimal": bson.M{"$toDecimal": "$balance"},
+			"$project": bson.M{
+				"_id":             0,
+				"contractAddress": 1,
+				"holderAddress":   "$_id",
+				"balance":         bson.M{"$toString": "$balanceDecimal"},
+				"blockNumber":     1,
+				"updatedAt":       1,
+				"tokenStandard":   1,
+				"balanceDecimal":  1,
 			},
 		},
-		// Sort by balance descending
-		{
-			"$sort": bson.M{"balanceDecimal": -1},
-		},
-		// Pagination
-		{
-			"$skip": int64(page * limit),
-		},
-		{
-			"$limit": int64(limit),
-		},
+		{"$sort": bson.M{"balanceDecimal": -1}},
+		{"$skip": skip},
+		{"$limit": lim},
 	}
 
 	cursor, err := collection.Aggregate(ctx, pipeline)
@@ -175,12 +257,118 @@ func GetTokenHolders(contractAddress string, page, limit int) ([]models.TokenBal
 	if err := cursor.All(ctx, &holders); err != nil {
 		return nil, 0, err
 	}
-
 	if holders == nil {
 		holders = make([]models.TokenBalance, 0)
 	}
 
-	return holders, int(totalCount), nil
+	return holders, totalCount, nil
+}
+
+// GetTokenIDs returns the distinct list of tokenIDs minted on a given NFT
+// contract, with the holder count for each id. Paginated. ERC-20 contracts
+// have no tokenID column and will return an empty list.
+//
+// Holder count is the number of distinct (holder, id) rows for that id,
+// i.e. how many addresses currently hold at least one copy of the id.
+func GetTokenIDs(contractAddress string, page, limit int) ([]TokenIDSummary, int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	contractVariants := normalizeAddressBoth(contractAddress)
+	matchStage := bson.M{
+		"contractAddress": bson.M{"$in": contractVariants},
+		"tokenID":         bson.M{"$exists": true, "$ne": ""},
+	}
+
+	collection := configs.GetCollection(configs.DB, "tokenBalances")
+
+	groupStage := bson.M{
+		"$group": bson.M{
+			"_id":           "$tokenID",
+			"holders":       bson.M{"$addToSet": "$holderAddress"},
+			"tokenStandard": bson.M{"$first": "$tokenStandard"},
+			"blockNumber":   bson.M{"$max": "$blockNumber"},
+			"updatedAt":     bson.M{"$max": "$updatedAt"},
+		},
+	}
+
+	// Total count of distinct ids.
+	countPipeline := []bson.M{
+		{"$match": matchStage},
+		groupStage,
+		{"$count": "total"},
+	}
+	countCursor, err := collection.Aggregate(ctx, countPipeline)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer countCursor.Close(ctx)
+	var countResult []struct {
+		Total int `bson:"total"`
+	}
+	if err := countCursor.All(ctx, &countResult); err != nil {
+		return nil, 0, err
+	}
+	totalCount := 0
+	if len(countResult) > 0 {
+		totalCount = countResult[0].Total
+	}
+
+	pipeline := []bson.M{
+		{"$match": matchStage},
+		groupStage,
+		{
+			"$project": bson.M{
+				"_id":           0,
+				"tokenID":       "$_id",
+				"holderCount":   bson.M{"$size": "$holders"},
+				"tokenStandard": 1,
+				"blockNumber":   1,
+				"updatedAt":     1,
+				// Sort key: cast tokenID to decimal so "10" > "2" (string
+				// sort would have put "10" before "2"). big-ints up to
+				// uint256 fit in Mongo's Decimal128 (up to 34 sig digits)
+				// for sorting purposes; the response keeps the original
+				// string for full precision.
+				"sortKey": bson.M{
+					"$convert": bson.M{
+						"input":   "$_id",
+						"to":      "decimal",
+						"onError": "0",
+						"onNull":  "0",
+					},
+				},
+			},
+		},
+		{"$sort": bson.M{"sortKey": 1}},
+		{"$skip": int64(page * limit)},
+		{"$limit": int64(limit)},
+		{"$project": bson.M{"sortKey": 0}},
+	}
+
+	cursor, err := collection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer cursor.Close(ctx)
+
+	var summaries []TokenIDSummary
+	if err := cursor.All(ctx, &summaries); err != nil {
+		return nil, 0, err
+	}
+	if summaries == nil {
+		summaries = make([]TokenIDSummary, 0)
+	}
+	return summaries, totalCount, nil
+}
+
+// TokenIDSummary is one row in the GET /token/:addr/tokens response.
+type TokenIDSummary struct {
+	TokenID       string `json:"tokenID" bson:"tokenID"`
+	HolderCount   int    `json:"holderCount" bson:"holderCount"`
+	TokenStandard string `json:"tokenStandard,omitempty" bson:"tokenStandard,omitempty"`
+	BlockNumber   string `json:"blockNumber,omitempty" bson:"blockNumber,omitempty"`
+	UpdatedAt     string `json:"updatedAt,omitempty" bson:"updatedAt,omitempty"`
 }
 
 // GetTokenTransfers returns all transfers for a specific token contract with pagination

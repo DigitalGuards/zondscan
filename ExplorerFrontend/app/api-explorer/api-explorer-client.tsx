@@ -122,7 +122,7 @@ const endpointGroups: EndpointGroup[] = [
       {
         method: 'GET',
         path: '/address/:address/tokens',
-        description: 'Returns all token balances held by an address. Useful for wallet integration and token auto-discovery.',
+        description: 'Returns all token balances held by an address. Useful for wallet integration and token auto-discovery. Phase 2: NFT holdings expand to one row per (collection, tokenID), each row carries `tokenStandard` and (for NFTs) `tokenID`. ERC-20 rows continue to return one row per collection with the existing balance string.',
         example: '/address/Q6153d37fa4da7193e6219dcbd2bbe62fa12905b1/tokens',
       },
       {
@@ -214,9 +214,16 @@ const endpointGroups: EndpointGroup[] = [
       {
         method: 'GET',
         path: '/token/:address/holders',
-        description: 'Returns a paginated list of token holders for a given contract.',
+        description: 'Returns a paginated list of token holders for a given contract. ERC-20 returns one row per (contract, holder). For ERC-721/1155, holders are aggregated across all ids by default (one row per distinct holder, balance is the cross-id total). Pass `tokenID=<decimal>` to filter to a single id (one row per holder of that id, balance is per-id quantity).',
+        params: 'page (query, default: 0), limit (query, default: 25, max: 100), tokenID (query, optional, decimal uint256 NFT id filter)',
+        example: '/token/Q539f73306bdd4288f93a5e50b4d5bf1a9b07f147/holders?page=0&limit=25&tokenID=1',
+      },
+      {
+        method: 'GET',
+        path: '/token/:address/tokens',
+        description: 'Phase 2: returns the distinct tokenID list minted on an NFT contract with holder count per id. Empty list for ERC-20 contracts. Useful for browsing the catalog of an ERC-721/1155 collection or for downstream Phase 3 metadata lookups.',
         params: 'page (query, default: 0), limit (query, default: 25, max: 100)',
-        example: '/token/Q539f73306bdd4288f93a5e50b4d5bf1a9b07f147/holders?page=0&limit=25',
+        example: '/token/Q539f73306bdd4288f93a5e50b4d5bf1a9b07f147/tokens?page=0&limit=25',
       },
       {
         method: 'GET',
