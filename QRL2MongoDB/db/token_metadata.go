@@ -80,6 +80,18 @@ func InitializeTokenMetadataCollection() error {
 		return err
 	}
 	configs.Logger.Info("Successfully initialized tokenMetadata collection and indexes")
+
+	// Phase 3b backfill: seed stubs for any NFT (contract, tokenID) that
+	// already exists in tokenTransfers but has no stub yet. Idempotent
+	// thanks to the (contract, tokenID) unique on tokenMetadata; cheap
+	// for the current scale (a $group + bulk upsert). Logged but
+	// non-fatal, the live dispatch path still creates stubs going
+	// forward even if this pre-population step fails.
+	if err := BackfillTokenMetadataStubs(context.Background()); err != nil {
+		configs.Logger.Warn("tokenMetadata stub backfill failed (non-fatal)",
+			zap.Error(err))
+	}
+
 	return nil
 }
 
@@ -250,6 +262,73 @@ func GetTokenMetadataByContract(ctx context.Context, contractAddress string) ([]
 		return nil, err
 	}
 	return out, nil
+}
+
+// BackfillTokenMetadataStubs walks `tokenTransfers` for every distinct
+// (contractAddress, tokenID, tokenStandard) tuple that matches an NFT
+// standard and ensures a stub exists in `tokenMetadata`. Phase 3b stub
+// upserts are wired into the live transfer dispatch path, but NFTs
+// that were indexed before 3b shipped have no stub, so the fetcher
+// queue starts empty. Running this on every syncer startup is cheap
+// (one $group + one bulk upsert) and idempotent because the
+// (contract, tokenID) unique already de-dupes.
+//
+// Called from InitializeTokenMetadataCollection at startup; no need to
+// gate on count=0 since the upsert is a no-op for existing rows.
+func BackfillTokenMetadataStubs(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
+	transfers := configs.GetCollection(configs.DB, "tokenTransfers")
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{
+			"tokenStandard": bson.M{"$in": []string{"ERC-721", "ERC-1155"}},
+			"tokenID":       bson.M{"$exists": true, "$ne": ""},
+		}}},
+		{{Key: "$group", Value: bson.M{
+			"_id": bson.M{
+				"contract": "$contractAddress",
+				"tokenID":  "$tokenID",
+			},
+			"tokenStandard": bson.M{"$first": "$tokenStandard"},
+		}}},
+	}
+
+	cur, err := transfers.Aggregate(ctx, pipeline)
+	if err != nil {
+		return err
+	}
+	defer cur.Close(ctx)
+
+	type agg struct {
+		ID struct {
+			Contract string `bson:"contract"`
+			TokenID  string `bson:"tokenID"`
+		} `bson:"_id"`
+		TokenStandard string `bson:"tokenStandard"`
+	}
+
+	created := 0
+	for cur.Next(ctx) {
+		var a agg
+		if decErr := cur.Decode(&a); decErr != nil {
+			continue
+		}
+		if err := StubTokenMetadata(ctx, a.ID.Contract, a.ID.TokenID, a.TokenStandard); err != nil {
+			configs.Logger.Debug("Backfill stub upsert failed",
+				zap.String("contract", a.ID.Contract),
+				zap.String("tokenID", a.ID.TokenID),
+				zap.Error(err))
+			continue
+		}
+		created++
+	}
+	if cur.Err() != nil {
+		return cur.Err()
+	}
+	configs.Logger.Info("tokenMetadata stub backfill complete",
+		zap.Int("rowsConsidered", created))
+	return nil
 }
 
 // GetTokenMetadata returns the metadata document for one specific
