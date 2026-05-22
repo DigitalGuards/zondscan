@@ -491,6 +491,14 @@ func UserRoute(router *gin.Engine) {
 			log.Printf("Error checking for token transfers tx %s: %v", value, err)
 		}
 
+		// Pull any internal-call entries the syncer captured under this
+		// tx. Simple value transfers don't have any; complex contract
+		// calls with delegate / static / call sub-frames will.
+		internalTxs, err := db.GetInternalTransactionsByTxHash(value)
+		if err != nil {
+			log.Printf("Error checking for internal txs %s: %v", value, err)
+		}
+
 		// Receipt logs power the Event Logs panel on the tx page; tx input
 		// powers the Input Data card. Best-effort RPC fetches in parallel
 		// with a shared 6s budget so the page still renders if the node is
@@ -625,6 +633,25 @@ func UserRoute(router *gin.Engine) {
 				})
 			}
 			response["tokenTransfers"] = rows
+		}
+
+		if len(internalTxs) > 0 {
+			rows := make([]gin.H, 0, len(internalTxs))
+			for _, t := range internalTxs {
+				rows = append(rows, gin.H{
+					"type":         t.Type,
+					"callType":     t.CallType,
+					"from":         t.From,
+					"to":           t.To,
+					"input":        t.Input,
+					"output":       t.Output,
+					"value":        t.Value,
+					"gas":          t.Gas,
+					"gasUsed":      t.GasUsed,
+					"traceAddress": t.TraceAddress,
+				})
+			}
+			response["internalTransactions"] = rows
 		}
 
 		c.JSON(http.StatusOK, response)

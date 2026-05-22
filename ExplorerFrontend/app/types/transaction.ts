@@ -133,6 +133,29 @@ export interface TransactionDetails {
   logs?: TxLog[];
   /** Verified contract metadata for the tx's target, used by the Input Data card to decode method calls. */
   targetContract?: ContractMeta;
+  /** Internal calls captured under this tx by the syncer (CALL / DELEGATECALL / STATICCALL sub-frames). */
+  internalTransactions?: InternalTx[];
+}
+
+/**
+ * One internal-call row attached to a tx. Mirrors the backend's
+ * models.InternalTx, which mirrors how the syncer writes the
+ * `internalTransactionByAddress` collection.
+ *
+ * Most txs have an empty array — only contract calls with sub-frames
+ * (CALL / DELEGATECALL / STATICCALL) get entries here.
+ */
+export interface InternalTx {
+  type: string;
+  callType: string;
+  from: string;
+  to: string;
+  input: string;
+  output: string;
+  value: number;
+  gas: string;
+  gasUsed: string;
+  traceAddress: number[];
 }
 
 /**

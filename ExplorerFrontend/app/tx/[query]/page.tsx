@@ -88,6 +88,7 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
     input: typeof data.input === 'string' ? data.input : (txData.Input || undefined),
     logs: Array.isArray(data.logs) ? data.logs : undefined,
     targetContract: data.targetContract || undefined,
+    internalTransactions: Array.isArray(data.internalTransactions) ? data.internalTransactions : undefined,
   };
 
   return transaction;

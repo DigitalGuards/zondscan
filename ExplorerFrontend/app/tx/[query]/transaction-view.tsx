@@ -451,6 +451,85 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
         </div>
       )}
 
+      {/* Internal Transactions panel. The syncer records each EVM
+          sub-frame (CALL / DELEGATECALL / STATICCALL) the tx triggered
+          under `internalTransactionByAddress` keyed by parent tx hash.
+          Most simple txs have none; complex contract calls fan out. */}
+      {transaction.internalTransactions && transaction.internalTransactions.length > 0 && (
+        <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+          <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
+            <div className="flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 17.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+              </svg>
+              <h2 className="text-[15px] font-semibold text-[#ffa729]">Internal Transactions</h2>
+              <Badge variant="neutral">{transaction.internalTransactions.length}</Badge>
+            </div>
+          </div>
+          <div className="p-4 sm:p-6 space-y-3">
+            {transaction.internalTransactions.map((itx, i) => {
+              const depth = itx.traceAddress?.length || 0;
+              const path = itx.traceAddress && itx.traceAddress.length > 0
+                ? itx.traceAddress.join(',')
+                : 'root';
+              return (
+                <div
+                  key={`${path}-${i}`}
+                  className="rounded-lg bg-[#1a1a1a]/60 border border-[#3d3d3d] p-3 sm:p-4"
+                  style={{ marginLeft: depth > 0 ? `${Math.min(depth, 4) * 12}px` : 0 }}
+                >
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <Badge variant="neutral">{path}</Badge>
+                    {itx.callType && (
+                      <Badge variant={itx.callType === 'DELEGATECALL' || itx.callType === 'STATICCALL' ? 'info' : 'brand'}>
+                        {itx.callType}
+                      </Badge>
+                    )}
+                    {itx.value > 0 && (
+                      <Badge variant="warning">{itx.value} QRL</Badge>
+                    )}
+                  </div>
+                  <div className="space-y-1 text-xs">
+                    {itx.from && (
+                      <div className="flex flex-wrap items-start gap-2">
+                        <span className="text-gray-400 font-mono min-w-[60px]">from:</span>
+                        <Link href={`/address/${itx.from}`} className="text-gray-200 hover:text-[#ffa729] transition-colors break-all font-mono">
+                          {itx.from}
+                        </Link>
+                      </div>
+                    )}
+                    {itx.to && (
+                      <div className="flex flex-wrap items-start gap-2">
+                        <span className="text-gray-400 font-mono min-w-[60px]">to:</span>
+                        <Link href={`/address/${itx.to}`} className="text-[#ffa729] hover:text-[#ffb84d] transition-colors break-all font-mono">
+                          {itx.to}
+                        </Link>
+                      </div>
+                    )}
+                    {itx.input && itx.input !== '0x' && itx.input !== '0x0' && (
+                      <div className="flex flex-wrap items-start gap-2">
+                        <span className="text-gray-400 font-mono min-w-[60px]">input:</span>
+                        <span className="text-gray-300 font-mono break-all">
+                          {itx.input.length > 18 ? `${itx.input.slice(0, 18)}…` : itx.input}
+                        </span>
+                      </div>
+                    )}
+                    {itx.gasUsed && itx.gasUsed !== '0x0' && (
+                      <div className="flex flex-wrap items-start gap-2">
+                        <span className="text-gray-400 font-mono min-w-[60px]">gasUsed:</span>
+                        <span className="text-gray-300 font-mono">
+                          {(() => { try { return BigInt(itx.gasUsed).toLocaleString('en-US'); } catch { return itx.gasUsed; } })()}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Input Data Card. Decode in three tiers:
           1. Known ERC token selectors via decodeTokenTransferInput (renders
              with the standard-tagged badge from the original UI).

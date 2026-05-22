@@ -449,6 +449,42 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 	return result, err
 }
 
+// GetInternalTransactionsByTxHash returns every internal-call entry the
+// syncer captured under a given outer tx hash. Used by /tx/:hash to
+// render the Internal Transactions panel. Returns an empty slice (not
+// nil) when nothing matches so the response shape stays predictable.
+//
+// The syncer keys these docs by `hash` (the parent tx hash), so this is
+// a flat collection lookup. Ordered by traceAddress to preserve the
+// EVM-emitted call order; an empty traceAddress sorts first (the
+// top-level call, when one was recorded).
+func GetInternalTransactionsByTxHash(txHash string) ([]models.InternalTx, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cursor, err := configs.InternalTransactionByAddressCollection.Find(
+		ctx,
+		bson.M{"hash": txHash},
+		options.Find().SetSort(bson.D{{Key: "traceAddress", Value: 1}}),
+	)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return []models.InternalTx{}, nil
+		}
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var out []models.InternalTx
+	if err := cursor.All(ctx, &out); err != nil {
+		return nil, err
+	}
+	if out == nil {
+		out = []models.InternalTx{}
+	}
+	return out, nil
+}
+
 func ReturnDailyTransactionsVolume() int64 {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
