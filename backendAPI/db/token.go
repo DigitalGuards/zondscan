@@ -12,9 +12,16 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// GetTokenBalancesByAddress returns all token balances for a given wallet address
-// with token metadata (name, symbol, decimals) included
-func GetTokenBalancesByAddress(address string) ([]models.TokenBalance, error) {
+// GetTokenBalancesByAddress returns token balances for a given wallet address
+// with token metadata (name, symbol, decimals) included.
+//
+// `standardFilter`, when non-nil and non-empty, narrows the result to one
+// of "ERC-20" / "ERC-721" / "ERC-1155". A nil filter keeps the legacy
+// behaviour of returning every standard, important because the wallet
+// auto-discovery flow still defaults to "give me everything you know".
+// The wallet's per-card flows pass an explicit filter via the route's
+// `?standard=` query param.
+func GetTokenBalancesByAddress(address string, standardFilter *string) ([]models.TokenBalance, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -23,13 +30,18 @@ func GetTokenBalancesByAddress(address string) ([]models.TokenBalance, error) {
 
 	collection := configs.GetCollection(configs.DB, "tokenBalances")
 
+	matchStage := bson.M{
+		"holderAddress": bson.M{"$in": searchAddresses},
+	}
+	if standardFilter != nil && *standardFilter != "" {
+		matchStage["tokenStandard"] = *standardFilter
+	}
+
 	// Aggregation pipeline to join with contractCode for token metadata
 	pipeline := []bson.M{
 		// Match token balances for this address (case-insensitive)
 		{
-			"$match": bson.M{
-				"holderAddress": bson.M{"$in": searchAddresses},
-			},
+			"$match": matchStage,
 		},
 		// Add lowercase version of contractAddress for case-insensitive lookup
 		{

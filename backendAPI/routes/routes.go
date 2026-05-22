@@ -806,15 +806,37 @@ func UserRoute(router *gin.Engine) {
 		})
 	})
 
-	// Get all token balances for a wallet address
-	// This endpoint is designed for wallet integration (e.g., qrlwallet)
-	// to auto-discover tokens held by an address on import
+	// Get all token balances for a wallet address.
+	//
+	// Default behaviour returns every standard the explorer indexes for
+	// this account (ERC-20 + ERC-721 + ERC-1155 per-id rows), useful for
+	// wallet auto-discovery and unchanged from the original contract so
+	// existing third-party callers don't break.
+	//
+	// Optional `?standard=` (ERC-20|ERC-721|ERC-1155) scopes the response
+	// to one token standard. The wallet's "Tokens" card uses this with
+	// `standard=ERC-20` so its ERC-20-aware renderer (which divides by
+	// `decimals`) doesn't accidentally render NFT rows as zero-balance
+	// fungibles.
 	router.GET("/address/:address/tokens", func(c *gin.Context) {
 		address := c.Param("address")
 
-		tokens, err := db.GetTokenBalancesByAddress(address)
+		var standardFilter *string
+		if s := c.Query("standard"); s != "" {
+			switch s {
+			case "ERC-20", "ERC-721", "ERC-1155":
+				standardFilter = &s
+			default:
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error": "invalid standard; expected one of ERC-20, ERC-721, ERC-1155",
+				})
+				return
+			}
+		}
+
+		tokens, err := db.GetTokenBalancesByAddress(address, standardFilter)
 		if err != nil {
-			log.Printf("Error fetching token balances for %s: %v", address, err)
+			log.Printf("Error fetching token balances for %s (standard=%v): %v", address, standardFilter, err)
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "Failed to fetch token balances",
 			})
