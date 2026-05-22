@@ -4,7 +4,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { type TransactionDetails, getConfirmations, getTransactionStatus } from '@/app/types';
-import { formatAmount, formatTokenAmount, decodeEventLog, decodeTokenTransferInput } from '../../lib/helpers';
+import { formatAmount, formatTokenAmount, decodeEventLog, decodeTokenTransferInput, decodeContractCall } from '../../lib/helpers';
 import CopyButton from '../../components/CopyButton';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import DetailRow from '../../components/DetailRow';
@@ -451,11 +451,18 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
         </div>
       )}
 
-      {/* Input Data Card. Decoded preview from decodeTokenTransferInput
-          when the calldata matches a known token-call selector; raw
-          calldata always shown so users can copy it into any decoder. */}
+      {/* Input Data Card. Decode in three tiers:
+          1. Known ERC token selectors via decodeTokenTransferInput (renders
+             with the standard-tagged badge from the original UI).
+          2. Target contract ABI via decodeContractCall (verified contracts
+             only) — renders method name + labelled args, same scheme as
+             the Event Logs panel for ABI-decoded events.
+          3. Raw calldata fallback so users can copy it into any decoder. */}
       {transaction.input && transaction.input !== '0x' && (() => {
         const decodedInput = decodeTokenTransferInput(transaction.input);
+        const decodedCall = !decodedInput
+          ? decodeContractCall(transaction.input, transaction.targetContract?.abi)
+          : null;
         return (
           <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
             <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
@@ -466,6 +473,14 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                     {decodedInput.methodName}
                   </Badge>
                 )}
+                {decodedCall && (
+                  <>
+                    <Badge variant="info">{decodedCall.name}</Badge>
+                    {transaction.targetContract?.contractName && (
+                      <span className="text-xs text-gray-500 font-mono">via {transaction.targetContract.contractName}</span>
+                    )}
+                  </>
+                )}
               </div>
             </div>
             <div className="p-4 sm:p-6">
@@ -473,6 +488,42 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                 <p className="text-xs text-gray-500 font-mono mb-2">
                   {decodedInput.standard} · {decodedInput.methodName}
                 </p>
+              )}
+              {decodedCall && (
+                <>
+                  <p className="text-xs text-gray-500 font-mono mb-2">{decodedCall.signature}</p>
+                  <div className="space-y-1 mb-3">
+                    {decodedCall.args.map((arg) => (
+                      <div key={arg.label} className="text-xs flex flex-wrap items-start gap-2">
+                        <span className="text-gray-400 font-mono min-w-[80px]">{arg.label}:</span>
+                        {arg.type === 'address' && arg.value ? (
+                          <Link
+                            href={`/address/${arg.value}`}
+                            className="text-gray-200 hover:text-[#ffa729] transition-colors break-all font-mono"
+                          >
+                            {arg.value}
+                          </Link>
+                        ) : arg.type === 'bool' ? (
+                          <Badge variant={arg.value === 'true' ? 'success' : 'error'}>{arg.value}</Badge>
+                        ) : arg.type === 'uint256' ? (
+                          <span className="text-gray-200 font-mono break-all">
+                            {(() => { try { return BigInt(arg.value || '0').toLocaleString('en-US'); } catch { return arg.value || ''; } })()}
+                          </span>
+                        ) : arg.type === 'uint256[]' ? (
+                          <span className="text-gray-200 font-mono break-all">
+                            {arg.values && arg.values.length > 0
+                              ? arg.values.map((v) => { try { return BigInt(v).toLocaleString('en-US'); } catch { return v; } }).join(', ')
+                              : '[]'}
+                          </span>
+                        ) : arg.type === 'string' ? (
+                          <span className="text-gray-200 break-all">{arg.value}</span>
+                        ) : (
+                          <span className="text-gray-200 font-mono break-all">{arg.value}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
               <p className="font-mono text-gray-300 break-all text-xs leading-relaxed">{transaction.input}</p>
             </div>

@@ -897,6 +897,172 @@ function decodeEventViaAbi(topics: string[], data: string, abiJson: string): Dec
   return null;
 }
 
+// ─── ABI-driven function-call decoding ───────────────────────────────────
+
+/**
+ * Minimal ABI function entry shape we consume. Same approach as the event
+ * decoder: we ignore tuples + nested arrays for the first pass and surface
+ * unrecognised ABI types as `raw` so the slot is at least copy-pasteable.
+ */
+interface AbiFunctionInput {
+  name?: string;
+  type?: string;
+}
+interface AbiFunctionEntry {
+  type?: string;
+  name?: string;
+  inputs?: AbiFunctionInput[];
+  stateMutability?: string;
+}
+
+/**
+ * A decoded contract method call, returned by decodeContractCall. Shares
+ * the per-arg shape with the event decoder so the Input Data card can
+ * reuse the same rendering branches.
+ */
+export interface DecodedFunctionCall {
+  /** Resolved method name (e.g. "setMatka1"). */
+  name: string;
+  /** Canonical signature (e.g. "setMatka1(address)"). */
+  signature: string;
+  /** 4-byte selector ("0xXXXXXXXX") that matched. */
+  selector: string;
+  /** Labelled arguments in declaration order. */
+  args: DecodedEventArg[];
+}
+
+// Compute the 4-byte function selector for an ABI entry. Same canonical
+// hashing rules as eventSignatureAndHash, but truncated to the first
+// 4 bytes (8 hex chars) per the Solidity / EVM convention.
+function functionSelector(entry: AbiFunctionEntry): { signature: string; selector: string } | null {
+  if (!entry || !entry.name || !Array.isArray(entry.inputs)) return null;
+  const types = entry.inputs.map((i) => canonicaliseAbiType(i.type)).filter(Boolean);
+  if (types.length !== entry.inputs.length) return null;
+  const sig = `${entry.name}(${types.join(',')})`;
+  try {
+    const full = keccak256(Buffer.from(sig, 'utf8')).toString('hex');
+    return { signature: sig, selector: '0x' + full.slice(0, 8) };
+  } catch {
+    return null;
+  }
+}
+
+// Decode a dynamic `string` or `bytes` arg from a packed calldata args
+// block. `argsBlock` is the calldata after the 4-byte selector (no 0x
+// prefix). `headOffset` is the slot index (in chars) where the head
+// argument's offset is stored. Returns the rendered DecodedEventArg.
+function decodeDynamicAt(label: string, type: string, argsBlock: string, headOffset: number): DecodedEventArg | null {
+  if (headOffset + 64 > argsBlock.length) return null;
+  let ptr: number;
+  try {
+    ptr = Number(BigInt('0x' + argsBlock.slice(headOffset, headOffset + 64))) * 2; // bytes → char offset
+  } catch {
+    return null;
+  }
+  if (ptr + 64 > argsBlock.length) return null;
+  let len: number;
+  try {
+    len = Number(BigInt('0x' + argsBlock.slice(ptr, ptr + 64)));
+  } catch {
+    return null;
+  }
+  const dataStart = ptr + 64;
+  const dataEnd = dataStart + len * 2;
+  if (dataEnd > argsBlock.length) return null;
+  const hex = argsBlock.slice(dataStart, dataEnd);
+  if (type === 'string') {
+    try {
+      const bytes = Buffer.from(hex, 'hex');
+      return { label, type: 'string', value: bytes.toString('utf8') };
+    } catch {
+      return { label, type: 'raw', value: '0x' + hex };
+    }
+  }
+  // `bytes` and everything else dynamic that we don't have a special-case
+  // for: surface as hex so the user can copy-paste.
+  return { label, type: 'raw', value: '0x' + hex };
+}
+
+/**
+ * Decode a transaction's calldata against the target contract's ABI.
+ *
+ * Returns null when:
+ *   - input is empty or malformed
+ *   - abi can't be parsed as a JSON array
+ *   - no `function` entry's keccak selector matches the first 4 bytes
+ *   - a static arg slot is missing (truncated calldata)
+ *
+ * Static args (address / bool / uintN / intN / fixed bytes) decode in-place.
+ * Dynamic args (string / bytes) follow the standard offset-pointer-then-
+ * length-then-data layout. Tuples and nested dynamic arrays surface as
+ * `raw` slot so the user still sees something rather than dropping the row.
+ *
+ * Used by the Input Data card on the tx page as the fallback when the
+ * existing decodeTokenTransferInput (which covers the well-known ERC
+ * token selectors only) returns null.
+ */
+export function decodeContractCall(input: string | undefined | null, abiJson: string | undefined): DecodedFunctionCall | null {
+  if (!input || input === '0x' || input.length < 10 || !abiJson) return null;
+  const data = input.toLowerCase();
+  if (!data.startsWith('0x')) return null;
+  const selector = data.slice(0, 10);
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(abiJson);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed)) return null;
+
+  // argsBlock is the calldata without "0x" and without the 4-byte selector.
+  // We index into this string in char-offset units (1 byte = 2 chars).
+  const argsBlock = data.slice(10);
+
+  for (const raw of parsed) {
+    const entry = raw as AbiFunctionEntry;
+    if (!entry || entry.type !== 'function') continue;
+    const matched = functionSelector(entry);
+    if (!matched || matched.selector !== selector) continue;
+
+    const inputs = entry.inputs || [];
+    const args: DecodedEventArg[] = [];
+    // Each input occupies one slot in the head (32 bytes), either holding
+    // the value (static) or an offset to the dynamic data.
+    if (inputs.length * 64 > argsBlock.length && inputs.length > 0) {
+      // Calldata truncated below what the ABI requires. Bail rather than
+      // mis-decode silently.
+      return null;
+    }
+    inputs.forEach((inp, i) => {
+      const headSlotStart = i * 64;
+      const t = canonicaliseAbiType(inp.type);
+      // Dynamic-type detection: string, bytes (without N), uintN[]/dyn arrays,
+      // tuples. We handle string and plain `bytes`; the rest falls to raw.
+      if (t === 'string' || t === 'bytes') {
+        const decoded = decodeDynamicAt(inp.name || `arg${i}`, t, argsBlock, headSlotStart);
+        if (decoded) {
+          args.push(decoded);
+        } else {
+          args.push({ label: inp.name || `arg${i}`, type: 'raw', value: '0x' + argsBlock.slice(headSlotStart, headSlotStart + 64) });
+        }
+        return;
+      }
+      // Static type, decode the slot directly.
+      const slot = '0x' + argsBlock.slice(headSlotStart, headSlotStart + 64);
+      args.push(decodeAbiSlot(inp.name || `arg${i}`, inp.type || 'raw', slot));
+    });
+
+    return {
+      name: entry.name || 'call',
+      signature: matched.signature,
+      selector,
+      args,
+    };
+  }
+  return null;
+}
+
 /**
  * Converts a smallest-unit integer string to a decimal string using BigInt (no floating-point).
  * E.g. smallestUnitToDecimal("200000000000", 18) => "0.0000002"
