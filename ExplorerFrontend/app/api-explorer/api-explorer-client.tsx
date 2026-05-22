@@ -122,8 +122,16 @@ const endpointGroups: EndpointGroup[] = [
       {
         method: 'GET',
         path: '/address/:address/tokens',
-        description: 'Returns all token balances held by an address. Useful for wallet integration and token auto-discovery. Phase 2: NFT holdings expand to one row per (collection, tokenID), each row carries `tokenStandard` and (for NFTs) `tokenID`. ERC-20 rows continue to return one row per collection with the existing balance string.',
-        example: '/address/Q6153d37fa4da7193e6219dcbd2bbe62fa12905b1/tokens',
+        description: 'Returns all token balances held by an address. Useful for wallet integration and token auto-discovery. Phase 2: NFT holdings expand to one row per (collection, tokenID), each row carries `tokenStandard` and (for NFTs) `tokenID`. ERC-20 rows continue to return one row per collection with the existing balance string. Phase 3b adds an optional `?standard=` filter: pass `ERC-20` to scope to fungibles (wallets should do this when populating an ERC-20-aware Tokens card so NFT rows do not get treated as zero-balance fungibles).',
+        params: 'standard (query, optional, ERC-20|ERC-721|ERC-1155, invalid value → 400)',
+        example: '/address/Q6153d37fa4da7193e6219dcbd2bbe62fa12905b1/tokens?standard=ERC-20',
+      },
+      {
+        method: 'GET',
+        path: '/address/:address/nfts',
+        description: 'Phase 3b: per-(contract, tokenID) NFT holdings for an address, joined with both the collection-level contractCode row (collectionName, collectionSymbol) and the per-tokenID tokenMetadata row (name, image, description, attributes). Designed for the wallet\'s "Add NFT" picker so a single response is enough to render thumbnails + names without follow-up roundtrips. Optional `?standard=ERC-721|ERC-1155` to scope further; default returns both NFT standards. ERC-20 is rejected with 400, use /address/:addr/tokens?standard=ERC-20 for that.',
+        params: 'standard (query, optional, ERC-721|ERC-1155, invalid value → 400)',
+        example: '/address/Q6153d37fa4da7193e6219dcbd2bbe62fa12905b1/nfts',
       },
       {
         method: 'POST',
