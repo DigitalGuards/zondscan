@@ -4,6 +4,8 @@ import (
 	"backendAPI/cache"
 	"backendAPI/db"
 	"backendAPI/models"
+	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
@@ -15,6 +17,47 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/mongo"
 )
+
+// receiptLog mirrors the subset of qrl_getTransactionReceipt.logs[] the tx
+// page actually consumes. address + topics + data + logIndex is enough for
+// the frontend's Event Logs panel to decode all token-flavoured signatures
+// (Transfer / TransferSingle / TransferBatch / Approval / ApprovalForAll)
+// and render a raw fallback for everything else. Everything else on the
+// receipt (block hash, tx index, etc.) is already known to the page.
+type receiptLog struct {
+	Address  string   `json:"address"`
+	Topics   []string `json:"topics"`
+	Data     string   `json:"data"`
+	LogIndex string   `json:"logIndex"`
+	Removed  bool     `json:"removed"`
+}
+
+// fetchReceiptLogs pulls a tx's receipt over JSON-RPC and returns the
+// logs slice. Best-effort: if the node is unreachable or the receipt
+// hasn't been indexed yet, returns an empty slice without an error so
+// the tx page still renders. Errors are logged at the call site.
+func fetchReceiptLogs(ctx context.Context, txHash string) []receiptLog {
+	raw, rpcErr, transportErr := db.NodeRPC(ctx, "qrl_getTransactionReceipt", []interface{}{txHash})
+	if transportErr != nil {
+		log.Printf("receipt fetch %s: %v", txHash, transportErr)
+		return nil
+	}
+	if rpcErr != nil {
+		log.Printf("receipt fetch %s: rpc error: %s", txHash, rpcErr.Error())
+		return nil
+	}
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var receipt struct {
+		Logs []receiptLog `json:"logs"`
+	}
+	if err := json.Unmarshal(raw, &receipt); err != nil {
+		log.Printf("receipt decode %s: %v", txHash, err)
+		return nil
+	}
+	return receipt.Logs
+}
 
 // routeCache absorbs concurrent traffic on read endpoints with a small TTL
 // (5–30 s depending on freshness needs). Singleflight inside the cache
@@ -419,9 +462,20 @@ func UserRoute(router *gin.Engine) {
 			log.Printf("Error checking for token transfers tx %s: %v", value, err)
 		}
 
+		// Receipt logs power the Event Logs panel on the tx page. Best-effort
+		// RPC fetch with a 6s budget, mined txs always have a receipt but if
+		// the node is briefly unreachable we'd rather serve the page without
+		// logs than 500.
+		logCtx, cancelLogs := context.WithTimeout(c.Request.Context(), 6*time.Second)
+		defer cancelLogs()
+		logs := fetchReceiptLogs(logCtx, value)
+
 		response := gin.H{
 			"response":    query,
 			"latestBlock": latestBlockNum,
+		}
+		if len(logs) > 0 {
+			response["logs"] = logs
 		}
 
 		if contractCreated != nil {

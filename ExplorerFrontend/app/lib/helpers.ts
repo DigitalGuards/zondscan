@@ -517,6 +517,221 @@ export function decodeTokenTransferInput(inputData: string | undefined | null): 
 }
 
 /**
+ * One decoded receipt-log argument. The frontend renders each arg per its
+ * `type`: addresses get a /address link, uint256 gets a mono-formatted
+ * value (locale-grouped when large), bool gets a badge, uint256[] gets a
+ * batch list. Unknown types fall back to the raw `value` string.
+ */
+export interface DecodedEventArg {
+  label: string;
+  type: 'address' | 'uint256' | 'bool' | 'uint256[]';
+  value?: string;
+  values?: string[];
+}
+
+export interface DecodedEvent {
+  /** Canonical event name (e.g. "Transfer", "ApprovalForAll"). */
+  name: string;
+  /** Event signature, e.g. "Transfer(address,address,uint256)". */
+  signature: string;
+  /** ERC-20 / ERC-721 / ERC-1155 hint for Transfer/Approval rendering. */
+  standard?: 'ERC-20' | 'ERC-721' | 'ERC-1155';
+  args: DecodedEventArg[];
+}
+
+// keccak256 topic hashes for the well-known token events. These are
+// stable across every EVM chain that follows the standards.
+const TOPIC_TRANSFER = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+const TOPIC_TRANSFER_SINGLE = '0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62';
+const TOPIC_TRANSFER_BATCH = '0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb';
+const TOPIC_APPROVAL = '0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925';
+const TOPIC_APPROVAL_FOR_ALL = '0x17307eab39ab6107e8899845ad3d59bd9653f200f220920489ca2b5937696c31';
+
+// Decode a 32-byte address slot ("0x" + 64 hex chars) to Q-prefix form.
+function topicToAddress(t: string): string {
+  if (!t) return '';
+  const hex = t.startsWith('0x') ? t.slice(2) : t;
+  return 'Q' + hex.slice(-40);
+}
+
+// Decode a 32-byte uint256 slot to a decimal string. Safe on missing input.
+function topicToUint(t: string): string {
+  if (!t) return '0';
+  try {
+    return BigInt(t.startsWith('0x') ? t : '0x' + t).toString();
+  } catch {
+    return '0';
+  }
+}
+
+// Slice a uint256 out of an ABI-encoded data field at the given char offset
+// (`data` is "0x..." prefixed; offset is from the start of the string).
+function dataUint(data: string, charOffset: number): string {
+  try {
+    return BigInt('0x' + data.slice(charOffset, charOffset + 64)).toString();
+  } catch {
+    return '0';
+  }
+}
+
+// Decode a dynamic uint256[] starting at `arrCharOffset` in `data`. Same
+// bounded/safe shape as abiUintArray above. Returns [] on bad input.
+function dataUintArray(data: string, arrCharOffset: number): string[] {
+  const lenHex = data.slice(arrCharOffset, arrCharOffset + 64);
+  if (lenHex.length < 64) return [];
+  let lenBig: bigint;
+  try {
+    lenBig = BigInt('0x' + lenHex);
+  } catch {
+    return [];
+  }
+  const MAX_ITEMS = 1024;
+  if (lenBig > BigInt(MAX_ITEMS)) return [];
+  const len = Number(lenBig);
+  if (arrCharOffset + 64 + len * 64 > data.length) return [];
+  const out: string[] = [];
+  for (let i = 0; i < len; i++) {
+    out.push(dataUint(data, arrCharOffset + 64 + i * 64));
+  }
+  return out;
+}
+
+/**
+ * Decode a single receipt-log topics/data pair into a labelled event.
+ * Recognises the five well-known token signatures; returns null for
+ * anything else so the view can render a raw fallback (topics + data).
+ *
+ * Disambiguation:
+ *   - Transfer / Approval are shared between ERC-20 and ERC-721. ERC-721
+ *     indexes all three params (4 topics, empty data); ERC-20 indexes the
+ *     two addresses only (3 topics, value in data). We branch on
+ *     topics.length to pick the right decoder + standard tag.
+ */
+export function decodeEventLog(topics: string[], data: string): DecodedEvent | null {
+  if (!topics || topics.length === 0) return null;
+  const sig = (topics[0] || '').toLowerCase();
+  const safeData = (data || '0x').toLowerCase();
+
+  switch (sig) {
+    case TOPIC_TRANSFER: {
+      // ERC-721 indexes the tokenId → 4 topics; ERC-20 keeps value in data.
+      if (topics.length === 4) {
+        return {
+          name: 'Transfer',
+          signature: 'Transfer(address from, address to, uint256 tokenId)',
+          standard: 'ERC-721',
+          args: [
+            { label: 'from', type: 'address', value: topicToAddress(topics[1]) },
+            { label: 'to', type: 'address', value: topicToAddress(topics[2]) },
+            { label: 'tokenId', type: 'uint256', value: topicToUint(topics[3]) },
+          ],
+        };
+      }
+      return {
+        name: 'Transfer',
+        signature: 'Transfer(address from, address to, uint256 value)',
+        standard: 'ERC-20',
+        args: [
+          { label: 'from', type: 'address', value: topicToAddress(topics[1]) },
+          { label: 'to', type: 'address', value: topicToAddress(topics[2]) },
+          { label: 'value', type: 'uint256', value: dataUint(safeData, 2) },
+        ],
+      };
+    }
+
+    case TOPIC_APPROVAL: {
+      // Same ERC-20 vs ERC-721 split as Transfer.
+      if (topics.length === 4) {
+        return {
+          name: 'Approval',
+          signature: 'Approval(address owner, address approved, uint256 tokenId)',
+          standard: 'ERC-721',
+          args: [
+            { label: 'owner', type: 'address', value: topicToAddress(topics[1]) },
+            { label: 'approved', type: 'address', value: topicToAddress(topics[2]) },
+            { label: 'tokenId', type: 'uint256', value: topicToUint(topics[3]) },
+          ],
+        };
+      }
+      return {
+        name: 'Approval',
+        signature: 'Approval(address owner, address spender, uint256 value)',
+        standard: 'ERC-20',
+        args: [
+          { label: 'owner', type: 'address', value: topicToAddress(topics[1]) },
+          { label: 'spender', type: 'address', value: topicToAddress(topics[2]) },
+          { label: 'value', type: 'uint256', value: dataUint(safeData, 2) },
+        ],
+      };
+    }
+
+    case TOPIC_APPROVAL_FOR_ALL: {
+      // ERC-721 + ERC-1155 share this signature exactly; we tag it as
+      // ERC-721 (the older standard) purely so the view picks the NFT
+      // badge variant. The rendered fields are identical for both.
+      let approved = false;
+      try {
+        approved = BigInt('0x' + safeData.slice(2, 66)) !== BigInt(0);
+      } catch {
+        approved = false;
+      }
+      return {
+        name: 'ApprovalForAll',
+        signature: 'ApprovalForAll(address owner, address operator, bool approved)',
+        standard: 'ERC-721',
+        args: [
+          { label: 'owner', type: 'address', value: topicToAddress(topics[1]) },
+          { label: 'operator', type: 'address', value: topicToAddress(topics[2]) },
+          { label: 'approved', type: 'bool', value: approved ? 'true' : 'false' },
+        ],
+      };
+    }
+
+    case TOPIC_TRANSFER_SINGLE: {
+      // operator + from + to are indexed; data = abi.encode(id, value)
+      return {
+        name: 'TransferSingle',
+        signature: 'TransferSingle(address operator, address from, address to, uint256 id, uint256 value)',
+        standard: 'ERC-1155',
+        args: [
+          { label: 'operator', type: 'address', value: topicToAddress(topics[1]) },
+          { label: 'from', type: 'address', value: topicToAddress(topics[2]) },
+          { label: 'to', type: 'address', value: topicToAddress(topics[3]) },
+          { label: 'id', type: 'uint256', value: dataUint(safeData, 2) },
+          { label: 'value', type: 'uint256', value: dataUint(safeData, 66) },
+        ],
+      };
+    }
+
+    case TOPIC_TRANSFER_BATCH: {
+      // operator + from + to indexed; data = abi.encode(uint256[] ids, uint256[] values).
+      // Two leading offsets point to the length+elements of each array,
+      // measured in bytes from the start of the args block. data is
+      // "0x"-prefixed so we add 2 to convert byte offsets to char positions.
+      const idsOff = (() => { try { return Number(BigInt('0x' + safeData.slice(2, 66))) * 2 + 2; } catch { return -1; } })();
+      const valsOff = (() => { try { return Number(BigInt('0x' + safeData.slice(66, 130))) * 2 + 2; } catch { return -1; } })();
+      const ids = idsOff > 0 ? dataUintArray(safeData, idsOff) : [];
+      const values = valsOff > 0 ? dataUintArray(safeData, valsOff) : [];
+      return {
+        name: 'TransferBatch',
+        signature: 'TransferBatch(address operator, address from, address to, uint256[] ids, uint256[] values)',
+        standard: 'ERC-1155',
+        args: [
+          { label: 'operator', type: 'address', value: topicToAddress(topics[1]) },
+          { label: 'from', type: 'address', value: topicToAddress(topics[2]) },
+          { label: 'to', type: 'address', value: topicToAddress(topics[3]) },
+          { label: 'ids', type: 'uint256[]', values: ids },
+          { label: 'values', type: 'uint256[]', values: values },
+        ],
+      };
+    }
+
+    default:
+      return null;
+  }
+}
+
+/**
  * Converts a smallest-unit integer string to a decimal string using BigInt (no floating-point).
  * E.g. smallestUnitToDecimal("200000000000", 18) => "0.0000002"
  */
