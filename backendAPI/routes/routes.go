@@ -806,15 +806,37 @@ func UserRoute(router *gin.Engine) {
 		})
 	})
 
-	// Get all token balances for a wallet address
-	// This endpoint is designed for wallet integration (e.g., qrlwallet)
-	// to auto-discover tokens held by an address on import
+	// Get all token balances for a wallet address.
+	//
+	// Default behaviour returns every standard the explorer indexes for
+	// this account (ERC-20 + ERC-721 + ERC-1155 per-id rows), useful for
+	// wallet auto-discovery and unchanged from the original contract so
+	// existing third-party callers don't break.
+	//
+	// Optional `?standard=` (ERC-20|ERC-721|ERC-1155) scopes the response
+	// to one token standard. The wallet's "Tokens" card uses this with
+	// `standard=ERC-20` so its ERC-20-aware renderer (which divides by
+	// `decimals`) doesn't accidentally render NFT rows as zero-balance
+	// fungibles.
 	router.GET("/address/:address/tokens", func(c *gin.Context) {
 		address := c.Param("address")
 
-		tokens, err := db.GetTokenBalancesByAddress(address)
+		var standardFilter *string
+		if s := c.Query("standard"); s != "" {
+			switch s {
+			case "ERC-20", "ERC-721", "ERC-1155":
+				standardFilter = &s
+			default:
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error": "invalid standard; expected one of ERC-20, ERC-721, ERC-1155",
+				})
+				return
+			}
+		}
+
+		tokens, err := db.GetTokenBalancesByAddress(address, standardFilter)
 		if err != nil {
-			log.Printf("Error fetching token balances for %s: %v", address, err)
+			log.Printf("Error fetching token balances for %s (standard=%v): %v", address, standardFilter, err)
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "Failed to fetch token balances",
 			})
@@ -825,6 +847,45 @@ func UserRoute(router *gin.Engine) {
 			Address: address,
 			Tokens:  tokens,
 			Count:   len(tokens),
+		})
+	})
+
+	// Per-(contract, tokenID) NFT holdings for a wallet address. Joins both
+	// the collection-level contractCode row and the Phase 3b tokenMetadata
+	// row so the wallet's "Add NFT" picker can render names + thumbnails +
+	// attributes in one call. Optional ?standard= scopes to ERC-721 or
+	// ERC-1155; default returns both NFT standards. ERC-20 is rejected as
+	// invalid here so the route's intent is explicit; ERC-20 holdings live
+	// on the sibling /tokens?standard=ERC-20.
+	router.GET("/address/:address/nfts", func(c *gin.Context) {
+		address := c.Param("address")
+
+		var standardFilter *string
+		if s := c.Query("standard"); s != "" {
+			switch s {
+			case "ERC-721", "ERC-1155":
+				standardFilter = &s
+			default:
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error": "invalid standard; expected ERC-721 or ERC-1155",
+				})
+				return
+			}
+		}
+
+		nfts, err := db.GetNFTBalancesByAddress(address, standardFilter)
+		if err != nil {
+			log.Printf("Error fetching NFT balances for %s (standard=%v): %v", address, standardFilter, err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to fetch NFT balances",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, models.NFTBalancesResponse{
+			Address: address,
+			NFTs:    nfts,
+			Count:   len(nfts),
 		})
 	})
 
