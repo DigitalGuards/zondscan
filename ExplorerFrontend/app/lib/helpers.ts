@@ -666,8 +666,9 @@ export function decodeEventLog(topics: string[], data: string): DecodedEvent | n
     }
 
     case TOPIC_APPROVAL_FOR_ALL: {
-      // ERC-721 + ERC-1155 share this signature exactly; we don't try to
-      // tell them apart since the rendered fields are identical.
+      // ERC-721 + ERC-1155 share this signature exactly; we tag it as
+      // ERC-721 (the older standard) purely so the view picks the NFT
+      // badge variant. The rendered fields are identical for both.
       let approved = false;
       try {
         approved = BigInt('0x' + safeData.slice(2, 66)) !== BigInt(0);
@@ -677,6 +678,7 @@ export function decodeEventLog(topics: string[], data: string): DecodedEvent | n
       return {
         name: 'ApprovalForAll',
         signature: 'ApprovalForAll(address owner, address operator, bool approved)',
+        standard: 'ERC-721',
         args: [
           { label: 'owner', type: 'address', value: topicToAddress(topics[1]) },
           { label: 'operator', type: 'address', value: topicToAddress(topics[2]) },
