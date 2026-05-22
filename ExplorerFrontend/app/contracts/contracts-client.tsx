@@ -173,11 +173,15 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
     router.replace(`/contracts?${params.toString()}`, { scroll: false });
   }, [router, searchParams]);
   // Keep state in sync when the URL changes from outside (back/forward,
-  // breadcrumb click on a different tab).
-  useEffect(() => {
-    if (urlTab !== activeTab) setActiveTabState(urlTab);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlTab]);
+  // breadcrumb click on a different tab). Adjusting state during render
+  // via a prev-value tracker, the React-recommended replacement for the
+  // set-state-in-effect anti-pattern. Matches the cadence used in
+  // pending-transaction-view.tsx for ETA resync.
+  const [prevUrlTab, setPrevUrlTab] = useState<TabType>(urlTab);
+  if (urlTab !== prevUrlTab) {
+    setPrevUrlTab(urlTab);
+    setActiveTabState(urlTab);
+  }
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(0);
   const [contracts, setContracts] = useState<ContractData[]>(initialData);
