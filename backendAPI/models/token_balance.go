@@ -43,6 +43,41 @@ type TokenTransfer struct {
 	TransferType    string `json:"transferType" bson:"transferType"`
 }
 
+// NFTBalance is one row of GET /address/:addr/nfts: the holder's
+// claim on a specific (collection, tokenID) pair, joined with the
+// collection-level contractCode metadata AND the per-tokenID
+// tokenMetadata document (Phase 3b) so the wallet can render a name
+// + thumbnail + attributes in a single response.
+//
+// The collection-level fields are renamed to make the projection
+// unambiguous (collectionName vs the per-token name from
+// tokenMetadata).
+type NFTBalance struct {
+	ContractAddress  string           `json:"contractAddress" bson:"contractAddress"`
+	HolderAddress    string           `json:"holderAddress" bson:"holderAddress"`
+	TokenID          string           `json:"tokenID" bson:"tokenID"`
+	TokenStandard    string           `json:"tokenStandard" bson:"tokenStandard"`
+	Balance          string           `json:"balance" bson:"balance"`
+	BlockNumber      string           `json:"blockNumber,omitempty" bson:"blockNumber,omitempty"`
+	UpdatedAt        string           `json:"updatedAt,omitempty" bson:"updatedAt,omitempty"`
+	CollectionName   string           `json:"collectionName,omitempty" bson:"collectionName,omitempty"`
+	CollectionSymbol string           `json:"collectionSymbol,omitempty" bson:"collectionSymbol,omitempty"`
+	Name             string           `json:"name,omitempty" bson:"name,omitempty"`
+	Description      string           `json:"description,omitempty" bson:"description,omitempty"`
+	Image            string           `json:"image,omitempty" bson:"image,omitempty"`
+	ExternalURL      string           `json:"externalURL,omitempty" bson:"externalURL,omitempty"`
+	Attributes       []TokenAttribute `json:"attributes,omitempty" bson:"attributes,omitempty"`
+}
+
+// NFTBalancesResponse is the wrapper for GET /address/:addr/nfts. Mirrors
+// the TokenBalancesResponse shape so wallet clients can share their
+// list-payload handling.
+type NFTBalancesResponse struct {
+	Address string       `json:"address"`
+	NFTs    []NFTBalance `json:"nfts"`
+	Count   int          `json:"count"`
+}
+
 // TokenHoldersResponse is the API response for token holders
 type TokenHoldersResponse struct {
 	ContractAddress string         `json:"contractAddress"`

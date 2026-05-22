@@ -555,3 +555,131 @@ func GetTokenTransferByTxHash(txHash string) (*models.TokenTransfer, error) {
 
 	return nil, nil
 }
+
+// GetNFTBalancesByAddress returns per-(contract, tokenID) NFT holdings for
+// a given wallet address, joined with both the collection-level
+// `contractCode` row and the per-tokenID `tokenMetadata` row so the wallet
+// can render a names+thumbnails picker without a round-trip per token.
+//
+// `standardFilter`, when non-nil, scopes to ERC-721 or ERC-1155. Default
+// is "both NFT standards". The caller is expected to have already
+// rejected ERC-20 (the route handler does this) since this function
+// only matches on NFT standards.
+//
+// Sort: collection, then tokenID by (string length, lex) so uint256 ids
+// past Decimal128's 34-digit limit still sort correctly without a
+// $toDecimal cast.
+func GetNFTBalancesByAddress(address string, standardFilter *string) ([]models.NFTBalance, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	searchAddresses := normalizeAddressBoth(address)
+
+	standards := []string{"ERC-721", "ERC-1155"}
+	if standardFilter != nil && *standardFilter != "" {
+		standards = []string{*standardFilter}
+	}
+
+	matchStage := bson.M{
+		"holderAddress": bson.M{"$in": searchAddresses},
+		"tokenStandard": bson.M{"$in": standards},
+	}
+
+	collection := configs.GetCollection(configs.DB, "tokenBalances")
+
+	pipeline := []bson.M{
+		{"$match": matchStage},
+		// Join the collection-level row (name/symbol/metadataName/etc) from
+		// contractCode. Case-insensitive lookup on the lowercase address to
+		// match the existing GetTokenBalancesByAddress pattern.
+		{
+			"$addFields": bson.M{
+				"contractAddressLower": bson.M{"$toLower": "$contractAddress"},
+			},
+		},
+		{
+			"$lookup": bson.M{
+				"from": "contractCode",
+				"let":  bson.M{"contractAddr": "$contractAddressLower"},
+				"pipeline": []bson.M{
+					{"$match": bson.M{"$expr": bson.M{"$eq": []interface{}{
+						bson.M{"$toLower": "$address"}, "$$contractAddr",
+					}}}},
+				},
+				"as": "contractInfo",
+			},
+		},
+		{"$unwind": bson.M{"path": "$contractInfo", "preserveNullAndEmptyArrays": true}},
+		// Join the per-tokenID metadata row (Phase 3b). $lookup on the
+		// (contract, tokenID) compound key.
+		{
+			"$lookup": bson.M{
+				"from": "tokenMetadata",
+				"let":  bson.M{"contractAddr": "$contractAddress", "tokenID": "$tokenID"},
+				"pipeline": []bson.M{
+					{"$match": bson.M{"$expr": bson.M{"$and": []interface{}{
+						bson.M{"$eq": []interface{}{"$contractAddress", "$$contractAddr"}},
+						bson.M{"$eq": []interface{}{"$tokenID", "$$tokenID"}},
+					}}}},
+				},
+				"as": "tokenMeta",
+			},
+		},
+		{"$unwind": bson.M{"path": "$tokenMeta", "preserveNullAndEmptyArrays": true}},
+		// Project the final NFTBalance shape. Prefer the off-chain
+		// metadataName for the collection label when present; falls back
+		// to the on-chain name().
+		{
+			"$project": bson.M{
+				"_id":             0,
+				"contractAddress": 1,
+				"holderAddress":   1,
+				"tokenID":         1,
+				"tokenStandard":   1,
+				"balance":         1,
+				"blockNumber":     1,
+				"updatedAt":       1,
+				"collectionName": bson.M{
+					"$cond": []interface{}{
+						bson.M{"$and": []interface{}{
+							bson.M{"$ne": []interface{}{"$contractInfo.metadataName", nil}},
+							bson.M{"$ne": []interface{}{"$contractInfo.metadataName", ""}},
+						}},
+						"$contractInfo.metadataName",
+						"$contractInfo.name",
+					},
+				},
+				"collectionSymbol": "$contractInfo.symbol",
+				"name":             "$tokenMeta.name",
+				"description":      "$tokenMeta.description",
+				"image":            "$tokenMeta.image",
+				"externalURL":      "$tokenMeta.externalURL",
+				"attributes":       "$tokenMeta.attributes",
+				"tokenIDLen":       bson.M{"$strLenCP": bson.M{"$ifNull": []interface{}{"$tokenID", ""}}},
+			},
+		},
+		// (length, lex) sort handles uint256 ids past Decimal128's 34-digit
+		// limit. Same pattern as Phase 2's GetTokenIDs.
+		{"$sort": bson.D{
+			{Key: "contractAddress", Value: 1},
+			{Key: "tokenIDLen", Value: 1},
+			{Key: "tokenID", Value: 1},
+		}},
+		{"$project": bson.M{"tokenIDLen": 0}},
+	}
+
+	cursor, err := collection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var out []models.NFTBalance
+	if err := cursor.All(ctx, &out); err != nil {
+		return nil, err
+	}
+	if out == nil {
+		out = make([]models.NFTBalance, 0)
+	}
+	return out, nil
+}
