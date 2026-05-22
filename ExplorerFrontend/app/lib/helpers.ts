@@ -356,9 +356,22 @@ function abiUint(data: string, offset: number): string {
 // Decode a dynamic uint256[] starting at byte offset `arrOffset` (in
 // chars from the start of the calldata, not from the args block).
 // Returns the decoded values as decimal strings.
+//
+// Defence-in-depth: the length prefix comes from attacker-controlled
+// calldata, so we cap it at 1024 (real ERC-1155 batches are
+// orders of magnitude smaller, the largest mainnet batches we've
+// seen are dozens of entries) and bound-check the declared payload
+// against the actual data length. Without the cap a crafted tx
+// could declare a 2^256-sized array and freeze the browser tab
+// when this runs in the pending-tx view.
 function abiUintArray(data: string, arrOffset: number): string[] {
   const lenHex = data.slice(arrOffset, arrOffset + 64);
-  const len = Number(BigInt('0x' + lenHex));
+  if (lenHex.length < 64) return [];
+  const lenBig = BigInt('0x' + lenHex);
+  const MAX_BATCH = 1024;
+  if (lenBig > BigInt(MAX_BATCH)) return [];
+  const len = Number(lenBig);
+  if (arrOffset + 64 + len * 64 > data.length) return [];
   const out: string[] = [];
   for (let i = 0; i < len; i++) {
     out.push(abiUint(data, arrOffset + 64 + i * 64));

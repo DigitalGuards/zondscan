@@ -4,6 +4,8 @@ import (
 	"backendAPI/configs"
 	"backendAPI/models"
 	"context"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -553,13 +555,7 @@ func GetTokenTransfersByTxHash(txHash string) ([]models.TokenTransfer, error) {
 		normalizedHash = "0x" + normalizedHash
 	}
 
-	// Stable order: logIndex ascending preserves event emission order within
-	// the tx. Legacy direct-calldata rows (logIndex == "") sort first, which
-	// matches what users expect when both a synthetic row and event rows
-	// exist for the same call.
-	opts := options.Find().SetSort(bson.D{{Key: "logIndex", Value: 1}})
-
-	cursor, err := collection.Find(ctx, bson.M{"txHash": normalizedHash}, opts)
+	cursor, err := collection.Find(ctx, bson.M{"txHash": normalizedHash})
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return []models.TokenTransfer{}, nil
@@ -575,7 +571,36 @@ func GetTokenTransfersByTxHash(txHash string) ([]models.TokenTransfer, error) {
 	if transfers == nil {
 		transfers = []models.TokenTransfer{}
 	}
+
+	// Sort by logIndex ascending so emission order is preserved within the
+	// tx. logIndex is persisted as a "0x..." hex string, sorting it as a
+	// BSON string would put "0xa" after "0x10" because string comparison is
+	// lexicographic. Sort numerically here instead. Legacy direct-calldata
+	// rows have an empty logIndex and we pin them to the front (sort key -1)
+	// so a synthetic row and any later event rows for the same call stay
+	// in a stable, intuitive order.
+	sort.SliceStable(transfers, func(i, j int) bool {
+		return logIndexSortKey(transfers[i].LogIndex) < logIndexSortKey(transfers[j].LogIndex)
+	})
+
 	return transfers, nil
+}
+
+// logIndexSortKey turns a "0x..." hex string into an int64 for ascending
+// sort. Empty input maps to -1 to keep legacy synthetic rows first.
+// Malformed input falls back to 0, the worst case is a stable but slightly
+// out-of-order row (never a panic, the syncer's own data path is the only
+// writer of this field and always emits a clean hex string).
+func logIndexSortKey(s string) int64 {
+	if s == "" {
+		return -1
+	}
+	trimmed := strings.TrimPrefix(strings.ToLower(s), "0x")
+	v, err := strconv.ParseInt(trimmed, 16, 64)
+	if err != nil {
+		return 0
+	}
+	return v
 }
 
 // GetNFTBalancesByAddress returns per-(contract, tokenID) NFT holdings for
