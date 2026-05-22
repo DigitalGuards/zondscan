@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -57,6 +58,34 @@ func fetchReceiptLogs(ctx context.Context, txHash string) []receiptLog {
 		return nil
 	}
 	return receipt.Logs
+}
+
+// fetchTxInput pulls a tx's calldata from the node. The historical block
+// docs in MongoDB carry an empty `data` field because the syncer's
+// Transaction struct uses the wrong JSON tag (`data`, where the node
+// returns `input`), so we resolve it over RPC instead. Best-effort:
+// returns "" when the node is unreachable so the page still renders.
+func fetchTxInput(ctx context.Context, txHash string) string {
+	raw, rpcErr, transportErr := db.NodeRPC(ctx, "qrl_getTransactionByHash", []interface{}{txHash})
+	if transportErr != nil {
+		log.Printf("tx input fetch %s: %v", txHash, transportErr)
+		return ""
+	}
+	if rpcErr != nil {
+		log.Printf("tx input fetch %s: rpc error: %s", txHash, rpcErr.Error())
+		return ""
+	}
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var tx struct {
+		Input string `json:"input"`
+	}
+	if err := json.Unmarshal(raw, &tx); err != nil {
+		log.Printf("tx input decode %s: %v", txHash, err)
+		return ""
+	}
+	return tx.Input
 }
 
 // routeCache absorbs concurrent traffic on read endpoints with a small TTL
@@ -462,13 +491,28 @@ func UserRoute(router *gin.Engine) {
 			log.Printf("Error checking for token transfers tx %s: %v", value, err)
 		}
 
-		// Receipt logs power the Event Logs panel on the tx page. Best-effort
-		// RPC fetch with a 6s budget, mined txs always have a receipt but if
-		// the node is briefly unreachable we'd rather serve the page without
-		// logs than 500.
-		logCtx, cancelLogs := context.WithTimeout(c.Request.Context(), 6*time.Second)
-		defer cancelLogs()
-		logs := fetchReceiptLogs(logCtx, value)
+		// Receipt logs power the Event Logs panel on the tx page; tx input
+		// powers the Input Data card. Best-effort RPC fetches in parallel
+		// with a shared 6s budget so the page still renders if the node is
+		// briefly unreachable. Tx input has to come from the node because
+		// the syncer's Transaction struct uses the wrong JSON tag (`data`
+		// where the node returns `input`), leaving the persisted field
+		// empty for every historical tx.
+		rpcCtx, cancelRPC := context.WithTimeout(c.Request.Context(), 6*time.Second)
+		defer cancelRPC()
+		var logs []receiptLog
+		var txInput string
+		var rpcWG sync.WaitGroup
+		rpcWG.Add(2)
+		go func() {
+			defer rpcWG.Done()
+			logs = fetchReceiptLogs(rpcCtx, value)
+		}()
+		go func() {
+			defer rpcWG.Done()
+			txInput = fetchTxInput(rpcCtx, value)
+		}()
+		rpcWG.Wait()
 
 		response := gin.H{
 			"response":    query,
@@ -476,6 +520,9 @@ func UserRoute(router *gin.Engine) {
 		}
 		if len(logs) > 0 {
 			response["logs"] = logs
+		}
+		if txInput != "" && txInput != "0x" {
+			response["input"] = txInput
 		}
 
 		if contractCreated != nil {
