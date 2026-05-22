@@ -7,10 +7,22 @@ interface PageProps {
   params: Promise<{ query: string }>;
 }
 
-function isEmptyTransaction(txData: any): boolean {
-  return !txData.TxHash && 
-         !txData.From && 
-         !txData.To && 
+// Loose shape: the backend may return any subset of these fields and we
+// just check whether the row is meaningful. Casting through `unknown` lets
+// us narrow per-field without committing to a stricter Transaction type
+// that's already represented elsewhere in app/types/transaction.ts.
+type MaybeTxRecord = {
+  TxHash?: string;
+  From?: string;
+  To?: string;
+  Value?: string;
+  BlockNumber?: string;
+};
+
+function isEmptyTransaction(txData: MaybeTxRecord): boolean {
+  return !txData.TxHash &&
+         !txData.From &&
+         !txData.To &&
          (!txData.Value || txData.Value === '0x0') &&
          (!txData.BlockNumber || txData.BlockNumber === '0x0');
 }

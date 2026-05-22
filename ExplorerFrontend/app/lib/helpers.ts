@@ -26,7 +26,11 @@ export function formatStaked(shor: string): string {
   }
 }
 
-export function decodeToHex(input: string, format?: string): string {
+// The `_format` arg is unused but preserved in the signature for call-site
+// compatibility — older usages threaded an optional encoding hint that the
+// implementation never branched on. Renamed with the underscore prefix so
+// no-unused-vars stops firing without changing the public shape.
+export function decodeToHex(input: string, _format?: string): string {
   if (!input) return '';
   try {
     const binary = atob(input);
@@ -1075,7 +1079,7 @@ export function smallestUnitToDecimal(amount: string, decimals: number = 18): st
     const divisor = BigInt(10) ** BigInt(decimals);
     const wholePart = raw / divisor;
     const fractionalPart = raw % divisor;
-    let fracStr = fractionalPart.toString().padStart(decimals, '0').replace(/0+$/, '');
+    const fracStr = fractionalPart.toString().padStart(decimals, '0').replace(/0+$/, '');
     return fracStr ? `${wholePart}.${fracStr}` : wholePart.toString();
   } catch {
     return '0';

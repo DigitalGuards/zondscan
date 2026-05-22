@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -49,12 +49,6 @@ const TAB_TO_STANDARD: Record<TabType, 'ERC-20' | 'ERC-721' | 'ERC-1155' | null>
   erc721: 'ERC-721',
   erc1155: 'ERC-1155',
   contracts: null,
-};
-
-const STANDARD_LABEL: Record<string, string> = {
-  'ERC-20': 'Token',
-  'ERC-721': 'NFT',
-  'ERC-1155': 'Multi-Token',
 };
 
 const TAB_RESULT_NOUN: Record<TabType, string> = {
@@ -193,7 +187,11 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
       setLoading(true);
       const cleanSearch = search ? search.toLowerCase().replace(/^0x/, '') : undefined;
 
-      const params: Record<string, any> = {
+      // Axios stringifies primitives directly; the union covers everything
+      // we actually assign here (page/limit as number, search/standard as
+      // string, isToken as boolean). Narrowing it to `unknown` would lose
+      // that, narrowing it to a closed union is the right shape.
+      const params: Record<string, string | number | boolean> = {
         page,
         limit: ITEMS_PER_PAGE,
       };
