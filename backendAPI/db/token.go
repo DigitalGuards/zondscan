@@ -639,17 +639,25 @@ func GetNFTBalancesByAddress(address string, standardFilter *string) ([]models.N
 				"balance":         1,
 				"blockNumber":     1,
 				"updatedAt":       1,
+				// MongoDB quirk: missing fields read as MISSING (distinct
+				// from null). `$ne: [MISSING, null]` returns true, so the
+				// naive non-null check fires the truthy branch, projects
+				// an undefined value, and the field gets dropped from the
+				// document entirely. $ifNull coerces both missing AND null
+				// to "" so we can test for non-empty in a single comparison.
+				// Same treatment on the fallback so a contract with neither
+				// metadataName nor name doesn't drop the field.
 				"collectionName": bson.M{
 					"$cond": []interface{}{
-						bson.M{"$and": []interface{}{
-							bson.M{"$ne": []interface{}{"$contractInfo.metadataName", nil}},
-							bson.M{"$ne": []interface{}{"$contractInfo.metadataName", ""}},
+						bson.M{"$ne": []interface{}{
+							bson.M{"$ifNull": []interface{}{"$contractInfo.metadataName", ""}},
+							"",
 						}},
 						"$contractInfo.metadataName",
-						"$contractInfo.name",
+						bson.M{"$ifNull": []interface{}{"$contractInfo.name", ""}},
 					},
 				},
-				"collectionSymbol": "$contractInfo.symbol",
+				"collectionSymbol": bson.M{"$ifNull": []interface{}{"$contractInfo.symbol", ""}},
 				"name":             "$tokenMeta.name",
 				"description":      "$tokenMeta.description",
 				"image":            "$tokenMeta.image",
