@@ -60,3 +60,4 @@ QRL2MongoDB/rpc/logs/
 /package-lock.json
 QRL2MongoDB/synchroniser/synchroniser
 QRL2MongoDB/zsyncer.log
+QRL2MongoDB/synchroniser/logs/zond_sync.log
