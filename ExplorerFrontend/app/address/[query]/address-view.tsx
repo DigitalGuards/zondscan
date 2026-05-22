@@ -8,6 +8,7 @@ import VerifiedBadge from "../../components/VerifiedBadge";
 import TanStackTable from "../../components/TanStackTable";
 import BalanceDisplay from "./balance-display";
 import ActivityDisplay from "./activity-display";
+import HoldingsDisplay from "./holdings-display";
 import type { AddressData } from "@/app/types";
 import Link from "next/link";
 import Breadcrumbs from "../../components/Breadcrumbs";
@@ -243,6 +244,12 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                     )}
                 </div>
             </div>
+
+            {/* Holdings (tokens + NFTs). Data was already collected by the
+                syncer into tokenBalances; this just surfaces it. The
+                component self-renders empty when the address has nothing,
+                so there's no spacer when it's not relevant. */}
+            <HoldingsDisplay address={addressSegment} />
 
             {/* Transactions Section */}
             <div className="space-y-3 md:space-y-4">
