@@ -4,6 +4,8 @@ import (
 	"backendAPI/configs"
 	"backendAPI/models"
 	"context"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -529,31 +531,76 @@ func GetTokenInfo(contractAddress string) (*models.TokenInfo, error) {
 	}, nil
 }
 
-// GetTokenTransferByTxHash returns token transfer info for a given transaction hash.
-// Returns nil, nil if no token transfer is associated with this transaction.
-// The syncer stores txHash with a lowercase 0x prefix; we normalize to that form.
-func GetTokenTransferByTxHash(txHash string) (*models.TokenTransfer, error) {
+// GetTokenTransfersByTxHash returns every token transfer row associated with
+// a given transaction hash. A single tx can produce multiple rows:
+//
+//   - DEX swaps emit several ERC-20 Transfer events (router, pool, recipient).
+//   - ERC-1155 TransferBatch is fanned out one row per (id, value) tuple by
+//     the syncer.
+//
+// FindOne-style readers silently dropped everything past the first row, so
+// only the first transfer ever rendered on the tx page. Returns an empty
+// slice (not nil) when nothing matches.
+//
+// The syncer stores txHash lowercase with a 0x prefix; we normalize input
+// the same way before querying.
+func GetTokenTransfersByTxHash(txHash string) ([]models.TokenTransfer, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	collection := configs.GetCollection(configs.DB, "tokenTransfers")
 
-	// Canonical storage format: lowercase with 0x prefix.
 	normalizedHash := strings.ToLower(txHash)
 	if !strings.HasPrefix(normalizedHash, "0x") {
 		normalizedHash = "0x" + normalizedHash
 	}
 
-	var transfer models.TokenTransfer
-	err := collection.FindOne(ctx, bson.M{"txHash": normalizedHash}).Decode(&transfer)
-	if err == nil {
-		return &transfer, nil
-	}
-	if err != mongo.ErrNoDocuments {
+	cursor, err := collection.Find(ctx, bson.M{"txHash": normalizedHash})
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return []models.TokenTransfer{}, nil
+		}
 		return nil, err
 	}
+	defer cursor.Close(ctx)
 
-	return nil, nil
+	var transfers []models.TokenTransfer
+	if err := cursor.All(ctx, &transfers); err != nil {
+		return nil, err
+	}
+	if transfers == nil {
+		transfers = []models.TokenTransfer{}
+	}
+
+	// Sort by logIndex ascending so emission order is preserved within the
+	// tx. logIndex is persisted as a "0x..." hex string, sorting it as a
+	// BSON string would put "0xa" after "0x10" because string comparison is
+	// lexicographic. Sort numerically here instead. Legacy direct-calldata
+	// rows have an empty logIndex and we pin them to the front (sort key -1)
+	// so a synthetic row and any later event rows for the same call stay
+	// in a stable, intuitive order.
+	sort.SliceStable(transfers, func(i, j int) bool {
+		return logIndexSortKey(transfers[i].LogIndex) < logIndexSortKey(transfers[j].LogIndex)
+	})
+
+	return transfers, nil
+}
+
+// logIndexSortKey turns a "0x..." hex string into an int64 for ascending
+// sort. Empty input maps to -1 to keep legacy synthetic rows first.
+// Malformed input falls back to 0, the worst case is a stable but slightly
+// out-of-order row (never a panic, the syncer's own data path is the only
+// writer of this field and always emits a clean hex string).
+func logIndexSortKey(s string) int64 {
+	if s == "" {
+		return -1
+	}
+	trimmed := strings.TrimPrefix(strings.ToLower(s), "0x")
+	v, err := strconv.ParseInt(trimmed, 16, 64)
+	if err != nil {
+		return 0
+	}
+	return v
 }
 
 // GetNFTBalancesByAddress returns per-(contract, tokenID) NFT holdings for
