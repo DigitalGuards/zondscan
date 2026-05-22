@@ -514,15 +514,87 @@ func UserRoute(router *gin.Engine) {
 		}()
 		rpcWG.Wait()
 
+		// Attach per-log + per-target contract metadata so the frontend
+		// can decode unknown event signatures + method selectors when the
+		// contract has been source-verified. One batched lookup covers
+		// every log address + the tx's target address; addresses without
+		// a contractCode row simply don't appear in the map and the
+		// frontend falls back to the raw render.
+		contractAddrs := make([]string, 0, len(logs)+1)
+		for _, l := range logs {
+			if l.Address != "" {
+				contractAddrs = append(contractAddrs, l.Address)
+			}
+		}
+		if query.To != "" {
+			contractAddrs = append(contractAddrs, query.To)
+		}
+		contractsByAddr, err := db.GetContractsByAddresses(contractAddrs)
+		if err != nil {
+			log.Printf("contracts-by-addresses lookup tx %s: %v", value, err)
+			contractsByAddr = map[string]models.ContractInfo{}
+		}
+
+		// contractInfoPayload builds the gin.H wrapper exposed to the
+		// frontend for a single contract. The ABI is included only when
+		// the contract is verified, that's the only case where the
+		// frontend can trust the ABI to be authoritative. Returns nil
+		// when there's no entry for this address so the caller can omit
+		// the field entirely.
+		contractInfoPayload := func(addr string) gin.H {
+			c, ok := contractsByAddr[strings.ToLower(addr)]
+			if !ok || c.ContractAddress == "" {
+				// canonical key is uppercase Q + lowercase hex; try both
+				// since incoming log addresses are sometimes lowercase Q.
+				c, ok = contractsByAddr[addr]
+				if !ok || c.ContractAddress == "" {
+					return nil
+				}
+			}
+			payload := gin.H{
+				"name":          c.TokenName,
+				"symbol":        c.TokenSymbol,
+				"tokenStandard": c.TokenStandard,
+				"verified":      c.Verified,
+				"contractName":  c.ContractName,
+			}
+			if c.Verified && c.Abi != "" {
+				payload["abi"] = c.Abi
+			}
+			return payload
+		}
+
 		response := gin.H{
 			"response":    query,
 			"latestBlock": latestBlockNum,
 		}
 		if len(logs) > 0 {
-			response["logs"] = logs
+			// Re-emit logs with the optional contract field attached so the
+			// frontend has everything it needs in one pass.
+			emitted := make([]gin.H, 0, len(logs))
+			for _, l := range logs {
+				entry := gin.H{
+					"address":  l.Address,
+					"topics":   l.Topics,
+					"data":     l.Data,
+					"logIndex": l.LogIndex,
+					"removed":  l.Removed,
+				}
+				if ci := contractInfoPayload(l.Address); ci != nil {
+					entry["contract"] = ci
+				}
+				emitted = append(emitted, entry)
+			}
+			response["logs"] = emitted
 		}
 		if txInput != "" && txInput != "0x" {
 			response["input"] = txInput
+			// targetContract carries the same shape as log.contract, used
+			// by the frontend Input Data card to decode the method
+			// selector + args off the target's ABI.
+			if ci := contractInfoPayload(query.To); ci != nil {
+				response["targetContract"] = ci
+			}
 		}
 
 		if contractCreated != nil {

@@ -75,6 +75,7 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
     // leaving txData.Input empty for every historical tx.
     input: typeof data.input === 'string' ? data.input : (txData.Input || undefined),
     logs: Array.isArray(data.logs) ? data.logs : undefined,
+    targetContract: data.targetContract || undefined,
   };
 
   return transaction;

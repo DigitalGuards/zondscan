@@ -107,6 +107,57 @@ func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool
 	return contracts, total, nil
 }
 
+// GetContractsByAddresses batch-loads contract docs for a set of addresses,
+// returning a map keyed by the canonical Q-prefix address. Used by the
+// /tx/:hash route to attach ABI metadata to receipt logs without N
+// round-trips. Missing addresses simply don't appear in the returned map,
+// callers handle the absent-key case as "no contract info available".
+//
+// Each input address is normalized to the canonical Q-prefix lowercase
+// form the syncer stores. Empty input returns an empty map without
+// touching mongo.
+func GetContractsByAddresses(addresses []string) (map[string]models.ContractInfo, error) {
+	out := make(map[string]models.ContractInfo)
+	if len(addresses) == 0 {
+		return out, nil
+	}
+
+	// Dedupe + normalize so the $in list is minimal.
+	seen := make(map[string]struct{}, len(addresses))
+	normalized := make([]string, 0, len(addresses))
+	for _, a := range addresses {
+		n := normalizeAddress(a)
+		if _, ok := seen[n]; ok {
+			continue
+		}
+		seen[n] = struct{}{}
+		normalized = append(normalized, n)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cursor, err := configs.ContractInfoCollection.Find(ctx, bson.M{
+		"address": bson.M{"$in": normalized},
+	})
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return out, nil
+		}
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	for cursor.Next(ctx) {
+		var c models.ContractInfo
+		if err := cursor.Decode(&c); err != nil {
+			continue
+		}
+		out[c.ContractAddress] = c
+	}
+	return out, nil
+}
+
 func ReturnContractCode(address string) (models.ContractInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

@@ -355,19 +355,26 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
           </div>
           <div className="p-4 sm:p-6 space-y-4">
             {transaction.logs.map((logEntry) => {
-              const decoded = decodeEventLog(logEntry.topics, logEntry.data);
+              // Pass the per-log ABI (when the emitting contract is verified)
+              // so the decoder can fall through from the five known
+              // signatures to a full ABI-driven decode.
+              const decoded = decodeEventLog(logEntry.topics, logEntry.data, logEntry.contract?.abi);
               const idxLabel = (() => { try { return parseInt(logEntry.logIndex || '0x0', 16).toString(); } catch { return logEntry.logIndex; } })();
+              const decodedViaAbi = !!decoded && !decoded.standard;
               return (
                 <div key={`${logEntry.address}-${logEntry.logIndex}`} className="rounded-lg bg-[#1a1a1a]/60 border border-[#3d3d3d] p-3 sm:p-4">
                   <div className="flex flex-wrap items-center gap-2 mb-2">
                     <Badge variant="neutral">#{idxLabel}</Badge>
                     {decoded ? (
                       <>
-                        <Badge variant={decoded.standard === 'ERC-721' || decoded.standard === 'ERC-1155' ? 'warning' : 'brand'}>
+                        <Badge variant={decoded.standard === 'ERC-721' || decoded.standard === 'ERC-1155' ? 'warning' : decoded.standard ? 'brand' : 'info'}>
                           {decoded.name}
                         </Badge>
                         {decoded.standard && (
                           <span className="text-xs text-gray-500 font-mono">{decoded.standard}</span>
+                        )}
+                        {decodedViaAbi && logEntry.contract?.contractName && (
+                          <span className="text-xs text-gray-500 font-mono">via {logEntry.contract.contractName}</span>
                         )}
                       </>
                     ) : (
@@ -408,7 +415,11 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                                     }).join(', ')
                                   : '[]'}
                               </span>
+                            ) : arg.type === 'string' ? (
+                              <span className="text-gray-200 break-all">{arg.value}</span>
                             ) : (
+                              // 'raw' or unknown — surface the slot so it's at
+                              // least copy-pasteable into another decoder.
                               <span className="text-gray-200 font-mono break-all">{arg.value}</span>
                             )}
                           </div>
