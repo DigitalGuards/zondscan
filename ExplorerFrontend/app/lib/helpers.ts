@@ -309,90 +309,198 @@ export function formatAddress(address: string | undefined | null): string {
 }
 
 /**
- * Decoded token transfer information from input data
+ * Decoded token call (transfer-like or approval) from a transaction's
+ * input data. The `standard` discriminator drives the badge in
+ * pending-transaction-view; per-call shape is sparse: only the fields
+ * that apply to the matched selector are populated. ERC-1155 batch is
+ * the only path that fills `ids` + `values`.
+ *
+ * Caveat: 0x23b872dd is shared by ERC-20 transferFrom and ERC-721
+ * transferFrom. Without the target contract we can't tell them apart,
+ * so we tag it as ERC-20 (its original meaning) and leave the
+ * ambiguity visible via the raw amount field. The user lands on the
+ * confirmed tx page once mined, where the syncer's tokenStandard tag
+ * resolves it correctly.
  */
+export type DecodedTokenStandard = 'ERC-20' | 'ERC-721' | 'ERC-1155';
+
 export interface DecodedTokenTransfer {
-  to: string;
-  amount: string;
-  methodName: string;
+  standard: DecodedTokenStandard;
+  methodName: 'transfer' | 'transferFrom' | 'safeTransferFrom' | 'safeBatchTransferFrom' | 'setApprovalForAll';
+  to?: string;
+  from?: string;
+  /** ERC-20 raw uint256 amount, as a decimal string. */
+  amount?: string;
+  /** ERC-721 / ERC-1155 single tokenID, as a decimal string. */
+  tokenID?: string;
+  /** ERC-1155 single transfer value (qty), as a decimal string. */
+  value?: string;
+  /** ERC-1155 batch ids and per-id values (decimal strings). */
+  ids?: string[];
+  values?: string[];
+  /** setApprovalForAll operator + flag. */
+  operator?: string;
+  approved?: boolean;
+}
+
+// Decode one 32-byte ABI slot as Q-prefixed address (last 20 bytes).
+function abiAddress(data: string, offset: number): string {
+  return 'Q' + data.slice(offset, offset + 64).slice(-40);
+}
+
+// Decode one 32-byte ABI slot as a uint256 decimal string.
+function abiUint(data: string, offset: number): string {
+  return BigInt('0x' + data.slice(offset, offset + 64)).toString();
+}
+
+// Decode a dynamic uint256[] starting at byte offset `arrOffset` (in
+// chars from the start of the calldata, not from the args block).
+// Returns the decoded values as decimal strings.
+function abiUintArray(data: string, arrOffset: number): string[] {
+  const lenHex = data.slice(arrOffset, arrOffset + 64);
+  const len = Number(BigInt('0x' + lenHex));
+  const out: string[] = [];
+  for (let i = 0; i < len; i++) {
+    out.push(abiUint(data, arrOffset + 64 + i * 64));
+  }
+  return out;
 }
 
 /**
- * Decodes ERC20 transfer input data
- * ERC20 transfer method signature: 0xa9059cbb
- * Format: 0xa9059cbb + 32 bytes (to address, padded) + 32 bytes (amount)
- * @param inputData - The transaction input data
- * @returns Decoded transfer info or null if not a transfer
+ * Decode a transaction's input data into a structured token-call descriptor.
+ * Returns null for any non-token-call input. Selectors covered:
+ *
+ *   ERC-20:   transfer (0xa9059cbb), transferFrom (0x23b872dd)
+ *   ERC-721:  safeTransferFrom (0x42842e0e, 0xb88d4fde)
+ *   ERC-1155: safeTransferFrom (0xf242432a), safeBatchTransferFrom (0x2eb2c2d6)
+ *   Both NFT: setApprovalForAll (0xa22cb465)
  */
 export function decodeTokenTransferInput(inputData: string | undefined | null): DecodedTokenTransfer | null {
   if (!inputData || inputData === '0x' || inputData.length < 10) {
     return null;
   }
 
-  // Normalize input
   const data = inputData.toLowerCase();
+  const selector = data.slice(0, 10);
+  // ABI args start at byte 10 (skip "0x" + 4-byte selector).
+  const args = 10;
 
-  // Check for ERC20 transfer method signature (0xa9059cbb)
-  if (data.startsWith('0xa9059cbb')) {
-    // transfer(address,uint256)
-    // Expected length: 0x (2) + method (8) + address (64) + amount (64) = 138
-    if (data.length !== 138) {
-      return null;
+  try {
+    switch (selector) {
+      // ─── ERC-20 ────────────────────────────────────────────────────────
+      case '0xa9059cbb': {
+        // transfer(address,uint256), 4 + 32 + 32 = 68 bytes → 138 chars
+        if (data.length !== 138) return null;
+        return {
+          standard: 'ERC-20',
+          methodName: 'transfer',
+          to: abiAddress(data, args),
+          amount: abiUint(data, args + 64),
+        };
+      }
+      case '0x23b872dd': {
+        // transferFrom(address,address,uint256), 4 + 32*3 = 100 bytes → 202 chars.
+        // Shared selector with ERC-721 transferFrom, see DecodedTokenTransfer
+        // docstring: we tag it as ERC-20 because we lack the contract's
+        // standard in mempool context.
+        if (data.length !== 202) return null;
+        return {
+          standard: 'ERC-20',
+          methodName: 'transferFrom',
+          from: abiAddress(data, args),
+          to: abiAddress(data, args + 64),
+          amount: abiUint(data, args + 128),
+        };
+      }
+
+      // ─── ERC-721 ───────────────────────────────────────────────────────
+      case '0x42842e0e': {
+        // safeTransferFrom(address,address,uint256), same shape as 0x23b872dd
+        // but ERC-721-only by selector, so the tokenID slot is unambiguous.
+        if (data.length !== 202) return null;
+        return {
+          standard: 'ERC-721',
+          methodName: 'safeTransferFrom',
+          from: abiAddress(data, args),
+          to: abiAddress(data, args + 64),
+          tokenID: abiUint(data, args + 128),
+        };
+      }
+      case '0xb88d4fde': {
+        // safeTransferFrom(address,address,uint256,bytes). Static head is
+        // 4 + 32*4 = 132 bytes; the trailing bytes payload is dynamic and
+        // we don't surface it.
+        if (data.length < args + 64 * 4) return null;
+        return {
+          standard: 'ERC-721',
+          methodName: 'safeTransferFrom',
+          from: abiAddress(data, args),
+          to: abiAddress(data, args + 64),
+          tokenID: abiUint(data, args + 128),
+        };
+      }
+
+      // ─── ERC-1155 ──────────────────────────────────────────────────────
+      case '0xf242432a': {
+        // safeTransferFrom(address,address,uint256,uint256,bytes). Static
+        // head is 4 + 32*5 = 164 bytes; data payload trails.
+        if (data.length < args + 64 * 5) return null;
+        return {
+          standard: 'ERC-1155',
+          methodName: 'safeTransferFrom',
+          from: abiAddress(data, args),
+          to: abiAddress(data, args + 64),
+          tokenID: abiUint(data, args + 128),
+          value: abiUint(data, args + 192),
+        };
+      }
+      case '0x2eb2c2d6': {
+        // safeBatchTransferFrom(address,address,uint256[],uint256[],bytes).
+        // Static head: from, to, ids_offset, values_offset, data_offset.
+        // Both arrays are dynamic and their offsets are relative to the
+        // start of the *args block*, not the calldata. Convert to char
+        // positions in the calldata.
+        if (data.length < args + 64 * 5) return null;
+        const from = abiAddress(data, args);
+        const to = abiAddress(data, args + 64);
+        const idsOff = Number(BigInt('0x' + data.slice(args + 128, args + 192))) * 2;
+        const valsOff = Number(BigInt('0x' + data.slice(args + 192, args + 256))) * 2;
+        const ids = abiUintArray(data, args + idsOff);
+        const values = abiUintArray(data, args + valsOff);
+        if (ids.length !== values.length) return null;
+        return {
+          standard: 'ERC-1155',
+          methodName: 'safeBatchTransferFrom',
+          from,
+          to,
+          ids,
+          values,
+        };
+      }
+
+      // ─── Both NFT standards ────────────────────────────────────────────
+      case '0xa22cb465': {
+        // setApprovalForAll(address,bool). Same selector for ERC-721 and
+        // ERC-1155; we can't disambiguate from mempool input alone, so
+        // we mark it ERC-721 (the older standard). Cosmetic only.
+        if (data.length !== 138) return null;
+        const operator = abiAddress(data, args);
+        const flagSlot = BigInt('0x' + data.slice(args + 64, args + 128));
+        return {
+          standard: 'ERC-721',
+          methodName: 'setApprovalForAll',
+          operator,
+          approved: flagSlot !== BigInt(0),
+        };
+      }
+
+      default:
+        return null;
     }
-
-    try {
-      // Extract recipient address (bytes 10-74, last 40 chars are the address)
-      const toAddressPadded = data.slice(10, 74);
-      const toAddress = 'Q' + toAddressPadded.slice(-40);
-
-      // Extract amount (bytes 74-138)
-      const amountHex = '0x' + data.slice(74);
-      const amount = BigInt(amountHex).toString();
-
-      return {
-        to: toAddress,
-        amount: amount,
-        methodName: 'transfer'
-      };
-    } catch (error) {
-      console.error('Error decoding transfer input:', error);
-      return null;
-    }
+  } catch (error) {
+    console.error('Error decoding token input:', selector, error);
+    return null;
   }
-
-  // Check for ERC20 transferFrom method signature (0x23b872dd)
-  if (data.startsWith('0x23b872dd')) {
-    // transferFrom(address,address,uint256)
-    // Expected length: 0x (2) + method (8) + from (64) + to (64) + amount (64) = 202
-    if (data.length !== 202) {
-      return null;
-    }
-
-    try {
-      // Extract from address (bytes 10-74)
-      const fromAddressPadded = data.slice(10, 74);
-      const fromAddress = 'Q' + fromAddressPadded.slice(-40);
-
-      // Extract to address (bytes 74-138)
-      const toAddressPadded = data.slice(74, 138);
-      const toAddress = 'Q' + toAddressPadded.slice(-40);
-
-      // Extract amount (bytes 138-202)
-      const amountHex = '0x' + data.slice(138);
-      const amount = BigInt(amountHex).toString();
-
-      return {
-        to: toAddress,
-        amount: amount,
-        methodName: 'transferFrom'
-      };
-    } catch (error) {
-      console.error('Error decoding transferFrom input:', error);
-      return null;
-    }
-  }
-
-  return null;
 }
 
 /**

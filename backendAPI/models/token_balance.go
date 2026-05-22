@@ -28,7 +28,14 @@ type TokenBalancesResponse struct {
 	Count   int            `json:"count"`
 }
 
-// TokenTransfer represents a token transfer event
+// TokenTransfer represents a token transfer event.
+//
+// TokenStandard / TokenID / LogIndex mirror the syncer's struct
+// (QRL2MongoDB/models/tokentransfer.go). Without them the BSON decoder
+// silently strips the fields off the persisted document and the tx page
+// can't tell an NFT transfer from a fungible one. LogIndex is required
+// to disambiguate multiple events in the same tx (DEX swaps, ERC-1155
+// TransferBatch fan-out).
 type TokenTransfer struct {
 	ContractAddress string `json:"contractAddress" bson:"contractAddress"`
 	From            string `json:"from" bson:"from"`
@@ -36,11 +43,14 @@ type TokenTransfer struct {
 	Amount          string `json:"amount" bson:"amount"`
 	BlockNumber     string `json:"blockNumber" bson:"blockNumber"`
 	TxHash          string `json:"txHash" bson:"txHash"`
+	LogIndex        string `json:"logIndex,omitempty" bson:"logIndex,omitempty"`
 	Timestamp       string `json:"timestamp" bson:"timestamp"`
 	TokenSymbol     string `json:"tokenSymbol" bson:"tokenSymbol"`
 	TokenDecimals   int    `json:"tokenDecimals" bson:"tokenDecimals"`
 	TokenName       string `json:"tokenName" bson:"tokenName"`
 	TransferType    string `json:"transferType" bson:"transferType"`
+	TokenStandard   string `json:"tokenStandard,omitempty" bson:"tokenStandard,omitempty"`
+	TokenID         string `json:"tokenID,omitempty" bson:"tokenID,omitempty"`
 }
 
 // NFTBalance is one row of GET /address/:addr/nfts: the holder's

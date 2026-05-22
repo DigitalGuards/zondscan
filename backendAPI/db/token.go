@@ -529,31 +529,53 @@ func GetTokenInfo(contractAddress string) (*models.TokenInfo, error) {
 	}, nil
 }
 
-// GetTokenTransferByTxHash returns token transfer info for a given transaction hash.
-// Returns nil, nil if no token transfer is associated with this transaction.
-// The syncer stores txHash with a lowercase 0x prefix; we normalize to that form.
-func GetTokenTransferByTxHash(txHash string) (*models.TokenTransfer, error) {
+// GetTokenTransfersByTxHash returns every token transfer row associated with
+// a given transaction hash. A single tx can produce multiple rows:
+//
+//   - DEX swaps emit several ERC-20 Transfer events (router, pool, recipient).
+//   - ERC-1155 TransferBatch is fanned out one row per (id, value) tuple by
+//     the syncer.
+//
+// FindOne-style readers silently dropped everything past the first row, so
+// only the first transfer ever rendered on the tx page. Returns an empty
+// slice (not nil) when nothing matches.
+//
+// The syncer stores txHash lowercase with a 0x prefix; we normalize input
+// the same way before querying.
+func GetTokenTransfersByTxHash(txHash string) ([]models.TokenTransfer, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	collection := configs.GetCollection(configs.DB, "tokenTransfers")
 
-	// Canonical storage format: lowercase with 0x prefix.
 	normalizedHash := strings.ToLower(txHash)
 	if !strings.HasPrefix(normalizedHash, "0x") {
 		normalizedHash = "0x" + normalizedHash
 	}
 
-	var transfer models.TokenTransfer
-	err := collection.FindOne(ctx, bson.M{"txHash": normalizedHash}).Decode(&transfer)
-	if err == nil {
-		return &transfer, nil
-	}
-	if err != mongo.ErrNoDocuments {
+	// Stable order: logIndex ascending preserves event emission order within
+	// the tx. Legacy direct-calldata rows (logIndex == "") sort first, which
+	// matches what users expect when both a synthetic row and event rows
+	// exist for the same call.
+	opts := options.Find().SetSort(bson.D{{Key: "logIndex", Value: 1}})
+
+	cursor, err := collection.Find(ctx, bson.M{"txHash": normalizedHash}, opts)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return []models.TokenTransfer{}, nil
+		}
 		return nil, err
 	}
+	defer cursor.Close(ctx)
 
-	return nil, nil
+	var transfers []models.TokenTransfer
+	if err := cursor.All(ctx, &transfers); err != nil {
+		return nil, err
+	}
+	if transfers == nil {
+		transfers = []models.TokenTransfer{}
+	}
+	return transfers, nil
 }
 
 // GetNFTBalancesByAddress returns per-(contract, tokenID) NFT holdings for
