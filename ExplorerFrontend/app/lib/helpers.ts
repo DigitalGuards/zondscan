@@ -27,7 +27,7 @@ export function formatStaked(shor: string): string {
 }
 
 // The `_format` arg is unused but preserved in the signature for call-site
-// compatibility — older usages threaded an optional encoding hint that the
+// compatibility; older usages threaded an optional encoding hint that the
 // implementation never branched on. Renamed with the underscore prefix so
 // no-unused-vars stops firing without changing the public shape.
 export function decodeToHex(input: string, _format?: string): string {
@@ -534,7 +534,7 @@ export interface DecodedEventArg {
   /**
    * Rendering discriminator. The five scalar types get their own UI; `raw`
    * is the catch-all for ABI types we don't have a specialised renderer
-   * for (bytes, dynamic strings, tuples, etc.) — value holds the formatted
+   * for (bytes, dynamic strings, tuples, etc.); value holds the formatted
    * hex slice so users can copy it out.
    */
   type: 'address' | 'uint256' | 'bool' | 'uint256[]' | 'string' | 'raw';
@@ -779,7 +779,7 @@ interface AbiEventEntry {
 // Canonicalise an ABI type for keccak256 signature construction. Solidity
 // ABIs emit `uint`/`int` aliases that must be expanded to `uint256`/`int256`
 // before hashing, otherwise the computed selector won't match the on-chain
-// topic[0]. Same for `bytes`/`bytes32` etc — bytes alone is a dynamic type,
+// topic[0]. Same for `bytes`/`bytes32` etc; bytes alone is a dynamic type,
 // bytesN is fixed; both are valid as-is. Arrays and tuples pass through.
 function canonicaliseAbiType(t: string | undefined): string {
   if (!t) return '';
@@ -819,7 +819,7 @@ function decodeAbiSlot(label: string, type: string, slot: string): DecodedEventA
     try { v = BigInt(slot) !== BigInt(0); } catch { v = false; }
     return { label, type: 'bool', value: v ? 'true' : 'false' };
   }
-  // All uintN/intN render the same way — decimal string in the slot. Signed
+  // All uintN/intN render the same way; decimal string in the slot. Signed
   // ints are treated as unsigned here; negative values render as huge
   // unsigned numbers, but events using signed ints in this codebase are rare.
   if (/^u?int\d*$/.test(t)) {
@@ -830,13 +830,13 @@ function decodeAbiSlot(label: string, type: string, slot: string): DecodedEventA
     return { label, type: 'raw', value: slot };
   }
   // Indexed dynamic types (string, bytes, dynamic arrays, tuples) are stored
-  // as keccak256(value) in the topic — we can surface the hash but not the
+  // as keccak256(value) in the topic; we can surface the hash but not the
   // value. Mark as raw so the user knows it's not the actual decoded value.
   return { label, type: 'raw', value: slot };
 }
 
 // Decode a packed sequence of non-indexed ABI args from a log's data field.
-// Only handles static head types — dynamic types (string, bytes, dynamic
+// Only handles static head types; dynamic types (string, bytes, dynamic
 // arrays) require offset resolution that we punt to the raw fallback for now.
 function decodeAbiData(inputs: AbiEventInput[], data: string): DecodedEventArg[] | null {
   const safeData = (data || '0x').toLowerCase();

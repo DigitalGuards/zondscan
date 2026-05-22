@@ -40,7 +40,7 @@ type Call struct {
 // for the /tx/:hash response so BSON decoding survives the round trip.
 //
 // Internal txs are the per-call entries the EVM produced under one
-// outer transaction — opcode-level CALL / DELEGATECALL / STATICCALL,
+// outer transaction; opcode-level CALL / DELEGATECALL / STATICCALL,
 // surfaced in the tx page so users can see what the contract actually
 // did beyond top-level Transfer events.
 type InternalTx struct {

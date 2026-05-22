@@ -15,7 +15,7 @@ import { formatTokenAmount } from '../../lib/helpers';
  * endpoints), it just wasn't surfaced on the address page UI.
  *
  * Fetches both endpoints in parallel on mount. Each section renders
- * independently — a 200 with an empty array shows the empty state for that
+ * independently; a 200 with an empty array shows the empty state for that
  * section but doesn't block the other. Network failures are silent: the
  * section stays empty rather than throwing, matching the rest of the
  * address page's resilience pattern.

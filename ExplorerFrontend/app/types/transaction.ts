@@ -142,7 +142,7 @@ export interface TransactionDetails {
  * models.InternalTx, which mirrors how the syncer writes the
  * `internalTransactionByAddress` collection.
  *
- * Most txs have an empty array — only contract calls with sub-frames
+ * Most txs have an empty array; only contract calls with sub-frames
  * (CALL / DELEGATECALL / STATICCALL) get entries here.
  */
 export interface InternalTx {

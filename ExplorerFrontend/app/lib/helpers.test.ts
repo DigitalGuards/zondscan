@@ -2,7 +2,7 @@
  * Decoder unit tests. These exercise the pure functions added in the
  * tx-page NFT support work (PRs #102, #103, #105) plus the loop-iter 1
  * and iter 3 ABI fallback decoders. The functions are all pure and don't
- * touch React, the DOM, or network — they live under jest-environment-node
+ * touch React, the DOM, or network; they live under jest-environment-node
  * (set globally in jest.config.js).
  *
  * What we cover:
@@ -167,7 +167,7 @@ describe('decodeEventLog', () => {
   it('falls back to ABI decode when topic[0] matches a verified event', () => {
     // ABI for `MyEvent(address indexed who, uint256 amount)`. The topic[0]
     // hash should be keccak256("MyEvent(address,uint256)") which the
-    // decoder computes internally — we just trust the round trip.
+    // decoder computes internally; we just trust the round trip.
     const abi = JSON.stringify([
       {
         type: 'event',
@@ -179,15 +179,15 @@ describe('decodeEventLog', () => {
       },
     ]);
     // Compute the topic hash via the production code path (call decoder
-    // twice — first to discover what signature the ABI produces).
+    // twice; first to discover what signature the ABI produces).
     // Simpler: construct topic from the canonical signature ourselves.
-    // Hash is: keccak256("MyEvent(address,uint256)") — precomputed below.
+    // Hash is: keccak256("MyEvent(address,uint256)"); precomputed below.
     const myEventTopic = '0x5c2b3f5b8b34a44ce14ec22f823c8d56f3854094bccc23f4c47c66ab7378ad96';
     const decoded = decodeEventLog([myEventTopic, addrTopic(ADDR_A)], uintSlot(99), abi);
     // We don't assert a specific topic hash since the production code
     // computes it from the ABI. Instead, prove the round-trip works for a
     // signature we know the production code generates.
-    // Re-run with the topic the decoder would have produced — call its
+    // Re-run with the topic the decoder would have produced; call its
     // sister API through an intermediate: build an ABI with a unique name
     // and brute-force discover the matching hash via decodeContractCall...
     // Punt: just assert that supplying a non-matching topic returns null
@@ -195,7 +195,7 @@ describe('decodeEventLog', () => {
     if (decoded) {
       expect(decoded.name).toBe('MyEvent');
     } else {
-      // If our precomputed hash didn't match (likely — we faked it), we
+      // If our precomputed hash didn't match (likely; we faked it), we
       // still want to confirm the code path doesn't throw. The null result
       // is acceptable here.
       expect(decoded).toBeNull();
@@ -324,7 +324,7 @@ describe('decodeContractCall', () => {
     // input/ABI pair, and that when it DOES decode (selector matches), the
     // args come out right. We brute-force discover the selector by trying
     // a few candidates is also overkill. Cleanest: have the decoder report
-    // back via a known-passing case — use a calldata built from the ABI's
+    // back via a known-passing case; use a calldata built from the ABI's
     // canonical signature hash.
     //
     // We replicate the production selector computation locally to construct

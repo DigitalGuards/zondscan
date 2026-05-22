@@ -118,7 +118,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
     isMobile ? `${addr.slice(0, 10)}...${addr.slice(-8)}` : addr;
 
   return (
-    <div className="detail-content">
+    <main className="detail-content" aria-labelledby="tx-detail-heading">
       <Breadcrumbs items={[
         { label: 'Transactions', href: '/transactions/1' },
         { label: `${transaction.hash.slice(0, 10)}...${transaction.hash.slice(-6)}` },
@@ -129,14 +129,17 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
       </Suspense>
 
       {/* Main Details Card */}
-      <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+      <section
+        aria-labelledby="tx-detail-heading"
+        className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6"
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-[#3d3d3d]">
           <div className="flex items-center gap-3">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-[#ffa729]">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-[#ffa729]" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
             </svg>
-            <h1 className="text-xl sm:text-2xl font-bold text-[#ffa729]">Transaction Details</h1>
+            <h1 id="tx-detail-heading" className="text-xl sm:text-2xl font-bold text-[#ffa729]">Transaction Details</h1>
           </div>
           <Badge variant={badgeVariant} size="md" dot>{status.text}</Badge>
         </div>
@@ -199,7 +202,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             </DetailRow>
           )}
         </div>
-      </div>
+      </section>
 
       {/* Contract Creation Section */}
       {transaction.contractCreated && (() => {
@@ -215,13 +218,13 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             ? `(${cc.symbol})`
             : 'Unnamed Collection';
         return (
-        <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+        <section aria-labelledby="contract-created-heading" className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
           <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
             <div className="flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-green-400">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-green-400" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <h2 className="text-[15px] font-semibold text-green-400">Contract Created</h2>
+              <h2 id="contract-created-heading" className="text-[15px] font-semibold text-green-400">Contract Created</h2>
               {cc.isToken && (
                 <Badge variant={ccStandard === 'ERC-721' || ccStandard === 'ERC-1155' ? 'warning' : 'brand'}>
                   {qrcBadgeText(ccStandard)} Token
@@ -244,7 +247,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               </DetailRow>
             )}
           </div>
-        </div>
+        </section>
         );
       })()}
 
@@ -261,13 +264,17 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
           const isNFT = standard === 'ERC-721' || standard === 'ERC-1155';
           const rowKey = tt.logIndex || `${tt.contractAddress}-${idx}`;
           return (
-        <div key={rowKey} className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+        <section
+          key={rowKey}
+          aria-labelledby={`token-transfer-${rowKey}-heading`}
+          className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6"
+        >
           <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
             <div className="flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
               </svg>
-              <h2 className="text-[15px] font-semibold text-[#ffa729]">{headerLabel}</h2>
+              <h2 id={`token-transfer-${rowKey}-heading`} className="text-[15px] font-semibold text-[#ffa729]">{headerLabel}</h2>
               <Badge variant={isNFT ? 'warning' : 'brand'}>{qrcBadgeText(standard)}</Badge>
             </div>
           </div>
@@ -334,7 +341,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               )}
             </DetailRow>
           </div>
-        </div>
+        </section>
           );
         })}
 
@@ -343,13 +350,13 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
           ApprovalForAll) inline; everything else falls back to topics +
           data so users can copy them into a decoder. */}
       {transaction.logs && transaction.logs.length > 0 && (
-        <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+        <section aria-labelledby="event-logs-heading" className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
           <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
             <div className="flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
               </svg>
-              <h2 className="text-[15px] font-semibold text-[#ffa729]">Event Logs</h2>
+              <h2 id="event-logs-heading" className="text-[15px] font-semibold text-[#ffa729]">Event Logs</h2>
               <Badge variant="neutral">{transaction.logs.length}</Badge>
             </div>
           </div>
@@ -418,7 +425,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                             ) : arg.type === 'string' ? (
                               <span className="text-gray-200 break-all">{arg.value}</span>
                             ) : (
-                              // 'raw' or unknown — surface the slot so it's at
+                              // 'raw' or unknown; surface the slot so it's at
                               // least copy-pasteable into another decoder.
                               <span className="text-gray-200 font-mono break-all">{arg.value}</span>
                             )}
@@ -448,7 +455,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               );
             })}
           </div>
-        </div>
+        </section>
       )}
 
       {/* Internal Transactions panel. The syncer records each EVM
@@ -456,13 +463,13 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
           under `internalTransactionByAddress` keyed by parent tx hash.
           Most simple txs have none; complex contract calls fan out. */}
       {transaction.internalTransactions && transaction.internalTransactions.length > 0 && (
-        <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+        <section aria-labelledby="internal-tx-heading" className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
           <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
             <div className="flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 17.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
               </svg>
-              <h2 className="text-[15px] font-semibold text-[#ffa729]">Internal Transactions</h2>
+              <h2 id="internal-tx-heading" className="text-[15px] font-semibold text-[#ffa729]">Internal Transactions</h2>
               <Badge variant="neutral">{transaction.internalTransactions.length}</Badge>
             </div>
           </div>
@@ -527,14 +534,14 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               );
             })}
           </div>
-        </div>
+        </section>
       )}
 
       {/* Input Data Card. Decode in three tiers:
           1. Known ERC token selectors via decodeTokenTransferInput (renders
              with the standard-tagged badge from the original UI).
           2. Target contract ABI via decodeContractCall (verified contracts
-             only) — renders method name + labelled args, same scheme as
+             only); renders method name + labelled args, same scheme as
              the Event Logs panel for ABI-decoded events.
           3. Raw calldata fallback so users can copy it into any decoder. */}
       {transaction.input && transaction.input !== '0x' && (() => {
@@ -543,10 +550,10 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
           ? decodeContractCall(transaction.input, transaction.targetContract?.abi)
           : null;
         return (
-          <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+          <section aria-labelledby="input-data-heading" className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
             <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
               <div className="flex items-center gap-2">
-                <h2 className="text-[15px] font-semibold text-[#ffa729]">Input Data</h2>
+                <h2 id="input-data-heading" className="text-[15px] font-semibold text-[#ffa729]">Input Data</h2>
                 {decodedInput && (
                   <Badge variant={decodedInput.standard === 'ERC-20' ? 'brand' : 'warning'}>
                     {decodedInput.methodName}
@@ -606,9 +613,9 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               )}
               <p className="font-mono text-gray-300 break-all text-xs leading-relaxed">{transaction.input}</p>
             </div>
-          </div>
+          </section>
         );
       })()}
-    </div>
+    </main>
   );
 }
