@@ -127,6 +127,22 @@ export interface TransactionDetails {
     tokenStandard?: TokenStandard | string;
   };
   tokenTransfers?: TokenTransferInfo[];
+  /** Raw calldata for the tx, "0x..." prefixed. Empty / "0x" for plain transfers. */
+  input?: string;
+  /** Receipt logs in emission order. Populated best-effort; absent when the RPC fetch fails. */
+  logs?: TxLog[];
+}
+
+/**
+ * One receipt log entry on a confirmed tx. Mirrors the subset returned by
+ * the backend's /tx/:hash route, which itself mirrors qrl_getTransactionReceipt.logs[].
+ */
+export interface TxLog {
+  address: string;
+  topics: string[];
+  data: string;
+  logIndex: string;
+  removed?: boolean;
 }
 
 /**
