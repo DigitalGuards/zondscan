@@ -4,7 +4,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { type TransactionDetails, getConfirmations, getTransactionStatus } from '@/app/types';
-import { formatAmount, formatTokenAmount } from '../../lib/helpers';
+import { formatAmount, formatTokenAmount, decodeEventLog, decodeTokenTransferInput } from '../../lib/helpers';
 import CopyButton from '../../components/CopyButton';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import DetailRow from '../../components/DetailRow';
@@ -337,6 +337,137 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
         </div>
           );
         })}
+
+      {/* Event Logs Panel. Decodes the five well-known token signatures
+          (Transfer / TransferSingle / TransferBatch / Approval /
+          ApprovalForAll) inline; everything else falls back to topics +
+          data so users can copy them into a decoder. */}
+      {transaction.logs && transaction.logs.length > 0 && (
+        <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+          <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
+            <div className="flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+              </svg>
+              <h2 className="text-[15px] font-semibold text-[#ffa729]">Event Logs</h2>
+              <Badge variant="neutral">{transaction.logs.length}</Badge>
+            </div>
+          </div>
+          <div className="p-4 sm:p-6 space-y-4">
+            {transaction.logs.map((logEntry) => {
+              const decoded = decodeEventLog(logEntry.topics, logEntry.data);
+              const idxLabel = (() => { try { return parseInt(logEntry.logIndex || '0x0', 16).toString(); } catch { return logEntry.logIndex; } })();
+              return (
+                <div key={`${logEntry.address}-${logEntry.logIndex}`} className="rounded-lg bg-[#1a1a1a]/60 border border-[#3d3d3d] p-3 sm:p-4">
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <Badge variant="neutral">#{idxLabel}</Badge>
+                    {decoded ? (
+                      <>
+                        <Badge variant={decoded.standard === 'ERC-721' || decoded.standard === 'ERC-1155' ? 'warning' : 'brand'}>
+                          {decoded.name}
+                        </Badge>
+                        {decoded.standard && (
+                          <span className="text-xs text-gray-500 font-mono">{decoded.standard}</span>
+                        )}
+                      </>
+                    ) : (
+                      <Badge variant="neutral">Raw</Badge>
+                    )}
+                    <Link
+                      href={`/address/${logEntry.address}`}
+                      className="text-[#ffa729] hover:text-[#ffb84d] transition-colors break-all text-xs font-mono"
+                    >
+                      {logEntry.address}
+                    </Link>
+                  </div>
+                  {decoded ? (
+                    <>
+                      <p className="text-xs text-gray-500 font-mono mb-2">{decoded.signature}</p>
+                      <div className="space-y-1">
+                        {decoded.args.map((arg) => (
+                          <div key={arg.label} className="text-xs flex flex-wrap items-start gap-2">
+                            <span className="text-gray-400 font-mono min-w-[80px]">{arg.label}:</span>
+                            {arg.type === 'address' && arg.value ? (
+                              <Link
+                                href={`/address/${arg.value}`}
+                                className="text-gray-200 hover:text-[#ffa729] transition-colors break-all font-mono"
+                              >
+                                {arg.value}
+                              </Link>
+                            ) : arg.type === 'bool' ? (
+                              <Badge variant={arg.value === 'true' ? 'success' : 'error'}>{arg.value}</Badge>
+                            ) : arg.type === 'uint256' ? (
+                              <span className="text-gray-200 font-mono break-all">
+                                {(() => { try { return BigInt(arg.value || '0').toLocaleString('en-US'); } catch { return arg.value || ''; } })()}
+                              </span>
+                            ) : arg.type === 'uint256[]' ? (
+                              <span className="text-gray-200 font-mono break-all">
+                                {arg.values && arg.values.length > 0
+                                  ? arg.values.map((v) => {
+                                      try { return BigInt(v).toLocaleString('en-US'); } catch { return v; }
+                                    }).join(', ')
+                                  : '[]'}
+                              </span>
+                            ) : (
+                              <span className="text-gray-200 font-mono break-all">{arg.value}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-xs space-y-1">
+                      <div>
+                        <span className="text-gray-400 font-mono">topics:</span>
+                        <div className="ml-2 mt-1 space-y-0.5">
+                          {logEntry.topics.map((t, ti) => (
+                            <div key={ti} className="text-gray-200 font-mono break-all">[{ti}] {t}</div>
+                          ))}
+                        </div>
+                      </div>
+                      {logEntry.data && logEntry.data !== '0x' && (
+                        <div>
+                          <span className="text-gray-400 font-mono">data:</span>
+                          <p className="ml-2 mt-1 text-gray-200 font-mono break-all">{logEntry.data}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Input Data Card. Decoded preview from decodeTokenTransferInput
+          when the calldata matches a known token-call selector; raw
+          calldata always shown so users can copy it into any decoder. */}
+      {transaction.input && transaction.input !== '0x' && (() => {
+        const decodedInput = decodeTokenTransferInput(transaction.input);
+        return (
+          <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+            <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
+              <div className="flex items-center gap-2">
+                <h2 className="text-[15px] font-semibold text-[#ffa729]">Input Data</h2>
+                {decodedInput && (
+                  <Badge variant={decodedInput.standard === 'ERC-20' ? 'brand' : 'warning'}>
+                    {decodedInput.methodName}
+                  </Badge>
+                )}
+              </div>
+            </div>
+            <div className="p-4 sm:p-6">
+              {decodedInput && (
+                <p className="text-xs text-gray-500 font-mono mb-2">
+                  {decodedInput.standard} · {decodedInput.methodName}
+                </p>
+              )}
+              <p className="font-mono text-gray-300 break-all text-xs leading-relaxed">{transaction.input}</p>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

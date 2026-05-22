@@ -69,6 +69,8 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
     PaidFees: txData.PaidFees ? Number(txData.PaidFees) : undefined,
     contractCreated: data.contractCreated || undefined,
     tokenTransfers: Array.isArray(data.tokenTransfers) ? data.tokenTransfers : undefined,
+    input: txData.Input || undefined,
+    logs: Array.isArray(data.logs) ? data.logs : undefined,
   };
 
   return transaction;

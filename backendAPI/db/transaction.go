@@ -427,6 +427,7 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 					Signature:      tx.Signature,
 					Pk:             tx.PublicKey,
 					Size:           ensureHexPrefix(block.Result.Size),
+					Input:          tx.Data,
 				}
 				return result, nil
 			}
