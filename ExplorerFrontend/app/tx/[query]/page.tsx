@@ -69,7 +69,11 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
     PaidFees: txData.PaidFees ? Number(txData.PaidFees) : undefined,
     contractCreated: data.contractCreated || undefined,
     tokenTransfers: Array.isArray(data.tokenTransfers) ? data.tokenTransfers : undefined,
-    input: txData.Input || undefined,
+    // input comes from the top-level data.input field. The backend fetches
+    // it from the node via qrl_getTransactionByHash because the syncer's
+    // Transaction struct uses the wrong JSON tag (`data` instead of `input`),
+    // leaving txData.Input empty for every historical tx.
+    input: typeof data.input === 'string' ? data.input : (txData.Input || undefined),
     logs: Array.isArray(data.logs) ? data.logs : undefined,
   };
 
