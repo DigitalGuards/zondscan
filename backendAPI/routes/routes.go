@@ -411,10 +411,12 @@ func UserRoute(router *gin.Engine) {
 			log.Printf("Error checking for contract creation tx %s: %v", value, err)
 		}
 
-		// Check if this transaction is a token transfer
-		tokenTransfer, err := db.GetTokenTransferByTxHash(value)
+		// Check if this transaction is a token transfer. A single tx can
+		// emit multiple Transfer events (DEX swaps, ERC-1155 TransferBatch
+		// fan-out), so we surface them all as an array.
+		tokenTransfers, err := db.GetTokenTransfersByTxHash(value)
 		if err != nil {
-			log.Printf("Error checking for token transfer tx %s: %v", value, err)
+			log.Printf("Error checking for token transfers tx %s: %v", value, err)
 		}
 
 		response := gin.H{
@@ -424,24 +426,32 @@ func UserRoute(router *gin.Engine) {
 
 		if contractCreated != nil {
 			response["contractCreated"] = gin.H{
-				"address":  contractCreated.ContractAddress,
-				"isToken":  contractCreated.IsToken,
-				"name":     contractCreated.TokenName,
-				"symbol":   contractCreated.TokenSymbol,
-				"decimals": contractCreated.TokenDecimals,
+				"address":       contractCreated.ContractAddress,
+				"isToken":       contractCreated.IsToken,
+				"name":          contractCreated.TokenName,
+				"symbol":        contractCreated.TokenSymbol,
+				"decimals":      contractCreated.TokenDecimals,
+				"tokenStandard": contractCreated.TokenStandard,
 			}
 		}
 
-		if tokenTransfer != nil {
-			response["tokenTransfer"] = gin.H{
-				"contractAddress": tokenTransfer.ContractAddress,
-				"from":            tokenTransfer.From,
-				"to":              tokenTransfer.To,
-				"amount":          tokenTransfer.Amount,
-				"tokenName":       tokenTransfer.TokenName,
-				"tokenSymbol":     tokenTransfer.TokenSymbol,
-				"tokenDecimals":   tokenTransfer.TokenDecimals,
+		if len(tokenTransfers) > 0 {
+			rows := make([]gin.H, 0, len(tokenTransfers))
+			for _, t := range tokenTransfers {
+				rows = append(rows, gin.H{
+					"contractAddress": t.ContractAddress,
+					"from":            t.From,
+					"to":              t.To,
+					"amount":          t.Amount,
+					"tokenName":       t.TokenName,
+					"tokenSymbol":     t.TokenSymbol,
+					"tokenDecimals":   t.TokenDecimals,
+					"tokenStandard":   t.TokenStandard,
+					"tokenID":         t.TokenID,
+					"logIndex":        t.LogIndex,
+				})
 			}
+			response["tokenTransfers"] = rows
 		}
 
 		c.JSON(http.StatusOK, response)

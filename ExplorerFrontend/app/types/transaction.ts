@@ -98,6 +98,8 @@ export interface TokenTransferInfo {
   tokenStandard?: TokenStandard | string;
   /** uint256 decimal string. Populated for ERC-721 + ERC-1155 transfers. */
   tokenID?: string;
+  /** Hex log index, used as a stable React key when a tx emits several events. */
+  logIndex?: string;
 }
 
 /**
@@ -124,7 +126,7 @@ export interface TransactionDetails {
     decimals: number;
     tokenStandard?: TokenStandard | string;
   };
-  tokenTransfer?: TokenTransferInfo;
+  tokenTransfers?: TokenTransferInfo[];
 }
 
 /**

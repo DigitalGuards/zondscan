@@ -48,6 +48,28 @@ const formatTimestamp = (timestamp: number): string => {
 const isZeroAddress = (addr: string): boolean =>
   addr === 'Q0' || addr === 'Q' + '0'.repeat(40);
 
+// QRC badge label for a token standard. Keeps the contract-created header
+// and per-row transfer header in lock-step, both branch on the same
+// syncer-supplied tokenStandard value (mirrors backendAPI ContractInfo +
+// TokenTransfer). Anything we don't recognise falls back to QRC-20 so the
+// UI stays usable on legacy un-tagged rows.
+function qrcBadgeText(standard?: string): string {
+  if (standard === 'ERC-721') return 'QRC-721';
+  if (standard === 'ERC-1155') return 'QRC-1155';
+  return 'QRC-20';
+}
+
+// ERC-1155 amounts are integer counts (no decimals on chain) but still
+// benefit from thousands separators on multi-digit values. Falls back to
+// the raw string if BigInt rejects it.
+function formatErc1155Amount(amount: string): string {
+  try {
+    return BigInt(amount).toLocaleString('en-US');
+  } catch {
+    return amount;
+  }
+}
+
 interface TransactionViewProps {
   transaction: TransactionDetails;
 }
@@ -180,7 +202,19 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
       </div>
 
       {/* Contract Creation Section */}
-      {transaction.contractCreated && (
+      {transaction.contractCreated && (() => {
+        const cc = transaction.contractCreated;
+        const ccStandard = cc.tokenStandard;
+        // ERC-1155 contracts often leave name()/symbol() unimplemented, the
+        // standard requires neither. Fall back to a placeholder rather than
+        // hiding the row, since the badge already tells the user it's a
+        // token contract.
+        const tokenLabel = cc.name
+          ? `${cc.name}${cc.symbol && cc.symbol !== cc.name ? ` (${cc.symbol})` : ''}`
+          : cc.symbol
+            ? `(${cc.symbol})`
+            : 'Unnamed Collection';
+        return (
         <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
           <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
             <div className="flex items-center gap-2">
@@ -188,55 +222,53 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <h2 className="text-[15px] font-semibold text-green-400">Contract Created</h2>
-              {transaction.contractCreated.isToken && <Badge variant="brand">QRC-20 Token</Badge>}
+              {cc.isToken && (
+                <Badge variant={ccStandard === 'ERC-721' || ccStandard === 'ERC-1155' ? 'warning' : 'brand'}>
+                  {qrcBadgeText(ccStandard)} Token
+                </Badge>
+              )}
             </div>
           </div>
           <div className="p-4 sm:p-6">
             <DetailRow label="Contract Address" mono>
               <Link
-                href={`/address/${transaction.contractCreated.address}`}
+                href={`/address/${cc.address}`}
                 className="text-[#ffa729] hover:text-[#ffb84d] transition-colors break-all"
               >
-                {displayAddr(transaction.contractCreated.address)}
+                {displayAddr(cc.address)}
               </Link>
             </DetailRow>
-            {transaction.contractCreated.isToken && transaction.contractCreated.name && (
+            {cc.isToken && (
               <DetailRow label="Token">
-                <span className="font-medium text-white">
-                  {transaction.contractCreated.name} ({transaction.contractCreated.symbol})
-                </span>
+                <span className="font-medium text-white">{tokenLabel}</span>
               </DetailRow>
             )}
           </div>
         </div>
-      )}
+        );
+      })()}
 
-      {/* Token Transfer Section */}
-      {transaction.tokenTransfer && (() => {
-        const tt = transaction.tokenTransfer;
-        // Per-standard presentation. The header badge reflects the chain
-        // standard (QRC-20 / QRC-721 / QRC-1155); ERC-721 transfers always
-        // move exactly one token, so we surface the tokenID rather than an
-        // ABI-encoded amount.
-        const standard = tt.tokenStandard;
-        const headerLabel =
-          standard === 'ERC-721' ? 'NFT Transfer'
-          : standard === 'ERC-1155' ? 'Multi-Token Transfer'
-          : 'Token Transfer';
-        const badgeText =
-          standard === 'ERC-721' ? 'QRC-721'
-          : standard === 'ERC-1155' ? 'QRC-1155'
-          : 'QRC-20';
-        const isNFT = standard === 'ERC-721' || standard === 'ERC-1155';
-        return (
-        <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+      {/* Token Transfer Section(s). A single tx can emit several Transfer
+          events (DEX swaps, ERC-1155 TransferBatch fan-out), each persisted
+          as its own row, so we render one card per row. */}
+      {transaction.tokenTransfers && transaction.tokenTransfers.length > 0 &&
+        transaction.tokenTransfers.map((tt, idx) => {
+          const standard = tt.tokenStandard;
+          const headerLabel =
+            standard === 'ERC-721' ? 'NFT Transfer'
+            : standard === 'ERC-1155' ? 'Multi-Token Transfer'
+            : 'Token Transfer';
+          const isNFT = standard === 'ERC-721' || standard === 'ERC-1155';
+          const rowKey = tt.logIndex || `${tt.contractAddress}-${idx}`;
+          return (
+        <div key={rowKey} className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
           <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
             <div className="flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
               </svg>
               <h2 className="text-[15px] font-semibold text-[#ffa729]">{headerLabel}</h2>
-              <Badge variant={isNFT ? 'warning' : 'brand'}>{badgeText}</Badge>
+              <Badge variant={isNFT ? 'warning' : 'brand'}>{qrcBadgeText(standard)}</Badge>
             </div>
           </div>
           <div className="p-4 sm:p-6">
@@ -258,7 +290,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               <DetailRow label="Amount">
                 <span className="font-semibold text-white">
                   {standard === 'ERC-1155'
-                    ? tt.amount
+                    ? formatErc1155Amount(tt.amount)
                     : formatTokenAmount(tt.amount, tt.tokenDecimals)}
                 </span>
                 {tt.tokenSymbol && (
@@ -303,8 +335,8 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             </DetailRow>
           </div>
         </div>
-        );
-      })()}
+          );
+        })}
     </div>
   );
 }
