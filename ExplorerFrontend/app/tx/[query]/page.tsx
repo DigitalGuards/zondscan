@@ -130,6 +130,7 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
     logs: Array.isArray(data.logs) ? data.logs : undefined,
     targetContract: data.targetContract || undefined,
     internalTransactions: Array.isArray(data.internalTransactions) ? data.internalTransactions : undefined,
+    receiptStatus: typeof data.receiptStatus === 'string' ? data.receiptStatus : undefined,
   };
 
   return transaction;

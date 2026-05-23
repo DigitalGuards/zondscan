@@ -147,8 +147,16 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
   };
 
   const paidFees = calculatePaidFees();
-  const badgeVariant = status.color === 'bg-green-500' ? 'success' as const
-    : status.color === 'bg-blue-500' ? 'info' as const
+  // Receipt-level revert flag takes priority over confirmation count: a
+  // tx that mined but reverted is "Confirmed" by the confirmations
+  // metric yet failed by the EVM's measure. Surface the real state.
+  const isReverted = transaction.receiptStatus === '0x0';
+  const effectiveStatus = isReverted
+    ? { text: 'Reverted', color: 'bg-red-500' }
+    : status;
+  const badgeVariant = isReverted ? 'error' as const
+    : effectiveStatus.color === 'bg-green-500' ? 'success' as const
+    : effectiveStatus.color === 'bg-blue-500' ? 'info' as const
     : 'warning' as const;
 
   const displayAddr = (addr: string): string =>
@@ -178,7 +186,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             </svg>
             <h1 id="tx-detail-heading" className="text-xl sm:text-2xl font-bold text-[#ffa729]">Transaction Details</h1>
           </div>
-          <Badge variant={badgeVariant} size="md" dot>{status.text}</Badge>
+          <Badge variant={badgeVariant} size="md" dot>{effectiveStatus.text}</Badge>
         </div>
 
         {/* Content */}
@@ -190,7 +198,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             </div>
           </DetailRow>
           <DetailRow label="Status">
-            <Badge variant={badgeVariant} dot>{status.text}</Badge>
+            <Badge variant={badgeVariant} dot>{effectiveStatus.text}</Badge>
             <span className="text-gray-500 text-xs ml-2">{confirmationText}</span>
           </DetailRow>
           <DetailRow label="Block">

@@ -33,31 +33,48 @@ type receiptLog struct {
 	Removed  bool     `json:"removed"`
 }
 
-// fetchReceiptLogs pulls a tx's receipt over JSON-RPC and returns the
-// logs slice. Best-effort: if the node is unreachable or the receipt
-// hasn't been indexed yet, returns an empty slice without an error so
-// the tx page still renders. Errors are logged at the call site.
-func fetchReceiptLogs(ctx context.Context, txHash string) []receiptLog {
+// receiptSummary is the subset of a tx receipt the /tx/:hash route
+// surfaces alongside the events. Status is the EVM revert flag
+// ("0x1" success, "0x0" reverted); the syncer's Transaction.Status
+// field is empty for every historical row, so we resolve it from
+// the live receipt here. Same RPC call that already fetches logs.
+type receiptSummary struct {
+	Status string       `json:"status"`
+	Logs   []receiptLog `json:"logs"`
+}
+
+// fetchReceipt pulls a tx's receipt over JSON-RPC and returns the
+// caller-facing subset (status + logs). Best-effort: if the node is
+// unreachable or the receipt hasn't been indexed yet, returns an
+// empty struct without an error so the tx page still renders. Errors
+// are logged at the call site.
+func fetchReceipt(ctx context.Context, txHash string) receiptSummary {
 	raw, rpcErr, transportErr := db.NodeRPC(ctx, "qrl_getTransactionReceipt", []interface{}{txHash})
 	if transportErr != nil {
 		log.Printf("receipt fetch %s: %v", txHash, transportErr)
-		return nil
+		return receiptSummary{}
 	}
 	if rpcErr != nil {
 		log.Printf("receipt fetch %s: rpc error: %s", txHash, rpcErr.Error())
-		return nil
+		return receiptSummary{}
 	}
 	if len(raw) == 0 || string(raw) == "null" {
-		return nil
+		return receiptSummary{}
 	}
-	var receipt struct {
-		Logs []receiptLog `json:"logs"`
-	}
-	if err := json.Unmarshal(raw, &receipt); err != nil {
+	var summary receiptSummary
+	if err := json.Unmarshal(raw, &summary); err != nil {
 		log.Printf("receipt decode %s: %v", txHash, err)
-		return nil
+		return receiptSummary{}
 	}
-	return receipt.Logs
+	return summary
+}
+
+// fetchReceiptLogs is the legacy logs-only entry point kept for
+// callers that don't care about status (currently none). Delegates
+// to fetchReceipt and returns just the logs slice so the existing
+// call sites compile without change.
+func fetchReceiptLogs(ctx context.Context, txHash string) []receiptLog {
+	return fetchReceipt(ctx, txHash).Logs
 }
 
 // fetchTxInput pulls a tx's calldata from the node. The historical block
@@ -581,19 +598,20 @@ func UserRoute(router *gin.Engine) {
 		// empty for every historical tx.
 		rpcCtx, cancelRPC := context.WithTimeout(c.Request.Context(), 6*time.Second)
 		defer cancelRPC()
-		var logs []receiptLog
+		var receipt receiptSummary
 		var txInput string
 		var rpcWG sync.WaitGroup
 		rpcWG.Add(2)
 		go func() {
 			defer rpcWG.Done()
-			logs = fetchReceiptLogs(rpcCtx, value)
+			receipt = fetchReceipt(rpcCtx, value)
 		}()
 		go func() {
 			defer rpcWG.Done()
 			txInput = fetchTxInput(rpcCtx, value)
 		}()
 		rpcWG.Wait()
+		logs := receipt.Logs
 
 		// Attach per-log + per-target contract metadata so the frontend
 		// can decode unknown event signatures + method selectors when the
@@ -648,6 +666,14 @@ func UserRoute(router *gin.Engine) {
 		response := gin.H{
 			"response":    query,
 			"latestBlock": latestBlockNum,
+		}
+		// Receipt status is "0x1" on success, "0x0" on revert. Surface it
+		// so the frontend can render a "Reverted" badge instead of falsely
+		// labelling a failed-but-confirmed tx as confirmed. Empty when
+		// the RPC fetch failed; the frontend treats absent as success
+		// (matches the existing fallback).
+		if receipt.Status != "" {
+			response["receiptStatus"] = receipt.Status
 		}
 		if len(logs) > 0 {
 			// Re-emit logs with the optional contract field attached so the

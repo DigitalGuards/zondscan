@@ -135,6 +135,8 @@ export interface TransactionDetails {
   targetContract?: ContractMeta;
   /** Internal calls captured under this tx by the syncer (CALL / DELEGATECALL / STATICCALL sub-frames). */
   internalTransactions?: InternalTx[];
+  /** Receipt-level status from the live RPC. "0x1" = success, "0x0" = reverted, undefined when RPC fetch failed. */
+  receiptStatus?: string;
 }
 
 /**
