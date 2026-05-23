@@ -449,6 +449,21 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                           <p className="ml-2 mt-1 text-gray-200 font-mono break-all">{logEntry.data}</p>
                         </div>
                       )}
+                      {/* The decoder fell through to raw because the emitting
+                          contract isn't verified (or has no contractCode row
+                          at all). Surface a CTA so users hit a path of
+                          action instead of a wall of hex. */}
+                      {(!logEntry.contract || !logEntry.contract.verified) && (
+                        <p className="mt-2 text-[11px] text-gray-500">
+                          <Link
+                            href={`/verify-contract?address=${logEntry.address}`}
+                            className="text-[#ffa729] hover:text-[#ffb84d] hover:underline"
+                          >
+                            Verify this contract
+                          </Link>
+                          {' '}to see decoded event names and labelled arguments here.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -612,6 +627,22 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                 </>
               )}
               <p className="font-mono text-gray-300 break-all text-xs leading-relaxed">{transaction.input}</p>
+              {/* Neither the well-known-token-selector decoder nor the
+                  ABI decoder produced a hit. If the target has a
+                  contractCode row but isn't verified, nudge users
+                  toward verification so future hits to this tx show
+                  a labelled method instead of raw hex. */}
+              {!decodedInput && !decodedCall && transaction.to && transaction.targetContract && !transaction.targetContract.verified && (
+                <p className="mt-2 text-[11px] text-gray-500">
+                  <Link
+                    href={`/verify-contract?address=${transaction.to}`}
+                    className="text-[#ffa729] hover:text-[#ffb84d] hover:underline"
+                  >
+                    Verify this contract
+                  </Link>
+                  {' '}to see the method name + labelled arguments instead of raw calldata.
+                </p>
+              )}
             </div>
           </section>
         );
