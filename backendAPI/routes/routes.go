@@ -89,9 +89,43 @@ func fetchTxInput(ctx context.Context, txHash string) string {
 }
 
 // routeCache absorbs concurrent traffic on read endpoints with a small TTL
-// (5–30 s depending on freshness needs). Singleflight inside the cache
+// (5-30 s depending on freshness needs). Singleflight inside the cache
 // guarantees only one goroutine recomputes a key when it expires, so
 // MongoDB never sees a "thundering herd" on cache miss.
+//
+// ── Cache inventory (audit, dev-loop iter 15) ────────────────────────────
+// QRL Zond block time is ~15 s; mempool turnover ~5 s. TTLs below were
+// picked against those clocks. Anything tagged (*) carries a known
+// staleness trade-off worth being aware of when reasoning about a bug.
+//
+//   key                       TTL  endpoint                  notes
+//   ────────────────────────  ───  ────────────────────────  ─────────────
+//   pending-tx:<page>:<lim>    5s  /pending-transactions     mempool turnover ~5s, matches
+//   overview                  10s  /overview                 8 mongo round trips fused; values change slowly
+//   txs:<page>:<lim>          10s  /transactions             (*) embeds latestBlock; lagged confirmation counts up to 10s
+//   addr:<addr>:<page>:<lim>  10s  /address/aggregate/:addr  (*) embeds latestBlock; same trade-off as /transactions
+//   latestblock                5s  /latestblock              hot poller endpoint; 5s = 3x ratio under block time
+//   richlist                  30s  /richlist                 wallet ranking shifts on timescale of minutes
+//   blocks:<page>:<lim>       10s  /blocks                   new block ~15s, list refresh tolerates lag
+//   blocksizes                30s  /blocksizes               precomputed time series; updated by syncer hourly
+//   latest-txs                 5s  /transactions (legacy)    home-page feed, hot path
+//   eta:<hash>                 5s  /pending-tx-eta/:hash     per-tx pending ETA, valid for one block window
+//   gas:summary                5s  /gas/summary              live gas snapshot
+//   gas-history:<range>       30s  /gas-history              precomputed time series; 30s is fine
+//
+// Staleness contract:
+//   - Endpoints embedding `latestBlock` carry the cache window as their
+//     worst-case confirmation lag. The /tx/:hash detail endpoint deliberately
+//     skips this cache (see backendAPI README + iter9 history) because a
+//     newly-mined tx must show its true confirmation count immediately.
+//   - Mempool endpoints (pending + eta + gas) hover at 5s, the smallest
+//     value that meaningfully amortises concurrent visitors.
+//   - Anything > 30s should be re-justified here, longer TTLs hide real
+//     changes that users notice (block height, gas price spikes).
+//
+// To change a TTL: edit the call site and update the row above so the
+// inventory stays accurate. Two minutes of doc-keeping costs less than
+// chasing a stale-cache bug.
 var routeCache = cache.New()
 
 func init() {
