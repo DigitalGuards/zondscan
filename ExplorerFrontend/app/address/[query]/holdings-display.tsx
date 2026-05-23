@@ -92,11 +92,11 @@ export default function HoldingsDisplay({ address }: HoldingsDisplayProps): JSX.
   if (tokens.length === 0 && nfts.length === 0) return null;
 
   return (
-    <div className="space-y-4 md:space-y-6">
-      <h2 className="text-base md:text-lg lg:text-xl font-semibold text-accent">Holdings</h2>
+    <section aria-labelledby="holdings-heading" className="space-y-4 md:space-y-6">
+      <h2 id="holdings-heading" className="text-base md:text-lg lg:text-xl font-semibold text-accent">Holdings</h2>
 
       {tokens.length > 0 && (
-        <div className="rounded-xl border border-border overflow-hidden">
+        <div className="rounded-xl border border-border overflow-hidden" role="region" aria-label="Token holdings">
           <div className="px-4 py-3 border-b border-border bg-[#1a1a1a]/40 flex items-center gap-2">
             <span className="text-sm font-medium text-gray-200">Tokens</span>
             <Badge variant="brand">{tokens.length} QRC-20</Badge>
@@ -128,7 +128,7 @@ export default function HoldingsDisplay({ address }: HoldingsDisplayProps): JSX.
       )}
 
       {nfts.length > 0 && (
-        <div className="rounded-xl border border-border overflow-hidden">
+        <div className="rounded-xl border border-border overflow-hidden" role="region" aria-label="NFT holdings">
           <div className="px-4 py-3 border-b border-border bg-[#1a1a1a]/40 flex items-center gap-2">
             <span className="text-sm font-medium text-gray-200">NFTs</span>
             <Badge variant="warning">{nfts.length} collection{nfts.length === 1 ? '' : 's'}</Badge>
@@ -193,6 +193,6 @@ export default function HoldingsDisplay({ address }: HoldingsDisplayProps): JSX.
           </ul>
         </div>
       )}
-    </div>
+    </section>
   );
 }
