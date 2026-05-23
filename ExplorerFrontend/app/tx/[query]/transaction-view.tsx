@@ -3,12 +3,21 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import axios from 'axios';
+import { useQuery } from '@tanstack/react-query';
 import { type TransactionDetails, getConfirmations, getTransactionStatus } from '@/app/types';
 import { formatAmount, formatTokenAmount, decodeEventLog, decodeTokenTransferInput, decodeContractCall } from '../../lib/helpers';
+import config from '../../../config';
 import CopyButton from '../../components/CopyButton';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import DetailRow from '../../components/DetailRow';
 import Badge from '../../components/Badge';
+
+// Once a tx has this many confirmations we stop polling /latestblock for
+// it; further refinement is just visual noise (most chain UIs treat
+// >12-25 as effectively final). Keeps the polling cost bounded for
+// long-lived tabs.
+const TERMINAL_CONFIRMATIONS = 24;
 
 function BackToTransactionsLink(): JSX.Element | null {
   const searchParams = useSearchParams();
@@ -86,7 +95,35 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
-  const confirmations = getConfirmations(transaction.blockNumber, transaction.latestBlock);
+  // Poll /latestblock so the confirmation count ticks up live; stops
+  // once we cross the terminal-confirmations threshold to bound load
+  // on long-lived tabs. /latestblock is cached server-side for 5s
+  // (iter 15 audit), so concurrent visitors fan into one DB hit per
+  // bucket.
+  const ssrConfirmations = getConfirmations(transaction.blockNumber, transaction.latestBlock);
+  const latestBlockQuery = useQuery<{ blockNumber: number }>({
+    queryKey: ['latestblock'],
+    queryFn: async () => {
+      const r = await axios.get<{ blockNumber: number }>(`${config.handlerUrl}/latestblock`);
+      return r.data;
+    },
+    enabled: ssrConfirmations !== null && ssrConfirmations < TERMINAL_CONFIRMATIONS,
+    refetchInterval: (q) => {
+      const latest = q.state.data?.blockNumber ?? transaction.latestBlock;
+      const live = getConfirmations(transaction.blockNumber, latest);
+      return live !== null && live < TERMINAL_CONFIRMATIONS ? 5000 : false;
+    },
+    refetchIntervalInBackground: false,
+  });
+
+  const effectiveLatest = Math.max(
+    transaction.latestBlock ?? 0,
+    latestBlockQuery.data?.blockNumber ?? 0,
+  );
+  const confirmations = getConfirmations(
+    transaction.blockNumber,
+    effectiveLatest > 0 ? effectiveLatest : transaction.latestBlock,
+  );
   const status = getTransactionStatus(confirmations);
   const confirmationText = confirmations === null
     ? 'Pending'
