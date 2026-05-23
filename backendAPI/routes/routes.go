@@ -19,6 +19,24 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+// normalizeContractAddr maps any input address form (0x-hex, q-lower, bare
+// hex, Q-canonical) to the canonical "Q" + lowercase hex shape the syncer
+// stores in contractCode. Mirrors db.normalizeAddress (package-private)
+// so route handlers can resolve map keys returned by
+// db.GetContractsByAddresses without re-importing the db pkg's logic.
+func normalizeContractAddr(addr string) string {
+	if addr == "" {
+		return ""
+	}
+	if strings.HasPrefix(addr, "0x") || strings.HasPrefix(addr, "0X") {
+		return "Q" + strings.ToLower(addr[2:])
+	}
+	if strings.HasPrefix(addr, "Q") || strings.HasPrefix(addr, "q") {
+		return "Q" + strings.ToLower(addr[1:])
+	}
+	return "Q" + strings.ToLower(addr)
+}
+
 // receiptLog mirrors the subset of qrl_getTransactionReceipt.logs[] the tx
 // page actually consumes. address + topics + data + logIndex is enough for
 // the frontend's Event Logs panel to decode all token-flavoured signatures
@@ -283,19 +301,10 @@ func UserRoute(router *gin.Engine) {
 			contracts, terr := db.GetContractsByAddresses([]string{transaction.To})
 			if terr != nil {
 				log.Printf("pending target contract lookup %s: %v", hash, terr)
-			} else if c, ok := contracts[strings.ToLower(transaction.To)]; ok && c.ContractAddress != "" {
-				meta := gin.H{
-					"name":          c.TokenName,
-					"symbol":        c.TokenSymbol,
-					"tokenStandard": c.TokenStandard,
-					"verified":      c.Verified,
-					"contractName":  c.ContractName,
-				}
-				if c.Verified && c.Abi != "" {
-					meta["abi"] = c.Abi
-				}
-				response["targetContract"] = meta
-			} else if c, ok := contracts[transaction.To]; ok && c.ContractAddress != "" {
+			} else if c, ok := contracts[normalizeContractAddr(transaction.To)]; ok && c.ContractAddress != "" {
+				// contracts map is keyed by canonical Q+lowercase hex (the
+				// syncer's storage form). The previous strings.ToLower path
+				// produced "0x..." or "q..." keys that never matched.
 				meta := gin.H{
 					"name":          c.TokenName,
 					"symbol":        c.TokenSymbol,
@@ -641,14 +650,14 @@ func UserRoute(router *gin.Engine) {
 		// when there's no entry for this address so the caller can omit
 		// the field entirely.
 		contractInfoPayload := func(addr string) gin.H {
-			c, ok := contractsByAddr[strings.ToLower(addr)]
+			// contractsByAddr is keyed by canonical Q+lowercase hex (the
+			// shape db.GetContractsByAddresses returns from c.ContractAddress).
+			// Normalise the incoming addr to that shape before lookup so we
+			// don't miss matches when a log carries the address in 0x or
+			// lowercase-q form.
+			c, ok := contractsByAddr[normalizeContractAddr(addr)]
 			if !ok || c.ContractAddress == "" {
-				// canonical key is uppercase Q + lowercase hex; try both
-				// since incoming log addresses are sometimes lowercase Q.
-				c, ok = contractsByAddr[addr]
-				if !ok || c.ContractAddress == "" {
-					return nil
-				}
+				return nil
 			}
 			payload := gin.H{
 				"name":          c.TokenName,
@@ -860,12 +869,21 @@ func UserRoute(router *gin.Engine) {
 			for blockNumber, hashes := range blockHashIndex {
 				tt, ic := 0, 0
 				for _, h := range hashes {
+					lowerH := strings.ToLower(h)
 					if c, ok := tokenCounts[h]; ok {
 						tt += c
-					} else if c, ok := tokenCounts[strings.ToLower(h)]; ok {
+					} else if c, ok := tokenCounts[lowerH]; ok {
 						tt += c
 					}
-					ic += internalCounts[h]
+					// internalTransactionByAddress is written from
+					// trace data that may not share casing with the
+					// block's tx.Hash field; mirror the token-count
+					// fallback so we don't undercount calls.
+					if c, ok := internalCounts[h]; ok {
+						ic += c
+					} else if c, ok := internalCounts[lowerH]; ok {
+						ic += c
+					}
 				}
 				if tt > 0 || ic > 0 {
 					blockActivity[blockNumber] = gin.H{"tokenTransfers": tt, "internalCalls": ic}
@@ -1172,14 +1190,21 @@ func UserRoute(router *gin.Engine) {
 		}
 		activity := make(map[string]gin.H, len(txHashes))
 		for _, h := range txHashes {
-			tt := tokenCounts[h]
+			lowerH := strings.ToLower(h)
 			// CountTokenTransfersByTxHashes normalises to lowercase 0x...;
 			// in case the block stores hashes that already match, fall back
 			// to a lowercase lookup for resilience.
+			tt := tokenCounts[h]
 			if tt == 0 {
-				tt = tokenCounts[strings.ToLower(h)]
+				tt = tokenCounts[lowerH]
 			}
+			// Mirror the fallback for internalCounts (parity with the
+			// /blocks list aggregation; both data sources may differ in
+			// casing from the block's stored tx.Hash).
 			ic := internalCounts[h]
+			if ic == 0 {
+				ic = internalCounts[lowerH]
+			}
 			if tt > 0 || ic > 0 {
 				activity[h] = gin.H{"tokenTransfers": tt, "internalCalls": ic}
 			}

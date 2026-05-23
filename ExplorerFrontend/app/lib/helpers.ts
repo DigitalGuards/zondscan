@@ -881,7 +881,12 @@ function decodeEventViaAbi(topics: string[], data: string, abiJson: string): Dec
       decodeAbiSlot(inp.name || `arg${i}`, inp.type || 'raw', topics[i + 1])
     );
 
-    const nonIndexedArgs = decodeAbiData(nonIndexedInputs, data) || [];
+    // decodeAbiData returns null when `data` is shorter than the
+    // declared non-indexed inputs require; in that case the args array
+    // would contain `undefined` entries that the view can't render.
+    // Bail to the raw fallback instead of producing a half-decoded shape.
+    const nonIndexedArgs = decodeAbiData(nonIndexedInputs, data);
+    if (nonIndexedInputs.length > 0 && !nonIndexedArgs) continue;
 
     // Recombine into original input order so the view labels stay consistent
     // with the ABI declaration.
@@ -889,7 +894,7 @@ function decodeEventViaAbi(topics: string[], data: string, abiJson: string): Dec
     let ix = 0, nx = 0;
     for (const inp of inputs) {
       if (inp.indexed) args.push(indexedArgs[ix++]);
-      else args.push(nonIndexedArgs[nx++]);
+      else args.push((nonIndexedArgs ?? [])[nx++]);
     }
 
     return {
