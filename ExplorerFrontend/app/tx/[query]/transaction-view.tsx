@@ -200,6 +200,13 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
           <DetailRow label="Status">
             <Badge variant={badgeVariant} dot>{effectiveStatus.text}</Badge>
             <span className="text-gray-500 text-xs ml-2">{confirmationText}</span>
+            {isReverted && (
+              <p className="text-xs text-gray-500 mt-2 max-w-prose">
+                The EVM rolled this transaction back; any state changes it
+                tried to make were not applied. Gas was still consumed by
+                the partial execution (see Transaction Fee below).
+              </p>
+            )}
           </DetailRow>
           <DetailRow label="Block">
             {transaction.blockNumber ? (
