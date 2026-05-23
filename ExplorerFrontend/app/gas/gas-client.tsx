@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import axios from 'axios';
+import { useQuery } from '@tanstack/react-query';
 import config from '../../config';
 import Badge from '../components/Badge';
 import { formatGasPrice, hexToBigInt, hexToNumber, formatBigGas } from '../lib/helpers';
@@ -190,43 +191,34 @@ function HistogramChart({ buckets }: { buckets: GasSummary['gasPriceHistogram'] 
 }
 
 export default function GasClient(): JSX.Element {
-  const [summary, setSummary] = useState<GasSummary | null>(null);
-  const [history, setHistory] = useState<GasHistoryRow[]>([]);
   const [range, setRange] = useState<'24h' | '7d'>('24h');
-  const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const s = await axios.get<GasSummary>(`${config.handlerUrl}/gas/summary`);
-        if (!cancelled) setSummary(s.data);
-      } catch (e: unknown) {
-        if (!cancelled) setErr('Failed to load gas summary');
-        console.error(e);
-      }
-    };
-    load();
-    const id = setInterval(load, 10000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, []);
+  // Polling via TanStack Query so backgrounded tabs go quiet (the previous
+  // raw setInterval polled regardless of visibility); same pattern as
+  // /tx + /block detail's iter 26/28 confirmation polls. Summary at
+  // ~block time, history range-keyed and refetched only on range change.
+  const summaryQuery = useQuery<GasSummary>({
+    queryKey: ['gas-summary'],
+    queryFn: async () => {
+      const r = await axios.get<GasSummary>(`${config.handlerUrl}/gas/summary`);
+      return r.data;
+    },
+    refetchInterval: 10000,
+    refetchIntervalInBackground: false,
+    retry: 2,
+  });
+  const summary = summaryQuery.data ?? null;
+  const err = summaryQuery.isError ? 'Failed to load gas summary' : null;
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const r = await axios.get<GasHistoryResp>(`${config.handlerUrl}/gas/history?range=${range}`);
-        if (!cancelled) setHistory(r.data?.data ?? []);
-      } catch (e) {
-        if (!cancelled) console.error(e);
-      }
-    };
-    load();
-    return () => { cancelled = true; };
-  }, [range]);
+  const historyQuery = useQuery<GasHistoryResp>({
+    queryKey: ['gas-history', range],
+    queryFn: async () => {
+      const r = await axios.get<GasHistoryResp>(`${config.handlerUrl}/gas/history?range=${range}`);
+      return r.data;
+    },
+    retry: 2,
+  });
+  const history = historyQuery.data?.data ?? [];
 
   const utilization = useMemo(() => {
     if (!summary) return null;

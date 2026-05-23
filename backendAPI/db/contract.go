@@ -107,6 +107,141 @@ func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool
 	return contracts, total, nil
 }
 
+// ContractCountsByStandard is the per-tab breakdown returned by
+// /contracts/counts: the three known token standards plus "other"
+// (non-token contracts). Used to populate the count chips on the
+// contracts-page tab buttons in one round trip.
+type ContractCountsByStandard struct {
+	ERC20   int64 `json:"erc20"`
+	ERC721  int64 `json:"erc721"`
+	ERC1155 int64 `json:"erc1155"`
+	Other   int64 `json:"other"`
+}
+
+// GetContractCountsByStandard returns the four tab buckets the frontend
+// shows on /contracts in a single aggregation. One $group instead of
+// four CountDocuments calls keeps the cost predictable as the
+// contractCode collection grows.
+//
+// The "other" bucket is non-token contracts (isToken=false). Three
+// token buckets are scoped by tokenStandard. Legacy rows without a
+// tokenStandard tag (pre-Phase 1) and isToken=true still count as
+// "other" so the four buckets always sum to the total contractCode
+// document count, useful for sanity-checking.
+func GetContractCountsByStandard() (ContractCountsByStandard, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var out ContractCountsByStandard
+
+	// $group by a synthesised bucket label so we get all four counts back
+	// in one aggregation pass.
+	pipeline := []bson.M{
+		{
+			"$group": bson.M{
+				"_id": bson.M{
+					"$cond": []interface{}{
+						bson.M{"$eq": []interface{}{"$isToken", true}},
+						bson.M{
+							"$switch": bson.M{
+								"branches": []bson.M{
+									{"case": bson.M{"$eq": []interface{}{"$tokenStandard", "ERC-20"}}, "then": "erc20"},
+									{"case": bson.M{"$eq": []interface{}{"$tokenStandard", "ERC-721"}}, "then": "erc721"},
+									{"case": bson.M{"$eq": []interface{}{"$tokenStandard", "ERC-1155"}}, "then": "erc1155"},
+								},
+								"default": "other",
+							},
+						},
+						"other",
+					},
+				},
+				"count": bson.M{"$sum": 1},
+			},
+		},
+	}
+
+	cursor, err := configs.ContractInfoCollection.Aggregate(ctx, pipeline)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return out, nil
+		}
+		return out, err
+	}
+	defer cursor.Close(ctx)
+
+	for cursor.Next(ctx) {
+		var row struct {
+			ID    string `bson:"_id"`
+			Count int64  `bson:"count"`
+		}
+		if err := cursor.Decode(&row); err != nil {
+			continue
+		}
+		switch row.ID {
+		case "erc20":
+			out.ERC20 = row.Count
+		case "erc721":
+			out.ERC721 = row.Count
+		case "erc1155":
+			out.ERC1155 = row.Count
+		default:
+			out.Other += row.Count
+		}
+	}
+	return out, nil
+}
+
+// GetContractsByAddresses batch-loads contract docs for a set of addresses,
+// returning a map keyed by the canonical Q-prefix address. Used by the
+// /tx/:hash route to attach ABI metadata to receipt logs without N
+// round-trips. Missing addresses simply don't appear in the returned map,
+// callers handle the absent-key case as "no contract info available".
+//
+// Each input address is normalized to the canonical Q-prefix lowercase
+// form the syncer stores. Empty input returns an empty map without
+// touching mongo.
+func GetContractsByAddresses(addresses []string) (map[string]models.ContractInfo, error) {
+	out := make(map[string]models.ContractInfo)
+	if len(addresses) == 0 {
+		return out, nil
+	}
+
+	// Dedupe + normalize so the $in list is minimal.
+	seen := make(map[string]struct{}, len(addresses))
+	normalized := make([]string, 0, len(addresses))
+	for _, a := range addresses {
+		n := normalizeAddress(a)
+		if _, ok := seen[n]; ok {
+			continue
+		}
+		seen[n] = struct{}{}
+		normalized = append(normalized, n)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cursor, err := configs.ContractInfoCollection.Find(ctx, bson.M{
+		"address": bson.M{"$in": normalized},
+	})
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return out, nil
+		}
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	for cursor.Next(ctx) {
+		var c models.ContractInfo
+		if err := cursor.Decode(&c); err != nil {
+			continue
+		}
+		out[c.ContractAddress] = c
+	}
+	return out, nil
+}
+
 func ReturnContractCode(address string) (models.ContractInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

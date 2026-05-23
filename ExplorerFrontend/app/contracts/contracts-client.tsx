@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import Image from 'next/image';
+import { useState, useEffect, useCallback } from 'react';
+import ImageWithFallback from '../components/ImageWithFallback';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
@@ -49,12 +49,6 @@ const TAB_TO_STANDARD: Record<TabType, 'ERC-20' | 'ERC-721' | 'ERC-1155' | null>
   erc721: 'ERC-721',
   erc1155: 'ERC-1155',
   contracts: null,
-};
-
-const STANDARD_LABEL: Record<string, string> = {
-  'ERC-20': 'Token',
-  'ERC-721': 'NFT',
-  'ERC-1155': 'Multi-Token',
 };
 
 const TAB_RESULT_NOUN: Record<TabType, string> = {
@@ -187,13 +181,50 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
   const [contracts, setContracts] = useState<ContractData[]>(initialData);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(totalContracts);
+  // Per-tab totals so the TabButtons can surface counts; loaded once on
+  // mount via four small `total`-only requests (limit=1 keeps the response
+  // payload trivial). Undefined while pending so the count chip renders
+  // only when we have real data.
+  const [tabCounts, setTabCounts] = useState<Partial<Record<TabType, number>>>({});
+
+  // Single round trip via /contracts/counts (iter 24); the backend
+  // aggregation returns all four buckets at once, replacing the
+  // four mount-time /contracts limit=1 hits the previous version made.
+  // 30s server-side cache absorbs concurrent traffic on the contracts
+  // page so DB cost stays predictable.
+  useEffect(() => {
+    let cancelled = false;
+    axios.get(`${config.handlerUrl}/contracts/counts`)
+      .then((r) => {
+        if (cancelled) return;
+        const d = r.data;
+        if (!d || typeof d !== 'object') return;
+        setTabCounts({
+          erc20: typeof d.erc20 === 'number' ? d.erc20 : undefined,
+          erc721: typeof d.erc721 === 'number' ? d.erc721 : undefined,
+          erc1155: typeof d.erc1155 === 'number' ? d.erc1155 : undefined,
+          contracts: typeof d.other === 'number' ? d.other : undefined,
+        });
+      })
+      .catch(() => {
+        // Endpoint failure is silent: tab labels just render without
+        // count chips. Less noise than retrying or surfacing a banner.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const fetchContracts = useCallback(async (page: number, search: string, tab: TabType) => {
     try {
       setLoading(true);
       const cleanSearch = search ? search.toLowerCase().replace(/^0x/, '') : undefined;
 
-      const params: Record<string, any> = {
+      // Axios stringifies primitives directly; the union covers everything
+      // we actually assign here (page/limit as number, search/standard as
+      // string, isToken as boolean). Narrowing it to `unknown` would lose
+      // that, narrowing it to a closed union is the right shape.
+      const params: Record<string, string | number | boolean> = {
         page,
         limit: ITEMS_PER_PAGE,
       };
@@ -256,10 +287,10 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
       {/* Tabs, QRC-X is the QRL-branded form of the EIP standards; the
           underlying tokenStandard string stays "ERC-X" in the DB / API. */}
       <div role="tablist" className="flex flex-wrap gap-2 mb-6">
-        <TabButton tab="erc20" label="Tokens (QRC-20)" activeTab={activeTab} onSelect={setActiveTab} />
-        <TabButton tab="erc721" label="NFTs (QRC-721)" activeTab={activeTab} onSelect={setActiveTab} />
-        <TabButton tab="erc1155" label="Multi-Token (QRC-1155)" activeTab={activeTab} onSelect={setActiveTab} />
-        <TabButton tab="contracts" label="Other Contracts" activeTab={activeTab} onSelect={setActiveTab} />
+        <TabButton tab="erc20" label="Tokens (QRC-20)" count={tabCounts.erc20} activeTab={activeTab} onSelect={setActiveTab} />
+        <TabButton tab="erc721" label="NFTs (QRC-721)" count={tabCounts.erc721} activeTab={activeTab} onSelect={setActiveTab} />
+        <TabButton tab="erc1155" label="Multi-Token (QRC-1155)" count={tabCounts.erc1155} activeTab={activeTab} onSelect={setActiveTab} />
+        <TabButton tab="contracts" label="Other Contracts" count={tabCounts.contracts} activeTab={activeTab} onSelect={setActiveTab} />
       </div>
 
       {/* Search */}
@@ -485,7 +516,20 @@ function ContractRow({
         <div className="flex items-center gap-3">
           {metaImage ? (
             <div className="relative w-8 h-8 rounded-full overflow-hidden border border-gray-700/50 bg-black/30 shrink-0">
-              <Image src={metaImage} alt={primary} fill sizes="32px" className="object-cover" unoptimized />
+              <ImageWithFallback
+                src={metaImage}
+                alt={primary}
+                fill
+                sizes="32px"
+                className="object-cover"
+                fallback={
+                  <div
+                    className={`absolute inset-0 bg-gradient-to-br ${avatarGradient} flex items-center justify-center font-bold text-sm ${avatarTextColor}`}
+                  >
+                    {avatarChar}
+                  </div>
+                }
+              />
             </div>
           ) : (
             <div

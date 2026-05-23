@@ -8,13 +8,13 @@ export const metadata: Metadata = {
   description: 'Explore the free Zondscan REST API. Access blockchain data, transactions, blocks, addresses, validators, and token information for the QRL Zond network.',
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: '/api-explorer',
+    canonical: 'https://zondscan.com/api-explorer',
   },
   openGraph: {
     ...sharedMetadata.openGraph,
     title: 'API Explorer | QRL Explorer',
     description: 'Explore the free Zondscan REST API. Access blockchain data, transactions, blocks, addresses, validators, and token information for the QRL Zond network.',
-    url: '/api-explorer',
+    url: 'https://zondscan.com/api-explorer',
   },
   twitter: {
     ...sharedMetadata.twitter,
@@ -24,5 +24,10 @@ export const metadata: Metadata = {
 };
 
 export default function ApiExplorerPage(): JSX.Element {
-  return <ApiExplorerClient />;
+  return (
+    <main aria-labelledby="api-explorer-heading">
+      <h1 id="api-explorer-heading" className="sr-only">Zondscan API Explorer</h1>
+      <ApiExplorerClient />
+    </main>
+  );
 }

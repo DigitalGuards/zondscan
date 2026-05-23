@@ -19,6 +19,24 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+// normalizeContractAddr maps any input address form (0x-hex, q-lower, bare
+// hex, Q-canonical) to the canonical "Q" + lowercase hex shape the syncer
+// stores in contractCode. Mirrors db.normalizeAddress (package-private)
+// so route handlers can resolve map keys returned by
+// db.GetContractsByAddresses without re-importing the db pkg's logic.
+func normalizeContractAddr(addr string) string {
+	if addr == "" {
+		return ""
+	}
+	if strings.HasPrefix(addr, "0x") || strings.HasPrefix(addr, "0X") {
+		return "Q" + strings.ToLower(addr[2:])
+	}
+	if strings.HasPrefix(addr, "Q") || strings.HasPrefix(addr, "q") {
+		return "Q" + strings.ToLower(addr[1:])
+	}
+	return "Q" + strings.ToLower(addr)
+}
+
 // receiptLog mirrors the subset of qrl_getTransactionReceipt.logs[] the tx
 // page actually consumes. address + topics + data + logIndex is enough for
 // the frontend's Event Logs panel to decode all token-flavoured signatures
@@ -33,31 +51,48 @@ type receiptLog struct {
 	Removed  bool     `json:"removed"`
 }
 
-// fetchReceiptLogs pulls a tx's receipt over JSON-RPC and returns the
-// logs slice. Best-effort: if the node is unreachable or the receipt
-// hasn't been indexed yet, returns an empty slice without an error so
-// the tx page still renders. Errors are logged at the call site.
-func fetchReceiptLogs(ctx context.Context, txHash string) []receiptLog {
+// receiptSummary is the subset of a tx receipt the /tx/:hash route
+// surfaces alongside the events. Status is the EVM revert flag
+// ("0x1" success, "0x0" reverted); the syncer's Transaction.Status
+// field is empty for every historical row, so we resolve it from
+// the live receipt here. Same RPC call that already fetches logs.
+type receiptSummary struct {
+	Status string       `json:"status"`
+	Logs   []receiptLog `json:"logs"`
+}
+
+// fetchReceipt pulls a tx's receipt over JSON-RPC and returns the
+// caller-facing subset (status + logs). Best-effort: if the node is
+// unreachable or the receipt hasn't been indexed yet, returns an
+// empty struct without an error so the tx page still renders. Errors
+// are logged at the call site.
+func fetchReceipt(ctx context.Context, txHash string) receiptSummary {
 	raw, rpcErr, transportErr := db.NodeRPC(ctx, "qrl_getTransactionReceipt", []interface{}{txHash})
 	if transportErr != nil {
 		log.Printf("receipt fetch %s: %v", txHash, transportErr)
-		return nil
+		return receiptSummary{}
 	}
 	if rpcErr != nil {
 		log.Printf("receipt fetch %s: rpc error: %s", txHash, rpcErr.Error())
-		return nil
+		return receiptSummary{}
 	}
 	if len(raw) == 0 || string(raw) == "null" {
-		return nil
+		return receiptSummary{}
 	}
-	var receipt struct {
-		Logs []receiptLog `json:"logs"`
-	}
-	if err := json.Unmarshal(raw, &receipt); err != nil {
+	var summary receiptSummary
+	if err := json.Unmarshal(raw, &summary); err != nil {
 		log.Printf("receipt decode %s: %v", txHash, err)
-		return nil
+		return receiptSummary{}
 	}
-	return receipt.Logs
+	return summary
+}
+
+// fetchReceiptLogs is the legacy logs-only entry point kept for
+// callers that don't care about status (currently none). Delegates
+// to fetchReceipt and returns just the logs slice so the existing
+// call sites compile without change.
+func fetchReceiptLogs(ctx context.Context, txHash string) []receiptLog {
+	return fetchReceipt(ctx, txHash).Logs
 }
 
 // fetchTxInput pulls a tx's calldata from the node. The historical block
@@ -89,9 +124,44 @@ func fetchTxInput(ctx context.Context, txHash string) string {
 }
 
 // routeCache absorbs concurrent traffic on read endpoints with a small TTL
-// (5–30 s depending on freshness needs). Singleflight inside the cache
+// (5-30 s depending on freshness needs). Singleflight inside the cache
 // guarantees only one goroutine recomputes a key when it expires, so
 // MongoDB never sees a "thundering herd" on cache miss.
+//
+// ── Cache inventory (audit, dev-loop iter 15) ────────────────────────────
+// QRL Zond block time is ~15 s; mempool turnover ~5 s. TTLs below were
+// picked against those clocks. Anything tagged (*) carries a known
+// staleness trade-off worth being aware of when reasoning about a bug.
+//
+//   key                       TTL  endpoint                  notes
+//   ────────────────────────  ───  ────────────────────────  ─────────────
+//   contracts:counts          30s  /contracts/counts         one $group aggregation; counts shift block-paced
+//   pending-tx:<page>:<lim>    5s  /pending-transactions     mempool turnover ~5s, matches
+//   overview                  10s  /overview                 8 mongo round trips fused; values change slowly
+//   txs:<page>:<lim>          10s  /transactions             (*) embeds latestBlock; lagged confirmation counts up to 10s
+//   addr:<addr>:<page>:<lim>  10s  /address/aggregate/:addr  (*) embeds latestBlock; same trade-off as /transactions
+//   latestblock                5s  /latestblock              hot poller endpoint; 5s = 3x ratio under block time
+//   richlist                  30s  /richlist                 wallet ranking shifts on timescale of minutes
+//   blocks:<page>:<lim>       10s  /blocks                   new block ~15s, list refresh tolerates lag
+//   blocksizes                30s  /blocksizes               precomputed time series; updated by syncer hourly
+//   latest-txs                 5s  /transactions (legacy)    home-page feed, hot path
+//   eta:<hash>                 5s  /pending-tx-eta/:hash     per-tx pending ETA, valid for one block window
+//   gas:summary                5s  /gas/summary              live gas snapshot
+//   gas-history:<range>       30s  /gas-history              precomputed time series; 30s is fine
+//
+// Staleness contract:
+//   - Endpoints embedding `latestBlock` carry the cache window as their
+//     worst-case confirmation lag. The /tx/:hash detail endpoint deliberately
+//     skips this cache (see backendAPI README + iter9 history) because a
+//     newly-mined tx must show its true confirmation count immediately.
+//   - Mempool endpoints (pending + eta + gas) hover at 5s, the smallest
+//     value that meaningfully amortises concurrent visitors.
+//   - Anything > 30s should be re-justified here, longer TTLs hide real
+//     changes that users notice (block height, gas price spikes).
+//
+// To change a TTL: edit the call site and update the row above so the
+// inventory stays accurate. Two minutes of doc-keeping costs less than
+// chasing a stale-cache bug.
 var routeCache = cache.New()
 
 func init() {
@@ -220,7 +290,36 @@ func UserRoute(router *gin.Engine) {
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{"transaction": transaction})
+		response := gin.H{"transaction": transaction}
+
+		// Surface verified-contract metadata for the recipient when one
+		// exists; mirrors the /tx/:hash plumbing so the pending view can
+		// use the same ABI-driven calldata decoder as the confirmed view.
+		// One row lookup per pending detail render, no batch needed
+		// because there's only one address to resolve.
+		if transaction.To != "" {
+			contracts, terr := db.GetContractsByAddresses([]string{transaction.To})
+			if terr != nil {
+				log.Printf("pending target contract lookup %s: %v", hash, terr)
+			} else if c, ok := contracts[normalizeContractAddr(transaction.To)]; ok && c.ContractAddress != "" {
+				// contracts map is keyed by canonical Q+lowercase hex (the
+				// syncer's storage form). The previous strings.ToLower path
+				// produced "0x..." or "q..." keys that never matched.
+				meta := gin.H{
+					"name":          c.TokenName,
+					"symbol":        c.TokenSymbol,
+					"tokenStandard": c.TokenStandard,
+					"verified":      c.Verified,
+					"contractName":  c.ContractName,
+				}
+				if c.Verified && c.Abi != "" {
+					meta["abi"] = c.Abi
+				}
+				response["targetContract"] = meta
+			}
+		}
+
+		c.JSON(http.StatusOK, response)
 	})
 
 	router.GET("/overview", func(c *gin.Context) {
@@ -491,6 +590,14 @@ func UserRoute(router *gin.Engine) {
 			log.Printf("Error checking for token transfers tx %s: %v", value, err)
 		}
 
+		// Pull any internal-call entries the syncer captured under this
+		// tx. Simple value transfers don't have any; complex contract
+		// calls with delegate / static / call sub-frames will.
+		internalTxs, err := db.GetInternalTransactionsByTxHash(value)
+		if err != nil {
+			log.Printf("Error checking for internal txs %s: %v", value, err)
+		}
+
 		// Receipt logs power the Event Logs panel on the tx page; tx input
 		// powers the Input Data card. Best-effort RPC fetches in parallel
 		// with a shared 6s budget so the page still renders if the node is
@@ -500,29 +607,110 @@ func UserRoute(router *gin.Engine) {
 		// empty for every historical tx.
 		rpcCtx, cancelRPC := context.WithTimeout(c.Request.Context(), 6*time.Second)
 		defer cancelRPC()
-		var logs []receiptLog
+		var receipt receiptSummary
 		var txInput string
 		var rpcWG sync.WaitGroup
 		rpcWG.Add(2)
 		go func() {
 			defer rpcWG.Done()
-			logs = fetchReceiptLogs(rpcCtx, value)
+			receipt = fetchReceipt(rpcCtx, value)
 		}()
 		go func() {
 			defer rpcWG.Done()
 			txInput = fetchTxInput(rpcCtx, value)
 		}()
 		rpcWG.Wait()
+		logs := receipt.Logs
+
+		// Attach per-log + per-target contract metadata so the frontend
+		// can decode unknown event signatures + method selectors when the
+		// contract has been source-verified. One batched lookup covers
+		// every log address + the tx's target address; addresses without
+		// a contractCode row simply don't appear in the map and the
+		// frontend falls back to the raw render.
+		contractAddrs := make([]string, 0, len(logs)+1)
+		for _, l := range logs {
+			if l.Address != "" {
+				contractAddrs = append(contractAddrs, l.Address)
+			}
+		}
+		if query.To != "" {
+			contractAddrs = append(contractAddrs, query.To)
+		}
+		contractsByAddr, err := db.GetContractsByAddresses(contractAddrs)
+		if err != nil {
+			log.Printf("contracts-by-addresses lookup tx %s: %v", value, err)
+			contractsByAddr = map[string]models.ContractInfo{}
+		}
+
+		// contractInfoPayload builds the gin.H wrapper exposed to the
+		// frontend for a single contract. The ABI is included only when
+		// the contract is verified, that's the only case where the
+		// frontend can trust the ABI to be authoritative. Returns nil
+		// when there's no entry for this address so the caller can omit
+		// the field entirely.
+		contractInfoPayload := func(addr string) gin.H {
+			// contractsByAddr is keyed by canonical Q+lowercase hex (the
+			// shape db.GetContractsByAddresses returns from c.ContractAddress).
+			// Normalise the incoming addr to that shape before lookup so we
+			// don't miss matches when a log carries the address in 0x or
+			// lowercase-q form.
+			c, ok := contractsByAddr[normalizeContractAddr(addr)]
+			if !ok || c.ContractAddress == "" {
+				return nil
+			}
+			payload := gin.H{
+				"name":          c.TokenName,
+				"symbol":        c.TokenSymbol,
+				"tokenStandard": c.TokenStandard,
+				"verified":      c.Verified,
+				"contractName":  c.ContractName,
+			}
+			if c.Verified && c.Abi != "" {
+				payload["abi"] = c.Abi
+			}
+			return payload
+		}
 
 		response := gin.H{
 			"response":    query,
 			"latestBlock": latestBlockNum,
 		}
+		// Receipt status is "0x1" on success, "0x0" on revert. Surface it
+		// so the frontend can render a "Reverted" badge instead of falsely
+		// labelling a failed-but-confirmed tx as confirmed. Empty when
+		// the RPC fetch failed; the frontend treats absent as success
+		// (matches the existing fallback).
+		if receipt.Status != "" {
+			response["receiptStatus"] = receipt.Status
+		}
 		if len(logs) > 0 {
-			response["logs"] = logs
+			// Re-emit logs with the optional contract field attached so the
+			// frontend has everything it needs in one pass.
+			emitted := make([]gin.H, 0, len(logs))
+			for _, l := range logs {
+				entry := gin.H{
+					"address":  l.Address,
+					"topics":   l.Topics,
+					"data":     l.Data,
+					"logIndex": l.LogIndex,
+					"removed":  l.Removed,
+				}
+				if ci := contractInfoPayload(l.Address); ci != nil {
+					entry["contract"] = ci
+				}
+				emitted = append(emitted, entry)
+			}
+			response["logs"] = emitted
 		}
 		if txInput != "" && txInput != "0x" {
 			response["input"] = txInput
+			// targetContract carries the same shape as log.contract, used
+			// by the frontend Input Data card to decode the method
+			// selector + args off the target's ABI.
+			if ci := contractInfoPayload(query.To); ci != nil {
+				response["targetContract"] = ci
+			}
 		}
 
 		if contractCreated != nil {
@@ -555,6 +743,25 @@ func UserRoute(router *gin.Engine) {
 			response["tokenTransfers"] = rows
 		}
 
+		if len(internalTxs) > 0 {
+			rows := make([]gin.H, 0, len(internalTxs))
+			for _, t := range internalTxs {
+				rows = append(rows, gin.H{
+					"type":         t.Type,
+					"callType":     t.CallType,
+					"from":         t.From,
+					"to":           t.To,
+					"input":        t.Input,
+					"output":       t.Output,
+					"value":        t.Value,
+					"gas":          t.Gas,
+					"gasUsed":      t.GasUsed,
+					"traceAddress": t.TraceAddress,
+				})
+			}
+			response["internalTransactions"] = rows
+		}
+
 		c.JSON(http.StatusOK, response)
 	})
 
@@ -562,6 +769,11 @@ func UserRoute(router *gin.Engine) {
 		// Several frontend pages and external pollers hit this very often;
 		// a 5 s cache trims the load by orders of magnitude with no
 		// visible staleness (chain block time is much longer).
+		//
+		// Carries qrlUsdPrice alongside the height so the tx + block detail
+		// pages that already poll this endpoint can render USD-denominated
+		// fees without a second request. The price comes from the same
+		// coingecko-backed cache /overview uses (sub-millisecond lookup).
 		v, err := routeCache.GetOrCompute("latestblock", 5*time.Second, func() (interface{}, error) {
 			blockNumber, err := db.GetLatestBlockFromSyncState()
 			if err != nil {
@@ -571,7 +783,10 @@ func UserRoute(router *gin.Engine) {
 			if err != nil {
 				return nil, fmt.Errorf("invalid block number format in sync state: %w", err)
 			}
-			return gin.H{"blockNumber": num}, nil
+			return gin.H{
+				"blockNumber":  num,
+				"qrlUsdPrice":  db.GetCurrentPrice(),
+			}, nil
 		})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -619,7 +834,63 @@ func UserRoute(router *gin.Engine) {
 			if countBlocks > maxBlocks {
 				countBlocks = maxBlocks
 			}
-			return gin.H{"blocks": blocks, "total": countBlocks}, nil
+
+			// Per-block activity rollup, same data already surfaced on the
+			// block detail page (iter 8). Two batched aggregations across
+			// every tx hash on the page so the blocks list can render a
+			// "5 token, 12 calls" hint without follow-up requests.
+			allHashes := make([]string, 0)
+			blockHashIndex := make(map[string][]string, len(blocks))
+			for _, b := range blocks {
+				hashes := make([]string, 0, len(b.Transactions))
+				for _, t := range b.Transactions {
+					if t.Hash != "" {
+						hashes = append(hashes, t.Hash)
+						allHashes = append(allHashes, t.Hash)
+					}
+				}
+				blockHashIndex[b.Number] = hashes
+			}
+			tokenCounts, terr := db.CountTokenTransfersByTxHashes(allHashes)
+			if terr != nil {
+				log.Printf("blocks-list token counts: %v", terr)
+				tokenCounts = map[string]int{}
+			}
+			internalCounts, ierr := db.CountInternalTxsByTxHashes(allHashes)
+			if ierr != nil {
+				log.Printf("blocks-list internal counts: %v", ierr)
+				internalCounts = map[string]int{}
+			}
+			// Roll per-tx counts up to per-block totals. Both counter
+			// helpers store their keys as the syncer wrote them, so the
+			// outer loop iterates by block to keep keys aligned with the
+			// frontend lookup which is also done by block.number.
+			blockActivity := make(map[string]gin.H, len(blocks))
+			for blockNumber, hashes := range blockHashIndex {
+				tt, ic := 0, 0
+				for _, h := range hashes {
+					lowerH := strings.ToLower(h)
+					if c, ok := tokenCounts[h]; ok {
+						tt += c
+					} else if c, ok := tokenCounts[lowerH]; ok {
+						tt += c
+					}
+					// internalTransactionByAddress is written from
+					// trace data that may not share casing with the
+					// block's tx.Hash field; mirror the token-count
+					// fallback so we don't undercount calls.
+					if c, ok := internalCounts[h]; ok {
+						ic += c
+					} else if c, ok := internalCounts[lowerH]; ok {
+						ic += c
+					}
+				}
+				if tt > 0 || ic > 0 {
+					blockActivity[blockNumber] = gin.H{"tokenTransfers": tt, "internalCalls": ic}
+				}
+			}
+
+			return gin.H{"blocks": blocks, "total": countBlocks, "blockActivity": blockActivity}, nil
 		})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -767,6 +1038,24 @@ func UserRoute(router *gin.Engine) {
 		c.JSON(http.StatusOK, v)
 	})
 
+	// /contracts/counts surfaces the four tab buckets the contracts page
+	// shows in one aggregation. Cached 30s; the underlying numbers shift
+	// only as new contracts are deployed (block-paced, slow).
+	router.GET("/contracts/counts", func(c *gin.Context) {
+		v, err := routeCache.GetOrCompute("contracts:counts", 30*time.Second, func() (interface{}, error) {
+			counts, err := db.GetContractCountsByStandard()
+			if err != nil {
+				return nil, fmt.Errorf("failed to count contracts by standard: %w", err)
+			}
+			return counts, nil
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, v)
+	})
+
 	router.GET("/contracts", func(c *gin.Context) {
 		pageInt, limitInt := getPaginationParams(c, 0, 10)
 		page := int64(pageInt)
@@ -878,8 +1167,52 @@ func UserRoute(router *gin.Engine) {
 			return
 		}
 
+		// Per-tx activity counts: each row in the block's tx table can
+		// surface "moved N tokens" + "made M internal calls" without a
+		// follow-up /tx/:hash hit per row. Two scoped Mongo aggregations
+		// per block fan in to a (hash; counts) map the client looks up
+		// by row hash.
+		txHashes := make([]string, 0, len(block.Result.Transactions))
+		for _, t := range block.Result.Transactions {
+			if t.Hash != "" {
+				txHashes = append(txHashes, t.Hash)
+			}
+		}
+		tokenCounts, terr := db.CountTokenTransfersByTxHashes(txHashes)
+		if terr != nil {
+			log.Printf("token counts block %d: %v", blockNum, terr)
+			tokenCounts = map[string]int{}
+		}
+		internalCounts, ierr := db.CountInternalTxsByTxHashes(txHashes)
+		if ierr != nil {
+			log.Printf("internal counts block %d: %v", blockNum, ierr)
+			internalCounts = map[string]int{}
+		}
+		activity := make(map[string]gin.H, len(txHashes))
+		for _, h := range txHashes {
+			lowerH := strings.ToLower(h)
+			// CountTokenTransfersByTxHashes normalises to lowercase 0x...;
+			// in case the block stores hashes that already match, fall back
+			// to a lowercase lookup for resilience.
+			tt := tokenCounts[h]
+			if tt == 0 {
+				tt = tokenCounts[lowerH]
+			}
+			// Mirror the fallback for internalCounts (parity with the
+			// /blocks list aggregation; both data sources may differ in
+			// casing from the block's stored tx.Hash).
+			ic := internalCounts[h]
+			if ic == 0 {
+				ic = internalCounts[lowerH]
+			}
+			if tt > 0 || ic > 0 {
+				activity[h] = gin.H{"tokenTransfers": tt, "internalCalls": ic}
+			}
+		}
+
 		c.JSON(http.StatusOK, gin.H{
-			"block": block,
+			"block":      block,
+			"txActivity": activity,
 		})
 	})
 

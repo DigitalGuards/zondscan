@@ -9,7 +9,9 @@ interface PaginationProps {
 
 export default function Pagination({ currentPage, totalPages, onPrevious, onNext }: PaginationProps): JSX.Element {
   return (
-    <div className="flex justify-center items-center gap-3 text-sm text-gray-300 mt-6">
+    // Landmark wrapper so screen readers list pagination controls under
+    // "Pagination" in their landmark menu instead of generic regions.
+    <nav aria-label="Pagination" className="flex justify-center items-center gap-3 text-sm text-gray-300 mt-6">
       <button
         onClick={onPrevious}
         disabled={currentPage <= 1}
@@ -20,7 +22,11 @@ export default function Pagination({ currentPage, totalPages, onPrevious, onNext
       >
         Previous
       </button>
-      <span className="tabular-nums">Page {currentPage} of {totalPages}</span>
+      {/* aria-live so SR users hear the page transition announced when
+          the parent component re-renders with a new currentPage. */}
+      <span className="tabular-nums" aria-live="polite" aria-atomic="true">
+        Page {currentPage} of {totalPages}
+      </span>
       <button
         onClick={onNext}
         disabled={currentPage >= totalPages}
@@ -31,6 +37,6 @@ export default function Pagination({ currentPage, totalPages, onPrevious, onNext
       >
         Next
       </button>
-    </div>
+    </nav>
   );
 }

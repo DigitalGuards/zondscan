@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import EmptyState from './components/EmptyState'
 
 export default function NotFound(): JSX.Element {
