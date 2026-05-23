@@ -181,6 +181,40 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
   const [contracts, setContracts] = useState<ContractData[]>(initialData);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(totalContracts);
+  // Per-tab totals so the TabButtons can surface counts; loaded once on
+  // mount via four small `total`-only requests (limit=1 keeps the response
+  // payload trivial). Undefined while pending so the count chip renders
+  // only when we have real data.
+  const [tabCounts, setTabCounts] = useState<Partial<Record<TabType, number>>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    const buildParams = (tab: TabType): Record<string, string | number | boolean> => {
+      const p: Record<string, string | number | boolean> = { page: 0, limit: 1 };
+      const standard = TAB_TO_STANDARD[tab];
+      if (standard !== null) p.standard = standard;
+      else p.isToken = false;
+      return p;
+    };
+    Promise.all((['erc20', 'erc721', 'erc1155', 'contracts'] as const).map(async (tab) => {
+      try {
+        const r = await axios.get(`${config.handlerUrl}/contracts`, { params: buildParams(tab) });
+        return [tab, typeof r.data?.total === 'number' ? r.data.total : 0] as const;
+      } catch {
+        return [tab, undefined] as const;
+      }
+    })).then((pairs) => {
+      if (cancelled) return;
+      const next: Partial<Record<TabType, number>> = {};
+      for (const [tab, count] of pairs) {
+        if (typeof count === 'number') next[tab] = count;
+      }
+      setTabCounts(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const fetchContracts = useCallback(async (page: number, search: string, tab: TabType) => {
     try {
@@ -254,10 +288,10 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
       {/* Tabs, QRC-X is the QRL-branded form of the EIP standards; the
           underlying tokenStandard string stays "ERC-X" in the DB / API. */}
       <div role="tablist" className="flex flex-wrap gap-2 mb-6">
-        <TabButton tab="erc20" label="Tokens (QRC-20)" activeTab={activeTab} onSelect={setActiveTab} />
-        <TabButton tab="erc721" label="NFTs (QRC-721)" activeTab={activeTab} onSelect={setActiveTab} />
-        <TabButton tab="erc1155" label="Multi-Token (QRC-1155)" activeTab={activeTab} onSelect={setActiveTab} />
-        <TabButton tab="contracts" label="Other Contracts" activeTab={activeTab} onSelect={setActiveTab} />
+        <TabButton tab="erc20" label="Tokens (QRC-20)" count={tabCounts.erc20} activeTab={activeTab} onSelect={setActiveTab} />
+        <TabButton tab="erc721" label="NFTs (QRC-721)" count={tabCounts.erc721} activeTab={activeTab} onSelect={setActiveTab} />
+        <TabButton tab="erc1155" label="Multi-Token (QRC-1155)" count={tabCounts.erc1155} activeTab={activeTab} onSelect={setActiveTab} />
+        <TabButton tab="contracts" label="Other Contracts" count={tabCounts.contracts} activeTab={activeTab} onSelect={setActiveTab} />
       </div>
 
       {/* Search */}
