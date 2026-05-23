@@ -164,10 +164,15 @@ describe('decodeEventLog', () => {
     expect(decodeEventLog([], '0x')).toBeNull();
   });
 
+  // Small helper: compute the canonical event topic for a (name, types)
+  // pair the same way the production code does it. Keeps the ABI fallback
+  // tests independent of any precomputed hash table.
+  function eventTopic(name: string, types: string[]): string {
+    const sig = `${name}(${types.join(',')})`;
+    return '0x' + keccak256(Buffer.from(sig, 'utf8')).toString('hex');
+  }
+
   it('falls back to ABI decode when topic[0] matches a verified event', () => {
-    // ABI for `MyEvent(address indexed who, uint256 amount)`. The topic[0]
-    // hash should be keccak256("MyEvent(address,uint256)") which the
-    // decoder computes internally; we just trust the round trip.
     const abi = JSON.stringify([
       {
         type: 'event',
@@ -178,28 +183,93 @@ describe('decodeEventLog', () => {
         ],
       },
     ]);
-    // Compute the topic hash via the production code path (call decoder
-    // twice; first to discover what signature the ABI produces).
-    // Simpler: construct topic from the canonical signature ourselves.
-    // Hash is: keccak256("MyEvent(address,uint256)"); precomputed below.
-    const myEventTopic = '0x5c2b3f5b8b34a44ce14ec22f823c8d56f3854094bccc23f4c47c66ab7378ad96';
-    const decoded = decodeEventLog([myEventTopic, addrTopic(ADDR_A)], uintSlot(99), abi);
-    // We don't assert a specific topic hash since the production code
-    // computes it from the ABI. Instead, prove the round-trip works for a
-    // signature we know the production code generates.
-    // Re-run with the topic the decoder would have produced; call its
-    // sister API through an intermediate: build an ABI with a unique name
-    // and brute-force discover the matching hash via decodeContractCall...
-    // Punt: just assert that supplying a non-matching topic returns null
-    // and a matching ABI doesn't crash.
-    if (decoded) {
-      expect(decoded.name).toBe('MyEvent');
-    } else {
-      // If our precomputed hash didn't match (likely; we faked it), we
-      // still want to confirm the code path doesn't throw. The null result
-      // is acceptable here.
-      expect(decoded).toBeNull();
-    }
+    const topic = eventTopic('MyEvent', ['address', 'uint256']);
+    const decoded = decodeEventLog([topic, addrTopic(ADDR_A)], uintSlot(99), abi);
+    expect(decoded).not.toBeNull();
+    expect(decoded?.name).toBe('MyEvent');
+    expect(decoded?.signature).toBe('MyEvent(address,uint256)');
+    expect(decoded?.args).toEqual([
+      { label: 'who', type: 'address', value: 'Q' + ADDR_A },
+      { label: 'amount', type: 'uint256', value: '99' },
+    ]);
+  });
+
+  it('ABI fallback preserves original declaration order for mixed indexed args', () => {
+    // Three params, only the middle one indexed. The decoder has to fan
+    // the topic and data slots into the original declaration order so
+    // labels stay aligned with the ABI.
+    const abi = JSON.stringify([
+      {
+        type: 'event',
+        name: 'Mixed',
+        inputs: [
+          { name: 'a', type: 'uint256', indexed: false },
+          { name: 'b', type: 'address', indexed: true },
+          { name: 'c', type: 'bool', indexed: false },
+        ],
+      },
+    ]);
+    const topic = eventTopic('Mixed', ['uint256', 'address', 'bool']);
+    // Two non-indexed slots packed in data: a=42, c=true.
+    const data = uintSlot(42) + uintSlot(1).slice(2);
+    const decoded = decodeEventLog([topic, addrTopic(ADDR_B)], data, abi);
+    expect(decoded?.args).toEqual([
+      { label: 'a', type: 'uint256', value: '42' },
+      { label: 'b', type: 'address', value: 'Q' + ADDR_B },
+      { label: 'c', type: 'bool', value: 'true' },
+    ]);
+  });
+
+  it('ABI fallback skips anonymous events', () => {
+    // Anonymous events don't reserve a topic[0] for their signature, so
+    // matching by topic[0] hash would be wrong. The decoder should skip
+    // them and return null when nothing else matches.
+    const abi = JSON.stringify([
+      {
+        type: 'event',
+        name: 'Anon',
+        anonymous: true,
+        inputs: [{ name: 'x', type: 'uint256', indexed: false }],
+      },
+    ]);
+    const topic = eventTopic('Anon', ['uint256']);
+    expect(decodeEventLog([topic, addrTopic(ADDR_A)], uintSlot(1), abi)).toBeNull();
+  });
+
+  it('ABI fallback bails when the contract emits a wrong indexed-topic count', () => {
+    // ABI declares one indexed arg → the decoder expects exactly 2 topics
+    // (sig + one indexed). If a contract bug emits an extra topic or
+    // misses one, the decoder must NOT mis-align labels. Bail to null.
+    const abi = JSON.stringify([
+      {
+        type: 'event',
+        name: 'OneIndexed',
+        inputs: [
+          { name: 'who', type: 'address', indexed: true },
+          { name: 'amount', type: 'uint256', indexed: false },
+        ],
+      },
+    ]);
+    const topic = eventTopic('OneIndexed', ['address', 'uint256']);
+    // Emit *two* indexed topics (sig + 2 indexed) when ABI only declares 1.
+    expect(decodeEventLog([topic, addrTopic(ADDR_A), addrTopic(ADDR_B)], '0x', abi)).toBeNull();
+  });
+
+  it('ABI fallback ignores non-event entries', () => {
+    // ABI mixing a function and an event with the same name shouldn't
+    // confuse the event decoder; the function entry is ignored.
+    const abi = JSON.stringify([
+      { type: 'function', name: 'Mixed', inputs: [{ name: 'a', type: 'uint256' }] },
+      {
+        type: 'event',
+        name: 'Mixed',
+        inputs: [{ name: 'a', type: 'uint256', indexed: false }],
+      },
+    ]);
+    const topic = eventTopic('Mixed', ['uint256']);
+    const decoded = decodeEventLog([topic], uintSlot(7), abi);
+    expect(decoded?.name).toBe('Mixed');
+    expect(decoded?.args[0].value).toBe('7');
   });
 });
 
@@ -339,6 +409,53 @@ describe('decodeContractCall', () => {
     expect(decoded?.signature).toBe('setMatka1(address)');
     expect(decoded?.args).toHaveLength(1);
     expect(decoded?.args[0]).toEqual({ label: 'matka1', type: 'address', value: 'Q' + ADDR_A });
+  });
+
+  it('decodes a multi-arg static function (address, uint256, bool)', () => {
+    const abi = JSON.stringify([
+      {
+        type: 'function',
+        name: 'multi',
+        inputs: [
+          { name: 'who', type: 'address' },
+          { name: 'amount', type: 'uint256' },
+          { name: 'flag', type: 'bool' },
+        ],
+      },
+    ]);
+    const sig = 'multi(address,uint256,bool)';
+    const selector = '0x' + keccak256(Buffer.from(sig, 'utf8')).toString('hex').slice(0, 8);
+    const input = selector +
+      addrTopic(ADDR_A).slice(2) +
+      uintSlot(123).slice(2) +
+      uintSlot(1).slice(2); // flag = true
+    const decoded = decodeContractCall(input, abi);
+    expect(decoded?.name).toBe('multi');
+    expect(decoded?.signature).toBe(sig);
+    expect(decoded?.args).toEqual([
+      { label: 'who', type: 'address', value: 'Q' + ADDR_A },
+      { label: 'amount', type: 'uint256', value: '123' },
+      { label: 'flag', type: 'bool', value: 'true' },
+    ]);
+  });
+
+  it('returns null when calldata is truncated below what the ABI requires', () => {
+    // ABI declares 3 args (3*32 bytes); supply only 2*32 bytes after the
+    // selector. Decoder should bail rather than mis-decode an out-of-range slot.
+    const abi = JSON.stringify([
+      {
+        type: 'function',
+        name: 'three',
+        inputs: [
+          { name: 'a', type: 'address' },
+          { name: 'b', type: 'uint256' },
+          { name: 'c', type: 'bool' },
+        ],
+      },
+    ]);
+    const selector = '0x' + keccak256(Buffer.from('three(address,uint256,bool)', 'utf8')).toString('hex').slice(0, 8);
+    const truncated = selector + addrTopic(ADDR_A).slice(2) + uintSlot(1).slice(2); // missing 3rd slot
+    expect(decodeContractCall(truncated, abi)).toBeNull();
   });
 
   it('decodes a string arg via the dynamic-data offset+length layout', () => {
