@@ -790,7 +790,54 @@ func UserRoute(router *gin.Engine) {
 			if countBlocks > maxBlocks {
 				countBlocks = maxBlocks
 			}
-			return gin.H{"blocks": blocks, "total": countBlocks}, nil
+
+			// Per-block activity rollup, same data already surfaced on the
+			// block detail page (iter 8). Two batched aggregations across
+			// every tx hash on the page so the blocks list can render a
+			// "5 token, 12 calls" hint without follow-up requests.
+			allHashes := make([]string, 0)
+			blockHashIndex := make(map[string][]string, len(blocks))
+			for _, b := range blocks {
+				hashes := make([]string, 0, len(b.Transactions))
+				for _, t := range b.Transactions {
+					if t.Hash != "" {
+						hashes = append(hashes, t.Hash)
+						allHashes = append(allHashes, t.Hash)
+					}
+				}
+				blockHashIndex[b.Number] = hashes
+			}
+			tokenCounts, terr := db.CountTokenTransfersByTxHashes(allHashes)
+			if terr != nil {
+				log.Printf("blocks-list token counts: %v", terr)
+				tokenCounts = map[string]int{}
+			}
+			internalCounts, ierr := db.CountInternalTxsByTxHashes(allHashes)
+			if ierr != nil {
+				log.Printf("blocks-list internal counts: %v", ierr)
+				internalCounts = map[string]int{}
+			}
+			// Roll per-tx counts up to per-block totals. Both counter
+			// helpers store their keys as the syncer wrote them, so the
+			// outer loop iterates by block to keep keys aligned with the
+			// frontend lookup which is also done by block.number.
+			blockActivity := make(map[string]gin.H, len(blocks))
+			for blockNumber, hashes := range blockHashIndex {
+				tt, ic := 0, 0
+				for _, h := range hashes {
+					if c, ok := tokenCounts[h]; ok {
+						tt += c
+					} else if c, ok := tokenCounts[strings.ToLower(h)]; ok {
+						tt += c
+					}
+					ic += internalCounts[h]
+				}
+				if tt > 0 || ic > 0 {
+					blockActivity[blockNumber] = gin.H{"tokenTransfers": tt, "internalCalls": ic}
+				}
+			}
+
+			return gin.H{"blocks": blocks, "total": countBlocks, "blockActivity": blockActivity}, nil
 		})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
