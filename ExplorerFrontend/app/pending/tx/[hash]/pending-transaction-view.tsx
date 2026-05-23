@@ -5,9 +5,9 @@ import Link from 'next/link';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import type { PendingTransaction } from '@/app/types';
+import type { PendingTransaction, ContractMeta } from '@/app/types';
 import config from '../../../../config';
-import { formatAmount, formatGasPrice, decodeTokenTransferInput, formatTokenAmount, hexToBigInt, type DecodedTokenTransfer } from '../../../lib/helpers';
+import { formatAmount, formatGasPrice, decodeTokenTransferInput, decodeContractCall, formatTokenAmount, hexToBigInt, type DecodedTokenTransfer } from '../../../lib/helpers';
 import Badge from '../../../components/Badge';
 import Breadcrumbs from '../../../components/Breadcrumbs';
 import DetailRow from '../../../components/DetailRow';
@@ -15,6 +15,13 @@ import CopyButton from '../../../components/CopyButton';
 
 interface PendingTransactionViewProps {
   pendingTx: PendingTransaction;
+  /**
+   * Verified-contract metadata for the tx's target, forwarded by the
+   * server-side fetch. When `verified` and `abi` are present the view
+   * can decode the calldata via the same ABI-driven decoder used on
+   * the confirmed tx page (parity with the iter 3 work).
+   */
+  targetContract?: ContractMeta;
 }
 
 type LiveStatus = 'pending' | 'mined' | 'dropped';
@@ -67,7 +74,7 @@ function methodSignatureFor(dt: DecodedTokenTransfer): string {
   }
 }
 
-export default function PendingTransactionView({ pendingTx }: PendingTransactionViewProps): JSX.Element {
+export default function PendingTransactionView({ pendingTx, targetContract }: PendingTransactionViewProps): JSX.Element {
   const [formattedValue, unit] = formatAmount(pendingTx.value);
   const formattedGasPrice = formatGasPrice(pendingTx.gasPrice);
   const router = useRouter();
@@ -75,6 +82,14 @@ export default function PendingTransactionView({ pendingTx }: PendingTransaction
   const decodedTransfer = useMemo(() => {
     return decodeTokenTransferInput(pendingTx.input);
   }, [pendingTx.input]);
+
+  // ABI fallback: if the calldata didn't match a known token selector,
+  // try the recipient's verified ABI. Same machinery as the confirmed
+  // tx page's Input Data card.
+  const decodedCall = useMemo(() => {
+    if (decodedTransfer) return null;
+    return decodeContractCall(pendingTx.input, targetContract?.abi);
+  }, [decodedTransfer, pendingTx.input, targetContract?.abi]);
 
   const isTokenTransfer = decodedTransfer !== null;
 
@@ -215,6 +230,9 @@ export default function PendingTransactionView({ pendingTx }: PendingTransaction
               const b = badgeForDecoded(decodedTransfer);
               return <Badge variant={b.variant}>{b.text}</Badge>;
             })()}
+            {!decodedTransfer && decodedCall && (
+              <Badge variant="info">{decodedCall.name}</Badge>
+            )}
           </div>
           <Badge variant="warning" size="md" dot>Pending</Badge>
         </div>
@@ -394,13 +412,64 @@ export default function PendingTransactionView({ pendingTx }: PendingTransaction
         );
       })()}
 
+      {/* ABI-decoded contract call (verified target, falls through from
+          the well-known-token-selector path above). Same shape as the
+          confirmed tx page's Input Data decoder section. */}
+      {!decodedTransfer && decodedCall && (
+        <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+          <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[15px] font-semibold text-[#ffa729]">Contract Call (Pending)</h2>
+              <Badge variant="info">{decodedCall.name}</Badge>
+              {targetContract?.contractName && (
+                <span className="text-xs text-gray-500 font-mono">via {targetContract.contractName}</span>
+              )}
+            </div>
+          </div>
+          <div className="p-4 sm:p-6">
+            <p className="text-xs text-gray-500 font-mono mb-2">{decodedCall.signature}</p>
+            <div className="space-y-1">
+              {decodedCall.args.map((arg) => (
+                <div key={arg.label} className="text-xs flex flex-wrap items-start gap-2">
+                  <span className="text-gray-400 font-mono min-w-[80px]">{arg.label}:</span>
+                  {arg.type === 'address' && arg.value ? (
+                    <Link href={`/address/${arg.value}`} className="text-gray-200 hover:text-[#ffa729] transition-colors break-all font-mono">
+                      {arg.value}
+                    </Link>
+                  ) : arg.type === 'bool' ? (
+                    <Badge variant={arg.value === 'true' ? 'success' : 'error'}>{arg.value}</Badge>
+                  ) : arg.type === 'uint256' ? (
+                    <span className="text-gray-200 font-mono break-all">
+                      {(() => { try { return BigInt(arg.value || '0').toLocaleString('en-US'); } catch { return arg.value || ''; } })()}
+                    </span>
+                  ) : arg.type === 'uint256[]' ? (
+                    <span className="text-gray-200 font-mono break-all">
+                      {arg.values && arg.values.length > 0
+                        ? arg.values.map((v) => { try { return BigInt(v).toLocaleString('en-US'); } catch { return v; } }).join(', ')
+                        : '[]'}
+                    </span>
+                  ) : arg.type === 'string' ? (
+                    <span className="text-gray-200 break-all">{arg.value}</span>
+                  ) : (
+                    <span className="text-gray-200 font-mono break-all">{arg.value}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 mt-3">
+              Decoded from the target contract&apos;s verified ABI. Final on-chain state lands once the transaction is confirmed.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Input Data Section */}
       {pendingTx.input && pendingTx.input !== '0x' && (
         <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden">
           <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
             <h2 className="text-[15px] font-semibold text-[#ffa729]">
               Input Data
-              {isTokenTransfer && <span className="text-xs text-gray-500 ml-2">(decoded above)</span>}
+              {(isTokenTransfer || decodedCall) && <span className="text-xs text-gray-500 ml-2">(decoded above)</span>}
             </h2>
           </div>
           <div className="p-4 sm:p-6">

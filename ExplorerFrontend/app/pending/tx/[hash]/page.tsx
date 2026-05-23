@@ -53,15 +53,19 @@ function validateTransactionHash(hash: string): boolean {
   return hashRegex.test(hash);
 }
 
-async function getTransactionStatus(hash: string): Promise<{ 
+async function getTransactionStatus(hash: string): Promise<{
   status: 'pending' | 'mined' | 'dropped';
   transaction: PendingTransaction | null;
   blockNumber?: string;
+  // Verified-contract metadata for the tx's recipient, propagated from
+  // /pending-transaction/:hash so the pending view can ABI-decode the
+  // calldata when the target contract is source-verified.
+  targetContract?: import('@/app/types').ContractMeta;
 }> {
   try {
     // First try pending transactions endpoint
     const response = await axios.get(`${config.handlerUrl}/pending-transaction/${hash}`);
-    
+
     if (!response.data?.transaction) {
       return { status: 'dropped', transaction: null };
     }
@@ -70,7 +74,8 @@ async function getTransactionStatus(hash: string): Promise<{
     return {
       status: tx.status,
       transaction: tx,
-      blockNumber: tx.blockNumber
+      blockNumber: tx.blockNumber,
+      targetContract: response.data.targetContract,
     };
   } catch (error: any) {
     console.error('Error fetching transaction status:', error);
@@ -138,7 +143,7 @@ export default async function PendingTransactionPage({ params }: PageProps): Pro
     );
   }
 
-  const { status, transaction } = await getTransactionStatus(hash);
+  const { status, transaction, targetContract } = await getTransactionStatus(hash);
 
   // If transaction is mined, redirect to the confirmed transaction page
   if (status === 'mined' && transaction) {
@@ -157,5 +162,5 @@ export default async function PendingTransactionPage({ params }: PageProps): Pro
   }
 
   // Transaction is pending
-  return <PendingTransactionView pendingTx={transaction} />;
+  return <PendingTransactionView pendingTx={transaction} targetContract={targetContract} />;
 }

@@ -220,7 +220,45 @@ func UserRoute(router *gin.Engine) {
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{"transaction": transaction})
+		response := gin.H{"transaction": transaction}
+
+		// Surface verified-contract metadata for the recipient when one
+		// exists; mirrors the /tx/:hash plumbing so the pending view can
+		// use the same ABI-driven calldata decoder as the confirmed view.
+		// One row lookup per pending detail render, no batch needed
+		// because there's only one address to resolve.
+		if transaction.To != "" {
+			contracts, terr := db.GetContractsByAddresses([]string{transaction.To})
+			if terr != nil {
+				log.Printf("pending target contract lookup %s: %v", hash, terr)
+			} else if c, ok := contracts[strings.ToLower(transaction.To)]; ok && c.ContractAddress != "" {
+				meta := gin.H{
+					"name":          c.TokenName,
+					"symbol":        c.TokenSymbol,
+					"tokenStandard": c.TokenStandard,
+					"verified":      c.Verified,
+					"contractName":  c.ContractName,
+				}
+				if c.Verified && c.Abi != "" {
+					meta["abi"] = c.Abi
+				}
+				response["targetContract"] = meta
+			} else if c, ok := contracts[transaction.To]; ok && c.ContractAddress != "" {
+				meta := gin.H{
+					"name":          c.TokenName,
+					"symbol":        c.TokenSymbol,
+					"tokenStandard": c.TokenStandard,
+					"verified":      c.Verified,
+					"contractName":  c.ContractName,
+				}
+				if c.Verified && c.Abi != "" {
+					meta["abi"] = c.Abi
+				}
+				response["targetContract"] = meta
+			}
+		}
+
+		c.JSON(http.StatusOK, response)
 	})
 
 	router.GET("/overview", func(c *gin.Context) {
