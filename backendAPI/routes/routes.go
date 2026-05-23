@@ -100,6 +100,7 @@ func fetchTxInput(ctx context.Context, txHash string) string {
 //
 //   key                       TTL  endpoint                  notes
 //   ────────────────────────  ───  ────────────────────────  ─────────────
+//   contracts:counts          30s  /contracts/counts         one $group aggregation; counts shift block-paced
 //   pending-tx:<page>:<lim>    5s  /pending-transactions     mempool turnover ~5s, matches
 //   overview                  10s  /overview                 8 mongo round trips fused; values change slowly
 //   txs:<page>:<lim>          10s  /transactions             (*) embeds latestBlock; lagged confirmation counts up to 10s
@@ -977,6 +978,24 @@ func UserRoute(router *gin.Engine) {
 				return nil, qerr
 			}
 			return gin.H{"response": query}, nil
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, v)
+	})
+
+	// /contracts/counts surfaces the four tab buckets the contracts page
+	// shows in one aggregation. Cached 30s; the underlying numbers shift
+	// only as new contracts are deployed (block-paced, slow).
+	router.GET("/contracts/counts", func(c *gin.Context) {
+		v, err := routeCache.GetOrCompute("contracts:counts", 30*time.Second, func() (interface{}, error) {
+			counts, err := db.GetContractCountsByStandard()
+			if err != nil {
+				return nil, fmt.Errorf("failed to count contracts by standard: %w", err)
+			}
+			return counts, nil
 		})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

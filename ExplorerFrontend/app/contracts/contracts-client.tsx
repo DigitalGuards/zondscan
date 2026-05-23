@@ -187,30 +187,29 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
   // only when we have real data.
   const [tabCounts, setTabCounts] = useState<Partial<Record<TabType, number>>>({});
 
+  // Single round trip via /contracts/counts (iter 24); the backend
+  // aggregation returns all four buckets at once, replacing the
+  // four mount-time /contracts limit=1 hits the previous version made.
+  // 30s server-side cache absorbs concurrent traffic on the contracts
+  // page so DB cost stays predictable.
   useEffect(() => {
     let cancelled = false;
-    const buildParams = (tab: TabType): Record<string, string | number | boolean> => {
-      const p: Record<string, string | number | boolean> = { page: 0, limit: 1 };
-      const standard = TAB_TO_STANDARD[tab];
-      if (standard !== null) p.standard = standard;
-      else p.isToken = false;
-      return p;
-    };
-    Promise.all((['erc20', 'erc721', 'erc1155', 'contracts'] as const).map(async (tab) => {
-      try {
-        const r = await axios.get(`${config.handlerUrl}/contracts`, { params: buildParams(tab) });
-        return [tab, typeof r.data?.total === 'number' ? r.data.total : 0] as const;
-      } catch {
-        return [tab, undefined] as const;
-      }
-    })).then((pairs) => {
-      if (cancelled) return;
-      const next: Partial<Record<TabType, number>> = {};
-      for (const [tab, count] of pairs) {
-        if (typeof count === 'number') next[tab] = count;
-      }
-      setTabCounts(next);
-    });
+    axios.get(`${config.handlerUrl}/contracts/counts`)
+      .then((r) => {
+        if (cancelled) return;
+        const d = r.data;
+        if (!d || typeof d !== 'object') return;
+        setTabCounts({
+          erc20: typeof d.erc20 === 'number' ? d.erc20 : undefined,
+          erc721: typeof d.erc721 === 'number' ? d.erc721 : undefined,
+          erc1155: typeof d.erc1155 === 'number' ? d.erc1155 : undefined,
+          contracts: typeof d.other === 'number' ? d.other : undefined,
+        });
+      })
+      .catch(() => {
+        // Endpoint failure is silent: tab labels just render without
+        // count chips. Less noise than retrying or surfacing a banner.
+      });
     return () => {
       cancelled = true;
     };
