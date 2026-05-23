@@ -977,8 +977,45 @@ func UserRoute(router *gin.Engine) {
 			return
 		}
 
+		// Per-tx activity counts: each row in the block's tx table can
+		// surface "moved N tokens" + "made M internal calls" without a
+		// follow-up /tx/:hash hit per row. Two scoped Mongo aggregations
+		// per block fan in to a (hash; counts) map the client looks up
+		// by row hash.
+		txHashes := make([]string, 0, len(block.Result.Transactions))
+		for _, t := range block.Result.Transactions {
+			if t.Hash != "" {
+				txHashes = append(txHashes, t.Hash)
+			}
+		}
+		tokenCounts, terr := db.CountTokenTransfersByTxHashes(txHashes)
+		if terr != nil {
+			log.Printf("token counts block %d: %v", blockNum, terr)
+			tokenCounts = map[string]int{}
+		}
+		internalCounts, ierr := db.CountInternalTxsByTxHashes(txHashes)
+		if ierr != nil {
+			log.Printf("internal counts block %d: %v", blockNum, ierr)
+			internalCounts = map[string]int{}
+		}
+		activity := make(map[string]gin.H, len(txHashes))
+		for _, h := range txHashes {
+			tt := tokenCounts[h]
+			// CountTokenTransfersByTxHashes normalises to lowercase 0x...;
+			// in case the block stores hashes that already match, fall back
+			// to a lowercase lookup for resilience.
+			if tt == 0 {
+				tt = tokenCounts[strings.ToLower(h)]
+			}
+			ic := internalCounts[h]
+			if tt > 0 || ic > 0 {
+				activity[h] = gin.H{"tokenTransfers": tt, "internalCalls": ic}
+			}
+		}
+
 		c.JSON(http.StatusOK, gin.H{
-			"block": block,
+			"block":      block,
+			"txActivity": activity,
 		})
 	})
 

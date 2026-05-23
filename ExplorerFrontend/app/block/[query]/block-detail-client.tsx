@@ -99,6 +99,10 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
   })();
 
   const [blockData, setBlockData] = useState<Block | null>(null);
+  // Per-tx activity counts surfaced alongside the block payload by the
+  // backend; an empty/absent map means no row had token-transfer or
+  // internal-call activity and the columns render dashes.
+  const [txActivity, setTxActivity] = useState<Record<string, { tokenTransfers: number; internalCalls: number }>>({});
   // Initialise loading/notFound from the validity check so the invalid-id
   // path doesn't need to write state inside a useEffect (set-state-in-effect
   // rule). React's "adjusting state on prop change" pattern below resyncs
@@ -146,6 +150,11 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
           withdrawals: block.withdrawals || [],
           withdrawalsRoot: block.withdrawalsRoot || '',
         });
+        // txActivity is keyed by parent tx hash, payload {tokenTransfers,
+        // internalCalls}. Treat absent as empty so the consumer doesn't
+        // need to null-check on every cell.
+        const activity = response.data?.txActivity;
+        setTxActivity(activity && typeof activity === 'object' ? activity : {});
         setError(null);
         setNotFound(false);
       } catch (err) {
@@ -307,11 +316,13 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
                   <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden sm:table-cell">From</th>
                   <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden sm:table-cell">To</th>
                   <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Value</th>
+                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden md:table-cell">Activity</th>
                 </tr>
               </thead>
               <tbody>
                 {blockData.transactions.map((tx) => {
                   const [amount, unit] = formatAmount(tx.value);
+                  const activity = txActivity[tx.hash];
                   return (
                     <tr
                       key={tx.hash}
@@ -347,6 +358,24 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
                       <td className="px-4 sm:px-6 py-3 text-gray-300 tabular-nums whitespace-nowrap">
                         {amount}
                         <span className="text-gray-500 text-xs ml-1">{unit}</span>
+                      </td>
+                      <td className="px-4 sm:px-6 py-3 hidden md:table-cell whitespace-nowrap">
+                        {activity ? (
+                          <span className="text-xs font-mono text-gray-300 flex items-center gap-2">
+                            {activity.tokenTransfers > 0 && (
+                              <span className="text-[#ffa729]" title="Token / NFT transfers emitted">
+                                {activity.tokenTransfers} token{activity.tokenTransfers === 1 ? '' : 's'}
+                              </span>
+                            )}
+                            {activity.internalCalls > 0 && (
+                              <span className="text-gray-400" title="Internal contract calls">
+                                {activity.internalCalls} call{activity.internalCalls === 1 ? '' : 's'}
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-gray-600 text-xs">-</span>
+                        )}
                       </td>
                     </tr>
                   );

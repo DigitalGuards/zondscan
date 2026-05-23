@@ -449,6 +449,49 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 	return result, err
 }
 
+// CountInternalTxsByTxHashes returns a map keyed by parent tx hash with
+// the number of internalTransactionByAddress rows persisted for each.
+// Used by /block/:n alongside CountTokenTransfersByTxHashes to surface
+// a per-tx activity hint in the block's tx table.
+//
+// Hashes are matched case-insensitively against whatever the syncer
+// stored (it writes them verbatim from the RPC response; we don't
+// re-normalise here).
+func CountInternalTxsByTxHashes(txHashes []string) (map[string]int, error) {
+	out := make(map[string]int)
+	if len(txHashes) == 0 {
+		return out, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	pipeline := []bson.M{
+		{"$match": bson.M{"hash": bson.M{"$in": txHashes}}},
+		{"$group": bson.M{"_id": "$hash", "count": bson.M{"$sum": 1}}},
+	}
+	cursor, err := configs.InternalTransactionByAddressCollection.Aggregate(ctx, pipeline)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return out, nil
+		}
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	for cursor.Next(ctx) {
+		var row struct {
+			ID    string `bson:"_id"`
+			Count int    `bson:"count"`
+		}
+		if err := cursor.Decode(&row); err != nil {
+			continue
+		}
+		out[row.ID] = row.Count
+	}
+	return out, nil
+}
+
 // GetInternalTransactionsByTxHash returns every internal-call entry the
 // syncer captured under a given outer tx hash. Used by /tx/:hash to
 // render the Internal Transactions panel. Returns an empty slice (not

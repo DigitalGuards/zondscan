@@ -531,6 +531,58 @@ func GetTokenInfo(contractAddress string) (*models.TokenInfo, error) {
 	}, nil
 }
 
+// CountTokenTransfersByTxHashes returns a map keyed by tx hash with the
+// number of tokenTransfers rows persisted for each. Used by /block/:n
+// to surface a per-tx "this tx moved N tokens" hint without making the
+// client issue one /tx/:hash per row.
+//
+// Hashes are matched case-insensitively against the lowercase-with-0x
+// canonical form the syncer stores. Missing hashes don't appear in the
+// returned map.
+func CountTokenTransfersByTxHashes(txHashes []string) (map[string]int, error) {
+	out := make(map[string]int)
+	if len(txHashes) == 0 {
+		return out, nil
+	}
+
+	normalized := make([]string, 0, len(txHashes))
+	for _, h := range txHashes {
+		n := strings.ToLower(h)
+		if !strings.HasPrefix(n, "0x") {
+			n = "0x" + n
+		}
+		normalized = append(normalized, n)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	pipeline := []bson.M{
+		{"$match": bson.M{"txHash": bson.M{"$in": normalized}}},
+		{"$group": bson.M{"_id": "$txHash", "count": bson.M{"$sum": 1}}},
+	}
+	cursor, err := configs.GetCollection(configs.DB, "tokenTransfers").Aggregate(ctx, pipeline)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return out, nil
+		}
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	for cursor.Next(ctx) {
+		var row struct {
+			ID    string `bson:"_id"`
+			Count int    `bson:"count"`
+		}
+		if err := cursor.Decode(&row); err != nil {
+			continue
+		}
+		out[row.ID] = row.Count
+	}
+	return out, nil
+}
+
 // GetTokenTransfersByTxHash returns every token transfer row associated with
 // a given transaction hash. A single tx can produce multiple rows:
 //
