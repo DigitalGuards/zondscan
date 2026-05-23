@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo } from 'react';
+import axios from 'axios';
+import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatAmount, timeAgo, truncateHash } from '../../lib/helpers';
@@ -9,7 +11,8 @@ import Pagination from '../../components/Pagination';
 import CopyButton from '../../components/CopyButton';
 import Badge from '../../components/Badge';
 import EmptyState from '../../components/EmptyState';
-import type { TransactionsListProps } from '@/app/types';
+import config from '../../../config';
+import type { TransactionsListProps, TransactionsResponse } from '@/app/types';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -18,12 +21,26 @@ export default function TransactionsList({
   currentPage,
 }: TransactionsListProps): JSX.Element {
   const router = useRouter();
-  // Render straight from props; the previous local mirror state served no
-  // purpose (no setter is called) and the useEffect-resync tripped the new
-  // set-state-in-effect rule. Memo for stable identity in case downstream
-  // components ever .map over it with referential keys.
-  const transactions = useMemo(() => initialData.txs, [initialData.txs]);
-  const totalPages = Math.max(1, Math.ceil(initialData.total / ITEMS_PER_PAGE));
+  // Page-1 polls the network-wide feed on roughly block time so newly
+  // mined txs appear without a manual reload. Later pages are historical
+  // and stay static (no rug-pull mid-scroll). Mirrors the iter 33 pattern
+  // on /blocks.
+  const isHead = currentPage === 1;
+  const { data } = useQuery<TransactionsResponse>({
+    queryKey: ['txs', currentPage],
+    queryFn: async () => {
+      const res = await axios.get(`${config.handlerUrl}/txs?page=${currentPage}`);
+      return res.data;
+    },
+    initialData,
+    staleTime: isHead ? 0 : 60000,
+    gcTime: 5 * 60 * 1000,
+    retry: 2,
+    refetchInterval: isHead ? 15000 : false,
+    refetchIntervalInBackground: false,
+  });
+  const transactions = useMemo(() => data?.txs ?? initialData.txs, [data?.txs, initialData.txs]);
+  const totalPages = Math.max(1, Math.ceil((data?.total ?? initialData.total) / ITEMS_PER_PAGE));
 
   const goToNextPage = (): void => {
     router.push(`/transactions/${Math.min(currentPage + 1, totalPages)}`);

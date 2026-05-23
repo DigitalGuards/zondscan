@@ -34,13 +34,19 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
   const router = useRouter();
   const currentPage = parseInt(initialPage);
 
+  // Page-1 is the chain head; refresh on roughly block time so new blocks
+  // appear without a manual reload. Later pages are historical and stay
+  // static so users mid-scroll on /blocks/57 don't get the rug pulled.
+  const isHead = initialPage === '1';
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['blocks', initialPage],
     queryFn: () => fetchBlocks(initialPage),
-    staleTime: 60000,
+    staleTime: isHead ? 0 : 60000,
     gcTime: 5 * 60 * 1000,
     retry: 2,
     initialData,
+    refetchInterval: isHead ? 15000 : false,
+    refetchIntervalInBackground: false,
   });
 
   const totalPages = data ? Math.min(Math.ceil(data.total / ITEMS_PER_PAGE), 300) : 300;
