@@ -1,10 +1,51 @@
+import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import TransactionView from './transaction-view';
 import type { TransactionDetails } from '@/app/types';
+import { sharedMetadata } from '@/app/lib/seo/metaData';
 import config from '../../../config';
 
 interface PageProps {
   params: Promise<{ query: string }>;
+}
+
+// Per-tx metadata so shared /tx/<hash> links surface a meaningful title +
+// description in OG / Twitter previews. We deliberately don't fetch the
+// tx body here (adds latency to crawlers + harms the page TTFB); a
+// truncated hash + a stable description is enough for link previews.
+// Mirrors the shape already used on /block/:n and /address/:addr.
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const resolvedParams = await params;
+  const txHash = resolvedParams.query;
+  const shortHash = txHash.length > 16
+    ? `${txHash.slice(0, 10)}...${txHash.slice(-6)}`
+    : txHash;
+  const canonicalUrl = `https://zondscan.com/tx/${txHash}`;
+  const title = `Transaction ${shortHash} | ZondScan`;
+  const description = `View detailed information for QRL Zond transaction ${shortHash}. See from / to, value, gas, decoded events, and contract calls.`;
+
+  return {
+    ...sharedMetadata,
+    title,
+    description,
+    alternates: {
+      ...sharedMetadata.alternates,
+      canonical: canonicalUrl,
+    },
+    openGraph: {
+      ...sharedMetadata.openGraph,
+      title,
+      description,
+      url: canonicalUrl,
+      siteName: 'ZondScan',
+      type: 'website',
+    },
+    twitter: {
+      ...sharedMetadata.twitter,
+      title,
+      description,
+    },
+  };
 }
 
 // Loose shape: the backend may return any subset of these fields and we
