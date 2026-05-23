@@ -3,12 +3,21 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import axios from 'axios';
+import { useQuery } from '@tanstack/react-query';
 import { type TransactionDetails, getConfirmations, getTransactionStatus } from '@/app/types';
-import { formatAmount, formatTokenAmount, decodeEventLog, decodeTokenTransferInput } from '../../lib/helpers';
+import { formatAmount, formatTokenAmount, decodeEventLog, decodeTokenTransferInput, decodeContractCall } from '../../lib/helpers';
+import config from '../../../config';
 import CopyButton from '../../components/CopyButton';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import DetailRow from '../../components/DetailRow';
 import Badge from '../../components/Badge';
+
+// Once a tx has this many confirmations we stop polling /latestblock for
+// it; further refinement is just visual noise (most chain UIs treat
+// >12-25 as effectively final). Keeps the polling cost bounded for
+// long-lived tabs.
+const TERMINAL_CONFIRMATIONS = 24;
 
 function BackToTransactionsLink(): JSX.Element | null {
   const searchParams = useSearchParams();
@@ -86,7 +95,35 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
-  const confirmations = getConfirmations(transaction.blockNumber, transaction.latestBlock);
+  // Poll /latestblock so the confirmation count ticks up live; stops
+  // once we cross the terminal-confirmations threshold to bound load
+  // on long-lived tabs. /latestblock is cached server-side for 5s
+  // (iter 15 audit), so concurrent visitors fan into one DB hit per
+  // bucket.
+  const ssrConfirmations = getConfirmations(transaction.blockNumber, transaction.latestBlock);
+  const latestBlockQuery = useQuery<{ blockNumber: number; qrlUsdPrice?: number }>({
+    queryKey: ['latestblock'],
+    queryFn: async () => {
+      const r = await axios.get<{ blockNumber: number; qrlUsdPrice?: number }>(`${config.handlerUrl}/latestblock`);
+      return r.data;
+    },
+    enabled: ssrConfirmations !== null && ssrConfirmations < TERMINAL_CONFIRMATIONS,
+    refetchInterval: (q) => {
+      const latest = q.state.data?.blockNumber ?? transaction.latestBlock;
+      const live = getConfirmations(transaction.blockNumber, latest);
+      return live !== null && live < TERMINAL_CONFIRMATIONS ? 5000 : false;
+    },
+    refetchIntervalInBackground: false,
+  });
+
+  const effectiveLatest = Math.max(
+    transaction.latestBlock ?? 0,
+    latestBlockQuery.data?.blockNumber ?? 0,
+  );
+  const confirmations = getConfirmations(
+    transaction.blockNumber,
+    effectiveLatest > 0 ? effectiveLatest : transaction.latestBlock,
+  );
   const status = getTransactionStatus(confirmations);
   const confirmationText = confirmations === null
     ? 'Pending'
@@ -110,15 +147,23 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
   };
 
   const paidFees = calculatePaidFees();
-  const badgeVariant = status.color === 'bg-green-500' ? 'success' as const
-    : status.color === 'bg-blue-500' ? 'info' as const
+  // Receipt-level revert flag takes priority over confirmation count: a
+  // tx that mined but reverted is "Confirmed" by the confirmations
+  // metric yet failed by the EVM's measure. Surface the real state.
+  const isReverted = transaction.receiptStatus === '0x0';
+  const effectiveStatus = isReverted
+    ? { text: 'Reverted', color: 'bg-red-500' }
+    : status;
+  const badgeVariant = isReverted ? 'error' as const
+    : effectiveStatus.color === 'bg-green-500' ? 'success' as const
+    : effectiveStatus.color === 'bg-blue-500' ? 'info' as const
     : 'warning' as const;
 
   const displayAddr = (addr: string): string =>
     isMobile ? `${addr.slice(0, 10)}...${addr.slice(-8)}` : addr;
 
   return (
-    <div className="detail-content">
+    <main className="detail-content" aria-labelledby="tx-detail-heading">
       <Breadcrumbs items={[
         { label: 'Transactions', href: '/transactions/1' },
         { label: `${transaction.hash.slice(0, 10)}...${transaction.hash.slice(-6)}` },
@@ -129,16 +174,19 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
       </Suspense>
 
       {/* Main Details Card */}
-      <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+      <section
+        aria-labelledby="tx-detail-heading"
+        className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6"
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-[#3d3d3d]">
           <div className="flex items-center gap-3">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-[#ffa729]">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-[#ffa729]" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
             </svg>
-            <h1 className="text-xl sm:text-2xl font-bold text-[#ffa729]">Transaction Details</h1>
+            <h1 id="tx-detail-heading" className="text-xl sm:text-2xl font-bold text-[#ffa729]">Transaction Details</h1>
           </div>
-          <Badge variant={badgeVariant} size="md" dot>{status.text}</Badge>
+          <Badge variant={badgeVariant} size="md" dot>{effectiveStatus.text}</Badge>
         </div>
 
         {/* Content */}
@@ -150,8 +198,15 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             </div>
           </DetailRow>
           <DetailRow label="Status">
-            <Badge variant={badgeVariant} dot>{status.text}</Badge>
+            <Badge variant={badgeVariant} dot>{effectiveStatus.text}</Badge>
             <span className="text-gray-500 text-xs ml-2">{confirmationText}</span>
+            {isReverted && (
+              <p className="text-xs text-gray-500 mt-2 max-w-prose">
+                The EVM rolled this transaction back; any state changes it
+                tried to make were not applied. Gas was still consumed by
+                the partial execution (see Transaction Fee below).
+              </p>
+            )}
           </DetailRow>
           <DetailRow label="Block">
             {transaction.blockNumber ? (
@@ -196,10 +251,26 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             <DetailRow label="Transaction Fee">
               {paidFees}
               <span className="text-gray-500 ml-1">QRL</span>
+              {(() => {
+                // USD conversion is opt-in: requires both a fee > 0 and a
+                // price from the polled /latestblock response. Skips the
+                // 18-decimal precision of paidFees and just rounds to the
+                // amount that's actually visible at human resolution.
+                const usd = latestBlockQuery.data?.qrlUsdPrice;
+                const qrlFee = parseFloat(paidFees);
+                if (!usd || usd <= 0 || !Number.isFinite(qrlFee) || qrlFee <= 0) return null;
+                const dollars = qrlFee * usd;
+                // < $0.001 renders as "<$0.001" so we don't display $0.00
+                // when there's a real (but tiny) fee.
+                const display = dollars < 0.001
+                  ? '<$0.001'
+                  : `≈ $${dollars < 1 ? dollars.toFixed(4) : dollars.toFixed(2)}`;
+                return <span className="text-gray-500 text-xs ml-2" title={`@${usd.toFixed(4)} USD/QRL`}>{display}</span>;
+              })()}
             </DetailRow>
           )}
         </div>
-      </div>
+      </section>
 
       {/* Contract Creation Section */}
       {transaction.contractCreated && (() => {
@@ -215,13 +286,13 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             ? `(${cc.symbol})`
             : 'Unnamed Collection';
         return (
-        <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+        <section aria-labelledby="contract-created-heading" className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
           <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
             <div className="flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-green-400">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-green-400" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <h2 className="text-[15px] font-semibold text-green-400">Contract Created</h2>
+              <h2 id="contract-created-heading" className="text-[15px] font-semibold text-green-400">Contract Created</h2>
               {cc.isToken && (
                 <Badge variant={ccStandard === 'ERC-721' || ccStandard === 'ERC-1155' ? 'warning' : 'brand'}>
                   {qrcBadgeText(ccStandard)} Token
@@ -244,7 +315,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               </DetailRow>
             )}
           </div>
-        </div>
+        </section>
         );
       })()}
 
@@ -261,13 +332,17 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
           const isNFT = standard === 'ERC-721' || standard === 'ERC-1155';
           const rowKey = tt.logIndex || `${tt.contractAddress}-${idx}`;
           return (
-        <div key={rowKey} className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+        <section
+          key={rowKey}
+          aria-labelledby={`token-transfer-${rowKey}-heading`}
+          className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6"
+        >
           <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
             <div className="flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
               </svg>
-              <h2 className="text-[15px] font-semibold text-[#ffa729]">{headerLabel}</h2>
+              <h2 id={`token-transfer-${rowKey}-heading`} className="text-[15px] font-semibold text-[#ffa729]">{headerLabel}</h2>
               <Badge variant={isNFT ? 'warning' : 'brand'}>{qrcBadgeText(standard)}</Badge>
             </div>
           </div>
@@ -334,7 +409,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               )}
             </DetailRow>
           </div>
-        </div>
+        </section>
           );
         })}
 
@@ -343,31 +418,38 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
           ApprovalForAll) inline; everything else falls back to topics +
           data so users can copy them into a decoder. */}
       {transaction.logs && transaction.logs.length > 0 && (
-        <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+        <section aria-labelledby="event-logs-heading" className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
           <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
             <div className="flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
               </svg>
-              <h2 className="text-[15px] font-semibold text-[#ffa729]">Event Logs</h2>
+              <h2 id="event-logs-heading" className="text-[15px] font-semibold text-[#ffa729]">Event Logs</h2>
               <Badge variant="neutral">{transaction.logs.length}</Badge>
             </div>
           </div>
           <div className="p-4 sm:p-6 space-y-4">
             {transaction.logs.map((logEntry) => {
-              const decoded = decodeEventLog(logEntry.topics, logEntry.data);
+              // Pass the per-log ABI (when the emitting contract is verified)
+              // so the decoder can fall through from the five known
+              // signatures to a full ABI-driven decode.
+              const decoded = decodeEventLog(logEntry.topics, logEntry.data, logEntry.contract?.abi);
               const idxLabel = (() => { try { return parseInt(logEntry.logIndex || '0x0', 16).toString(); } catch { return logEntry.logIndex; } })();
+              const decodedViaAbi = !!decoded && !decoded.standard;
               return (
                 <div key={`${logEntry.address}-${logEntry.logIndex}`} className="rounded-lg bg-[#1a1a1a]/60 border border-[#3d3d3d] p-3 sm:p-4">
                   <div className="flex flex-wrap items-center gap-2 mb-2">
                     <Badge variant="neutral">#{idxLabel}</Badge>
                     {decoded ? (
                       <>
-                        <Badge variant={decoded.standard === 'ERC-721' || decoded.standard === 'ERC-1155' ? 'warning' : 'brand'}>
+                        <Badge variant={decoded.standard === 'ERC-721' || decoded.standard === 'ERC-1155' ? 'warning' : decoded.standard ? 'brand' : 'info'}>
                           {decoded.name}
                         </Badge>
                         {decoded.standard && (
                           <span className="text-xs text-gray-500 font-mono">{decoded.standard}</span>
+                        )}
+                        {decodedViaAbi && logEntry.contract?.contractName && (
+                          <span className="text-xs text-gray-500 font-mono">via {logEntry.contract.contractName}</span>
                         )}
                       </>
                     ) : (
@@ -408,7 +490,11 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                                     }).join(', ')
                                   : '[]'}
                               </span>
+                            ) : arg.type === 'string' ? (
+                              <span className="text-gray-200 break-all">{arg.value}</span>
                             ) : (
+                              // 'raw' or unknown; surface the slot so it's at
+                              // least copy-pasteable into another decoder.
                               <span className="text-gray-200 font-mono break-all">{arg.value}</span>
                             )}
                           </div>
@@ -431,29 +517,138 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                           <p className="ml-2 mt-1 text-gray-200 font-mono break-all">{logEntry.data}</p>
                         </div>
                       )}
+                      {/* The decoder fell through to raw because the emitting
+                          contract isn't verified (or has no contractCode row
+                          at all). Surface a CTA so users hit a path of
+                          action instead of a wall of hex. */}
+                      {(!logEntry.contract || !logEntry.contract.verified) && (
+                        <p className="mt-2 text-[11px] text-gray-500">
+                          <Link
+                            href={`/verify-contract?address=${logEntry.address}`}
+                            className="text-[#ffa729] hover:text-[#ffb84d] hover:underline"
+                          >
+                            Verify this contract
+                          </Link>
+                          {' '}to see decoded event names and labelled arguments here.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
               );
             })}
           </div>
-        </div>
+        </section>
       )}
 
-      {/* Input Data Card. Decoded preview from decodeTokenTransferInput
-          when the calldata matches a known token-call selector; raw
-          calldata always shown so users can copy it into any decoder. */}
+      {/* Internal Transactions panel. The syncer records each EVM
+          sub-frame (CALL / DELEGATECALL / STATICCALL) the tx triggered
+          under `internalTransactionByAddress` keyed by parent tx hash.
+          Most simple txs have none; complex contract calls fan out. */}
+      {transaction.internalTransactions && transaction.internalTransactions.length > 0 && (
+        <section aria-labelledby="internal-tx-heading" className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+          <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
+            <div className="flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 17.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+              </svg>
+              <h2 id="internal-tx-heading" className="text-[15px] font-semibold text-[#ffa729]">Internal Transactions</h2>
+              <Badge variant="neutral">{transaction.internalTransactions.length}</Badge>
+            </div>
+          </div>
+          <div className="p-4 sm:p-6 space-y-3">
+            {transaction.internalTransactions.map((itx, i) => {
+              const depth = itx.traceAddress?.length || 0;
+              const path = itx.traceAddress && itx.traceAddress.length > 0
+                ? itx.traceAddress.join(',')
+                : 'root';
+              return (
+                <div
+                  key={`${path}-${i}`}
+                  className="rounded-lg bg-[#1a1a1a]/60 border border-[#3d3d3d] p-3 sm:p-4"
+                  style={{ marginLeft: depth > 0 ? `${Math.min(depth, 4) * 12}px` : 0 }}
+                >
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <Badge variant="neutral">{path}</Badge>
+                    {itx.callType && (
+                      <Badge variant={itx.callType === 'DELEGATECALL' || itx.callType === 'STATICCALL' ? 'info' : 'brand'}>
+                        {itx.callType}
+                      </Badge>
+                    )}
+                    {itx.value > 0 && (
+                      <Badge variant="warning">{itx.value} QRL</Badge>
+                    )}
+                  </div>
+                  <div className="space-y-1 text-xs">
+                    {itx.from && (
+                      <div className="flex flex-wrap items-start gap-2">
+                        <span className="text-gray-400 font-mono min-w-[60px]">from:</span>
+                        <Link href={`/address/${itx.from}`} className="text-gray-200 hover:text-[#ffa729] transition-colors break-all font-mono">
+                          {itx.from}
+                        </Link>
+                      </div>
+                    )}
+                    {itx.to && (
+                      <div className="flex flex-wrap items-start gap-2">
+                        <span className="text-gray-400 font-mono min-w-[60px]">to:</span>
+                        <Link href={`/address/${itx.to}`} className="text-[#ffa729] hover:text-[#ffb84d] transition-colors break-all font-mono">
+                          {itx.to}
+                        </Link>
+                      </div>
+                    )}
+                    {itx.input && itx.input !== '0x' && itx.input !== '0x0' && (
+                      <div className="flex flex-wrap items-start gap-2">
+                        <span className="text-gray-400 font-mono min-w-[60px]">input:</span>
+                        <span className="text-gray-300 font-mono break-all">
+                          {itx.input.length > 18 ? `${itx.input.slice(0, 18)}…` : itx.input}
+                        </span>
+                      </div>
+                    )}
+                    {itx.gasUsed && itx.gasUsed !== '0x0' && (
+                      <div className="flex flex-wrap items-start gap-2">
+                        <span className="text-gray-400 font-mono min-w-[60px]">gasUsed:</span>
+                        <span className="text-gray-300 font-mono">
+                          {(() => { try { return BigInt(itx.gasUsed).toLocaleString('en-US'); } catch { return itx.gasUsed; } })()}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Input Data Card. Decode in three tiers:
+          1. Known ERC token selectors via decodeTokenTransferInput (renders
+             with the standard-tagged badge from the original UI).
+          2. Target contract ABI via decodeContractCall (verified contracts
+             only); renders method name + labelled args, same scheme as
+             the Event Logs panel for ABI-decoded events.
+          3. Raw calldata fallback so users can copy it into any decoder. */}
       {transaction.input && transaction.input !== '0x' && (() => {
         const decodedInput = decodeTokenTransferInput(transaction.input);
+        const decodedCall = !decodedInput
+          ? decodeContractCall(transaction.input, transaction.targetContract?.abi)
+          : null;
         return (
-          <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+          <section aria-labelledby="input-data-heading" className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
             <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
               <div className="flex items-center gap-2">
-                <h2 className="text-[15px] font-semibold text-[#ffa729]">Input Data</h2>
+                <h2 id="input-data-heading" className="text-[15px] font-semibold text-[#ffa729]">Input Data</h2>
                 {decodedInput && (
                   <Badge variant={decodedInput.standard === 'ERC-20' ? 'brand' : 'warning'}>
                     {decodedInput.methodName}
                   </Badge>
+                )}
+                {decodedCall && (
+                  <>
+                    <Badge variant="info">{decodedCall.name}</Badge>
+                    {transaction.targetContract?.contractName && (
+                      <span className="text-xs text-gray-500 font-mono">via {transaction.targetContract.contractName}</span>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -463,11 +658,63 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                   {decodedInput.standard} · {decodedInput.methodName}
                 </p>
               )}
+              {decodedCall && (
+                <>
+                  <p className="text-xs text-gray-500 font-mono mb-2">{decodedCall.signature}</p>
+                  <div className="space-y-1 mb-3">
+                    {decodedCall.args.map((arg) => (
+                      <div key={arg.label} className="text-xs flex flex-wrap items-start gap-2">
+                        <span className="text-gray-400 font-mono min-w-[80px]">{arg.label}:</span>
+                        {arg.type === 'address' && arg.value ? (
+                          <Link
+                            href={`/address/${arg.value}`}
+                            className="text-gray-200 hover:text-[#ffa729] transition-colors break-all font-mono"
+                          >
+                            {arg.value}
+                          </Link>
+                        ) : arg.type === 'bool' ? (
+                          <Badge variant={arg.value === 'true' ? 'success' : 'error'}>{arg.value}</Badge>
+                        ) : arg.type === 'uint256' ? (
+                          <span className="text-gray-200 font-mono break-all">
+                            {(() => { try { return BigInt(arg.value || '0').toLocaleString('en-US'); } catch { return arg.value || ''; } })()}
+                          </span>
+                        ) : arg.type === 'uint256[]' ? (
+                          <span className="text-gray-200 font-mono break-all">
+                            {arg.values && arg.values.length > 0
+                              ? arg.values.map((v) => { try { return BigInt(v).toLocaleString('en-US'); } catch { return v; } }).join(', ')
+                              : '[]'}
+                          </span>
+                        ) : arg.type === 'string' ? (
+                          <span className="text-gray-200 break-all">{arg.value}</span>
+                        ) : (
+                          <span className="text-gray-200 font-mono break-all">{arg.value}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
               <p className="font-mono text-gray-300 break-all text-xs leading-relaxed">{transaction.input}</p>
+              {/* Neither the well-known-token-selector decoder nor the
+                  ABI decoder produced a hit. If the target has a
+                  contractCode row but isn't verified, nudge users
+                  toward verification so future hits to this tx show
+                  a labelled method instead of raw hex. */}
+              {!decodedInput && !decodedCall && transaction.to && transaction.targetContract && !transaction.targetContract.verified && (
+                <p className="mt-2 text-[11px] text-gray-500">
+                  <Link
+                    href={`/verify-contract?address=${transaction.to}`}
+                    className="text-[#ffa729] hover:text-[#ffb84d] hover:underline"
+                  >
+                    Verify this contract
+                  </Link>
+                  {' '}to see the method name + labelled arguments instead of raw calldata.
+                </p>
+              )}
             </div>
-          </div>
+          </section>
         );
       })()}
-    </div>
+    </main>
   );
 }

@@ -55,13 +55,13 @@ export const metadata: Metadata = {
   description: 'View all smart contracts deployed on the QRL network',
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: 'https://zondscan.com/smart-contracts',
+    canonical: 'https://zondscan.com/contracts',
   },
   openGraph: {
     ...sharedMetadata.openGraph,
     title: 'Smart Contracts | QRL Explorer',
     description: 'View all smart contracts deployed on the QRL network',
-    url: 'https://zondscan.com/smart-contracts',
+    url: 'https://zondscan.com/contracts',
   },
   twitter: {
     ...sharedMetadata.twitter,
@@ -74,11 +74,14 @@ export default async function ContractsPage(): Promise<JSX.Element> {
   const { response: initialData, total } = await getContracts();
 
   return (
-    <Suspense fallback={<div className="p-4 text-center">Loading contracts...</div>}>
-      <ContractsWrapper 
-        initialData={initialData} 
-        totalContracts={total} 
-      />
-    </Suspense>
+    <main aria-labelledby="contracts-heading">
+      <h1 id="contracts-heading" className="sr-only">QRL Zond Smart Contracts</h1>
+      <Suspense fallback={<div className="p-4 text-center">Loading contracts...</div>}>
+        <ContractsWrapper
+          initialData={initialData}
+          totalContracts={total}
+        />
+      </Suspense>
+    </main>
   );
 }

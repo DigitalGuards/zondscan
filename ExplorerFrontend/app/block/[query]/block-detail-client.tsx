@@ -3,6 +3,7 @@
 import axios from 'axios';
 import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import config from '../../../config';
 import Link from 'next/link';
 import { formatAmount, truncateHash, timeAgo, formatPlanckAdaptive } from '../../lib/helpers';
@@ -10,6 +11,11 @@ import Breadcrumbs from '../../components/Breadcrumbs';
 import DetailRow from '../../components/DetailRow';
 import CopyButton from '../../components/CopyButton';
 import EmptyState from '../../components/EmptyState';
+import Badge from '../../components/Badge';
+
+// Same threshold the tx page uses for confirmations: past this depth a
+// block is effectively final and we stop polling to bound load.
+const TERMINAL_CONFIRMATIONS = 24;
 
 function BackToBlocksLink(): JSX.Element | null {
   const searchParams = useSearchParams();
@@ -99,6 +105,10 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
   })();
 
   const [blockData, setBlockData] = useState<Block | null>(null);
+  // Per-tx activity counts surfaced alongside the block payload by the
+  // backend; an empty/absent map means no row had token-transfer or
+  // internal-call activity and the columns render dashes.
+  const [txActivity, setTxActivity] = useState<Record<string, { tokenTransfers: number; internalCalls: number }>>({});
   // Initialise loading/notFound from the validity check so the invalid-id
   // path doesn't need to write state inside a useEffect (set-state-in-effect
   // rule). React's "adjusting state on prop change" pattern below resyncs
@@ -116,6 +126,29 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
   }
 
   const blockNum = parseInt(blockNumber);
+
+  // Live confirmations (= currentLatest - thisBlock). Polled via the
+  // shared /latestblock endpoint (5s server cache). Stops at
+  // TERMINAL_CONFIRMATIONS to bound load on long-lived tabs.
+  const latestBlockQuery = useQuery<{ blockNumber: number }>({
+    queryKey: ['latestblock'],
+    queryFn: async () => {
+      const r = await axios.get<{ blockNumber: number }>(`${config.handlerUrl}/latestblock`);
+      return r.data;
+    },
+    enabled: Number.isFinite(blockNum) && blockNum >= 0,
+    refetchInterval: (q) => {
+      const latest = q.state.data?.blockNumber ?? 0;
+      const depth = latest > 0 ? Math.max(0, latest - blockNum) : 0;
+      return depth >= 0 && depth < TERMINAL_CONFIRMATIONS ? 5000 : false;
+    },
+    refetchIntervalInBackground: false,
+  });
+  const liveConfirmations = (() => {
+    const latest = latestBlockQuery.data?.blockNumber;
+    if (!Number.isFinite(blockNum) || !latest) return null;
+    return Math.max(0, latest - blockNum);
+  })();
 
   useEffect(() => {
     if (!isValidBlockId) return;
@@ -146,6 +179,11 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
           withdrawals: block.withdrawals || [],
           withdrawalsRoot: block.withdrawalsRoot || '',
         });
+        // txActivity is keyed by parent tx hash, payload {tokenTransfers,
+        // internalCalls}. Treat absent as empty so the consumer doesn't
+        // need to null-check on every cell.
+        const activity = response.data?.txActivity;
+        setTxActivity(activity && typeof activity === 'object' ? activity : {});
         setError(null);
         setNotFound(false);
       } catch (err) {
@@ -210,7 +248,7 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
     : parseInt(blockData.timestamp);
 
   return (
-    <div className="p-4 sm:p-8 max-w-6xl mx-auto">
+    <main className="p-4 sm:p-8 max-w-6xl mx-auto" aria-labelledby="block-heading">
       <Breadcrumbs items={[
         { label: 'Blocks', href: '/blocks/1' },
         { label: `Block #${blockNumber}` },
@@ -221,14 +259,25 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
       </Suspense>
 
       {/* Block Details Card */}
-      <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+      <section aria-labelledby="block-heading" className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-[#3d3d3d]">
           <div className="flex items-center gap-3">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
             </svg>
-            <h1 className="text-xl sm:text-2xl font-bold text-[#ffa729]">Block #{formatHexValue(blockData.number)}</h1>
+            <h1 id="block-heading" className="text-xl sm:text-2xl font-bold text-[#ffa729]">Block #{formatHexValue(blockData.number)}</h1>
+            {/* Live depth: surfaces how settled this block is. "Latest"
+                when we're looking at the head, otherwise "N
+                confirmations". Hidden until the first /latestblock
+                response arrives so we don't flash a stale value. */}
+            {liveConfirmations !== null && (
+              <Badge variant={liveConfirmations === 0 ? 'info' : liveConfirmations >= TERMINAL_CONFIRMATIONS ? 'success' : 'neutral'}>
+                {liveConfirmations === 0
+                  ? 'Latest'
+                  : `${liveConfirmations.toLocaleString()} confirmation${liveConfirmations === 1 ? '' : 's'}`}
+              </Badge>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {blockNum > 0 && (
@@ -288,12 +337,12 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
             <DetailRow label="Extra Data" mono>{blockData.extraData}</DetailRow>
           )}
         </div>
-      </div>
+      </section>
 
       {/* Transactions Table */}
-      <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden">
+      <section aria-labelledby="block-txs-heading" className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden">
         <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
-          <h2 className="text-[15px] font-semibold text-[#ffa729]">
+          <h2 id="block-txs-heading" className="text-[15px] font-semibold text-[#ffa729]">
             Transactions ({blockData.transactions?.length ?? 0})
           </h2>
         </div>
@@ -307,11 +356,13 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
                   <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden sm:table-cell">From</th>
                   <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden sm:table-cell">To</th>
                   <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Value</th>
+                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden md:table-cell">Activity</th>
                 </tr>
               </thead>
               <tbody>
                 {blockData.transactions.map((tx) => {
                   const [amount, unit] = formatAmount(tx.value);
+                  const activity = txActivity[tx.hash];
                   return (
                     <tr
                       key={tx.hash}
@@ -348,6 +399,24 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
                         {amount}
                         <span className="text-gray-500 text-xs ml-1">{unit}</span>
                       </td>
+                      <td className="px-4 sm:px-6 py-3 hidden md:table-cell whitespace-nowrap">
+                        {activity ? (
+                          <span className="text-xs font-mono text-gray-300 flex items-center gap-2">
+                            {activity.tokenTransfers > 0 && (
+                              <span className="text-[#ffa729]" title="Token / NFT transfers emitted">
+                                {activity.tokenTransfers} token{activity.tokenTransfers === 1 ? '' : 's'}
+                              </span>
+                            )}
+                            {activity.internalCalls > 0 && (
+                              <span className="text-gray-400" title="Internal contract calls">
+                                {activity.internalCalls} call{activity.internalCalls === 1 ? '' : 's'}
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-gray-600 text-xs">-</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
@@ -357,7 +426,7 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
         ) : (
           <EmptyState title="No transactions in this block" description="This block was produced without any transactions." />
         )}
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

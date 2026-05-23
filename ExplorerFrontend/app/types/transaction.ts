@@ -131,11 +131,58 @@ export interface TransactionDetails {
   input?: string;
   /** Receipt logs in emission order. Populated best-effort; absent when the RPC fetch fails. */
   logs?: TxLog[];
+  /** Verified contract metadata for the tx's target, used by the Input Data card to decode method calls. */
+  targetContract?: ContractMeta;
+  /** Internal calls captured under this tx by the syncer (CALL / DELEGATECALL / STATICCALL sub-frames). */
+  internalTransactions?: InternalTx[];
+  /** Receipt-level status from the live RPC. "0x1" = success, "0x0" = reverted, undefined when RPC fetch failed. */
+  receiptStatus?: string;
+}
+
+/**
+ * One internal-call row attached to a tx. Mirrors the backend's
+ * models.InternalTx, which mirrors how the syncer writes the
+ * `internalTransactionByAddress` collection.
+ *
+ * Most txs have an empty array; only contract calls with sub-frames
+ * (CALL / DELEGATECALL / STATICCALL) get entries here.
+ */
+export interface InternalTx {
+  type: string;
+  callType: string;
+  from: string;
+  to: string;
+  input: string;
+  output: string;
+  value: number;
+  gas: string;
+  gasUsed: string;
+  traceAddress: number[];
+}
+
+/**
+ * Optional contract metadata attached to a log or as the tx's target,
+ * surfaced by the backend on /tx/:hash when contractCode has a row for
+ * the address. `abi` is only populated when `verified === true` since
+ * an unverified ABI is unreliable, the frontend uses it to decode
+ * unknown event signatures + method selectors.
+ */
+export interface ContractMeta {
+  name?: string;
+  symbol?: string;
+  tokenStandard?: TokenStandard | string;
+  verified?: boolean;
+  contractName?: string;
+  abi?: string;
 }
 
 /**
  * One receipt log entry on a confirmed tx. Mirrors the subset returned by
  * the backend's /tx/:hash route, which itself mirrors qrl_getTransactionReceipt.logs[].
+ *
+ * `contract` is attached server-side from contractCode for the log's
+ * emitting address; the event-log decoder uses it as the ABI fallback
+ * when topic[0] doesn't match a well-known signature.
  */
 export interface TxLog {
   address: string;
@@ -143,6 +190,7 @@ export interface TxLog {
   data: string;
   logIndex: string;
   removed?: boolean;
+  contract?: ContractMeta;
 }
 
 /**

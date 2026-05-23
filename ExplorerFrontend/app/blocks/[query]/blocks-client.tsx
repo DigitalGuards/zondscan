@@ -34,13 +34,19 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
   const router = useRouter();
   const currentPage = parseInt(initialPage);
 
+  // Page-1 is the chain head; refresh on roughly block time so new blocks
+  // appear without a manual reload. Later pages are historical and stay
+  // static so users mid-scroll on /blocks/57 don't get the rug pulled.
+  const isHead = initialPage === '1';
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['blocks', initialPage],
     queryFn: () => fetchBlocks(initialPage),
-    staleTime: 60000,
+    staleTime: isHead ? 0 : 60000,
     gcTime: 5 * 60 * 1000,
     retry: 2,
     initialData,
+    refetchInterval: isHead ? 15000 : false,
+    refetchIntervalInBackground: false,
   });
 
   const totalPages = data ? Math.min(Math.ceil(data.total / ITEMS_PER_PAGE), 300) : 300;
@@ -69,6 +75,7 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
                 <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Block</th>
                 <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden sm:table-cell">Hash</th>
                 <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Txns</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden lg:table-cell">Activity</th>
                 <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Time</th>
                 <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden md:table-cell">Gas Used</th>
               </tr>
@@ -80,25 +87,30 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
                     <td className="px-4 py-3"><div className="h-4 w-16 bg-[#2a2a2a] rounded animate-pulse" /></td>
                     <td className="px-4 py-3 hidden sm:table-cell"><div className="h-4 w-24 bg-[#2a2a2a] rounded animate-pulse" /></td>
                     <td className="px-4 py-3"><div className="h-4 w-8 bg-[#2a2a2a] rounded animate-pulse" /></td>
+                    <td className="px-4 py-3 hidden lg:table-cell"><div className="h-4 w-20 bg-[#2a2a2a] rounded animate-pulse" /></td>
                     <td className="px-4 py-3"><div className="h-4 w-16 bg-[#2a2a2a] rounded animate-pulse" /></td>
                     <td className="px-4 py-3 hidden md:table-cell"><div className="h-4 w-16 bg-[#2a2a2a] rounded animate-pulse" /></td>
                   </tr>
                 ))
               ) : isError ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center text-red-400">
+                  <td colSpan={6} className="px-4 py-12 text-center text-red-400">
                     {error instanceof Error ? error.message : 'Failed to load blocks'}
                   </td>
                 </tr>
               ) : !data?.blocks?.length ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center text-gray-500">
+                  <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
                     No blocks found.
                   </td>
                 </tr>
               ) : (
                 data.blocks.map((block) => {
                   const blockNum = formatBlockNumber(block.number);
+                  // blockActivity is keyed by block.number string verbatim
+                  // (typically "0x..."). Look up by the original key so the
+                  // join survives without re-encoding.
+                  const activity = data.blockActivity?.[String(block.number)];
                   return (
                     <tr
                       key={block.number}
@@ -119,6 +131,24 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
                       </td>
                       <td className="px-4 py-3 text-gray-300 tabular-nums">
                         {block.transactions?.length ?? 0}
+                      </td>
+                      <td className="px-4 py-3 hidden lg:table-cell whitespace-nowrap">
+                        {activity ? (
+                          <span className="text-xs font-mono flex items-center gap-2">
+                            {activity.tokenTransfers > 0 && (
+                              <span className="text-[#ffa729]" title="Token / NFT transfers across this block's txs">
+                                {activity.tokenTransfers} token{activity.tokenTransfers === 1 ? '' : 's'}
+                              </span>
+                            )}
+                            {activity.internalCalls > 0 && (
+                              <span className="text-gray-400" title="Internal contract calls across this block's txs">
+                                {activity.internalCalls} call{activity.internalCalls === 1 ? '' : 's'}
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-gray-600 text-xs">-</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-gray-400 tabular-nums">
                         {timeAgo(block.timestamp)}

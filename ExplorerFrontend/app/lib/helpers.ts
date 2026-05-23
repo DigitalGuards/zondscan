@@ -1,3 +1,6 @@
+import { keccak256 } from 'ethereumjs-util';
+import { Buffer } from 'buffer';
+
 export function timeAgo(unixSeconds: number): string {
   const now = Math.floor(Date.now() / 1000);
   const diff = now - unixSeconds;
@@ -23,7 +26,11 @@ export function formatStaked(shor: string): string {
   }
 }
 
-export function decodeToHex(input: string, format?: string): string {
+// The `_format` arg is unused but preserved in the signature for call-site
+// compatibility; older usages threaded an optional encoding hint that the
+// implementation never branched on. Renamed with the underscore prefix so
+// no-unused-vars stops firing without changing the public shape.
+export function decodeToHex(input: string, _format?: string): string {
   if (!input) return '';
   try {
     const binary = atob(input);
@@ -524,7 +531,13 @@ export function decodeTokenTransferInput(inputData: string | undefined | null): 
  */
 export interface DecodedEventArg {
   label: string;
-  type: 'address' | 'uint256' | 'bool' | 'uint256[]';
+  /**
+   * Rendering discriminator. The five scalar types get their own UI; `raw`
+   * is the catch-all for ABI types we don't have a specialised renderer
+   * for (bytes, dynamic strings, tuples, etc.); value holds the formatted
+   * hex slice so users can copy it out.
+   */
+  type: 'address' | 'uint256' | 'bool' | 'uint256[]' | 'string' | 'raw';
   value?: string;
   values?: string[];
 }
@@ -598,16 +611,27 @@ function dataUintArray(data: string, arrCharOffset: number): string[] {
 
 /**
  * Decode a single receipt-log topics/data pair into a labelled event.
- * Recognises the five well-known token signatures; returns null for
- * anything else so the view can render a raw fallback (topics + data).
  *
- * Disambiguation:
+ * Two-tier resolution:
+ *   1. Match topic[0] against the five well-known token signatures
+ *      (Transfer / Approval / ApprovalForAll / TransferSingle /
+ *      TransferBatch). These render with our specialised UI.
+ *   2. Fall back to the emitting contract's ABI when one was attached
+ *      server-side (verified contracts only): compute the keccak256 of
+ *      each event signature, match topic[0], decode indexed args off
+ *      topics[1..] and non-indexed args off the data field. Anything
+ *      with an ABI type we can't decode renders as 'raw' so users can
+ *      still see the slot.
+ *   3. Return null when neither tier matches; the view shows the
+ *      address + raw topics + data so the user can copy them out.
+ *
+ * Disambiguation (tier 1):
  *   - Transfer / Approval are shared between ERC-20 and ERC-721. ERC-721
  *     indexes all three params (4 topics, empty data); ERC-20 indexes the
  *     two addresses only (3 topics, value in data). We branch on
  *     topics.length to pick the right decoder + standard tag.
  */
-export function decodeEventLog(topics: string[], data: string): DecodedEvent | null {
+export function decodeEventLog(topics: string[], data: string, abi?: string): DecodedEvent | null {
   if (!topics || topics.length === 0) return null;
   const sig = (topics[0] || '').toLowerCase();
   const safeData = (data || '0x').toLowerCase();
@@ -727,8 +751,325 @@ export function decodeEventLog(topics: string[], data: string): DecodedEvent | n
     }
 
     default:
-      return null;
+      // Tier 2: try the verified-contract ABI if one was attached.
+      return abi ? decodeEventViaAbi(topics, data, abi) : null;
   }
+}
+
+// ─── ABI-driven fallback decoding ────────────────────────────────────────
+
+/**
+ * Minimal ABI event entry shape we consume. Solidity / Hyperion ABIs
+ * always emit `type`, `name`, `inputs`, and per-input `indexed`. We treat
+ * anything else (anonymous, components, error types) as out-of-scope and
+ * skip it.
+ */
+interface AbiEventInput {
+  name?: string;
+  type?: string;
+  indexed?: boolean;
+}
+interface AbiEventEntry {
+  type?: string;
+  name?: string;
+  anonymous?: boolean;
+  inputs?: AbiEventInput[];
+}
+
+// Canonicalise an ABI type for keccak256 signature construction. Solidity
+// ABIs emit `uint`/`int` aliases that must be expanded to `uint256`/`int256`
+// before hashing, otherwise the computed selector won't match the on-chain
+// topic[0]. Same for `bytes`/`bytes32` etc; bytes alone is a dynamic type,
+// bytesN is fixed; both are valid as-is. Arrays and tuples pass through.
+function canonicaliseAbiType(t: string | undefined): string {
+  if (!t) return '';
+  if (t === 'uint') return 'uint256';
+  if (t === 'int') return 'int256';
+  // Expand alias inside arrays too: e.g. uint[] → uint256[]
+  if (t === 'uint[]') return 'uint256[]';
+  if (t === 'int[]') return 'int256[]';
+  return t;
+}
+
+// Compute the canonical event signature ("Transfer(address,address,uint256)")
+// and its keccak256 topic hash for an ABI entry.
+function eventSignatureAndHash(entry: AbiEventEntry): { signature: string; hash: string } | null {
+  if (!entry || !entry.name || !Array.isArray(entry.inputs)) return null;
+  const types = entry.inputs.map((i) => canonicaliseAbiType(i.type)).filter(Boolean);
+  if (types.length !== entry.inputs.length) return null;
+  const sig = `${entry.name}(${types.join(',')})`;
+  try {
+    const hash = '0x' + keccak256(Buffer.from(sig, 'utf8')).toString('hex');
+    return { signature: sig, hash };
+  } catch {
+    return null;
+  }
+}
+
+// Decode a single ABI arg value from a hex slice (32 bytes, "0x"-prefixed).
+// Returns the rendered shape the view consumes. Anything we can't decode
+// cleanly falls through to `raw` so the user still sees the slot.
+function decodeAbiSlot(label: string, type: string, slot: string): DecodedEventArg {
+  const t = canonicaliseAbiType(type);
+  if (t === 'address') {
+    return { label, type: 'address', value: topicToAddress(slot) };
+  }
+  if (t === 'bool') {
+    let v = false;
+    try { v = BigInt(slot) !== BigInt(0); } catch { v = false; }
+    return { label, type: 'bool', value: v ? 'true' : 'false' };
+  }
+  // All uintN/intN render the same way; decimal string in the slot. Signed
+  // ints are treated as unsigned here; negative values render as huge
+  // unsigned numbers, but events using signed ints in this codebase are rare.
+  if (/^u?int\d*$/.test(t)) {
+    return { label, type: 'uint256', value: topicToUint(slot) };
+  }
+  // bytes32, bytes16 etc are fixed-size byte strings, render as a hex string.
+  if (/^bytes\d+$/.test(t)) {
+    return { label, type: 'raw', value: slot };
+  }
+  // Indexed dynamic types (string, bytes, dynamic arrays, tuples) are stored
+  // as keccak256(value) in the topic; we can surface the hash but not the
+  // value. Mark as raw so the user knows it's not the actual decoded value.
+  return { label, type: 'raw', value: slot };
+}
+
+// Decode a packed sequence of non-indexed ABI args from a log's data field.
+// Only handles static head types; dynamic types (string, bytes, dynamic
+// arrays) require offset resolution that we punt to the raw fallback for now.
+function decodeAbiData(inputs: AbiEventInput[], data: string): DecodedEventArg[] | null {
+  const safeData = (data || '0x').toLowerCase();
+  const body = safeData.startsWith('0x') ? safeData.slice(2) : safeData;
+  // Each static type occupies one 32-byte slot.
+  if (inputs.length * 64 > body.length) return null;
+  const out: DecodedEventArg[] = [];
+  inputs.forEach((inp, i) => {
+    const slot = '0x' + body.slice(i * 64, (i + 1) * 64);
+    out.push(decodeAbiSlot(inp.name || `arg${i}`, inp.type || 'raw', slot));
+  });
+  return out;
+}
+
+function decodeEventViaAbi(topics: string[], data: string, abiJson: string): DecodedEvent | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(abiJson);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed)) return null;
+  const targetTopic = (topics[0] || '').toLowerCase();
+  if (!targetTopic) return null;
+
+  for (const raw of parsed) {
+    const entry = raw as AbiEventEntry;
+    if (!entry || entry.type !== 'event' || entry.anonymous) continue;
+    const sig = eventSignatureAndHash(entry);
+    if (!sig || sig.hash !== targetTopic) continue;
+
+    const inputs = entry.inputs || [];
+    const indexedInputs = inputs.filter((i) => i.indexed);
+    const nonIndexedInputs = inputs.filter((i) => !i.indexed);
+
+    // topics[1..] hold indexed args in declaration order. If the contract
+    // emitted fewer indexed topics than the ABI declares, bail to raw so
+    // we don't misalign the labels.
+    if (indexedInputs.length !== topics.length - 1) continue;
+
+    const indexedArgs: DecodedEventArg[] = indexedInputs.map((inp, i) =>
+      decodeAbiSlot(inp.name || `arg${i}`, inp.type || 'raw', topics[i + 1])
+    );
+
+    // decodeAbiData returns null when `data` is shorter than the
+    // declared non-indexed inputs require; in that case the args array
+    // would contain `undefined` entries that the view can't render.
+    // Bail to the raw fallback instead of producing a half-decoded shape.
+    const nonIndexedArgs = decodeAbiData(nonIndexedInputs, data);
+    if (nonIndexedInputs.length > 0 && !nonIndexedArgs) continue;
+
+    // Recombine into original input order so the view labels stay consistent
+    // with the ABI declaration.
+    const args: DecodedEventArg[] = [];
+    let ix = 0, nx = 0;
+    for (const inp of inputs) {
+      if (inp.indexed) args.push(indexedArgs[ix++]);
+      else args.push((nonIndexedArgs ?? [])[nx++]);
+    }
+
+    return {
+      name: entry.name || 'Event',
+      signature: sig.signature,
+      args,
+    };
+  }
+  return null;
+}
+
+// ─── ABI-driven function-call decoding ───────────────────────────────────
+
+/**
+ * Minimal ABI function entry shape we consume. Same approach as the event
+ * decoder: we ignore tuples + nested arrays for the first pass and surface
+ * unrecognised ABI types as `raw` so the slot is at least copy-pasteable.
+ */
+interface AbiFunctionInput {
+  name?: string;
+  type?: string;
+}
+interface AbiFunctionEntry {
+  type?: string;
+  name?: string;
+  inputs?: AbiFunctionInput[];
+  stateMutability?: string;
+}
+
+/**
+ * A decoded contract method call, returned by decodeContractCall. Shares
+ * the per-arg shape with the event decoder so the Input Data card can
+ * reuse the same rendering branches.
+ */
+export interface DecodedFunctionCall {
+  /** Resolved method name (e.g. "setMatka1"). */
+  name: string;
+  /** Canonical signature (e.g. "setMatka1(address)"). */
+  signature: string;
+  /** 4-byte selector ("0xXXXXXXXX") that matched. */
+  selector: string;
+  /** Labelled arguments in declaration order. */
+  args: DecodedEventArg[];
+}
+
+// Compute the 4-byte function selector for an ABI entry. Same canonical
+// hashing rules as eventSignatureAndHash, but truncated to the first
+// 4 bytes (8 hex chars) per the Solidity / EVM convention.
+function functionSelector(entry: AbiFunctionEntry): { signature: string; selector: string } | null {
+  if (!entry || !entry.name || !Array.isArray(entry.inputs)) return null;
+  const types = entry.inputs.map((i) => canonicaliseAbiType(i.type)).filter(Boolean);
+  if (types.length !== entry.inputs.length) return null;
+  const sig = `${entry.name}(${types.join(',')})`;
+  try {
+    const full = keccak256(Buffer.from(sig, 'utf8')).toString('hex');
+    return { signature: sig, selector: '0x' + full.slice(0, 8) };
+  } catch {
+    return null;
+  }
+}
+
+// Decode a dynamic `string` or `bytes` arg from a packed calldata args
+// block. `argsBlock` is the calldata after the 4-byte selector (no 0x
+// prefix). `headOffset` is the slot index (in chars) where the head
+// argument's offset is stored. Returns the rendered DecodedEventArg.
+function decodeDynamicAt(label: string, type: string, argsBlock: string, headOffset: number): DecodedEventArg | null {
+  if (headOffset + 64 > argsBlock.length) return null;
+  let ptr: number;
+  try {
+    ptr = Number(BigInt('0x' + argsBlock.slice(headOffset, headOffset + 64))) * 2; // bytes → char offset
+  } catch {
+    return null;
+  }
+  if (ptr + 64 > argsBlock.length) return null;
+  let len: number;
+  try {
+    len = Number(BigInt('0x' + argsBlock.slice(ptr, ptr + 64)));
+  } catch {
+    return null;
+  }
+  const dataStart = ptr + 64;
+  const dataEnd = dataStart + len * 2;
+  if (dataEnd > argsBlock.length) return null;
+  const hex = argsBlock.slice(dataStart, dataEnd);
+  if (type === 'string') {
+    try {
+      const bytes = Buffer.from(hex, 'hex');
+      return { label, type: 'string', value: bytes.toString('utf8') };
+    } catch {
+      return { label, type: 'raw', value: '0x' + hex };
+    }
+  }
+  // `bytes` and everything else dynamic that we don't have a special-case
+  // for: surface as hex so the user can copy-paste.
+  return { label, type: 'raw', value: '0x' + hex };
+}
+
+/**
+ * Decode a transaction's calldata against the target contract's ABI.
+ *
+ * Returns null when:
+ *   - input is empty or malformed
+ *   - abi can't be parsed as a JSON array
+ *   - no `function` entry's keccak selector matches the first 4 bytes
+ *   - a static arg slot is missing (truncated calldata)
+ *
+ * Static args (address / bool / uintN / intN / fixed bytes) decode in-place.
+ * Dynamic args (string / bytes) follow the standard offset-pointer-then-
+ * length-then-data layout. Tuples and nested dynamic arrays surface as
+ * `raw` slot so the user still sees something rather than dropping the row.
+ *
+ * Used by the Input Data card on the tx page as the fallback when the
+ * existing decodeTokenTransferInput (which covers the well-known ERC
+ * token selectors only) returns null.
+ */
+export function decodeContractCall(input: string | undefined | null, abiJson: string | undefined): DecodedFunctionCall | null {
+  if (!input || input === '0x' || input.length < 10 || !abiJson) return null;
+  const data = input.toLowerCase();
+  if (!data.startsWith('0x')) return null;
+  const selector = data.slice(0, 10);
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(abiJson);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed)) return null;
+
+  // argsBlock is the calldata without "0x" and without the 4-byte selector.
+  // We index into this string in char-offset units (1 byte = 2 chars).
+  const argsBlock = data.slice(10);
+
+  for (const raw of parsed) {
+    const entry = raw as AbiFunctionEntry;
+    if (!entry || entry.type !== 'function') continue;
+    const matched = functionSelector(entry);
+    if (!matched || matched.selector !== selector) continue;
+
+    const inputs = entry.inputs || [];
+    const args: DecodedEventArg[] = [];
+    // Each input occupies one slot in the head (32 bytes), either holding
+    // the value (static) or an offset to the dynamic data.
+    if (inputs.length * 64 > argsBlock.length && inputs.length > 0) {
+      // Calldata truncated below what the ABI requires. Bail rather than
+      // mis-decode silently.
+      return null;
+    }
+    inputs.forEach((inp, i) => {
+      const headSlotStart = i * 64;
+      const t = canonicaliseAbiType(inp.type);
+      // Dynamic-type detection: string, bytes (without N), uintN[]/dyn arrays,
+      // tuples. We handle string and plain `bytes`; the rest falls to raw.
+      if (t === 'string' || t === 'bytes') {
+        const decoded = decodeDynamicAt(inp.name || `arg${i}`, t, argsBlock, headSlotStart);
+        if (decoded) {
+          args.push(decoded);
+        } else {
+          args.push({ label: inp.name || `arg${i}`, type: 'raw', value: '0x' + argsBlock.slice(headSlotStart, headSlotStart + 64) });
+        }
+        return;
+      }
+      // Static type, decode the slot directly.
+      const slot = '0x' + argsBlock.slice(headSlotStart, headSlotStart + 64);
+      args.push(decodeAbiSlot(inp.name || `arg${i}`, inp.type || 'raw', slot));
+    });
+
+    return {
+      name: entry.name || 'call',
+      signature: matched.signature,
+      selector,
+      args,
+    };
+  }
+  return null;
 }
 
 /**
@@ -743,7 +1084,7 @@ export function smallestUnitToDecimal(amount: string, decimals: number = 18): st
     const divisor = BigInt(10) ** BigInt(decimals);
     const wholePart = raw / divisor;
     const fractionalPart = raw % divisor;
-    let fracStr = fractionalPart.toString().padStart(decimals, '0').replace(/0+$/, '');
+    const fracStr = fractionalPart.toString().padStart(decimals, '0').replace(/0+$/, '');
     return fracStr ? `${wholePart}.${fracStr}` : wholePart.toString();
   } catch {
     return '0';

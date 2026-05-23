@@ -24,5 +24,10 @@ export const metadata: Metadata = {
 };
 
 export default function FAQPage(): JSX.Element {
-  return <FAQClient />;
+  return (
+    <main aria-labelledby="faq-heading">
+      <h1 id="faq-heading" className="sr-only">Zondscan FAQ</h1>
+      <FAQClient />
+    </main>
+  );
 }

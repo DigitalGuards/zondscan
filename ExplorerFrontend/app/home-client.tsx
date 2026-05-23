@@ -4,6 +4,7 @@ import * as React from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import axios from 'axios';
+import { useQuery } from '@tanstack/react-query';
 import { formatNumberWithCommas, timeAgo, formatStaked, formatGasPrice, truncateHash, formatAmount, formatAddress } from './lib/helpers';
 import config from '../config.js';
 import SearchBar from './components/SearchBar';
@@ -98,43 +99,43 @@ function dedupeTxs(txs: TxResult[], max: number): TxResult[] {
 
 const icons = {
   epoch: (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   ),
   slot: (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
     </svg>
   ),
   gas: (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M3 21h18" />
     </svg>
   ),
   block: (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
     </svg>
   ),
   validators: (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
     </svg>
   ),
   transactions: (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
     </svg>
   ),
   staked: (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   ),
   marketCap: (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
     </svg>
   ),
@@ -243,7 +244,7 @@ function getEpochFromBlock(blockNumber: number): number {
 
 function BlockTable({ blocks, loading }: { blocks: BlockResult[]; loading: boolean }) {
   return (
-    <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden">
+    <section aria-label="Latest blocks" className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden">
       <TableHeader icon={icons.block} title="Latest Blocks" viewAllHref="/blocks/1" />
       <div>
         {loading
@@ -296,7 +297,7 @@ function BlockTable({ blocks, loading }: { blocks: BlockResult[]; loading: boole
               );
             })}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -304,7 +305,7 @@ function BlockTable({ blocks, loading }: { blocks: BlockResult[]; loading: boole
 
 function TransactionTable({ txs, loading }: { txs: TxResult[]; loading: boolean }) {
   return (
-    <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden">
+    <section aria-label="Latest transactions" className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden">
       <TableHeader icon={icons.transactions} title="Latest Transactions" viewAllHref="/transactions/1" />
       <div>
         {loading
@@ -357,7 +358,7 @@ function TransactionTable({ txs, loading }: { txs: TxResult[]; loading: boolean 
               );
             })}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -436,31 +437,40 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
     }
   }, []);
 
-  React.useEffect(() => {
-    // Defer the initial call so its inner setState() lands outside the
-    // synchronous effect body (set-state-in-effect rule).
-    const initial = setTimeout(fetchData, 0);
-    // Refresh every 30s (approx half a slot)
-    const interval = setInterval(fetchData, 30000);
-    return () => {
-      clearTimeout(initial);
-      clearInterval(interval);
-    };
-  }, [fetchData]);
+  // Drive the polling via TanStack Query so backgrounded tabs go quiet
+  // (every other live page uses this discipline; the previous raw
+  // setInterval polled regardless of visibility). fetchData stays in
+  // charge of writing into the local state; this query only owns the
+  // schedule. Returns a timestamp so successive renders see a fresh
+  // value and don't dedupe.
+  useQuery<number>({
+    queryKey: ['home-poll'],
+    queryFn: async () => {
+      await fetchData();
+      return Date.now();
+    },
+    refetchInterval: 30000,
+    refetchIntervalInBackground: false,
+    refetchOnMount: 'always',
+    staleTime: 0,
+  });
 
   return (
-    <div className="px-4 lg:px-8 pt-4 lg:pt-6">
+    <main className="px-4 lg:px-8 pt-4 lg:pt-6" aria-labelledby="home-heading">
       <div className="max-w-6xl mx-auto">
         {/* Search Bar */}
-        <h1 className="text-base sm:text-lg font-semibold mb-2 text-white">{pageTitle}</h1>
+        <h1 id="home-heading" className="text-base sm:text-lg font-semibold mb-2 text-white">{pageTitle}</h1>
         <div className="mb-6">
           <SearchBar />
         </div>
 
         {/* Init Warning */}
         {!data.loading && !data.dataInitialized && (
-          <div className="mb-4 px-3 py-2.5 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 text-xs sm:text-sm flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div
+            role="status"
+            className="mb-4 px-3 py-2.5 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 text-xs sm:text-sm flex items-center gap-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             Initializing explorer data... This may take a few minutes.
@@ -468,9 +478,9 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
         )}
 
         {/* Stats Bar */}
-        <div className="mb-6">
+        <section aria-label="Network stats" className="mb-6">
           <StatBar data={data} />
-        </div>
+        </section>
 
         {/* Side-by-Side Tables */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
@@ -479,10 +489,10 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
         </div>
 
         {/* TradingView Chart */}
-        <div className="mb-2">
+        <section aria-label="Price chart" className="mb-2">
           <Charts />
-        </div>
+        </section>
       </div>
-    </div>
+    </main>
   );
 }
