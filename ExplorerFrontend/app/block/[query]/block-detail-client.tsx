@@ -3,6 +3,7 @@
 import axios from 'axios';
 import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import config from '../../../config';
 import Link from 'next/link';
 import { formatAmount, truncateHash, timeAgo, formatPlanckAdaptive } from '../../lib/helpers';
@@ -10,6 +11,11 @@ import Breadcrumbs from '../../components/Breadcrumbs';
 import DetailRow from '../../components/DetailRow';
 import CopyButton from '../../components/CopyButton';
 import EmptyState from '../../components/EmptyState';
+import Badge from '../../components/Badge';
+
+// Same threshold the tx page uses for confirmations: past this depth a
+// block is effectively final and we stop polling to bound load.
+const TERMINAL_CONFIRMATIONS = 24;
 
 function BackToBlocksLink(): JSX.Element | null {
   const searchParams = useSearchParams();
@@ -120,6 +126,29 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
   }
 
   const blockNum = parseInt(blockNumber);
+
+  // Live confirmations (= currentLatest - thisBlock). Polled via the
+  // shared /latestblock endpoint (5s server cache). Stops at
+  // TERMINAL_CONFIRMATIONS to bound load on long-lived tabs.
+  const latestBlockQuery = useQuery<{ blockNumber: number }>({
+    queryKey: ['latestblock'],
+    queryFn: async () => {
+      const r = await axios.get<{ blockNumber: number }>(`${config.handlerUrl}/latestblock`);
+      return r.data;
+    },
+    enabled: Number.isFinite(blockNum) && blockNum >= 0,
+    refetchInterval: (q) => {
+      const latest = q.state.data?.blockNumber ?? 0;
+      const depth = latest > 0 ? Math.max(0, latest - blockNum) : 0;
+      return depth >= 0 && depth < TERMINAL_CONFIRMATIONS ? 5000 : false;
+    },
+    refetchIntervalInBackground: false,
+  });
+  const liveConfirmations = (() => {
+    const latest = latestBlockQuery.data?.blockNumber;
+    if (!Number.isFinite(blockNum) || !latest) return null;
+    return Math.max(0, latest - blockNum);
+  })();
 
   useEffect(() => {
     if (!isValidBlockId) return;
@@ -238,6 +267,17 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
               <path strokeLinecap="round" strokeLinejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
             </svg>
             <h1 className="text-xl sm:text-2xl font-bold text-[#ffa729]">Block #{formatHexValue(blockData.number)}</h1>
+            {/* Live depth: surfaces how settled this block is. "Latest"
+                when we're looking at the head, otherwise "N
+                confirmations". Hidden until the first /latestblock
+                response arrives so we don't flash a stale value. */}
+            {liveConfirmations !== null && (
+              <Badge variant={liveConfirmations === 0 ? 'info' : liveConfirmations >= TERMINAL_CONFIRMATIONS ? 'success' : 'neutral'}>
+                {liveConfirmations === 0
+                  ? 'Latest'
+                  : `${liveConfirmations.toLocaleString()} confirmation${liveConfirmations === 1 ? '' : 's'}`}
+              </Badge>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {blockNum > 0 && (
