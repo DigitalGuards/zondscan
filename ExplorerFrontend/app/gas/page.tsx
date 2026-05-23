@@ -6,7 +6,7 @@ import GasClient from './gas-client';
 export const metadata: Metadata = {
   ...sharedMetadata,
   title: 'Gas | QRL Explorer',
-  description: 'Network gas metrics — average gas price, gas usage, mempool size, and recent block gas history on the QRL Zond network',
+  description: 'Network gas metrics, average gas price, gas usage, mempool size, and recent block gas history on the QRL Zond network',
   openGraph: {
     ...sharedMetadata.openGraph,
     title: 'Gas | QRL Explorer',

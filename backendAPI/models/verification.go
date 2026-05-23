@@ -46,7 +46,7 @@ type VerificationJobPayload struct {
 }
 
 // VerificationJobResultRef is the small handle written back into the job
-// after a successful verification — the full materialised result lives on
+// after a successful verification, the full materialised result lives on
 // the contract document itself (verified=true + abi + …). This struct
 // exists so /contract/verify/:jobId can return a useful payload without
 // re-querying the contracts collection.

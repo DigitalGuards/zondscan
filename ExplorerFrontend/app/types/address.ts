@@ -5,7 +5,7 @@ import type { Transaction, InternalTransaction } from './transaction';
  *
  * Verification fields below are written exclusively by the backend verify
  * endpoint (M2). Until a contract is verified, `verified` is `false` and
- * the optional source/abi/compiler fields are absent — matching the Go
+ * the optional source/abi/compiler fields are absent, matching the Go
  * struct's `omitempty` bson tags.
  */
 export interface ContractData {
@@ -14,11 +14,30 @@ export interface ContractData {
   contractCode: string;
   creationTransaction: string;
   isToken: boolean;
+  /** ERC-20 / ERC-721 / ERC-1155 / empty for unclassified. Drives the
+   *  "Token Contract" / "NFT Collection" / "Multi-Token Collection"
+   *  header in address-view + token-contract-view. */
+  tokenStandard?: 'ERC-20' | 'ERC-721' | 'ERC-1155' | string;
+  hasERC165?: boolean;
   status: string;
   decimals: number;
   name: string;
   symbol: string;
   updatedAt: string;
+
+  /** Phase 3a: off-chain collection metadata fetched from contractURI()
+   *  via the IPFS gateway. The image URL is pre-resolved to an HTTPS
+   *  URL renderable directly via next/image; the syncer never persists
+   *  bare `ipfs://...` here so the frontend doesn't have to deal with it.
+   *  All fields are absent ("not fetched yet") on contracts whose
+   *  `contractURI()` reverts or whose fetcher pass hasn't run. */
+  metadataURI?: string;
+  metadataName?: string;
+  metadataDescription?: string;
+  metadataImage?: string;
+  metadataExternalURL?: string;
+  metadataFetchedAt?: string;
+  metadataFetchError?: string;
 
   // Source verification (added by M1, populated by M2+)
   verified: boolean;
@@ -34,6 +53,13 @@ export interface ContractData {
   license?: string;
   verificationMethod?: string;
   verifiedAt?: string;
+
+  // M6a, populated only after a user has triggered the on-demand AI
+  // explanation. Frontend treats absence as "not generated yet"; the
+  // AiExplainCard renders a button instead of the cached body.
+  aiExplanation?: string;
+  aiExplanationAt?: string;
+  aiExplanationModel?: string;
 }
 
 /**

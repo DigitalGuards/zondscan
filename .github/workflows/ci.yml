@@ -1,10 +1,21 @@
 name: CI
 
+# Only fire on pull requests. Triggering on `push: dev` AND
+# `pull_request: [main, dev]` caused every commit on dev to run twice
+# (push event + pull_request:synchronize on the open dev,main PR).
+# pull_request:synchronize already covers any push to a branch with an
+# open PR, and the workflow assumes a dev,main release PR is always
+# pending while changes are landing.
 on:
-  push:
-    branches: [dev]
   pull_request:
     branches: [main, dev]
+
+# Belt-and-braces dedupe: if two events ever do collide (e.g. a future
+# branch protection ruleset opens a second PR for the same head),
+# cancel the older run instead of letting both finish.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   frontend:

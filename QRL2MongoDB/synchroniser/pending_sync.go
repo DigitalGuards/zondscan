@@ -83,7 +83,7 @@ func UpdatePendingTransactionsInBlock(block *models.ZondDatabaseBlock) error {
 	// an existing tombstone is preserved across re-polls.
 	// CleanupOldPendingTransactions sweeps these rows once they age out.
 	//
-	// Only status + lastSeen change here — match the shape that
+	// Only status + lastSeen change here, match the shape that
 	// verifyPendingTransactions/UpdatePendingTransactionStatus writes, so
 	// both tombstone paths produce identical rows. blockNumber lives in
 	// the blocks/transactions collections.
@@ -136,7 +136,7 @@ func syncMempool() error {
 	// Skip mempool polling while initial block sync is in progress to avoid
 	// competing with batch block fetches for RPC bandwidth.
 	if !IsInitialSyncComplete() {
-		configs.Logger.Debug("Skipping mempool sync — initial block sync still in progress")
+		configs.Logger.Debug("Skipping mempool sync, initial block sync still in progress")
 		return nil
 	}
 
@@ -176,7 +176,7 @@ func syncMempool() error {
 
 // verifyPendingTransactions checks pending transactions against the node
 // and tombstones any that have been mined (have a receipt). Tombstone instead
-// of delete to match UpdatePendingTransactionsInBlock — a delete here could
+// of delete to match UpdatePendingTransactionsInBlock, a delete here could
 // also race with mempool re-poll re-inserting the row as "pending".
 func verifyPendingTransactions() error {
 	hashes, err := db.GetAllPendingTransactionHashes()
@@ -202,7 +202,7 @@ func verifyPendingTransactions() error {
 			continue
 		}
 
-		// If receipt exists with status, the tx is mined — tombstone the row.
+		// If receipt exists with status, the tx is mined, tombstone the row.
 		if receipt != nil && receipt.Result.Status != "" {
 			if err := db.UpdatePendingTransactionStatus(hash, "mined"); err != nil {
 				configs.Logger.Error("Failed to tombstone mined pending transaction",

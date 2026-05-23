@@ -4,7 +4,9 @@ import (
 	"backendAPI/configs"
 	"backendAPI/models"
 	"context"
+	"errors"
 	"log"
+	"regexp"
 	"strings"
 	"time"
 
@@ -13,7 +15,12 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool) ([]models.ContractInfo, int64, error) {
+// ReturnContracts paginates contracts with optional `isToken` and
+// `tokenStandard` filters. `standardFilter` overlays on top of
+// `isTokenFilter` so e.g. `isToken=true,standard=ERC-721` returns the
+// intersection (NFT collections only). Pass nil/empty for either filter to
+// skip that predicate.
+func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool, standardFilter *string) ([]models.ContractInfo, int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -28,17 +35,36 @@ func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool
 		filter = append(filter, bson.E{Key: "isToken", Value: *isTokenFilter})
 	}
 
+	// Add tokenStandard filter if specified. Both filters AND together ,
+	// `?isToken=true&standard=ERC-721` returns NFT collections only.
+	if standardFilter != nil && *standardFilter != "" {
+		filter = append(filter, bson.E{Key: "tokenStandard", Value: *standardFilter})
+	}
+
 	// Add search if provided, using correct field names
 	if search != "" {
-		// Normalize the search address to canonical Q-prefix form
+		// Normalize the search address to canonical Q-prefix form (for the
+		// address + creatorAddress exact-match branches).
 		normalizedSearch := normalizeAddress(search)
 
-		// Zond addresses start with 'Q'. Search by normalized address or token name.
+		// Escape regex metacharacters in the user input so a `.` or `*`
+		// in the search term doesn't behave as a wildcard or DoS vector.
+		escaped := regexp.QuoteMeta(search)
+		nameRegex := bson.D{{Key: "$regex", Value: escaped}, {Key: "$options", Value: "i"}}
+
+		// Search by exact address, exact creator address, OR partial
+		// case-insensitive match against name + symbol + metadataName.
+		// Symbol was previously absent, searching "MQW" missed tokens whose
+		// `name` field held the full project label instead of the ticker.
+		// Phase 3a adds metadataName so a user searching by the off-chain
+		// display title hits the row even when on-chain name() is empty.
 		searchFilter := bson.D{
 			{Key: "$or", Value: bson.A{
-				bson.D{{Key: "address", Value: normalizedSearch}},        // Match contract address
-				bson.D{{Key: "creatorAddress", Value: normalizedSearch}}, // Match creator address
-				bson.D{{Key: "name", Value: bson.D{{Key: "$regex", Value: search}, {Key: "$options", Value: "i"}}}}, // Match token name
+				bson.D{{Key: "address", Value: normalizedSearch}},
+				bson.D{{Key: "creatorAddress", Value: normalizedSearch}},
+				bson.D{{Key: "name", Value: nameRegex}},
+				bson.D{{Key: "symbol", Value: nameRegex}},
+				bson.D{{Key: "metadataName", Value: nameRegex}},
 			}},
 		}
 		// Combine with existing filter
@@ -79,6 +105,141 @@ func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool
 	}
 
 	return contracts, total, nil
+}
+
+// ContractCountsByStandard is the per-tab breakdown returned by
+// /contracts/counts: the three known token standards plus "other"
+// (non-token contracts). Used to populate the count chips on the
+// contracts-page tab buttons in one round trip.
+type ContractCountsByStandard struct {
+	ERC20   int64 `json:"erc20"`
+	ERC721  int64 `json:"erc721"`
+	ERC1155 int64 `json:"erc1155"`
+	Other   int64 `json:"other"`
+}
+
+// GetContractCountsByStandard returns the four tab buckets the frontend
+// shows on /contracts in a single aggregation. One $group instead of
+// four CountDocuments calls keeps the cost predictable as the
+// contractCode collection grows.
+//
+// The "other" bucket is non-token contracts (isToken=false). Three
+// token buckets are scoped by tokenStandard. Legacy rows without a
+// tokenStandard tag (pre-Phase 1) and isToken=true still count as
+// "other" so the four buckets always sum to the total contractCode
+// document count, useful for sanity-checking.
+func GetContractCountsByStandard() (ContractCountsByStandard, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var out ContractCountsByStandard
+
+	// $group by a synthesised bucket label so we get all four counts back
+	// in one aggregation pass.
+	pipeline := []bson.M{
+		{
+			"$group": bson.M{
+				"_id": bson.M{
+					"$cond": []interface{}{
+						bson.M{"$eq": []interface{}{"$isToken", true}},
+						bson.M{
+							"$switch": bson.M{
+								"branches": []bson.M{
+									{"case": bson.M{"$eq": []interface{}{"$tokenStandard", "ERC-20"}}, "then": "erc20"},
+									{"case": bson.M{"$eq": []interface{}{"$tokenStandard", "ERC-721"}}, "then": "erc721"},
+									{"case": bson.M{"$eq": []interface{}{"$tokenStandard", "ERC-1155"}}, "then": "erc1155"},
+								},
+								"default": "other",
+							},
+						},
+						"other",
+					},
+				},
+				"count": bson.M{"$sum": 1},
+			},
+		},
+	}
+
+	cursor, err := configs.ContractInfoCollection.Aggregate(ctx, pipeline)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return out, nil
+		}
+		return out, err
+	}
+	defer cursor.Close(ctx)
+
+	for cursor.Next(ctx) {
+		var row struct {
+			ID    string `bson:"_id"`
+			Count int64  `bson:"count"`
+		}
+		if err := cursor.Decode(&row); err != nil {
+			continue
+		}
+		switch row.ID {
+		case "erc20":
+			out.ERC20 = row.Count
+		case "erc721":
+			out.ERC721 = row.Count
+		case "erc1155":
+			out.ERC1155 = row.Count
+		default:
+			out.Other += row.Count
+		}
+	}
+	return out, nil
+}
+
+// GetContractsByAddresses batch-loads contract docs for a set of addresses,
+// returning a map keyed by the canonical Q-prefix address. Used by the
+// /tx/:hash route to attach ABI metadata to receipt logs without N
+// round-trips. Missing addresses simply don't appear in the returned map,
+// callers handle the absent-key case as "no contract info available".
+//
+// Each input address is normalized to the canonical Q-prefix lowercase
+// form the syncer stores. Empty input returns an empty map without
+// touching mongo.
+func GetContractsByAddresses(addresses []string) (map[string]models.ContractInfo, error) {
+	out := make(map[string]models.ContractInfo)
+	if len(addresses) == 0 {
+		return out, nil
+	}
+
+	// Dedupe + normalize so the $in list is minimal.
+	seen := make(map[string]struct{}, len(addresses))
+	normalized := make([]string, 0, len(addresses))
+	for _, a := range addresses {
+		n := normalizeAddress(a)
+		if _, ok := seen[n]; ok {
+			continue
+		}
+		seen[n] = struct{}{}
+		normalized = append(normalized, n)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cursor, err := configs.ContractInfoCollection.Find(ctx, bson.M{
+		"address": bson.M{"$in": normalized},
+	})
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return out, nil
+		}
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	for cursor.Next(ctx) {
+		var c models.ContractInfo
+		if err := cursor.Decode(&c); err != nil {
+			continue
+		}
+		out[c.ContractAddress] = c
+	}
+	return out, nil
 }
 
 func ReturnContractCode(address string) (models.ContractInfo, error) {
@@ -137,7 +298,7 @@ func CountContracts() (int64, error) {
 // MarkContractVerified writes the verification result onto the existing
 // contract document using a **targeted $set of only verification fields**.
 // This is the symmetric half of the syncer's field-scoped $set (see
-// QRL2MongoDB/db/contracts.go:syncerOwnedSet) — neither writer ever
+// QRL2MongoDB/db/contracts.go:syncerOwnedSet), neither writer ever
 // touches the other's keys, so concurrent updates can't clobber each
 // other regardless of which thread reads first.
 //
@@ -176,6 +337,112 @@ func MarkContractVerified(address string, result models.VerificationResult) erro
 	}
 	if res.MatchedCount == 0 {
 		log.Printf("MarkContractVerified: no contract document for %s", normalizedAddr)
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
+// ErrAIRegenCap signals that the per-contract regen cap has been reached
+// inside the current rolling window. The HTTP layer maps it to 429.
+var ErrAIRegenCap = errors.New("AI regen cap reached")
+
+// ReserveAIRegenSlot atomically reserves one regeneration slot on the
+// contract document. Returns ErrAIRegenCap when:
+//
+//   - the existing window has not yet rolled over (now - windowStart < window) AND
+//   - the count has already reached limit.
+//
+// Otherwise it either increments the count within the current window or
+// resets the window start to now with count=1 (rollover case / first regen).
+// Both paths use a single $set/$inc UpdateOne so there's no read-modify-
+// write race between concurrent callers, the loser sees ErrAIRegenCap.
+func ReserveAIRegenSlot(address string, limit int, window time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	normalizedAddr := normalizeAddress(address)
+	now := time.Now().UTC()
+	cutoff := now.Add(-window).Format(time.RFC3339)
+	nowStr := now.Format(time.RFC3339)
+
+	// Path A: increment within the current window (window is still fresh,
+	// count is below limit).
+	res, err := configs.ContractInfoCollection.UpdateOne(
+		ctx,
+		bson.M{
+			"address":                       normalizedAddr,
+			"aiExplanationRegenWindowStart": bson.M{"$gte": cutoff},
+			"aiExplanationRegenCount":       bson.M{"$lt": limit},
+		},
+		bson.M{"$inc": bson.M{"aiExplanationRegenCount": 1}},
+	)
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount > 0 {
+		return nil
+	}
+
+	// Path B: open a fresh window. Matches when the window expired, was
+	// never started, or the field is missing entirely.
+	res, err = configs.ContractInfoCollection.UpdateOne(
+		ctx,
+		bson.M{
+			"address": normalizedAddr,
+			"$or": []bson.M{
+				{"aiExplanationRegenWindowStart": bson.M{"$lt": cutoff}},
+				{"aiExplanationRegenWindowStart": bson.M{"$exists": false}},
+				{"aiExplanationRegenWindowStart": ""},
+			},
+		},
+		bson.M{"$set": bson.M{
+			"aiExplanationRegenCount":       1,
+			"aiExplanationRegenWindowStart": nowStr,
+		}},
+	)
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount > 0 {
+		return nil
+	}
+
+	// Neither path matched: a fresh window exists AND count is at limit.
+	// (If the address truly doesn't exist, Path B's first clause `$or`
+	// branches would not match because the address filter rules them out;
+	// but the caller already validated existence via ReturnContractCode,
+	// so we know the contract is present.)
+	return ErrAIRegenCap
+}
+
+// SaveContractExplanation persists the M6a AI-generated explanation onto
+// the contract document. Uses the same field-scoped $set pattern as
+// MarkContractVerified so the syncer cannot stomp the cache during a
+// concurrent contract-state refresh.
+//
+// generatedAt is the caller's responsibility (typically time.Now().UTC()
+// formatted RFC3339) so the explainer can echo back the same timestamp it
+// returns to the HTTP client without a re-read.
+func SaveContractExplanation(address, explanation, model, generatedAt string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	normalizedAddr := normalizeAddress(address)
+	res, err := configs.ContractInfoCollection.UpdateOne(
+		ctx,
+		bson.M{"address": normalizedAddr},
+		bson.M{"$set": bson.M{
+			"aiExplanation":      explanation,
+			"aiExplanationAt":    generatedAt,
+			"aiExplanationModel": model,
+		}},
+	)
+	if err != nil {
+		log.Printf("SaveContractExplanation: failed to update %s: %v", normalizedAddr, err)
+		return err
+	}
+	if res.MatchedCount == 0 {
+		log.Printf("SaveContractExplanation: no contract document for %s", normalizedAddr)
 		return mongo.ErrNoDocuments
 	}
 	return nil
@@ -222,7 +489,7 @@ func GetVerificationJob(jobID string) (*models.ContractVerificationJob, error) {
 	return &job, nil
 }
 
-// UpdateVerificationJob applies a targeted $set to a job document — only
+// UpdateVerificationJob applies a targeted $set to a job document, only
 // the supplied fields are written. Use this for status transitions
 // (pending → compiling → success/failed), error notes, and the result
 // handle. `updatedAt` is stamped automatically.

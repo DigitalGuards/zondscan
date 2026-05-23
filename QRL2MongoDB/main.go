@@ -129,6 +129,20 @@ func main() {
 	configs.Logger.Info("Starting pending transaction sync service...")
 	synchroniser.StartPendingTransactionSync()
 
+	// Phase 3a: start the off-chain NFT collection metadata fetcher.
+	// Background goroutine that polls contractCode for unfetched
+	// metadataURI rows and resolves them through the configured IPFS
+	// gateway. Self-disables via METADATA_FETCHER_ENABLED=false.
+	metadataCtx, cancelMetadata := context.WithCancel(context.Background())
+	metadataSvc := synchroniser.NewMetadataService()
+	metadataSvc.Start(metadataCtx)
+	// Ensure the goroutine stops cleanly on shutdown.
+	go func() {
+		<-stopCh
+		cancelMetadata()
+		metadataSvc.Stop()
+	}()
+
 	// Run the main sync in a goroutine so the signal handler above can observe doneCh.
 	go func() {
 		defer close(doneCh)

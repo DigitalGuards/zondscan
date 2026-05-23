@@ -72,7 +72,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# NOTE: build target must NOT be "handler" — there is a handler/ package directory
+# NOTE: build target must NOT be "handler", there is a handler/ package directory
 # in this repo; `go build -o handler` would write into it instead of producing a
 # top-level binary. Use the historical "backendAPI" name.
 go build -o backendAPI .

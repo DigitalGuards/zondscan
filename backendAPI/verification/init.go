@@ -5,7 +5,7 @@ import (
 	"sync"
 )
 
-// Process-wide default Verifier. nil when the runner isn't configured —
+// Process-wide default Verifier. nil when the runner isn't configured ,
 // the routes layer must check Default() and return 503 in that case so
 // the rest of the backend boots normally.
 var (
@@ -16,11 +16,11 @@ var (
 // Init constructs the package-level Verifier from environment variables.
 // Called once at backend startup. A nil error here means /contract/verify*
 // routes are live; a non-nil error logs a warning and leaves the default
-// nil — the rest of the backend remains usable.
+// nil, the rest of the backend remains usable.
 func Init() error {
 	c, err := NewCompiler()
 	if err != nil {
-		log.Printf("WARN: contract verification disabled — %v", err)
+		log.Printf("WARN: contract verification disabled, %v", err)
 		return err
 	}
 	defaultMu.Lock()

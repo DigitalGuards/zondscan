@@ -9,7 +9,7 @@ import "encoding/json"
 // `imports` map keyed by the path the source uses for the import (e.g.
 // "./Context.hyp" → the Context.hyp content). The Go layer wraps both
 // into a Hyperion standard-JSON `sources` map before invoking the
-// runner — users never see standard-JSON directly in v1.
+// runner, users never see standard-JSON directly in v1.
 type VerifyRequest struct {
 	Address              string            `json:"address" binding:"required"`
 	SourceCode           string            `json:"sourceCode" binding:"required"`
@@ -33,7 +33,7 @@ type VerifyEnqueueResponse struct {
 	Address string `json:"address"`
 }
 
-// CompilerInfoResponse is the body of GET /contract/compiler-info — the
+// CompilerInfoResponse is the body of GET /contract/compiler-info, the
 // single pinned hypc build the backend is willing to verify against.
 type CompilerInfoResponse struct {
 	Language string `json:"language"`
@@ -41,7 +41,7 @@ type CompilerInfoResponse struct {
 }
 
 // StandardJSONInput is the Hyperion standard-JSON shape we feed to the
-// runner. Mirrors the Solidity standard-JSON layout — see
+// runner. Mirrors the Solidity standard-JSON layout, see
 // theQRL/hyperion docs for details.
 type StandardJSONInput struct {
 	Language string                              `json:"language"`
@@ -79,19 +79,41 @@ type CompilerError struct {
 }
 
 // CompiledContract is the per-contract artifact from the compiler's output
-// for a given source unit. Hyperion uses `zvm` (Zond VM) rather than `evm`.
+// for a given source unit. The bytecode is published under different
+// top-level keys depending on the hypc version:
+//
+//   hypc 0.0.2  → `zvm`  (the legacy Zond VM naming)
+//   hypc 0.2.x+ → `qrvm` (post-fork QRL VM rename)
+//
+// Both shapes are parsed; the verifier picks whichever is populated via
+// `CompiledContract.DeployedBytecode()` so downstream code doesn't have
+// to branch on compiler version.
 type CompiledContract struct {
-	ABI json.RawMessage `json:"abi,omitempty"`
-	ZVM struct {
-		DeployedBytecode struct {
-			Object              string                          `json:"object"`
-			ImmutableReferences map[string][]ImmutableRange     `json:"immutableReferences,omitempty"`
-		} `json:"deployedBytecode"`
-		Bytecode struct {
-			Object string `json:"object"`
-		} `json:"bytecode"`
-	} `json:"zvm"`
-	Metadata string `json:"metadata,omitempty"`
+	ABI      json.RawMessage `json:"abi,omitempty"`
+	ZVM      vmArtifacts     `json:"zvm,omitempty"`
+	QRVM     vmArtifacts     `json:"qrvm,omitempty"`
+	Metadata string          `json:"metadata,omitempty"`
+}
+
+type vmArtifacts struct {
+	DeployedBytecode deployedBytecodeArtifact `json:"deployedBytecode"`
+	Bytecode         struct {
+		Object string `json:"object"`
+	} `json:"bytecode"`
+}
+
+type deployedBytecodeArtifact struct {
+	Object              string                      `json:"object"`
+	ImmutableReferences map[string][]ImmutableRange `json:"immutableReferences,omitempty"`
+}
+
+// DeployedBytecode returns the populated deployed-bytecode artifact,
+// preferring qrvm (modern) over zvm (legacy 0.0.2).
+func (c *CompiledContract) DeployedBytecode() deployedBytecodeArtifact {
+	if c.QRVM.DeployedBytecode.Object != "" {
+		return c.QRVM.DeployedBytecode
+	}
+	return c.ZVM.DeployedBytecode
 }
 
 // ImmutableRange is a byte slice within deployedBytecode that holds an

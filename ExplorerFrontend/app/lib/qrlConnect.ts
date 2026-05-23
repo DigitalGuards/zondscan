@@ -4,7 +4,7 @@ import { QRLConnect, ConnectionStatus } from '@qrlwallet/connect';
 import type { QRLConnectProvider } from '@qrlwallet/connect';
 
 // Module-level singleton. The QRLConnect constructor announces itself via
-// EIP-6963 and opens a relay socket — instantiating twice would double the
+// EIP-6963 and opens a relay socket, instantiating twice would double the
 // announcements and stomp on the persisted-session storage key. Always go
 // through getQrlConnect().
 let instance: QRLConnectProvider | null = null;

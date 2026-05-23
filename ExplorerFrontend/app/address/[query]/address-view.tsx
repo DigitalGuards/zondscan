@@ -8,6 +8,7 @@ import VerifiedBadge from "../../components/VerifiedBadge";
 import TanStackTable from "../../components/TanStackTable";
 import BalanceDisplay from "./balance-display";
 import ActivityDisplay from "./activity-display";
+import HoldingsDisplay from "./holdings-display";
 import type { AddressData } from "@/app/types";
 import Link from "next/link";
 import Breadcrumbs from "../../components/Breadcrumbs";
@@ -86,23 +87,39 @@ export default function AddressView({ addressData, addressSegment }: AddressView
         );
     }
 
+    // Visually-hidden h1 anchors the main landmark for assistive tech;
+    // the visible heading is the address text itself (rendered below
+    // via AddressDisplay), which doesn't carry semantic heading weight.
+    const addressHeadingId = 'address-page-heading';
+    // addressIcon is rendered both desktop + mobile; tag both so the
+    // duplicate doesn't get announced as two graphics.
+    const decorativeIcon = addressIcon ? (
+        <span aria-hidden="true">{addressIcon}</span>
+    ) : null;
+
     return (
-        <div className="py-3 md:py-6 lg:py-8 px-3 md:px-6 lg:px-8 max-w-[900px] mx-auto">
+        <main className="detail-content" aria-labelledby={addressHeadingId}>
+            <h1 id={addressHeadingId} className="sr-only">
+                {addressType || 'Address'} {addressSegment}
+            </h1>
             <Breadcrumbs items={[
                 { label: 'Address' },
                 { label: `${addressSegment.slice(0, 10)}...${addressSegment.slice(-6)}` },
             ]} />
-            <div className="relative overflow-hidden rounded-xl md:rounded-2xl 
+            <section
+                aria-labelledby={addressHeadingId}
+                className="relative overflow-hidden rounded-xl md:rounded-2xl
                         bg-card-gradient
-                        border border-border shadow-lg md:shadow-xl mb-4 md:mb-6 lg:mb-8">
+                        border border-border shadow-lg md:shadow-xl mb-4 md:mb-6 lg:mb-8"
+            >
                 <div className="p-3 md:p-6 lg:p-8">
                     {/* Header */}
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-4 md:mb-6 lg:mb-8 pb-3 md:pb-4 lg:pb-6 border-b border-gray-700">
                         <div className="flex items-start lg:items-center mb-3 lg:mb-0">
-                            <div className="hidden lg:block">{addressIcon}</div>
+                            <div className="hidden lg:block">{decorativeIcon}</div>
                             <div className="flex-1 lg:ml-4">
                                 <div className="flex items-center">
-                                    <div className="block lg:hidden mr-2">{addressIcon}</div>
+                                    <div className="block lg:hidden mr-2">{decorativeIcon}</div>
                                     <div className="text-xs md:text-sm font-medium text-gray-400">{addressType}</div>
                                 </div>
                                 <div className="flex flex-col lg:flex-row lg:items-center mt-1 gap-2">
@@ -129,11 +146,17 @@ export default function AddressView({ addressData, addressSegment }: AddressView
 
                     {/* Contract Information */}
                     {contractData && contractData.contractCode && (
-                        <div className="mt-4 md:mt-6">
+                        <section aria-labelledby="contract-info-heading" className="mt-4 md:mt-6">
                             <div className="card-simple p-3 md:p-4 lg:p-6 space-y-3 md:space-y-4">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                    <h3 className="text-base md:text-lg font-semibold text-accent">
-                                        {contractData.isToken ? 'Token Contract' : 'Contract'} Information
+                                    <h3 id="contract-info-heading" className="text-base md:text-lg font-semibold text-accent">
+                                        {contractData.tokenStandard === 'ERC-721'
+                                            ? 'NFT Collection'
+                                            : contractData.tokenStandard === 'ERC-1155'
+                                              ? 'Multi-Token Collection'
+                                              : contractData.isToken
+                                                ? 'Token Contract'
+                                                : 'Contract'} Information
                                     </h3>
                                     {contractData.verified && <VerifiedBadge />}
                                 </div>
@@ -152,32 +175,49 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                         </div>
                                     </div>
 
-                                    {/* Token Information */}
+                                    {/* Token / NFT Information */}
                                     {contractData.isToken && (
                                         <>
-                                            {/* Token Name */}
+                                            {/* Standard label, surfaces the QRC-X branding
+                                                (DB value stays ERC-X). */}
+                                            {contractData.tokenStandard && (
+                                                <div>
+                                                    <div className="text-xs md:text-sm text-gray-400 mb-1">Token Standard</div>
+                                                    <div className="text-xs md:text-sm text-gray-300">
+                                                        {contractData.tokenStandard.replace(/^ERC-/, 'QRC-')}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Name */}
                                             <div>
-                                                <div className="text-xs md:text-sm text-gray-400 mb-1">Token Name</div>
+                                                <div className="text-xs md:text-sm text-gray-400 mb-1">
+                                                    {contractData.tokenStandard === 'ERC-20' || !contractData.tokenStandard ? 'Token Name' : 'Collection Name'}
+                                                </div>
                                                 <div className="text-xs md:text-sm text-gray-300">
                                                     {contractData.name || 'Unknown'}
                                                 </div>
                                             </div>
 
-                                            {/* Token Symbol */}
+                                            {/* Symbol */}
                                             <div>
-                                                <div className="text-xs md:text-sm text-gray-400 mb-1">Token Symbol</div>
+                                                <div className="text-xs md:text-sm text-gray-400 mb-1">
+                                                    {contractData.tokenStandard === 'ERC-20' || !contractData.tokenStandard ? 'Token Symbol' : 'Collection Symbol'}
+                                                </div>
                                                 <div className="text-xs md:text-sm text-gray-300">
                                                     {contractData.symbol || 'Unknown'}
                                                 </div>
                                             </div>
 
-                                            {/* Token Decimals */}
-                                            <div>
-                                                <div className="text-xs md:text-sm text-gray-400 mb-1">Token Decimals</div>
-                                                <div className="text-xs md:text-sm text-gray-300">
-                                                    {contractData.decimals || '0'}
+                                            {/* Decimals, ERC-20 only */}
+                                            {(contractData.tokenStandard === 'ERC-20' || !contractData.tokenStandard) && (
+                                                <div>
+                                                    <div className="text-xs md:text-sm text-gray-400 mb-1">Token Decimals</div>
+                                                    <div className="text-xs md:text-sm text-gray-300">
+                                                        {contractData.decimals || '0'}
+                                                    </div>
                                                 </div>
-                                            </div>
+                                            )}
                                         </>
                                     )}
 
@@ -216,14 +256,20 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                     <ContractTabs contractData={contractData} />
                                 </div>
                             </div>
-                        </div>
+                        </section>
                     )}
                 </div>
-            </div>
+            </section>
+
+            {/* Holdings (tokens + NFTs). Data was already collected by the
+                syncer into tokenBalances; this just surfaces it. The
+                component self-renders empty when the address has nothing,
+                so there's no spacer when it's not relevant. */}
+            <HoldingsDisplay address={addressSegment} />
 
             {/* Transactions Section */}
-            <div className="space-y-3 md:space-y-4">
-                <h2 className="text-base md:text-lg lg:text-xl font-semibold text-accent">Transactions</h2>
+            <section aria-labelledby="address-transactions-heading" className="space-y-3 md:space-y-4">
+                <h2 id="address-transactions-heading" className="text-base md:text-lg lg:text-xl font-semibold text-accent">Transactions</h2>
                 <div className="overflow-hidden rounded-xl border border-border">
                     {addressData.transactions_by_address && addressData.transactions_by_address.length > 0 ? (
                         <TanStackTable 
@@ -239,7 +285,7 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                         />
                     )}
                 </div>
-            </div>
-        </div>
+            </section>
+        </main>
     );
 }

@@ -1,3 +1,6 @@
+import { keccak256 } from 'ethereumjs-util';
+import { Buffer } from 'buffer';
+
 export function timeAgo(unixSeconds: number): string {
   const now = Math.floor(Date.now() / 1000);
   const diff = now - unixSeconds;
@@ -23,7 +26,11 @@ export function formatStaked(shor: string): string {
   }
 }
 
-export function decodeToHex(input: string, format?: string): string {
+// The `_format` arg is unused but preserved in the signature for call-site
+// compatibility; older usages threaded an optional encoding hint that the
+// implementation never branched on. Renamed with the underscore prefix so
+// no-unused-vars stops firing without changing the public shape.
+export function decodeToHex(input: string, _format?: string): string {
   if (!input) return '';
   try {
     const binary = atob(input);
@@ -69,7 +76,7 @@ export function toFixed(x: number | string | undefined | null): string {
 
 /**
  * Parse a "0x"-prefixed hex string into a bigint. Returns 0n on missing or
- * malformed input — gas-stats math should never throw on a dropped field.
+ * malformed input, gas-stats math should never throw on a dropped field.
  */
 export function hexToBigInt(s: string | undefined | null): bigint {
   if (!s) return BigInt(0);
@@ -97,7 +104,7 @@ export function hexToNumber(s: string | undefined | null): number {
  * Format a hex gas count (gasUsed / gasLimit) as a thousands-separated decimal.
  */
 export function formatBigGas(s: string | undefined | null): string {
-  if (!s) return '—';
+  if (!s) return ',';
   const v = hexToBigInt(s);
   if (v === BigInt(0)) return '0';
   return v.toLocaleString('en-US');
@@ -309,89 +316,759 @@ export function formatAddress(address: string | undefined | null): string {
 }
 
 /**
- * Decoded token transfer information from input data
+ * Decoded token call (transfer-like or approval) from a transaction's
+ * input data. The `standard` discriminator drives the badge in
+ * pending-transaction-view; per-call shape is sparse: only the fields
+ * that apply to the matched selector are populated. ERC-1155 batch is
+ * the only path that fills `ids` + `values`.
+ *
+ * Caveat: 0x23b872dd is shared by ERC-20 transferFrom and ERC-721
+ * transferFrom. Without the target contract we can't tell them apart,
+ * so we tag it as ERC-20 (its original meaning) and leave the
+ * ambiguity visible via the raw amount field. The user lands on the
+ * confirmed tx page once mined, where the syncer's tokenStandard tag
+ * resolves it correctly.
  */
+export type DecodedTokenStandard = 'ERC-20' | 'ERC-721' | 'ERC-1155';
+
 export interface DecodedTokenTransfer {
-  to: string;
-  amount: string;
-  methodName: string;
+  standard: DecodedTokenStandard;
+  methodName: 'transfer' | 'transferFrom' | 'safeTransferFrom' | 'safeBatchTransferFrom' | 'setApprovalForAll';
+  to?: string;
+  from?: string;
+  /** ERC-20 raw uint256 amount, as a decimal string. */
+  amount?: string;
+  /** ERC-721 / ERC-1155 single tokenID, as a decimal string. */
+  tokenID?: string;
+  /** ERC-1155 single transfer value (qty), as a decimal string. */
+  value?: string;
+  /** ERC-1155 batch ids and per-id values (decimal strings). */
+  ids?: string[];
+  values?: string[];
+  /** setApprovalForAll operator + flag. */
+  operator?: string;
+  approved?: boolean;
+}
+
+// Decode one 32-byte ABI slot as Q-prefixed address (last 20 bytes).
+function abiAddress(data: string, offset: number): string {
+  return 'Q' + data.slice(offset, offset + 64).slice(-40);
+}
+
+// Decode one 32-byte ABI slot as a uint256 decimal string.
+function abiUint(data: string, offset: number): string {
+  return BigInt('0x' + data.slice(offset, offset + 64)).toString();
+}
+
+// Decode a dynamic uint256[] starting at byte offset `arrOffset` (in
+// chars from the start of the calldata, not from the args block).
+// Returns the decoded values as decimal strings.
+//
+// Defence-in-depth: the length prefix comes from attacker-controlled
+// calldata, so we cap it at 1024 (real ERC-1155 batches are
+// orders of magnitude smaller, the largest mainnet batches we've
+// seen are dozens of entries) and bound-check the declared payload
+// against the actual data length. Without the cap a crafted tx
+// could declare a 2^256-sized array and freeze the browser tab
+// when this runs in the pending-tx view.
+function abiUintArray(data: string, arrOffset: number): string[] {
+  const lenHex = data.slice(arrOffset, arrOffset + 64);
+  if (lenHex.length < 64) return [];
+  const lenBig = BigInt('0x' + lenHex);
+  const MAX_BATCH = 1024;
+  if (lenBig > BigInt(MAX_BATCH)) return [];
+  const len = Number(lenBig);
+  if (arrOffset + 64 + len * 64 > data.length) return [];
+  const out: string[] = [];
+  for (let i = 0; i < len; i++) {
+    out.push(abiUint(data, arrOffset + 64 + i * 64));
+  }
+  return out;
 }
 
 /**
- * Decodes ERC20 transfer input data
- * ERC20 transfer method signature: 0xa9059cbb
- * Format: 0xa9059cbb + 32 bytes (to address, padded) + 32 bytes (amount)
- * @param inputData - The transaction input data
- * @returns Decoded transfer info or null if not a transfer
+ * Decode a transaction's input data into a structured token-call descriptor.
+ * Returns null for any non-token-call input. Selectors covered:
+ *
+ *   ERC-20:   transfer (0xa9059cbb), transferFrom (0x23b872dd)
+ *   ERC-721:  safeTransferFrom (0x42842e0e, 0xb88d4fde)
+ *   ERC-1155: safeTransferFrom (0xf242432a), safeBatchTransferFrom (0x2eb2c2d6)
+ *   Both NFT: setApprovalForAll (0xa22cb465)
  */
 export function decodeTokenTransferInput(inputData: string | undefined | null): DecodedTokenTransfer | null {
   if (!inputData || inputData === '0x' || inputData.length < 10) {
     return null;
   }
 
-  // Normalize input
   const data = inputData.toLowerCase();
+  const selector = data.slice(0, 10);
+  // ABI args start at byte 10 (skip "0x" + 4-byte selector).
+  const args = 10;
 
-  // Check for ERC20 transfer method signature (0xa9059cbb)
-  if (data.startsWith('0xa9059cbb')) {
-    // transfer(address,uint256)
-    // Expected length: 0x (2) + method (8) + address (64) + amount (64) = 138
-    if (data.length !== 138) {
-      return null;
+  try {
+    switch (selector) {
+      // ─── ERC-20 ────────────────────────────────────────────────────────
+      case '0xa9059cbb': {
+        // transfer(address,uint256), 4 + 32 + 32 = 68 bytes → 138 chars
+        if (data.length !== 138) return null;
+        return {
+          standard: 'ERC-20',
+          methodName: 'transfer',
+          to: abiAddress(data, args),
+          amount: abiUint(data, args + 64),
+        };
+      }
+      case '0x23b872dd': {
+        // transferFrom(address,address,uint256), 4 + 32*3 = 100 bytes → 202 chars.
+        // Shared selector with ERC-721 transferFrom, see DecodedTokenTransfer
+        // docstring: we tag it as ERC-20 because we lack the contract's
+        // standard in mempool context.
+        if (data.length !== 202) return null;
+        return {
+          standard: 'ERC-20',
+          methodName: 'transferFrom',
+          from: abiAddress(data, args),
+          to: abiAddress(data, args + 64),
+          amount: abiUint(data, args + 128),
+        };
+      }
+
+      // ─── ERC-721 ───────────────────────────────────────────────────────
+      case '0x42842e0e': {
+        // safeTransferFrom(address,address,uint256), same shape as 0x23b872dd
+        // but ERC-721-only by selector, so the tokenID slot is unambiguous.
+        if (data.length !== 202) return null;
+        return {
+          standard: 'ERC-721',
+          methodName: 'safeTransferFrom',
+          from: abiAddress(data, args),
+          to: abiAddress(data, args + 64),
+          tokenID: abiUint(data, args + 128),
+        };
+      }
+      case '0xb88d4fde': {
+        // safeTransferFrom(address,address,uint256,bytes). Static head is
+        // 4 + 32*4 = 132 bytes; the trailing bytes payload is dynamic and
+        // we don't surface it.
+        if (data.length < args + 64 * 4) return null;
+        return {
+          standard: 'ERC-721',
+          methodName: 'safeTransferFrom',
+          from: abiAddress(data, args),
+          to: abiAddress(data, args + 64),
+          tokenID: abiUint(data, args + 128),
+        };
+      }
+
+      // ─── ERC-1155 ──────────────────────────────────────────────────────
+      case '0xf242432a': {
+        // safeTransferFrom(address,address,uint256,uint256,bytes). Static
+        // head is 4 + 32*5 = 164 bytes; data payload trails.
+        if (data.length < args + 64 * 5) return null;
+        return {
+          standard: 'ERC-1155',
+          methodName: 'safeTransferFrom',
+          from: abiAddress(data, args),
+          to: abiAddress(data, args + 64),
+          tokenID: abiUint(data, args + 128),
+          value: abiUint(data, args + 192),
+        };
+      }
+      case '0x2eb2c2d6': {
+        // safeBatchTransferFrom(address,address,uint256[],uint256[],bytes).
+        // Static head: from, to, ids_offset, values_offset, data_offset.
+        // Both arrays are dynamic and their offsets are relative to the
+        // start of the *args block*, not the calldata. Convert to char
+        // positions in the calldata.
+        if (data.length < args + 64 * 5) return null;
+        const from = abiAddress(data, args);
+        const to = abiAddress(data, args + 64);
+        const idsOff = Number(BigInt('0x' + data.slice(args + 128, args + 192))) * 2;
+        const valsOff = Number(BigInt('0x' + data.slice(args + 192, args + 256))) * 2;
+        const ids = abiUintArray(data, args + idsOff);
+        const values = abiUintArray(data, args + valsOff);
+        if (ids.length !== values.length) return null;
+        return {
+          standard: 'ERC-1155',
+          methodName: 'safeBatchTransferFrom',
+          from,
+          to,
+          ids,
+          values,
+        };
+      }
+
+      // ─── Both NFT standards ────────────────────────────────────────────
+      case '0xa22cb465': {
+        // setApprovalForAll(address,bool). Same selector for ERC-721 and
+        // ERC-1155; we can't disambiguate from mempool input alone, so
+        // we mark it ERC-721 (the older standard). Cosmetic only.
+        if (data.length !== 138) return null;
+        const operator = abiAddress(data, args);
+        const flagSlot = BigInt('0x' + data.slice(args + 64, args + 128));
+        return {
+          standard: 'ERC-721',
+          methodName: 'setApprovalForAll',
+          operator,
+          approved: flagSlot !== BigInt(0),
+        };
+      }
+
+      default:
+        return null;
+    }
+  } catch (error) {
+    console.error('Error decoding token input:', selector, error);
+    return null;
+  }
+}
+
+/**
+ * One decoded receipt-log argument. The frontend renders each arg per its
+ * `type`: addresses get a /address link, uint256 gets a mono-formatted
+ * value (locale-grouped when large), bool gets a badge, uint256[] gets a
+ * batch list. Unknown types fall back to the raw `value` string.
+ */
+export interface DecodedEventArg {
+  label: string;
+  /**
+   * Rendering discriminator. The five scalar types get their own UI; `raw`
+   * is the catch-all for ABI types we don't have a specialised renderer
+   * for (bytes, dynamic strings, tuples, etc.); value holds the formatted
+   * hex slice so users can copy it out.
+   */
+  type: 'address' | 'uint256' | 'bool' | 'uint256[]' | 'string' | 'raw';
+  value?: string;
+  values?: string[];
+}
+
+export interface DecodedEvent {
+  /** Canonical event name (e.g. "Transfer", "ApprovalForAll"). */
+  name: string;
+  /** Event signature, e.g. "Transfer(address,address,uint256)". */
+  signature: string;
+  /** ERC-20 / ERC-721 / ERC-1155 hint for Transfer/Approval rendering. */
+  standard?: 'ERC-20' | 'ERC-721' | 'ERC-1155';
+  args: DecodedEventArg[];
+}
+
+// keccak256 topic hashes for the well-known token events. These are
+// stable across every EVM chain that follows the standards.
+const TOPIC_TRANSFER = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+const TOPIC_TRANSFER_SINGLE = '0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62';
+const TOPIC_TRANSFER_BATCH = '0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb';
+const TOPIC_APPROVAL = '0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925';
+const TOPIC_APPROVAL_FOR_ALL = '0x17307eab39ab6107e8899845ad3d59bd9653f200f220920489ca2b5937696c31';
+
+// Decode a 32-byte address slot ("0x" + 64 hex chars) to Q-prefix form.
+function topicToAddress(t: string): string {
+  if (!t) return '';
+  const hex = t.startsWith('0x') ? t.slice(2) : t;
+  return 'Q' + hex.slice(-40);
+}
+
+// Decode a 32-byte uint256 slot to a decimal string. Safe on missing input.
+function topicToUint(t: string): string {
+  if (!t) return '0';
+  try {
+    return BigInt(t.startsWith('0x') ? t : '0x' + t).toString();
+  } catch {
+    return '0';
+  }
+}
+
+// Slice a uint256 out of an ABI-encoded data field at the given char offset
+// (`data` is "0x..." prefixed; offset is from the start of the string).
+function dataUint(data: string, charOffset: number): string {
+  try {
+    return BigInt('0x' + data.slice(charOffset, charOffset + 64)).toString();
+  } catch {
+    return '0';
+  }
+}
+
+// Decode a dynamic uint256[] starting at `arrCharOffset` in `data`. Same
+// bounded/safe shape as abiUintArray above. Returns [] on bad input.
+function dataUintArray(data: string, arrCharOffset: number): string[] {
+  const lenHex = data.slice(arrCharOffset, arrCharOffset + 64);
+  if (lenHex.length < 64) return [];
+  let lenBig: bigint;
+  try {
+    lenBig = BigInt('0x' + lenHex);
+  } catch {
+    return [];
+  }
+  const MAX_ITEMS = 1024;
+  if (lenBig > BigInt(MAX_ITEMS)) return [];
+  const len = Number(lenBig);
+  if (arrCharOffset + 64 + len * 64 > data.length) return [];
+  const out: string[] = [];
+  for (let i = 0; i < len; i++) {
+    out.push(dataUint(data, arrCharOffset + 64 + i * 64));
+  }
+  return out;
+}
+
+/**
+ * Decode a single receipt-log topics/data pair into a labelled event.
+ *
+ * Two-tier resolution:
+ *   1. Match topic[0] against the five well-known token signatures
+ *      (Transfer / Approval / ApprovalForAll / TransferSingle /
+ *      TransferBatch). These render with our specialised UI.
+ *   2. Fall back to the emitting contract's ABI when one was attached
+ *      server-side (verified contracts only): compute the keccak256 of
+ *      each event signature, match topic[0], decode indexed args off
+ *      topics[1..] and non-indexed args off the data field. Anything
+ *      with an ABI type we can't decode renders as 'raw' so users can
+ *      still see the slot.
+ *   3. Return null when neither tier matches; the view shows the
+ *      address + raw topics + data so the user can copy them out.
+ *
+ * Disambiguation (tier 1):
+ *   - Transfer / Approval are shared between ERC-20 and ERC-721. ERC-721
+ *     indexes all three params (4 topics, empty data); ERC-20 indexes the
+ *     two addresses only (3 topics, value in data). We branch on
+ *     topics.length to pick the right decoder + standard tag.
+ */
+export function decodeEventLog(topics: string[], data: string, abi?: string): DecodedEvent | null {
+  if (!topics || topics.length === 0) return null;
+  const sig = (topics[0] || '').toLowerCase();
+  const safeData = (data || '0x').toLowerCase();
+
+  switch (sig) {
+    case TOPIC_TRANSFER: {
+      // ERC-721 indexes the tokenId → 4 topics; ERC-20 keeps value in data.
+      if (topics.length === 4) {
+        return {
+          name: 'Transfer',
+          signature: 'Transfer(address from, address to, uint256 tokenId)',
+          standard: 'ERC-721',
+          args: [
+            { label: 'from', type: 'address', value: topicToAddress(topics[1]) },
+            { label: 'to', type: 'address', value: topicToAddress(topics[2]) },
+            { label: 'tokenId', type: 'uint256', value: topicToUint(topics[3]) },
+          ],
+        };
+      }
+      return {
+        name: 'Transfer',
+        signature: 'Transfer(address from, address to, uint256 value)',
+        standard: 'ERC-20',
+        args: [
+          { label: 'from', type: 'address', value: topicToAddress(topics[1]) },
+          { label: 'to', type: 'address', value: topicToAddress(topics[2]) },
+          { label: 'value', type: 'uint256', value: dataUint(safeData, 2) },
+        ],
+      };
     }
 
-    try {
-      // Extract recipient address (bytes 10-74, last 40 chars are the address)
-      const toAddressPadded = data.slice(10, 74);
-      const toAddress = 'Q' + toAddressPadded.slice(-40);
-
-      // Extract amount (bytes 74-138)
-      const amountHex = '0x' + data.slice(74);
-      const amount = BigInt(amountHex).toString();
-
+    case TOPIC_APPROVAL: {
+      // Same ERC-20 vs ERC-721 split as Transfer.
+      if (topics.length === 4) {
+        return {
+          name: 'Approval',
+          signature: 'Approval(address owner, address approved, uint256 tokenId)',
+          standard: 'ERC-721',
+          args: [
+            { label: 'owner', type: 'address', value: topicToAddress(topics[1]) },
+            { label: 'approved', type: 'address', value: topicToAddress(topics[2]) },
+            { label: 'tokenId', type: 'uint256', value: topicToUint(topics[3]) },
+          ],
+        };
+      }
       return {
-        to: toAddress,
-        amount: amount,
-        methodName: 'transfer'
+        name: 'Approval',
+        signature: 'Approval(address owner, address spender, uint256 value)',
+        standard: 'ERC-20',
+        args: [
+          { label: 'owner', type: 'address', value: topicToAddress(topics[1]) },
+          { label: 'spender', type: 'address', value: topicToAddress(topics[2]) },
+          { label: 'value', type: 'uint256', value: dataUint(safeData, 2) },
+        ],
       };
-    } catch (error) {
-      console.error('Error decoding transfer input:', error);
-      return null;
+    }
+
+    case TOPIC_APPROVAL_FOR_ALL: {
+      // ERC-721 + ERC-1155 share this signature exactly; we tag it as
+      // ERC-721 (the older standard) purely so the view picks the NFT
+      // badge variant. The rendered fields are identical for both.
+      let approved = false;
+      try {
+        approved = BigInt('0x' + safeData.slice(2, 66)) !== BigInt(0);
+      } catch {
+        approved = false;
+      }
+      return {
+        name: 'ApprovalForAll',
+        signature: 'ApprovalForAll(address owner, address operator, bool approved)',
+        standard: 'ERC-721',
+        args: [
+          { label: 'owner', type: 'address', value: topicToAddress(topics[1]) },
+          { label: 'operator', type: 'address', value: topicToAddress(topics[2]) },
+          { label: 'approved', type: 'bool', value: approved ? 'true' : 'false' },
+        ],
+      };
+    }
+
+    case TOPIC_TRANSFER_SINGLE: {
+      // operator + from + to are indexed; data = abi.encode(id, value)
+      return {
+        name: 'TransferSingle',
+        signature: 'TransferSingle(address operator, address from, address to, uint256 id, uint256 value)',
+        standard: 'ERC-1155',
+        args: [
+          { label: 'operator', type: 'address', value: topicToAddress(topics[1]) },
+          { label: 'from', type: 'address', value: topicToAddress(topics[2]) },
+          { label: 'to', type: 'address', value: topicToAddress(topics[3]) },
+          { label: 'id', type: 'uint256', value: dataUint(safeData, 2) },
+          { label: 'value', type: 'uint256', value: dataUint(safeData, 66) },
+        ],
+      };
+    }
+
+    case TOPIC_TRANSFER_BATCH: {
+      // operator + from + to indexed; data = abi.encode(uint256[] ids, uint256[] values).
+      // Two leading offsets point to the length+elements of each array,
+      // measured in bytes from the start of the args block. data is
+      // "0x"-prefixed so we add 2 to convert byte offsets to char positions.
+      const idsOff = (() => { try { return Number(BigInt('0x' + safeData.slice(2, 66))) * 2 + 2; } catch { return -1; } })();
+      const valsOff = (() => { try { return Number(BigInt('0x' + safeData.slice(66, 130))) * 2 + 2; } catch { return -1; } })();
+      const ids = idsOff > 0 ? dataUintArray(safeData, idsOff) : [];
+      const values = valsOff > 0 ? dataUintArray(safeData, valsOff) : [];
+      return {
+        name: 'TransferBatch',
+        signature: 'TransferBatch(address operator, address from, address to, uint256[] ids, uint256[] values)',
+        standard: 'ERC-1155',
+        args: [
+          { label: 'operator', type: 'address', value: topicToAddress(topics[1]) },
+          { label: 'from', type: 'address', value: topicToAddress(topics[2]) },
+          { label: 'to', type: 'address', value: topicToAddress(topics[3]) },
+          { label: 'ids', type: 'uint256[]', values: ids },
+          { label: 'values', type: 'uint256[]', values: values },
+        ],
+      };
+    }
+
+    default:
+      // Tier 2: try the verified-contract ABI if one was attached.
+      return abi ? decodeEventViaAbi(topics, data, abi) : null;
+  }
+}
+
+// ─── ABI-driven fallback decoding ────────────────────────────────────────
+
+/**
+ * Minimal ABI event entry shape we consume. Solidity / Hyperion ABIs
+ * always emit `type`, `name`, `inputs`, and per-input `indexed`. We treat
+ * anything else (anonymous, components, error types) as out-of-scope and
+ * skip it.
+ */
+interface AbiEventInput {
+  name?: string;
+  type?: string;
+  indexed?: boolean;
+}
+interface AbiEventEntry {
+  type?: string;
+  name?: string;
+  anonymous?: boolean;
+  inputs?: AbiEventInput[];
+}
+
+// Canonicalise an ABI type for keccak256 signature construction. Solidity
+// ABIs emit `uint`/`int` aliases that must be expanded to `uint256`/`int256`
+// before hashing, otherwise the computed selector won't match the on-chain
+// topic[0]. Same for `bytes`/`bytes32` etc; bytes alone is a dynamic type,
+// bytesN is fixed; both are valid as-is. Arrays and tuples pass through.
+function canonicaliseAbiType(t: string | undefined): string {
+  if (!t) return '';
+  if (t === 'uint') return 'uint256';
+  if (t === 'int') return 'int256';
+  // Expand alias inside arrays too: e.g. uint[] → uint256[]
+  if (t === 'uint[]') return 'uint256[]';
+  if (t === 'int[]') return 'int256[]';
+  return t;
+}
+
+// Compute the canonical event signature ("Transfer(address,address,uint256)")
+// and its keccak256 topic hash for an ABI entry.
+function eventSignatureAndHash(entry: AbiEventEntry): { signature: string; hash: string } | null {
+  if (!entry || !entry.name || !Array.isArray(entry.inputs)) return null;
+  const types = entry.inputs.map((i) => canonicaliseAbiType(i.type)).filter(Boolean);
+  if (types.length !== entry.inputs.length) return null;
+  const sig = `${entry.name}(${types.join(',')})`;
+  try {
+    const hash = '0x' + keccak256(Buffer.from(sig, 'utf8')).toString('hex');
+    return { signature: sig, hash };
+  } catch {
+    return null;
+  }
+}
+
+// Decode a single ABI arg value from a hex slice (32 bytes, "0x"-prefixed).
+// Returns the rendered shape the view consumes. Anything we can't decode
+// cleanly falls through to `raw` so the user still sees the slot.
+function decodeAbiSlot(label: string, type: string, slot: string): DecodedEventArg {
+  const t = canonicaliseAbiType(type);
+  if (t === 'address') {
+    return { label, type: 'address', value: topicToAddress(slot) };
+  }
+  if (t === 'bool') {
+    let v = false;
+    try { v = BigInt(slot) !== BigInt(0); } catch { v = false; }
+    return { label, type: 'bool', value: v ? 'true' : 'false' };
+  }
+  // All uintN/intN render the same way; decimal string in the slot. Signed
+  // ints are treated as unsigned here; negative values render as huge
+  // unsigned numbers, but events using signed ints in this codebase are rare.
+  if (/^u?int\d*$/.test(t)) {
+    return { label, type: 'uint256', value: topicToUint(slot) };
+  }
+  // bytes32, bytes16 etc are fixed-size byte strings, render as a hex string.
+  if (/^bytes\d+$/.test(t)) {
+    return { label, type: 'raw', value: slot };
+  }
+  // Indexed dynamic types (string, bytes, dynamic arrays, tuples) are stored
+  // as keccak256(value) in the topic; we can surface the hash but not the
+  // value. Mark as raw so the user knows it's not the actual decoded value.
+  return { label, type: 'raw', value: slot };
+}
+
+// Decode a packed sequence of non-indexed ABI args from a log's data field.
+// Only handles static head types; dynamic types (string, bytes, dynamic
+// arrays) require offset resolution that we punt to the raw fallback for now.
+function decodeAbiData(inputs: AbiEventInput[], data: string): DecodedEventArg[] | null {
+  const safeData = (data || '0x').toLowerCase();
+  const body = safeData.startsWith('0x') ? safeData.slice(2) : safeData;
+  // Each static type occupies one 32-byte slot.
+  if (inputs.length * 64 > body.length) return null;
+  const out: DecodedEventArg[] = [];
+  inputs.forEach((inp, i) => {
+    const slot = '0x' + body.slice(i * 64, (i + 1) * 64);
+    out.push(decodeAbiSlot(inp.name || `arg${i}`, inp.type || 'raw', slot));
+  });
+  return out;
+}
+
+function decodeEventViaAbi(topics: string[], data: string, abiJson: string): DecodedEvent | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(abiJson);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed)) return null;
+  const targetTopic = (topics[0] || '').toLowerCase();
+  if (!targetTopic) return null;
+
+  for (const raw of parsed) {
+    const entry = raw as AbiEventEntry;
+    if (!entry || entry.type !== 'event' || entry.anonymous) continue;
+    const sig = eventSignatureAndHash(entry);
+    if (!sig || sig.hash !== targetTopic) continue;
+
+    const inputs = entry.inputs || [];
+    const indexedInputs = inputs.filter((i) => i.indexed);
+    const nonIndexedInputs = inputs.filter((i) => !i.indexed);
+
+    // topics[1..] hold indexed args in declaration order. If the contract
+    // emitted fewer indexed topics than the ABI declares, bail to raw so
+    // we don't misalign the labels.
+    if (indexedInputs.length !== topics.length - 1) continue;
+
+    const indexedArgs: DecodedEventArg[] = indexedInputs.map((inp, i) =>
+      decodeAbiSlot(inp.name || `arg${i}`, inp.type || 'raw', topics[i + 1])
+    );
+
+    // decodeAbiData returns null when `data` is shorter than the
+    // declared non-indexed inputs require; in that case the args array
+    // would contain `undefined` entries that the view can't render.
+    // Bail to the raw fallback instead of producing a half-decoded shape.
+    const nonIndexedArgs = decodeAbiData(nonIndexedInputs, data);
+    if (nonIndexedInputs.length > 0 && !nonIndexedArgs) continue;
+
+    // Recombine into original input order so the view labels stay consistent
+    // with the ABI declaration.
+    const args: DecodedEventArg[] = [];
+    let ix = 0, nx = 0;
+    for (const inp of inputs) {
+      if (inp.indexed) args.push(indexedArgs[ix++]);
+      else args.push((nonIndexedArgs ?? [])[nx++]);
+    }
+
+    return {
+      name: entry.name || 'Event',
+      signature: sig.signature,
+      args,
+    };
+  }
+  return null;
+}
+
+// ─── ABI-driven function-call decoding ───────────────────────────────────
+
+/**
+ * Minimal ABI function entry shape we consume. Same approach as the event
+ * decoder: we ignore tuples + nested arrays for the first pass and surface
+ * unrecognised ABI types as `raw` so the slot is at least copy-pasteable.
+ */
+interface AbiFunctionInput {
+  name?: string;
+  type?: string;
+}
+interface AbiFunctionEntry {
+  type?: string;
+  name?: string;
+  inputs?: AbiFunctionInput[];
+  stateMutability?: string;
+}
+
+/**
+ * A decoded contract method call, returned by decodeContractCall. Shares
+ * the per-arg shape with the event decoder so the Input Data card can
+ * reuse the same rendering branches.
+ */
+export interface DecodedFunctionCall {
+  /** Resolved method name (e.g. "setMatka1"). */
+  name: string;
+  /** Canonical signature (e.g. "setMatka1(address)"). */
+  signature: string;
+  /** 4-byte selector ("0xXXXXXXXX") that matched. */
+  selector: string;
+  /** Labelled arguments in declaration order. */
+  args: DecodedEventArg[];
+}
+
+// Compute the 4-byte function selector for an ABI entry. Same canonical
+// hashing rules as eventSignatureAndHash, but truncated to the first
+// 4 bytes (8 hex chars) per the Solidity / EVM convention.
+function functionSelector(entry: AbiFunctionEntry): { signature: string; selector: string } | null {
+  if (!entry || !entry.name || !Array.isArray(entry.inputs)) return null;
+  const types = entry.inputs.map((i) => canonicaliseAbiType(i.type)).filter(Boolean);
+  if (types.length !== entry.inputs.length) return null;
+  const sig = `${entry.name}(${types.join(',')})`;
+  try {
+    const full = keccak256(Buffer.from(sig, 'utf8')).toString('hex');
+    return { signature: sig, selector: '0x' + full.slice(0, 8) };
+  } catch {
+    return null;
+  }
+}
+
+// Decode a dynamic `string` or `bytes` arg from a packed calldata args
+// block. `argsBlock` is the calldata after the 4-byte selector (no 0x
+// prefix). `headOffset` is the slot index (in chars) where the head
+// argument's offset is stored. Returns the rendered DecodedEventArg.
+function decodeDynamicAt(label: string, type: string, argsBlock: string, headOffset: number): DecodedEventArg | null {
+  if (headOffset + 64 > argsBlock.length) return null;
+  let ptr: number;
+  try {
+    ptr = Number(BigInt('0x' + argsBlock.slice(headOffset, headOffset + 64))) * 2; // bytes → char offset
+  } catch {
+    return null;
+  }
+  if (ptr + 64 > argsBlock.length) return null;
+  let len: number;
+  try {
+    len = Number(BigInt('0x' + argsBlock.slice(ptr, ptr + 64)));
+  } catch {
+    return null;
+  }
+  const dataStart = ptr + 64;
+  const dataEnd = dataStart + len * 2;
+  if (dataEnd > argsBlock.length) return null;
+  const hex = argsBlock.slice(dataStart, dataEnd);
+  if (type === 'string') {
+    try {
+      const bytes = Buffer.from(hex, 'hex');
+      return { label, type: 'string', value: bytes.toString('utf8') };
+    } catch {
+      return { label, type: 'raw', value: '0x' + hex };
     }
   }
+  // `bytes` and everything else dynamic that we don't have a special-case
+  // for: surface as hex so the user can copy-paste.
+  return { label, type: 'raw', value: '0x' + hex };
+}
 
-  // Check for ERC20 transferFrom method signature (0x23b872dd)
-  if (data.startsWith('0x23b872dd')) {
-    // transferFrom(address,address,uint256)
-    // Expected length: 0x (2) + method (8) + from (64) + to (64) + amount (64) = 202
-    if (data.length !== 202) {
-      return null;
-    }
+/**
+ * Decode a transaction's calldata against the target contract's ABI.
+ *
+ * Returns null when:
+ *   - input is empty or malformed
+ *   - abi can't be parsed as a JSON array
+ *   - no `function` entry's keccak selector matches the first 4 bytes
+ *   - a static arg slot is missing (truncated calldata)
+ *
+ * Static args (address / bool / uintN / intN / fixed bytes) decode in-place.
+ * Dynamic args (string / bytes) follow the standard offset-pointer-then-
+ * length-then-data layout. Tuples and nested dynamic arrays surface as
+ * `raw` slot so the user still sees something rather than dropping the row.
+ *
+ * Used by the Input Data card on the tx page as the fallback when the
+ * existing decodeTokenTransferInput (which covers the well-known ERC
+ * token selectors only) returns null.
+ */
+export function decodeContractCall(input: string | undefined | null, abiJson: string | undefined): DecodedFunctionCall | null {
+  if (!input || input === '0x' || input.length < 10 || !abiJson) return null;
+  const data = input.toLowerCase();
+  if (!data.startsWith('0x')) return null;
+  const selector = data.slice(0, 10);
 
-    try {
-      // Extract from address (bytes 10-74)
-      const fromAddressPadded = data.slice(10, 74);
-      const fromAddress = 'Q' + fromAddressPadded.slice(-40);
-
-      // Extract to address (bytes 74-138)
-      const toAddressPadded = data.slice(74, 138);
-      const toAddress = 'Q' + toAddressPadded.slice(-40);
-
-      // Extract amount (bytes 138-202)
-      const amountHex = '0x' + data.slice(138);
-      const amount = BigInt(amountHex).toString();
-
-      return {
-        to: toAddress,
-        amount: amount,
-        methodName: 'transferFrom'
-      };
-    } catch (error) {
-      console.error('Error decoding transferFrom input:', error);
-      return null;
-    }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(abiJson);
+  } catch {
+    return null;
   }
+  if (!Array.isArray(parsed)) return null;
 
+  // argsBlock is the calldata without "0x" and without the 4-byte selector.
+  // We index into this string in char-offset units (1 byte = 2 chars).
+  const argsBlock = data.slice(10);
+
+  for (const raw of parsed) {
+    const entry = raw as AbiFunctionEntry;
+    if (!entry || entry.type !== 'function') continue;
+    const matched = functionSelector(entry);
+    if (!matched || matched.selector !== selector) continue;
+
+    const inputs = entry.inputs || [];
+    const args: DecodedEventArg[] = [];
+    // Each input occupies one slot in the head (32 bytes), either holding
+    // the value (static) or an offset to the dynamic data.
+    if (inputs.length * 64 > argsBlock.length && inputs.length > 0) {
+      // Calldata truncated below what the ABI requires. Bail rather than
+      // mis-decode silently.
+      return null;
+    }
+    inputs.forEach((inp, i) => {
+      const headSlotStart = i * 64;
+      const t = canonicaliseAbiType(inp.type);
+      // Dynamic-type detection: string, bytes (without N), uintN[]/dyn arrays,
+      // tuples. We handle string and plain `bytes`; the rest falls to raw.
+      if (t === 'string' || t === 'bytes') {
+        const decoded = decodeDynamicAt(inp.name || `arg${i}`, t, argsBlock, headSlotStart);
+        if (decoded) {
+          args.push(decoded);
+        } else {
+          args.push({ label: inp.name || `arg${i}`, type: 'raw', value: '0x' + argsBlock.slice(headSlotStart, headSlotStart + 64) });
+        }
+        return;
+      }
+      // Static type, decode the slot directly.
+      const slot = '0x' + argsBlock.slice(headSlotStart, headSlotStart + 64);
+      args.push(decodeAbiSlot(inp.name || `arg${i}`, inp.type || 'raw', slot));
+    });
+
+    return {
+      name: entry.name || 'call',
+      signature: matched.signature,
+      selector,
+      args,
+    };
+  }
   return null;
 }
 
@@ -407,7 +1084,7 @@ export function smallestUnitToDecimal(amount: string, decimals: number = 18): st
     const divisor = BigInt(10) ** BigInt(decimals);
     const wholePart = raw / divisor;
     const fractionalPart = raw % divisor;
-    let fracStr = fractionalPart.toString().padStart(decimals, '0').replace(/0+$/, '');
+    const fracStr = fractionalPart.toString().padStart(decimals, '0').replace(/0+$/, '');
     return fracStr ? `${wholePart}.${fracStr}` : wholePart.toString();
   } catch {
     return '0';
@@ -466,6 +1143,26 @@ export function formatTokenAmount(amount: string | undefined | null, decimals: n
     console.error('Error formatting token amount:', error, amount);
     return amount;
   }
+}
+
+/**
+ * Compact representation of a long decimal tokenID for a small fixed-size
+ * tile (e.g. a 40px monogram). Returns the id unchanged when it already
+ * fits, otherwise an ellipsis-suffix form like "1234…78" that preserves
+ * the most significant + least significant digits and signals truncation
+ * explicitly. Empty input becomes "?".
+ *
+ * Used by the Tokens tab when a token's off-chain metadata image hasn't
+ * been fetched yet and we render an id-based placeholder.
+ */
+export function compactTokenIDLabel(tokenID: string, maxLen = 5): string {
+  const s = (tokenID ?? '').trim();
+  if (!s) return '?';
+  if (s.length <= maxLen) return s;
+  // Show the first chunk + the last 2 chars + an ellipsis between them.
+  const tail = 2;
+  const head = Math.max(1, maxLen - tail - 1); // -1 for the ellipsis char
+  return s.slice(0, head) + '…' + s.slice(-tail);
 }
 
 /**

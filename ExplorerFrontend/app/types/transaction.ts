@@ -78,6 +78,12 @@ interface OptionalInternalTransactionFields {
 export type InternalTransaction = BaseInternalTransaction & OptionalInternalTransactionFields;
 
 /**
+ * Token standard tag persisted on contract + transfer rows. Empty for
+ * legacy un-classified rows; new rows are always one of the three.
+ */
+export type TokenStandard = 'ERC-20' | 'ERC-721' | 'ERC-1155';
+
+/**
  * Token transfer information for a transaction
  */
 export interface TokenTransferInfo {
@@ -88,6 +94,12 @@ export interface TokenTransferInfo {
   tokenName: string;
   tokenSymbol: string;
   tokenDecimals: number;
+  /** ERC-20 | ERC-721 | ERC-1155, drives the row's badge in transaction-view. */
+  tokenStandard?: TokenStandard | string;
+  /** uint256 decimal string. Populated for ERC-721 + ERC-1155 transfers. */
+  tokenID?: string;
+  /** Hex log index, used as a stable React key when a tx emits several events. */
+  logIndex?: string;
 }
 
 /**
@@ -112,8 +124,73 @@ export interface TransactionDetails {
     name: string;
     symbol: string;
     decimals: number;
+    tokenStandard?: TokenStandard | string;
   };
-  tokenTransfer?: TokenTransferInfo;
+  tokenTransfers?: TokenTransferInfo[];
+  /** Raw calldata for the tx, "0x..." prefixed. Empty / "0x" for plain transfers. */
+  input?: string;
+  /** Receipt logs in emission order. Populated best-effort; absent when the RPC fetch fails. */
+  logs?: TxLog[];
+  /** Verified contract metadata for the tx's target, used by the Input Data card to decode method calls. */
+  targetContract?: ContractMeta;
+  /** Internal calls captured under this tx by the syncer (CALL / DELEGATECALL / STATICCALL sub-frames). */
+  internalTransactions?: InternalTx[];
+  /** Receipt-level status from the live RPC. "0x1" = success, "0x0" = reverted, undefined when RPC fetch failed. */
+  receiptStatus?: string;
+}
+
+/**
+ * One internal-call row attached to a tx. Mirrors the backend's
+ * models.InternalTx, which mirrors how the syncer writes the
+ * `internalTransactionByAddress` collection.
+ *
+ * Most txs have an empty array; only contract calls with sub-frames
+ * (CALL / DELEGATECALL / STATICCALL) get entries here.
+ */
+export interface InternalTx {
+  type: string;
+  callType: string;
+  from: string;
+  to: string;
+  input: string;
+  output: string;
+  value: number;
+  gas: string;
+  gasUsed: string;
+  traceAddress: number[];
+}
+
+/**
+ * Optional contract metadata attached to a log or as the tx's target,
+ * surfaced by the backend on /tx/:hash when contractCode has a row for
+ * the address. `abi` is only populated when `verified === true` since
+ * an unverified ABI is unreliable, the frontend uses it to decode
+ * unknown event signatures + method selectors.
+ */
+export interface ContractMeta {
+  name?: string;
+  symbol?: string;
+  tokenStandard?: TokenStandard | string;
+  verified?: boolean;
+  contractName?: string;
+  abi?: string;
+}
+
+/**
+ * One receipt log entry on a confirmed tx. Mirrors the subset returned by
+ * the backend's /tx/:hash route, which itself mirrors qrl_getTransactionReceipt.logs[].
+ *
+ * `contract` is attached server-side from contractCode for the log's
+ * emitting address; the event-log decoder uses it as the ABI fallback
+ * when topic[0] doesn't match a well-known signature.
+ */
+export interface TxLog {
+  address: string;
+  topics: string[];
+  data: string;
+  logIndex: string;
+  removed?: boolean;
+  contract?: ContractMeta;
 }
 
 /**
@@ -146,7 +223,7 @@ export interface PendingTransaction {
  * Calculate the number of confirmations for a transaction. Clamped to >=0:
  * if the backend's latestBlock is briefly stale relative to the tx's own
  * block, we'd otherwise return a negative count and badge the (mined) tx
- * as "Pending" with "-N Confirmations" — confusing UX.
+ * as "Pending" with "-N Confirmations", confusing UX.
  */
 export function getConfirmations(txBlockNumber?: string | number, latestBlock?: number): number | null {
   if (!txBlockNumber || !latestBlock) return null;

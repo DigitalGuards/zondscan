@@ -173,7 +173,7 @@ func (s *endpointSelector) markSucceeded(url string) {
 	}
 }
 
-// CurrentURL returns the first preferred endpoint URL — useful for diagnostic
+// CurrentURL returns the first preferred endpoint URL, useful for diagnostic
 // logging and for callers that just need a string.
 func (s *endpointSelector) CurrentURL() string {
 	attempts := s.orderedAttempts()

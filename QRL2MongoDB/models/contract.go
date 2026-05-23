@@ -40,7 +40,7 @@ type ResultContract struct {
 // The verification fields at the bottom are written **only** by the
 // backendAPI verify endpoint (backendAPI/db/contract.go:MarkContractVerified).
 // The syncer treats them as opaque pass-through state and must never write
-// into them — see db/contracts.go:StoreContract for the field-scoped $set
+// into them, see db/contracts.go:StoreContract for the field-scoped $set
 // that enforces this invariant.
 //
 // Verification fields are mirrored in backendAPI/models/contract.go with
@@ -64,7 +64,39 @@ type ContractInfo struct {
 	MaxWalletAmount string `bson:"maxWalletAmount,omitempty" json:"maxWalletAmount,omitempty"`
 	MaxTxLimit      string `bson:"maxTxLimit,omitempty" json:"maxTxLimit,omitempty"`
 
-	// Source-verification fields — mirror backendAPI/models/contract.go.
+	// NFT / multi-token classification, written exclusively by the syncer
+	// (see db/contracts.go:syncerOwnedSet). `tokenStandard` is one of
+	// "ERC-20" / "ERC-721" / "ERC-1155" or empty for unclassified contracts.
+	// `hasERC165` records whether supportsInterface returned a well-formed
+	// answer, once true we skip re-probing the ERC-165 path. `baseURI` is
+	// reserved for tokenURI rendering (Phase 3b) and stays empty until then.
+	TokenStandard string `bson:"tokenStandard,omitempty" json:"tokenStandard,omitempty"`
+	HasERC165     bool   `bson:"hasERC165,omitempty" json:"hasERC165,omitempty"`
+	BaseURI       string `bson:"baseURI,omitempty" json:"baseURI,omitempty"`
+
+	// Collection-level off-chain metadata (Phase 3a).
+	//
+	// `MetadataURI` is written by the syncer at classification time from the
+	// OpenSea-convention contractURI() getter; everything else is populated
+	// by the background metadata fetcher service after it resolves the URI
+	// and parses the JSON. Empty strings on all fields are the "not fetched"
+	// signal, the merge in db/contracts.go preserves any previously
+	// populated value if a later probe fails (C5 promote-only invariant).
+	//
+	// `MetadataImage` is stored as the gateway-resolved URL so the frontend
+	// can pass it directly to next/image, no per-render IPFS resolution.
+	// `MetadataFetchError` surfaces non-fatal fetch failures for diagnostics
+	// (gateway down, JSON malformed) without blocking the rest of the
+	// indexer; cleared on the next successful fetch.
+	MetadataURI         string `bson:"metadataURI,omitempty" json:"metadataURI,omitempty"`
+	MetadataName        string `bson:"metadataName,omitempty" json:"metadataName,omitempty"`
+	MetadataDescription string `bson:"metadataDescription,omitempty" json:"metadataDescription,omitempty"`
+	MetadataImage       string `bson:"metadataImage,omitempty" json:"metadataImage,omitempty"`
+	MetadataExternalURL string `bson:"metadataExternalURL,omitempty" json:"metadataExternalURL,omitempty"`
+	MetadataFetchedAt   string `bson:"metadataFetchedAt,omitempty" json:"metadataFetchedAt,omitempty"`
+	MetadataFetchError  string `bson:"metadataFetchError,omitempty" json:"metadataFetchError,omitempty"`
+
+	// Source-verification fields, mirror backendAPI/models/contract.go.
 	// Written exclusively by the backend verify endpoint; the syncer
 	// holds them only for round-trip preservation.
 	Verified             bool              `bson:"verified" json:"verified"`
@@ -80,6 +112,16 @@ type ContractInfo struct {
 	License              string            `bson:"license,omitempty" json:"license,omitempty"`
 	VerificationMethod   string            `bson:"verificationMethod,omitempty" json:"verificationMethod,omitempty"`
 	VerifiedAt           string            `bson:"verifiedAt,omitempty" json:"verifiedAt,omitempty"`
+
+	// M6a AI explanation cache. Written exclusively by the backend
+	// /contract/explain endpoint; the syncer holds them only for
+	// round-trip preservation.
+	AIExplanation      string `bson:"aiExplanation,omitempty" json:"aiExplanation,omitempty"`
+	AIExplanationAt    string `bson:"aiExplanationAt,omitempty" json:"aiExplanationAt,omitempty"`
+	AIExplanationModel string `bson:"aiExplanationModel,omitempty" json:"aiExplanationModel,omitempty"`
+
+	AIExplanationRegenCount       int    `bson:"aiExplanationRegenCount,omitempty" json:"aiExplanationRegenCount,omitempty"`
+	AIExplanationRegenWindowStart string `bson:"aiExplanationRegenWindowStart,omitempty" json:"aiExplanationRegenWindowStart,omitempty"`
 }
 
 // LogsResponse represents the response from qrl_getLogs
