@@ -101,10 +101,10 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
   // (iter 15 audit), so concurrent visitors fan into one DB hit per
   // bucket.
   const ssrConfirmations = getConfirmations(transaction.blockNumber, transaction.latestBlock);
-  const latestBlockQuery = useQuery<{ blockNumber: number }>({
+  const latestBlockQuery = useQuery<{ blockNumber: number; qrlUsdPrice?: number }>({
     queryKey: ['latestblock'],
     queryFn: async () => {
-      const r = await axios.get<{ blockNumber: number }>(`${config.handlerUrl}/latestblock`);
+      const r = await axios.get<{ blockNumber: number; qrlUsdPrice?: number }>(`${config.handlerUrl}/latestblock`);
       return r.data;
     },
     enabled: ssrConfirmations !== null && ssrConfirmations < TERMINAL_CONFIRMATIONS,
@@ -244,6 +244,22 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             <DetailRow label="Transaction Fee">
               {paidFees}
               <span className="text-gray-500 ml-1">QRL</span>
+              {(() => {
+                // USD conversion is opt-in: requires both a fee > 0 and a
+                // price from the polled /latestblock response. Skips the
+                // 18-decimal precision of paidFees and just rounds to the
+                // amount that's actually visible at human resolution.
+                const usd = latestBlockQuery.data?.qrlUsdPrice;
+                const qrlFee = parseFloat(paidFees);
+                if (!usd || usd <= 0 || !Number.isFinite(qrlFee) || qrlFee <= 0) return null;
+                const dollars = qrlFee * usd;
+                // < $0.001 renders as "<$0.001" so we don't display $0.00
+                // when there's a real (but tiny) fee.
+                const display = dollars < 0.001
+                  ? '<$0.001'
+                  : `≈ $${dollars < 1 ? dollars.toFixed(4) : dollars.toFixed(2)}`;
+                return <span className="text-gray-500 text-xs ml-2" title={`@${usd.toFixed(4)} USD/QRL`}>{display}</span>;
+              })()}
             </DetailRow>
           )}
         </div>

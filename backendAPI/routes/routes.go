@@ -760,6 +760,11 @@ func UserRoute(router *gin.Engine) {
 		// Several frontend pages and external pollers hit this very often;
 		// a 5 s cache trims the load by orders of magnitude with no
 		// visible staleness (chain block time is much longer).
+		//
+		// Carries qrlUsdPrice alongside the height so the tx + block detail
+		// pages that already poll this endpoint can render USD-denominated
+		// fees without a second request. The price comes from the same
+		// coingecko-backed cache /overview uses (sub-millisecond lookup).
 		v, err := routeCache.GetOrCompute("latestblock", 5*time.Second, func() (interface{}, error) {
 			blockNumber, err := db.GetLatestBlockFromSyncState()
 			if err != nil {
@@ -769,7 +774,10 @@ func UserRoute(router *gin.Engine) {
 			if err != nil {
 				return nil, fmt.Errorf("invalid block number format in sync state: %w", err)
 			}
-			return gin.H{"blockNumber": num}, nil
+			return gin.H{
+				"blockNumber":  num,
+				"qrlUsdPrice":  db.GetCurrentPrice(),
+			}, nil
 		})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
