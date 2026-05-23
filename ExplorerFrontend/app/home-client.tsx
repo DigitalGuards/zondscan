@@ -4,6 +4,7 @@ import * as React from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import axios from 'axios';
+import { useQuery } from '@tanstack/react-query';
 import { formatNumberWithCommas, timeAgo, formatStaked, formatGasPrice, truncateHash, formatAmount, formatAddress } from './lib/helpers';
 import config from '../config.js';
 import SearchBar from './components/SearchBar';
@@ -436,17 +437,23 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
     }
   }, []);
 
-  React.useEffect(() => {
-    // Defer the initial call so its inner setState() lands outside the
-    // synchronous effect body (set-state-in-effect rule).
-    const initial = setTimeout(fetchData, 0);
-    // Refresh every 30s (approx half a slot)
-    const interval = setInterval(fetchData, 30000);
-    return () => {
-      clearTimeout(initial);
-      clearInterval(interval);
-    };
-  }, [fetchData]);
+  // Drive the polling via TanStack Query so backgrounded tabs go quiet
+  // (every other live page uses this discipline; the previous raw
+  // setInterval polled regardless of visibility). fetchData stays in
+  // charge of writing into the local state; this query only owns the
+  // schedule. Returns a timestamp so successive renders see a fresh
+  // value and don't dedupe.
+  useQuery<number>({
+    queryKey: ['home-poll'],
+    queryFn: async () => {
+      await fetchData();
+      return Date.now();
+    },
+    refetchInterval: 30000,
+    refetchIntervalInBackground: false,
+    refetchOnMount: 'always',
+    staleTime: 0,
+  });
 
   return (
     <main className="px-4 lg:px-8 pt-4 lg:pt-6" aria-labelledby="home-heading">
