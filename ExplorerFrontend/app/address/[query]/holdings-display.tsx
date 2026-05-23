@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import Link from 'next/link';
 import Badge from '../../components/Badge';
+import ImageWithFallback from '../../components/ImageWithFallback';
 import config from '../../../config';
 import { formatTokenAmount } from '../../lib/helpers';
 
@@ -153,15 +154,21 @@ export default function HoldingsDisplay({ address }: HoldingsDisplayProps): JSX.
                   <div className="flex items-center gap-3 min-w-0">
                     {n.image ? (
                       // Off-chain metadata images live on arbitrary HTTP / IPFS
-                      // gateways, so plain <img> avoids next/image's domain-list
-                      // requirement. Lazy load + fixed dimensions keep layout
-                      // stable while many rows hydrate.
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
+                      // gateways. ImageWithFallback handles broken URLs by
+                      // swapping in the tokenID monogram on load failure;
+                      // unoptimized inside the component skips next/image's
+                      // domain-list requirement.
+                      <ImageWithFallback
                         src={n.image}
                         alt=""
-                        loading="lazy"
+                        width={40}
+                        height={40}
                         className="w-10 h-10 rounded-md object-cover bg-[#1a1a1a]"
+                        fallback={
+                          <div className="w-10 h-10 rounded-md bg-[#1a1a1a] border border-border flex items-center justify-center text-xs font-mono text-gray-500">
+                            {(n.tokenID || '?').slice(0, 3)}
+                          </div>
+                        }
                       />
                     ) : (
                       <div className="w-10 h-10 rounded-md bg-[#1a1a1a] border border-border flex items-center justify-center text-xs font-mono text-gray-500">

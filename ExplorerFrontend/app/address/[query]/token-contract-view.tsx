@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
+import ImageWithFallback from '../../components/ImageWithFallback';
 import Link from 'next/link';
 import CopyButton from "../../components/CopyButton";
 import QRCodeButton from "../../components/QRCodeButton";
@@ -347,13 +348,17 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                 loader resolves. */}
                             {metaImage ? (
                                 <div className="relative w-12 h-12 md:w-16 md:h-16 rounded-full overflow-hidden border border-gray-700 bg-black/30">
-                                    <Image
+                                    <ImageWithFallback
                                         src={metaImage}
                                         alt={name}
                                         fill
                                         sizes="64px"
                                         className="object-cover"
-                                        unoptimized
+                                        fallback={
+                                            <div className="absolute inset-0 bg-gradient-to-br from-[#ffa729] to-[#ff6b00] flex items-center justify-center text-xl md:text-2xl font-bold text-white">
+                                                {symbol.charAt(0)}
+                                            </div>
+                                        }
                                     />
                                 </div>
                             ) : (
@@ -826,7 +831,18 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                         <td className="px-4 py-3">
                                                             {t.image ? (
                                                                 <div className="relative w-10 h-10 rounded-md overflow-hidden border border-gray-700/60 bg-black/30">
-                                                                    <Image src={t.image} alt={tokenLabel} fill sizes="40px" className="object-cover" unoptimized />
+                                                                    <ImageWithFallback
+                                                                        src={t.image}
+                                                                        alt={tokenLabel}
+                                                                        fill
+                                                                        sizes="40px"
+                                                                        className="object-cover"
+                                                                        fallback={
+                                                                            <div className="absolute inset-0 bg-gradient-to-br from-[#3a3a3a] to-[#1f1f1f] flex items-center justify-center text-xs font-mono text-gray-300">
+                                                                                {compactTokenIDLabel(t.tokenID)}
+                                                                            </div>
+                                                                        }
+                                                                    />
                                                                 </div>
                                                             ) : (
                                                                 <div

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import Image from 'next/image';
+import ImageWithFallback from '../components/ImageWithFallback';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
@@ -516,7 +516,20 @@ function ContractRow({
         <div className="flex items-center gap-3">
           {metaImage ? (
             <div className="relative w-8 h-8 rounded-full overflow-hidden border border-gray-700/50 bg-black/30 shrink-0">
-              <Image src={metaImage} alt={primary} fill sizes="32px" className="object-cover" unoptimized />
+              <ImageWithFallback
+                src={metaImage}
+                alt={primary}
+                fill
+                sizes="32px"
+                className="object-cover"
+                fallback={
+                  <div
+                    className={`absolute inset-0 bg-gradient-to-br ${avatarGradient} flex items-center justify-center font-bold text-sm ${avatarTextColor}`}
+                  >
+                    {avatarChar}
+                  </div>
+                }
+              />
             </div>
           ) : (
             <div
