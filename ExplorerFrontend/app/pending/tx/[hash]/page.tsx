@@ -1,11 +1,51 @@
+import type { Metadata } from 'next';
 import axios from 'axios';
 import { redirect } from 'next/navigation';
 import config from '../../../../config';
 import type { PendingTransaction } from '@/app/types';
+import { sharedMetadata } from '@/app/lib/seo/metaData';
 import PendingTransactionView from './pending-transaction-view';
 
 interface PageProps {
   params: Promise<{ hash: string }>;
+}
+
+// Per-pending-tx metadata. Same pattern as the confirmed tx page;
+// shared pending-tx links are common during mempool congestion ("hey,
+// is my tx going through?"), so previews carrying the truncated hash +
+// "Pending Transaction" disambiguator are worth the small extra surface.
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const resolvedParams = await params;
+  const hash = resolvedParams.hash;
+  const shortHash = hash.length > 16
+    ? `${hash.slice(0, 10)}...${hash.slice(-6)}`
+    : hash;
+  const canonicalUrl = `https://zondscan.com/pending/tx/${hash}`;
+  const title = `Pending Transaction ${shortHash} | ZondScan`;
+  const description = `Track QRL Zond pending transaction ${shortHash}: mempool status, ETA to inclusion, gas price vs median, and decoded calldata.`;
+
+  return {
+    ...sharedMetadata,
+    title,
+    description,
+    alternates: {
+      ...sharedMetadata.alternates,
+      canonical: canonicalUrl,
+    },
+    openGraph: {
+      ...sharedMetadata.openGraph,
+      title,
+      description,
+      url: canonicalUrl,
+      siteName: 'ZondScan',
+      type: 'website',
+    },
+    twitter: {
+      ...sharedMetadata.twitter,
+      title,
+      description,
+    },
+  };
 }
 
 function validateTransactionHash(hash: string): boolean {
