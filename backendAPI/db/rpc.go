@@ -42,7 +42,7 @@ var nodeRPCClient = &http.Client{Timeout: 12 * time.Second}
 // shape the method emits (string, hex, object, …).
 //
 // `ctx` controls cancellation/timeout in addition to the client's own
-// 12s default — callers with per-call budgets shorter than that should
+// 12s default, callers with per-call budgets shorter than that should
 // pass a derived context.
 //
 // Returns:

@@ -9,8 +9,8 @@ export const metadata: Metadata = {
 
 export default function VerifyContractPage(): JSX.Element {
   return (
-    <div className="mx-auto max-w-3xl px-3 md:px-4 py-4 md:py-8">
-      <div className="card-simple p-3 md:p-4 lg:p-6 space-y-3 md:space-y-4">
+    <div className="mx-auto max-w-4xl px-3 md:px-4 py-4 md:py-8">
+      <div className="card-simple p-4 md:p-6 lg:p-8 space-y-4 md:space-y-5">
         <div>
           <h1 className="text-lg md:text-xl lg:text-2xl font-semibold text-accent">Verify smart contract</h1>
           <p className="text-xs md:text-sm text-gray-400 mt-1">

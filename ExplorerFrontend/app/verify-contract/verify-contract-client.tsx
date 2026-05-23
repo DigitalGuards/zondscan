@@ -35,7 +35,7 @@ const COMMON_LICENSES = ['MIT', 'GPL-3.0', 'Apache-2.0', 'BSD-2-Clause', 'BSD-3-
 /**
  * Client-side verify-contract form. Posts to /contract/verify and polls
  * /contract/verify/:jobId until terminal. Compiler-version selector is
- * intentionally absent — the backend supports exactly one pinned build
+ * intentionally absent, the backend supports exactly one pinned build
  * (read-only display).
  */
 export default function VerifyContractClient(): JSX.Element {
@@ -61,7 +61,7 @@ export default function VerifyContractClient(): JSX.Element {
   const [alreadyVerified, setAlreadyVerified] = useState<string | null>(null);
 
   // Fetch the pinned compiler build once on mount. If the backend doesn't
-  // expose it (503), surface that as a banner — submitting in that state
+  // expose it (503), surface that as a banner, submitting in that state
   // will just 503 from the backend.
   useEffect(() => {
     let cancelled = false;
@@ -75,7 +75,7 @@ export default function VerifyContractClient(): JSX.Element {
 
   // Poll the job to terminal. Depend on the stable jobId (not the whole
   // job object) so setJob() inside the poller doesn't restart the timer
-  // — without this the effective cadence drifts between 1.5–3s as the
+  //, without this the effective cadence drifts between 1.5–3s as the
   // interval re-arms after every response.
   const jobId = job?.jobId;
   useEffect(() => {
@@ -123,7 +123,7 @@ export default function VerifyContractClient(): JSX.Element {
         sourceCode,
         contractName: contractName.trim(),
         optimizerEnabled,
-        // Pass the raw optimizerRuns through — 0 is a legitimate
+        // Pass the raw optimizerRuns through, 0 is a legitimate
         // configuration distinct from the default, so don't fall back
         // via `|| 200`.
         optimizerRuns: optimizerRuns,
@@ -290,7 +290,7 @@ export default function VerifyContractClient(): JSX.Element {
           />
         </Field>
 
-        <Field label="Constructor arguments (optional)" hint="Hex-encoded ABI tuple. Advisory — not used for the byte-match check.">
+        <Field label="Constructor arguments (optional)" hint="Hex-encoded ABI tuple. Advisory, not used for the byte-match check.">
           <input
             value={constructorArgs}
             onChange={e => setConstructorArgs(e.target.value)}

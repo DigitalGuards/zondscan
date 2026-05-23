@@ -1,11 +1,20 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import ImageWithFallback from '../components/ImageWithFallback';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import config from '../../config';
 import Badge from '../components/Badge';
 import EmptyState from '../components/EmptyState';
+
+const TAB_TYPES = ['erc20', 'erc721', 'erc1155', 'contracts'] as const;
+function parseTab(raw: string | null): TabType {
+  return (TAB_TYPES as readonly string[]).includes(raw ?? '')
+    ? (raw as TabType)
+    : 'erc20';
+}
 
 interface ContractData {
   _id: string;
@@ -17,6 +26,12 @@ interface ContractData {
   totalSupply?: string;
   creationBlockNumber?: string;
   isToken: boolean;
+  tokenStandard?: 'ERC-20' | 'ERC-721' | 'ERC-1155' | string;
+  // Phase 3a: off-chain collection metadata. metadataName preferred over
+  // on-chain name() when both exist, NFT collections typically leave
+  // name() empty and put the display title in the contractURI JSON.
+  metadataName?: string;
+  metadataImage?: string;
 }
 
 interface ContractsClientProps {
@@ -24,14 +39,38 @@ interface ContractsClientProps {
   totalContracts: number;
 }
 
-type TabType = 'tokens' | 'contracts';
+// Per-tab → backend filter mapping. ERC-20/721/1155 use the ?standard= filter
+// added in Phase 1; 'contracts' (other) uses ?isToken=false to surface non-
+// token contracts. 'all' has no filter, useful for search-everything.
+type TabType = 'erc20' | 'erc721' | 'erc1155' | 'contracts';
+
+const TAB_TO_STANDARD: Record<TabType, 'ERC-20' | 'ERC-721' | 'ERC-1155' | null> = {
+  erc20: 'ERC-20',
+  erc721: 'ERC-721',
+  erc1155: 'ERC-1155',
+  contracts: null,
+};
+
+const TAB_RESULT_NOUN: Record<TabType, string> = {
+  erc20: 'tokens',
+  erc721: 'NFT collections',
+  erc1155: 'multi-token collections',
+  contracts: 'contracts',
+};
+
+const TAB_EMPTY_TITLE: Record<TabType, string> = {
+  erc20: 'No tokens found',
+  erc721: 'No NFT collections found',
+  erc1155: 'No multi-token collections found',
+  contracts: 'No contracts found',
+};
 
 const ITEMS_PER_PAGE = 15;
 
 // Hoisted out of the render body so each ContractsClient render doesn't
 // allocate a brand-new component identity. React 19 (and the new
 // react-hooks/error-boundaries rule) flag in-render component creation as
-// a bug — every new identity loses state and re-mounts children.
+// a bug, every new identity loses state and re-mounts children.
 function TabButton({
   tab,
   label,
@@ -112,19 +151,80 @@ function truncateAddress(addr: string, start = 8, end = 6): string {
 }
 
 export default function ContractsClient({ initialData, totalContracts }: ContractsClientProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('tokens');
+  // URL-backed active tab so deep-links like /contracts?tab=erc1155 land on
+  // the right pane and breadcrumb back-steps from contract detail pages
+  // return the user to the section they came from. URL is the source of
+  // truth; clicking a tab pushes a replace() so the back button stays
+  // useful for in-page navigation.
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlTab = parseTab(searchParams.get('tab'));
+  const [activeTab, setActiveTabState] = useState<TabType>(urlTab);
+  const setActiveTab = useCallback((t: TabType) => {
+    setActiveTabState(t);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', t);
+    router.replace(`/contracts?${params.toString()}`, { scroll: false });
+  }, [router, searchParams]);
+  // Keep state in sync when the URL changes from outside (back/forward,
+  // breadcrumb click on a different tab). Adjusting state during render
+  // via a prev-value tracker, the React-recommended replacement for the
+  // set-state-in-effect anti-pattern. Matches the cadence used in
+  // pending-transaction-view.tsx for ETA resync.
+  const [prevUrlTab, setPrevUrlTab] = useState<TabType>(urlTab);
+  if (urlTab !== prevUrlTab) {
+    setPrevUrlTab(urlTab);
+    setActiveTabState(urlTab);
+  }
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(0);
   const [contracts, setContracts] = useState<ContractData[]>(initialData);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(totalContracts);
+  // Per-tab totals so the TabButtons can surface counts; loaded once on
+  // mount via four small `total`-only requests (limit=1 keeps the response
+  // payload trivial). Undefined while pending so the count chip renders
+  // only when we have real data.
+  const [tabCounts, setTabCounts] = useState<Partial<Record<TabType, number>>>({});
 
-  const fetchContracts = useCallback(async (page: number, search: string, isToken: boolean | null) => {
+  // Single round trip via /contracts/counts (iter 24); the backend
+  // aggregation returns all four buckets at once, replacing the
+  // four mount-time /contracts limit=1 hits the previous version made.
+  // 30s server-side cache absorbs concurrent traffic on the contracts
+  // page so DB cost stays predictable.
+  useEffect(() => {
+    let cancelled = false;
+    axios.get(`${config.handlerUrl}/contracts/counts`)
+      .then((r) => {
+        if (cancelled) return;
+        const d = r.data;
+        if (!d || typeof d !== 'object') return;
+        setTabCounts({
+          erc20: typeof d.erc20 === 'number' ? d.erc20 : undefined,
+          erc721: typeof d.erc721 === 'number' ? d.erc721 : undefined,
+          erc1155: typeof d.erc1155 === 'number' ? d.erc1155 : undefined,
+          contracts: typeof d.other === 'number' ? d.other : undefined,
+        });
+      })
+      .catch(() => {
+        // Endpoint failure is silent: tab labels just render without
+        // count chips. Less noise than retrying or surfacing a banner.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const fetchContracts = useCallback(async (page: number, search: string, tab: TabType) => {
     try {
       setLoading(true);
       const cleanSearch = search ? search.toLowerCase().replace(/^0x/, '') : undefined;
 
-      const params: Record<string, any> = {
+      // Axios stringifies primitives directly; the union covers everything
+      // we actually assign here (page/limit as number, search/standard as
+      // string, isToken as boolean). Narrowing it to `unknown` would lose
+      // that, narrowing it to a closed union is the right shape.
+      const params: Record<string, string | number | boolean> = {
         page,
         limit: ITEMS_PER_PAGE,
       };
@@ -133,9 +233,12 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
         params.search = cleanSearch;
       }
 
-      // Filter by isToken based on active tab
-      if (isToken !== null) {
-        params.isToken = isToken;
+      const standard = TAB_TO_STANDARD[tab];
+      if (standard !== null) {
+        params.standard = standard;
+      } else {
+        // 'contracts' tab → non-token contracts only.
+        params.isToken = false;
       }
 
       const response = await axios.get(`${config.handlerUrl}/contracts`, { params });
@@ -155,15 +258,14 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
 
   // Fetch when tab, search, or page changes
   useEffect(() => {
-    const isToken = activeTab === 'tokens' ? true : false;
     const timer = setTimeout(() => {
-      fetchContracts(currentPage, searchQuery, isToken);
+      fetchContracts(currentPage, searchQuery, activeTab);
     }, searchQuery ? 300 : 0);
 
     return () => clearTimeout(timer);
   }, [activeTab, searchQuery, currentPage, fetchContracts]);
 
-  // Reset page when tab or search changes — adjusting state on prop/state
+  // Reset page when tab or search changes, adjusting state on prop/state
   // change instead of writing it in an effect (set-state-in-effect).
   const [prevReset, setPrevReset] = useState<string>(`${activeTab}|${searchQuery}`);
   const resetKey = `${activeTab}|${searchQuery}`;
@@ -182,10 +284,13 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
         <p className="text-gray-400">Browse deployed tokens and smart contracts on the QRL Zond network</p>
       </div>
 
-      {/* Tabs */}
-      <div role="tablist" className="flex gap-2 mb-6">
-        <TabButton tab="tokens" label="Tokens" activeTab={activeTab} onSelect={setActiveTab} />
-        <TabButton tab="contracts" label="All Contracts" activeTab={activeTab} onSelect={setActiveTab} />
+      {/* Tabs, QRC-X is the QRL-branded form of the EIP standards; the
+          underlying tokenStandard string stays "ERC-X" in the DB / API. */}
+      <div role="tablist" className="flex flex-wrap gap-2 mb-6">
+        <TabButton tab="erc20" label="Tokens (QRC-20)" count={tabCounts.erc20} activeTab={activeTab} onSelect={setActiveTab} />
+        <TabButton tab="erc721" label="NFTs (QRC-721)" count={tabCounts.erc721} activeTab={activeTab} onSelect={setActiveTab} />
+        <TabButton tab="erc1155" label="Multi-Token (QRC-1155)" count={tabCounts.erc1155} activeTab={activeTab} onSelect={setActiveTab} />
+        <TabButton tab="contracts" label="Other Contracts" count={tabCounts.contracts} activeTab={activeTab} onSelect={setActiveTab} />
       </div>
 
       {/* Search */}
@@ -199,7 +304,7 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
           <input
             type="text"
             aria-label="Search contracts"
-            placeholder={activeTab === 'tokens' ? 'Search by token name or address...' : 'Search by contract address...'}
+            placeholder={activeTab === 'contracts' ? 'Search by contract address...' : 'Search by token name or address...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full p-3 pl-10 bg-[#2d2d2d] border border-[#3d3d3d] rounded-lg text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#ffa729] focus:border-transparent"
@@ -209,7 +314,9 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
 
       {/* Results Count */}
       <div className="mb-4 text-sm text-gray-400">
-        {loading ? 'Loading...' : `${total} ${activeTab === 'tokens' ? 'tokens' : 'contracts'} found`}
+        {loading
+          ? 'Loading...'
+          : `${total} ${TAB_RESULT_NOUN[activeTab]} found`}
       </div>
 
       {/* Content */}
@@ -222,13 +329,11 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
           </div>
         ) : contracts.length === 0 ? (
           <EmptyState
-            title={activeTab === 'tokens' ? 'No tokens found' : 'No contracts found'}
+            title={TAB_EMPTY_TITLE[activeTab]}
             description="Try adjusting your search or check back later."
           />
-        ) : activeTab === 'tokens' ? (
-          <TokensTable contracts={contracts} />
         ) : (
-          <ContractsTable contracts={contracts} />
+          <ContractRowsTable contracts={contracts} variant={activeTab} />
         )}
       </div>
 
@@ -290,67 +395,60 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
   );
 }
 
-// Tokens Table Component
-function TokensTable({ contracts }: { contracts: ContractData[] }) {
+// Single source of truth for cell chrome so every tab looks like the same
+// table with a different column subset, the original split-into-three
+// approach gave each tab its own visual identity, which read as four
+// different pages stitched together.
+const TH_BASE = 'px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider';
+const TD_BASE = 'px-4 py-4 whitespace-nowrap';
+
+const TAB_TABLE_LABEL: Record<TabType, string> = {
+  erc20: 'Tokens',
+  erc721: 'NFT collections',
+  erc1155: 'Multi-token collections',
+  contracts: 'Smart contracts',
+};
+
+// ContractRowsTable renders all four tabs through the same chrome, same
+// header bar, same divider, same row hover, same identity cell. Per-tab
+// columns toggle on/off via the `variant` prop, but the visual rhythm
+// stays identical across tabs.
+function ContractRowsTable({
+  contracts,
+  variant,
+}: {
+  contracts: ContractData[];
+  variant: TabType;
+}) {
+  const showDecimalsAndSupply = variant === 'erc20';
   return (
     <div className="overflow-x-auto">
-      <table aria-label="Token contracts" className="min-w-full divide-y divide-[#3d3d3d]">
+      <table aria-label={TAB_TABLE_LABEL[variant]} className="min-w-full divide-y divide-[#3d3d3d]">
         <thead className="bg-[#2d2d2d]/50">
           <tr>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Token
+            <th scope="col" className={TH_BASE}>
+              {variant === 'contracts' ? 'Contract' : variant === 'erc20' ? 'Token' : 'Collection'}
             </th>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Contract Address
-            </th>
-            <th scope="col" className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Decimals
-            </th>
-            <th scope="col" className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Total Supply
-            </th>
-            <th scope="col" className="hidden lg:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Creator
-            </th>
+            <th scope="col" className={TH_BASE}>Contract Address</th>
+            <th scope="col" className={`hidden sm:table-cell ${TH_BASE}`}>Type</th>
+            {showDecimalsAndSupply && (
+              <th scope="col" className={`hidden md:table-cell ${TH_BASE}`}>Decimals</th>
+            )}
+            {showDecimalsAndSupply && (
+              <th scope="col" className={`hidden lg:table-cell ${TH_BASE}`}>Total Supply</th>
+            )}
+            <th scope="col" className={`hidden lg:table-cell ${TH_BASE}`}>Creator</th>
+            <th scope="col" className={`hidden xl:table-cell ${TH_BASE}`}>Created at Block</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-[#3d3d3d]">
-          {contracts.map((contract, index) => (
-            <tr key={contract._id || index} className="hover:bg-[#2d2d2d]/30">
-              <td className="px-4 py-4 whitespace-nowrap">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#ffa729] to-[#ff8c00] flex items-center justify-center text-black font-bold text-sm">
-                    {contract.symbol ? contract.symbol.charAt(0) : '?'}
-                  </div>
-                  <div>
-                    <div className="text-white font-medium">{contract.name || 'Unknown Token'}</div>
-                    <div className="text-gray-500 text-sm">{contract.symbol || '-'}</div>
-                  </div>
-                </div>
-              </td>
-              <td className="px-4 py-4 whitespace-nowrap">
-                <Link
-                  href={`/address/${contract.address}`}
-                  className="text-[#ffa729] hover:underline font-mono text-sm"
-                >
-                  {truncateAddress(contract.address)}
-                </Link>
-              </td>
-              <td className="hidden md:table-cell px-4 py-4 whitespace-nowrap text-gray-300 text-sm">
-                {contract.decimals ?? '-'}
-              </td>
-              <td className="hidden sm:table-cell px-4 py-4 whitespace-nowrap text-gray-300 text-sm font-mono">
-                {formatTotalSupply(contract.totalSupply, contract.decimals)}
-              </td>
-              <td className="hidden lg:table-cell px-4 py-4 whitespace-nowrap">
-                <Link
-                  href={`/address/${contract.creatorAddress}`}
-                  className="text-gray-400 hover:text-[#ffa729] font-mono text-sm"
-                >
-                  {truncateAddress(contract.creatorAddress, 6, 4)}
-                </Link>
-              </td>
-            </tr>
+          {contracts.map((contract, i) => (
+            <ContractRow
+              key={contract._id || i}
+              contract={contract}
+              variant={variant}
+              showDecimalsAndSupply={showDecimalsAndSupply}
+            />
           ))}
         </tbody>
       </table>
@@ -358,70 +456,138 @@ function TokensTable({ contracts }: { contracts: ContractData[] }) {
   );
 }
 
-// All Contracts Table Component
-function ContractsTable({ contracts }: { contracts: ContractData[] }) {
+function ContractRow({
+  contract,
+  variant,
+  showDecimalsAndSupply,
+}: {
+  contract: ContractData;
+  variant: TabType;
+  showDecimalsAndSupply: boolean;
+}) {
+  const isToken = variant !== 'contracts';
+  // Identity cell: avatar + name/symbol stack for tokens; avatar + "Smart
+  // Contract" + truncated address for non-token contracts. Same physical
+  // layout in both cases, only the colour palette + text vary.
+  const avatarSeed = isToken
+    ? (contract.symbol || contract.name || '?')
+    : contract.address.replace(/^Q/i, '');
+  const avatarChar = (avatarSeed.charAt(0) || '?').toUpperCase();
+  const avatarGradient = isToken
+    ? 'from-[#ffa729] to-[#ff8c00]'
+    : 'from-[#5f5f5f] to-[#3d3d3d]';
+  const avatarTextColor = isToken ? 'text-black' : 'text-white';
+
+  // Some standards (ERC-1155 in particular) don't expose name()/symbol(),
+  // so the syncer stores empty strings. Phase 3a adds an off-chain name
+  // from contractURI(); prefer it over the on-chain name when present.
+  // Fall through to a truncated address + standard-label so the row
+  // remains identifiable instead of a generic "Unknown".
+  const standardFallback =
+    variant === 'erc20' ? 'Token'
+    : variant === 'erc721' ? 'NFT Collection'
+    : variant === 'erc1155' ? 'Multi-Token Collection'
+    : 'Contract';
+  const displayName = (contract.metadataName?.trim() || contract.name || '').trim();
+  const primary = isToken
+    ? (displayName || truncateAddress(contract.address, 10, 8))
+    : 'Smart Contract';
+  const secondary = isToken
+    ? (contract.symbol || standardFallback)
+    : truncateAddress(contract.address, 6, 4);
+
+  const typeBadge = (() => {
+    if (variant === 'erc20') return <Badge variant="success">QRC-20</Badge>;
+    if (variant === 'erc721') return <Badge variant="warning">QRC-721 NFT</Badge>;
+    if (variant === 'erc1155') return <Badge variant="warning">QRC-1155</Badge>;
+    return <Badge variant="info">Contract</Badge>;
+  })();
+
+  // Phase 3a: render the off-chain collection image in the avatar slot
+  // when present. Falls back to the monogram gradient when missing/empty.
+  // Fixed 32px square so the row height doesn't shift while next/image
+  // resolves; `unoptimized` because the wallet backend's IPFS proxy
+  // already streams pre-sized originals (no /_next/image rewrite path).
+  const metaImage = (contract.metadataImage || '').trim();
+
   return (
-    <div className="overflow-x-auto">
-      <table aria-label="Smart contracts" className="min-w-full divide-y divide-[#3d3d3d]">
-        <thead className="bg-[#2d2d2d]/50">
-          <tr>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Contract Address
-            </th>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Type
-            </th>
-            <th scope="col" className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Creator
-            </th>
-            <th scope="col" className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Created at Block
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-[#3d3d3d]">
-          {contracts.map((contract, index) => (
-            <tr key={contract._id || index} className="hover:bg-[#2d2d2d]/30">
-              <td className="px-4 py-4 whitespace-nowrap">
-                <Link
-                  href={`/address/${contract.address}`}
-                  className="text-[#ffa729] hover:underline font-mono text-sm"
-                >
-                  <span className="hidden sm:inline">{truncateAddress(contract.address, 10, 8)}</span>
-                  <span className="sm:hidden">{truncateAddress(contract.address, 6, 4)}</span>
-                </Link>
-              </td>
-              <td className="px-4 py-4 whitespace-nowrap">
-                {contract.isToken ? (
-                  <Badge variant="success">Token{contract.symbol ? ` (${contract.symbol})` : ''}</Badge>
-                ) : (
-                  <Badge variant="info">Contract</Badge>
-                )}
-              </td>
-              <td className="hidden sm:table-cell px-4 py-4 whitespace-nowrap">
-                <Link
-                  href={`/address/${contract.creatorAddress}`}
-                  className="text-gray-400 hover:text-[#ffa729] font-mono text-sm"
-                >
-                  {truncateAddress(contract.creatorAddress, 6, 4)}
-                </Link>
-              </td>
-              <td className="hidden md:table-cell px-4 py-4 whitespace-nowrap text-gray-300 text-sm font-mono">
-                {contract.creationBlockNumber ? (
-                  <Link
-                    href={`/block/${formatBlockNumber(contract.creationBlockNumber).replace(/,/g, '')}`}
-                    className="text-gray-400 hover:text-[#ffa729]"
+    <tr className="hover:bg-[#2d2d2d]/30">
+      <td className={TD_BASE}>
+        <div className="flex items-center gap-3">
+          {metaImage ? (
+            <div className="relative w-8 h-8 rounded-full overflow-hidden border border-gray-700/50 bg-black/30 shrink-0">
+              <ImageWithFallback
+                src={metaImage}
+                alt={primary}
+                fill
+                sizes="32px"
+                className="object-cover"
+                fallback={
+                  <div
+                    className={`absolute inset-0 bg-gradient-to-br ${avatarGradient} flex items-center justify-center font-bold text-sm ${avatarTextColor}`}
                   >
-                    #{formatBlockNumber(contract.creationBlockNumber)}
-                  </Link>
-                ) : (
-                  '-'
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+                    {avatarChar}
+                  </div>
+                }
+              />
+            </div>
+          ) : (
+            <div
+              className={`w-8 h-8 rounded-full bg-gradient-to-br ${avatarGradient} flex items-center justify-center font-bold text-sm shrink-0 ${avatarTextColor}`}
+            >
+              {avatarChar}
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="text-white font-medium truncate">{primary}</div>
+            <div className="text-gray-500 text-sm truncate">{secondary}</div>
+          </div>
+        </div>
+      </td>
+      <td className={TD_BASE}>
+        <Link
+          href={`/address/${contract.address}`}
+          className="text-[#ffa729] hover:underline font-mono text-sm"
+        >
+          <span className="hidden sm:inline">{truncateAddress(contract.address, 10, 8)}</span>
+          <span className="sm:hidden">{truncateAddress(contract.address, 6, 4)}</span>
+        </Link>
+      </td>
+      <td className={`hidden sm:table-cell ${TD_BASE}`}>{typeBadge}</td>
+      {showDecimalsAndSupply && (
+        <td className={`hidden md:table-cell ${TD_BASE} text-gray-300 text-sm`}>
+          {contract.decimals ?? '-'}
+        </td>
+      )}
+      {showDecimalsAndSupply && (
+        <td className={`hidden lg:table-cell ${TD_BASE} text-gray-300 text-sm font-mono`}>
+          {formatTotalSupply(contract.totalSupply, contract.decimals)}
+        </td>
+      )}
+      <td className={`hidden lg:table-cell ${TD_BASE}`}>
+        {contract.creatorAddress ? (
+          <Link
+            href={`/address/${contract.creatorAddress}`}
+            className="text-gray-400 hover:text-[#ffa729] font-mono text-sm"
+          >
+            {truncateAddress(contract.creatorAddress, 6, 4)}
+          </Link>
+        ) : (
+          <span className="text-gray-500 text-sm">-</span>
+        )}
+      </td>
+      <td className={`hidden xl:table-cell ${TD_BASE} text-gray-300 text-sm font-mono`}>
+        {contract.creationBlockNumber ? (
+          <Link
+            href={`/block/${formatBlockNumber(contract.creationBlockNumber).replace(/,/g, '')}`}
+            className="text-gray-400 hover:text-[#ffa729]"
+          >
+            #{formatBlockNumber(contract.creationBlockNumber)}
+          </Link>
+        ) : (
+          '-'
+        )}
+      </td>
+    </tr>
   );
 }

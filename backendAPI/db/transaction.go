@@ -343,7 +343,7 @@ func CountTransactions(address string) (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Normalize to canonical Q-prefix — matches syncer write format.
+	// Normalize to canonical Q-prefix, matches syncer write format.
 	normalizedAddress := normalizeAddress(address)
 
 	filter := primitive.D{{Key: "$or", Value: []primitive.D{
@@ -427,6 +427,7 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 					Signature:      tx.Signature,
 					Pk:             tx.PublicKey,
 					Size:           ensureHexPrefix(block.Result.Size),
+					Input:          tx.Data,
 				}
 				return result, nil
 			}
@@ -446,6 +447,85 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 	}
 
 	return result, err
+}
+
+// CountInternalTxsByTxHashes returns a map keyed by parent tx hash with
+// the number of internalTransactionByAddress rows persisted for each.
+// Used by /block/:n alongside CountTokenTransfersByTxHashes to surface
+// a per-tx activity hint in the block's tx table.
+//
+// Hashes are matched case-insensitively against whatever the syncer
+// stored (it writes them verbatim from the RPC response; we don't
+// re-normalise here).
+func CountInternalTxsByTxHashes(txHashes []string) (map[string]int, error) {
+	out := make(map[string]int)
+	if len(txHashes) == 0 {
+		return out, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	pipeline := []bson.M{
+		{"$match": bson.M{"hash": bson.M{"$in": txHashes}}},
+		{"$group": bson.M{"_id": "$hash", "count": bson.M{"$sum": 1}}},
+	}
+	cursor, err := configs.InternalTransactionByAddressCollection.Aggregate(ctx, pipeline)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return out, nil
+		}
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	for cursor.Next(ctx) {
+		var row struct {
+			ID    string `bson:"_id"`
+			Count int    `bson:"count"`
+		}
+		if err := cursor.Decode(&row); err != nil {
+			continue
+		}
+		out[row.ID] = row.Count
+	}
+	return out, nil
+}
+
+// GetInternalTransactionsByTxHash returns every internal-call entry the
+// syncer captured under a given outer tx hash. Used by /tx/:hash to
+// render the Internal Transactions panel. Returns an empty slice (not
+// nil) when nothing matches so the response shape stays predictable.
+//
+// The syncer keys these docs by `hash` (the parent tx hash), so this is
+// a flat collection lookup. Ordered by traceAddress to preserve the
+// EVM-emitted call order; an empty traceAddress sorts first (the
+// top-level call, when one was recorded).
+func GetInternalTransactionsByTxHash(txHash string) ([]models.InternalTx, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cursor, err := configs.InternalTransactionByAddressCollection.Find(
+		ctx,
+		bson.M{"hash": txHash},
+		options.Find().SetSort(bson.D{{Key: "traceAddress", Value: 1}}),
+	)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return []models.InternalTx{}, nil
+		}
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var out []models.InternalTx
+	if err := cursor.All(ctx, &out); err != nil {
+		return nil, err
+	}
+	if out == nil {
+		out = []models.InternalTx{}
+	}
+	return out, nil
 }
 
 func ReturnDailyTransactionsVolume() int64 {

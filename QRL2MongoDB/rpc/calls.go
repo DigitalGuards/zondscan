@@ -223,7 +223,7 @@ func CallDebugTraceTransaction(hash string) DebugTraceResult {
 		return emptyTrace(err)
 	}
 
-	// debug_traceTransaction is a primary-only method — public/foundation nodes
+	// debug_traceTransaction is a primary-only method, public/foundation nodes
 	// don't expose the debug_ namespace. Pin to the primary URL so we don't
 	// surface a misleading "method not found" by failing over.
 	primary := Endpoints().PrimaryURL()
@@ -322,7 +322,7 @@ func CallDebugTraceTransaction(hash string) DebugTraceResult {
 			hexStr := strings.TrimPrefix(tracerResponse.Result.Output, "0x")
 			hexStr = strings.TrimLeft(hexStr, "0")
 
-			if len(tracerResponse.Result.Output) == 42 { // "0x" + 40 chars — an address
+			if len(tracerResponse.Result.Output) == 42 { // "0x" + 40 chars, an address
 				res.Output = 1
 			} else if hexStr == "" {
 				res.Output = 0
@@ -595,8 +595,12 @@ func GetCode(address string, blockNrOrHash string) (string, error) {
 	return GetCode.Result, nil
 }
 
-// ZondGetBlockLogs retrieves logs for a specific block with optional topic filtering
-func ZondGetBlockLogs(blockNumber string, topics []string) (*models.ZondLogsResponse, error) {
+// ZondGetBlockLogs retrieves logs for a specific block with an optional
+// topic[0] filter. When `topic0Filters` has >1 entry the values are
+// OR-matched against topic[0], the standard JSON-RPC encoding is a
+// nested array `[[t0a, t0b, ...]]` (the outer position is the topic index,
+// the inner array is the candidate set for that position).
+func ZondGetBlockLogs(blockNumber string, topic0Filters []string) (*models.ZondLogsResponse, error) {
 	// Validate block number format - Zond uses 0x prefix for block numbers
 	if len(blockNumber) == 0 || (!strings.HasPrefix(blockNumber, "0x") && blockNumber != "latest") {
 		return nil, fmt.Errorf("invalid block number format: %s", blockNumber)
@@ -607,9 +611,8 @@ func ZondGetBlockLogs(blockNumber string, topics []string) (*models.ZondLogsResp
 		"toBlock":   blockNumber,
 	}
 
-	// Add topics if provided
-	if len(topics) > 0 {
-		filter["topics"] = topics
+	if len(topic0Filters) > 0 {
+		filter["topics"] = [][]string{topic0Filters}
 	}
 
 	group := models.JsonRPC{

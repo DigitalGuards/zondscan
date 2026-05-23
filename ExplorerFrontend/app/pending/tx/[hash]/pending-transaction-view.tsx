@@ -5,9 +5,9 @@ import Link from 'next/link';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import type { PendingTransaction } from '@/app/types';
+import type { PendingTransaction, ContractMeta } from '@/app/types';
 import config from '../../../../config';
-import { formatAmount, formatGasPrice, decodeTokenTransferInput, formatTokenAmount, hexToBigInt } from '../../../lib/helpers';
+import { formatAmount, formatGasPrice, decodeTokenTransferInput, decodeContractCall, formatTokenAmount, hexToBigInt, type DecodedTokenTransfer } from '../../../lib/helpers';
 import Badge from '../../../components/Badge';
 import Breadcrumbs from '../../../components/Breadcrumbs';
 import DetailRow from '../../../components/DetailRow';
@@ -15,6 +15,13 @@ import CopyButton from '../../../components/CopyButton';
 
 interface PendingTransactionViewProps {
   pendingTx: PendingTransaction;
+  /**
+   * Verified-contract metadata for the tx's target, forwarded by the
+   * server-side fetch. When `verified` and `abi` are present the view
+   * can decode the calldata via the same ABI-driven decoder used on
+   * the confirmed tx page (parity with the iter 3 work).
+   */
+  targetContract?: ContractMeta;
 }
 
 type LiveStatus = 'pending' | 'mined' | 'dropped';
@@ -36,7 +43,38 @@ function formatElapsed(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export default function PendingTransactionView({ pendingTx }: PendingTransactionViewProps): JSX.Element {
+// QRC badge label + variant per decoded standard. Kept symmetric with
+// tx page's qrcBadgeText so a tx looks consistent before vs after mining.
+function badgeForDecoded(dt: DecodedTokenTransfer): { text: string; variant: 'brand' | 'warning' | 'info' } {
+  if (dt.methodName === 'setApprovalForAll') {
+    return { text: dt.standard === 'ERC-1155' ? 'QRC-1155 Approval' : 'NFT Approval', variant: 'info' };
+  }
+  if (dt.standard === 'ERC-721') return { text: 'QRC-721', variant: 'warning' };
+  if (dt.standard === 'ERC-1155') return { text: 'QRC-1155', variant: 'warning' };
+  return { text: 'QRC-20', variant: 'brand' };
+}
+
+function headerLabelFor(dt: DecodedTokenTransfer): string {
+  if (dt.methodName === 'setApprovalForAll') return 'Token Approval (Pending)';
+  if (dt.methodName === 'safeBatchTransferFrom') return 'Multi-Token Batch Transfer (Pending)';
+  if (dt.standard === 'ERC-721') return 'NFT Transfer (Pending)';
+  if (dt.standard === 'ERC-1155') return 'Multi-Token Transfer (Pending)';
+  return 'Token Transfer (Pending)';
+}
+
+function methodSignatureFor(dt: DecodedTokenTransfer): string {
+  switch (dt.methodName) {
+    case 'transfer':              return 'transfer(address, uint256)';
+    case 'transferFrom':          return 'transferFrom(address, address, uint256)';
+    case 'safeTransferFrom':      return dt.standard === 'ERC-1155'
+      ? 'safeTransferFrom(address, address, uint256, uint256, bytes)'
+      : 'safeTransferFrom(address, address, uint256)';
+    case 'safeBatchTransferFrom': return 'safeBatchTransferFrom(address, address, uint256[], uint256[], bytes)';
+    case 'setApprovalForAll':     return 'setApprovalForAll(address, bool)';
+  }
+}
+
+export default function PendingTransactionView({ pendingTx, targetContract }: PendingTransactionViewProps): JSX.Element {
   const [formattedValue, unit] = formatAmount(pendingTx.value);
   const formattedGasPrice = formatGasPrice(pendingTx.gasPrice);
   const router = useRouter();
@@ -44,6 +82,14 @@ export default function PendingTransactionView({ pendingTx }: PendingTransaction
   const decodedTransfer = useMemo(() => {
     return decodeTokenTransferInput(pendingTx.input);
   }, [pendingTx.input]);
+
+  // ABI fallback: if the calldata didn't match a known token selector,
+  // try the recipient's verified ABI. Same machinery as the confirmed
+  // tx page's Input Data card.
+  const decodedCall = useMemo(() => {
+    if (decodedTransfer) return null;
+    return decodeContractCall(pendingTx.input, targetContract?.abi);
+  }, [decodedTransfer, pendingTx.input, targetContract?.abi]);
 
   const isTokenTransfer = decodedTransfer !== null;
 
@@ -121,7 +167,7 @@ export default function PendingTransactionView({ pendingTx }: PendingTransaction
   }, [statusQuery.data?.status]);
   const elapsedSec = Math.max(0, nowSec - (pendingTx.createdAt ?? nowSec));
 
-  // ── ETA countdown — seeded from each poll, ticks down every second ─────
+  // ── ETA countdown, seeded from each poll, ticks down every second ─────
   // Adjusting-state-on-prop-change: detect a new poll value mid-render and
   // resync without writing state inside an effect (set-state-in-effect).
   const [etaRemaining, setEtaRemaining] = useState<number | null>(null);
@@ -180,7 +226,13 @@ export default function PendingTransactionView({ pendingTx }: PendingTransaction
               <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
             </svg>
             <h1 className="text-xl sm:text-2xl font-bold text-[#ffa729]">Pending Transaction</h1>
-            {isTokenTransfer && <Badge variant="brand">Token Transfer</Badge>}
+            {decodedTransfer && (() => {
+              const b = badgeForDecoded(decodedTransfer);
+              return <Badge variant={b.variant}>{b.text}</Badge>;
+            })()}
+            {!decodedTransfer && decodedCall && (
+              <Badge variant="info">{decodedCall.name}</Badge>
+            )}
           </div>
           <Badge variant="warning" size="md" dot>Pending</Badge>
         </div>
@@ -202,7 +254,7 @@ export default function PendingTransactionView({ pendingTx }: PendingTransaction
             )}
           </div>
           <p className="text-[11px] text-gray-500">
-            Auto-refreshing every 5s — this page will navigate to the confirmed transaction once it&apos;s included in a block.
+            Auto-refreshing every 5s, this page will navigate to the confirmed transaction once it&apos;s included in a block.
           </p>
         </div>
 
@@ -248,40 +300,164 @@ export default function PendingTransactionView({ pendingTx }: PendingTransaction
         </div>
       </div>
 
-      {/* Token Transfer Section */}
-      {isTokenTransfer && decodedTransfer && (
+      {/* Token call section. Layout branches on the decoded shape: ERC-20
+          shows recipient + raw amount (decimals unknown until confirmed);
+          ERC-721 / ERC-1155 surface tokenID(s) + value(s); setApprovalForAll
+          shows operator + on/off. Token name/symbol fill in once mined. */}
+      {decodedTransfer && (() => {
+        const b = badgeForDecoded(decodedTransfer);
+        const isApproval = decodedTransfer.methodName === 'setApprovalForAll';
+        const isBatch = decodedTransfer.methodName === 'safeBatchTransferFrom';
+        return (
+          <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+            <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
+              <div className="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                </svg>
+                <h2 className="text-[15px] font-semibold text-[#ffa729]">{headerLabelFor(decodedTransfer)}</h2>
+                <Badge variant={b.variant}>{b.text}</Badge>
+              </div>
+            </div>
+            <div className="p-4 sm:p-6">
+              <DetailRow label="Method">
+                <span className="font-mono text-sm">{methodSignatureFor(decodedTransfer)}</span>
+              </DetailRow>
+
+              {/* setApprovalForAll(operator, approved) */}
+              {isApproval && (
+                <>
+                  <DetailRow label="Operator" mono>
+                    <Link
+                      href={`/address/${decodedTransfer.operator}`}
+                      className="text-[#ffa729] hover:text-[#ffb84d] transition-colors break-all"
+                    >
+                      {decodedTransfer.operator}
+                    </Link>
+                  </DetailRow>
+                  <DetailRow label="Approved">
+                    <Badge variant={decodedTransfer.approved ? 'success' : 'error'}>
+                      {decodedTransfer.approved ? 'true (granted)' : 'false (revoked)'}
+                    </Badge>
+                  </DetailRow>
+                </>
+              )}
+
+              {/* Transfer-like calls: From (when present) → To */}
+              {!isApproval && decodedTransfer.from && (
+                <DetailRow label="From" mono>
+                  <Link
+                    href={`/address/${decodedTransfer.from}`}
+                    className="text-gray-200 hover:text-[#ffa729] transition-colors break-all"
+                  >
+                    {decodedTransfer.from}
+                  </Link>
+                </DetailRow>
+              )}
+              {!isApproval && decodedTransfer.to && (
+                <DetailRow label={decodedTransfer.from ? 'To' : 'Recipient'} mono>
+                  <Link
+                    href={`/address/${decodedTransfer.to}`}
+                    className="text-[#ffa729] hover:text-[#ffb84d] transition-colors break-all"
+                  >
+                    {decodedTransfer.to}
+                  </Link>
+                </DetailRow>
+              )}
+
+              {/* ERC-20: raw amount (decimals unknown pre-confirmation) */}
+              {decodedTransfer.standard === 'ERC-20' && decodedTransfer.amount && (
+                <DetailRow label="Amount">
+                  <span className="font-semibold">{formatTokenAmount(decodedTransfer.amount, 18)}</span>
+                  <span className="text-gray-500 ml-2 text-xs">(raw: {decodedTransfer.amount}, assumes 18 decimals)</span>
+                </DetailRow>
+              )}
+
+              {/* ERC-721 / ERC-1155 single */}
+              {!isBatch && decodedTransfer.tokenID && (
+                <DetailRow label="Token ID" mono>
+                  <span className="font-semibold text-white">#{decodedTransfer.tokenID}</span>
+                </DetailRow>
+              )}
+              {decodedTransfer.standard === 'ERC-1155' && !isBatch && decodedTransfer.value && (
+                <DetailRow label="Quantity">
+                  <span className="font-semibold text-white">
+                    {(() => { try { return BigInt(decodedTransfer.value).toLocaleString('en-US'); } catch { return decodedTransfer.value; } })()}
+                  </span>
+                </DetailRow>
+              )}
+
+              {/* ERC-1155 batch: list each (id, qty) row */}
+              {isBatch && decodedTransfer.ids && decodedTransfer.values && (
+                <DetailRow label="Batch">
+                  <div className="flex flex-col gap-1 mt-1">
+                    {decodedTransfer.ids.map((id, i) => (
+                      <div key={`${id}-${i}`} className="font-mono text-xs text-gray-200">
+                        <span className="text-[#ffa729]">#{id}</span>
+                        <span className="text-gray-500"> x </span>
+                        <span>{(() => { try { return BigInt(decodedTransfer.values![i]).toLocaleString('en-US'); } catch { return decodedTransfer.values![i]; } })()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </DetailRow>
+              )}
+
+              <p className="text-xs text-gray-500 mt-3">
+                {isApproval
+                  ? 'Approval will take effect once the transaction is confirmed.'
+                  : 'Token name and symbol will be available once the transaction is confirmed.'}
+              </p>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ABI-decoded contract call (verified target, falls through from
+          the well-known-token-selector path above). Same shape as the
+          confirmed tx page's Input Data decoder section. */}
+      {!decodedTransfer && decodedCall && (
         <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
           <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
             <div className="flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-              </svg>
-              <h2 className="text-[15px] font-semibold text-[#ffa729]">Token Transfer (Pending)</h2>
-              <Badge variant="brand">QRC-20</Badge>
+              <h2 className="text-[15px] font-semibold text-[#ffa729]">Contract Call (Pending)</h2>
+              <Badge variant="info">{decodedCall.name}</Badge>
+              {targetContract?.contractName && (
+                <span className="text-xs text-gray-500 font-mono">via {targetContract.contractName}</span>
+              )}
             </div>
           </div>
           <div className="p-4 sm:p-6">
-            <DetailRow label="Method">
-              <span className="font-mono text-sm">
-                {decodedTransfer.methodName === 'transferFrom'
-                  ? `${decodedTransfer.methodName}(address, address, uint256)`
-                  : `${decodedTransfer.methodName}(address, uint256)`}
-              </span>
-            </DetailRow>
-            <DetailRow label="Amount">
-              <span className="font-semibold">{formatTokenAmount(decodedTransfer.amount, 18)}</span>
-              <span className="text-gray-500 ml-2 text-xs">(raw: {decodedTransfer.amount})</span>
-            </DetailRow>
-            <DetailRow label="Recipient" mono>
-              <Link
-                href={`/address/${decodedTransfer.to}`}
-                className="text-[#ffa729] hover:text-[#ffb84d] transition-colors break-all"
-              >
-                {decodedTransfer.to}
-              </Link>
-            </DetailRow>
+            <p className="text-xs text-gray-500 font-mono mb-2">{decodedCall.signature}</p>
+            <div className="space-y-1">
+              {decodedCall.args.map((arg) => (
+                <div key={arg.label} className="text-xs flex flex-wrap items-start gap-2">
+                  <span className="text-gray-400 font-mono min-w-[80px]">{arg.label}:</span>
+                  {arg.type === 'address' && arg.value ? (
+                    <Link href={`/address/${arg.value}`} className="text-gray-200 hover:text-[#ffa729] transition-colors break-all font-mono">
+                      {arg.value}
+                    </Link>
+                  ) : arg.type === 'bool' ? (
+                    <Badge variant={arg.value === 'true' ? 'success' : 'error'}>{arg.value}</Badge>
+                  ) : arg.type === 'uint256' ? (
+                    <span className="text-gray-200 font-mono break-all">
+                      {(() => { try { return BigInt(arg.value || '0').toLocaleString('en-US'); } catch { return arg.value || ''; } })()}
+                    </span>
+                  ) : arg.type === 'uint256[]' ? (
+                    <span className="text-gray-200 font-mono break-all">
+                      {arg.values && arg.values.length > 0
+                        ? arg.values.map((v) => { try { return BigInt(v).toLocaleString('en-US'); } catch { return v; } }).join(', ')
+                        : '[]'}
+                    </span>
+                  ) : arg.type === 'string' ? (
+                    <span className="text-gray-200 break-all">{arg.value}</span>
+                  ) : (
+                    <span className="text-gray-200 font-mono break-all">{arg.value}</span>
+                  )}
+                </div>
+              ))}
+            </div>
             <p className="text-xs text-gray-500 mt-3">
-              Token name and symbol will be available once the transaction is confirmed.
+              Decoded from the target contract&apos;s verified ABI. Final on-chain state lands once the transaction is confirmed.
             </p>
           </div>
         </div>
@@ -293,7 +469,7 @@ export default function PendingTransactionView({ pendingTx }: PendingTransaction
           <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
             <h2 className="text-[15px] font-semibold text-[#ffa729]">
               Input Data
-              {isTokenTransfer && <span className="text-xs text-gray-500 ml-2">(decoded above)</span>}
+              {(isTokenTransfer || decodedCall) && <span className="text-xs text-gray-500 ml-2">(decoded above)</span>}
             </h2>
           </div>
           <div className="p-4 sm:p-6">

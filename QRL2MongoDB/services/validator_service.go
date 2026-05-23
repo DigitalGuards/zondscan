@@ -276,7 +276,7 @@ func BackfillValidatorHistory(currentEpoch int64) error {
 		genesisTime, _ = strconv.ParseInt(blockDoc.Result.Timestamp, 0, 64)
 	}
 	if genesisTime == 0 {
-		// Block 0 not in DB — derive genesis from block 1 (timestamp - 1 slot)
+		// Block 0 not in DB, derive genesis from block 1 (timestamp - 1 slot)
 		err = configs.BlocksCollections.FindOne(ctx, bson.M{"blockNumberInt": int64(1)}).Decode(&blockDoc)
 		if err == nil && blockDoc.Result.Timestamp != "" {
 			t, _ := strconv.ParseInt(blockDoc.Result.Timestamp, 0, 64)

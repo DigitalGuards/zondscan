@@ -16,6 +16,11 @@ type Transfer struct {
 	Signature      string             `bson:"signature"`
 	Pk             string             `bson:"pk"`
 	Size           string             `bson:"size"`
+	// Input is the transaction's calldata (the tx's `data` field on the
+	// block). Populated by ReturnSingleTransfer from the blocks collection.
+	// Empty for plain QRL transfers, "0x" + selector + ABI args for contract
+	// calls. Drives the Input Data card + Event Logs panel on the tx page.
+	Input string `bson:"input,omitempty" json:"Input,omitempty"`
 }
 
 type TransactionsVolume struct {

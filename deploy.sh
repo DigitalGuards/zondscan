@@ -209,11 +209,11 @@ select_branch() {
             git stash push -m "deploy.sh auto-stash $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
                 || print_error "Failed to stash changes"
         else
-            print_error "Aborting — clean working tree first or stash manually"
+            print_error "Aborting, clean working tree first or stash manually"
         fi
     fi
 
-    # Checkout target branch — track origin if no local branch exists yet
+    # Checkout target branch, track origin if no local branch exists yet
     if [ "$SELECTED_BRANCH" != "$CURRENT_BRANCH" ]; then
         if git show-ref --verify --quiet "refs/heads/$SELECTED_BRANCH"; then
             git checkout "$SELECTED_BRANCH" || print_error "Failed to checkout $SELECTED_BRANCH"
@@ -229,10 +229,10 @@ select_branch() {
     if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
         read -p "Pull latest changes for $SELECTED_BRANCH? (y/n): " PULL_LATEST
         if [[ $PULL_LATEST =~ ^[Yy]$ ]]; then
-            git pull --ff-only || print_error "Failed to pull (non-fast-forward — resolve manually)"
+            git pull --ff-only || print_error "Failed to pull (non-fast-forward, resolve manually)"
         fi
     else
-        print_status "Branch has no upstream — skipping pull"
+        print_status "Branch has no upstream, skipping pull"
     fi
 
     print_status "On branch $(git rev-parse --abbrev-ref HEAD) at $(git rev-parse --short HEAD)"

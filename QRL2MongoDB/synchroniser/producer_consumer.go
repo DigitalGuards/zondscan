@@ -64,7 +64,7 @@ func consumer(ch <-chan (<-chan Data)) {
 					// Pre-validate every blockData entry. blockData is
 					// []interface{} (see Data struct). If we discovered a bad
 					// type mid-loop, InsertManyBlockDocuments below would have
-					// already committed the whole batch — we'd be left with
+					// already committed the whole batch, we'd be left with
 					// rows in `blocks` whose transactions never get processed
 					// and whose pending hashes never get tombstoned, while
 					// sync_state still advances past them. Drop the whole
@@ -97,7 +97,7 @@ func consumer(ch <-chan (<-chan Data)) {
 						// block. The single-block path (sync.go) calls this
 						// inline; without it here, batch-sync (first-sync /
 						// behind-the-tip catch-up) leaves rows as "pending"
-						// until verifyPendingTransactions sweeps them — up to
+						// until verifyPendingTransactions sweeps them, up to
 						// 5 minutes after the tx is confirmed on-chain.
 						if err := UpdatePendingTransactionsInBlock(&blocks[x]); err != nil {
 							configs.Logger.Error("Failed to update pending transactions in batch block",

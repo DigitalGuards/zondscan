@@ -763,7 +763,7 @@ Single pending transaction by hash. Implements lifecycle management:
 4. If not found anywhere, returns 404 with an explanation that the tx may have been dropped.
 
 #### `GET /pending-tx-eta/:hash`
-Best-effort inclusion-ETA for a single pending transaction. The headline `etaSec` is computed as `ceil(gasAhead / avgGasUsed) * avgBlockTimeSec`, floored at one block-time so "no one ahead of you" still implies one block of wait. Returns 404 once the tx is mined or dropped — the frontend's status poll handles the transition.
+Best-effort inclusion-ETA for a single pending transaction. The headline `etaSec` is computed as `ceil(gasAhead / avgGasUsed) * avgBlockTimeSec`, floored at one block-time so "no one ahead of you" still implies one block of wait. Returns 404 once the tx is mined or dropped, the frontend's status poll handles the transition.
 
 ```json
 {

@@ -31,7 +31,7 @@ interface ReadContractProps {
  * that decodes the bytes returned by the backend's /contract/call proxy.
  *
  * ABI encode + decode runs entirely client-side via @theqrl/web3-zond-abi
- * — the backend never sees decoded values, it just forwards the hex
+ *, the backend never sees decoded values, it just forwards the hex
  * calldata to the node and returns hex.
  */
 export default function ReadContract({ contractData }: ReadContractProps): JSX.Element {
@@ -185,7 +185,7 @@ function ReadFunctionCard({ fn, address }: { fn: AbiFunction; address: string })
 }
 
 // parseArg converts a user-typed string into the right JS shape for
-// @theqrl/web3-zond-abi.encodeFunctionCall. Keep this minimal — anything
+// @theqrl/web3-zond-abi.encodeFunctionCall. Keep this minimal, anything
 // fancy (tuples, fixed arrays) the user can express as JSON.
 function parseArg(raw: string, type: string): unknown {
   const t = raw.trim();
@@ -201,7 +201,7 @@ function parseArg(raw: string, type: string): unknown {
     }
   }
   if (type.startsWith('uint') || type.startsWith('int')) {
-    // Hand string through — web3-zond-abi accepts strings for big ints.
+    // Hand string through, web3-zond-abi accepts strings for big ints.
     return t;
   }
   return t;

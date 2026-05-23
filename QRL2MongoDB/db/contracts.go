@@ -31,7 +31,7 @@ import (
 // concurrent verification write, the whole-doc $set would clobber the
 // freshly-written verification fields with stale empties from the
 // in-memory copy. Switching to a field-scoped $set listing only the
-// syncer-owned fields makes that race impossible by construction —
+// syncer-owned fields makes that race impossible by construction ,
 // the syncer literally cannot touch verification keys.
 func StoreContract(contract models.ContractInfo) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -76,9 +76,24 @@ func StoreContract(contract models.ContractInfo) error {
 			merged.Status = contract.Status
 		}
 
-		// For token info, update if the new info seems more complete or explicitly provided
-		merged.IsToken = contract.IsToken
+		// Token classification is promote-only: once a contract has been
+		// identified as a token (Name/Symbol/Decimals populated from a
+		// successful RPC probe), we never demote it back. The previous
+		// logic clobbered Name/Symbol/Decimals/TotalSupply to empty whenever
+		// `GetTokenInfo` returned `isToken=false`, and that path also
+		// returns false on every *transient* RPC error (name()/symbol()
+		// timeout, decode failure, node failover blip). Real-world symptom
+		// was real ERC-20 tokens flickering to empty `name`/`symbol` in the
+		// explorer during node hiccups, then restoring on the next
+		// interaction that succeeded. Now the merge:
+		//   - flips IsToken only false → true;
+		//   - copies Name/Symbol/Decimals/TotalSupply only when the existing
+		//     value is empty (fills gaps from a richer probe);
+		//   - never clears non-empty token metadata.
+		// Re-classification (true → false) is intentionally NOT a side
+		// effect of any read path, it must be an explicit operator action.
 		if contract.IsToken {
+			merged.IsToken = true
 			if merged.Name == "" && contract.Name != "" {
 				merged.Name = contract.Name
 			}
@@ -91,14 +106,38 @@ func StoreContract(contract models.ContractInfo) error {
 			if merged.TotalSupply == "" && contract.TotalSupply != "" {
 				merged.TotalSupply = contract.TotalSupply
 			}
-		} else {
-			// If it's not a token according to new info, clear token fields
-			merged.Name = ""
-			merged.Symbol = ""
-			merged.Decimals = 0
-			merged.TotalSupply = ""
 		}
+		// `contract.IsToken == false` is a no-op for IsToken + token
+		// metadata; keep existing values intact.
 
+		// TokenStandard promotion ladder: "" → ERC-20 → ERC-721/1155.
+		// Same promote-only rationale as IsToken: a transient RPC blip
+		// must never demote a previously-classified contract. ERC-1155
+		// outranks ERC-721 so dual-impl edge cases (rare) pick the
+		// broader standard. The merge never moves DOWN the ladder.
+		if standardRank(contract.TokenStandard) > standardRank(merged.TokenStandard) {
+			merged.TokenStandard = contract.TokenStandard
+		}
+		// HasERC165 latches true forever, a contract that ever responded
+		// to supportsInterface didn't UN-implement ERC-165 later. Skip the
+		// flag flip on transient probe failures (those return HasERC165=false).
+		if contract.HasERC165 {
+			merged.HasERC165 = true
+		}
+		// BaseURI is gap-fill only (Phase 3 will populate it from tokenURI
+		// / uri probes). Never overwrite or clear.
+		if merged.BaseURI == "" && contract.BaseURI != "" {
+			merged.BaseURI = contract.BaseURI
+		}
+		// Phase 3a collection metadata: gap-fill only for MetadataURI from
+		// the classifier path. The metadata fetcher service has its own
+		// write path (UpdateContractMetadata) for the *resolved* fields
+		// (Name/Description/Image/ExternalURL/FetchedAt/FetchError); the
+		// classifier never touches those, so a transient classification
+		// blip can't clobber a previously-resolved metadata document.
+		if merged.MetadataURI == "" && contract.MetadataURI != "" {
+			merged.MetadataURI = contract.MetadataURI
+		}
 	} else if !errors.Is(err, mongo.ErrNoDocuments) {
 		configs.Logger.Error("Failed to check for existing contract",
 			zap.String("address", contract.Address),
@@ -106,8 +145,17 @@ func StoreContract(contract models.ContractInfo) error {
 		return err
 	}
 
+	// IsToken back-compat: any classified standard implies isToken=true so
+	// the legacy `?isToken=true` API filter continues to surface NFT
+	// collections alongside ERC-20s. Applied in BOTH the merge and the
+	// fresh-write path, callers that set TokenStandard without IsToken
+	// (e.g. backfill scripts) still produce correct rows.
+	if merged.TokenStandard != "" {
+		merged.IsToken = true
+	}
+
 	// Stamp updatedAt once for both code paths (merge + first-write).
-	// Live indexing — the wall clock is the right source here.
+	// Live indexing, the wall clock is the right source here.
 	merged.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 
 	opts := options.Update().SetUpsert(true)
@@ -127,7 +175,7 @@ func StoreContract(contract models.ContractInfo) error {
 
 // syncerOwnedSet returns the $set payload for fields the syncer is allowed
 // to write. Verification fields (verified / sourceCode / abi / ...) are
-// deliberately absent — they belong exclusively to the backend verify
+// deliberately absent, they belong exclusively to the backend verify
 // endpoint. Keep this list in sync with the non-verification fields on
 // models.ContractInfo; any field added to the model that the syncer also
 // populates must be added here.
@@ -139,7 +187,7 @@ func StoreContract(contract models.ContractInfo) error {
 //     trust-critical fields. Adding a new SYNCER-owned field and
 //     forgetting to add it here results in a visible omission (easy to
 //     spot in tests / data sampling). The inverted shape would default
-//     to "syncer may write any new field" — a new VERIFICATION field
+//     to "syncer may write any new field", a new VERIFICATION field
 //     forgotten in the delete list would get silently clobbered. Silent
 //     trust-store corruption is the much worse failure mode.
 //  2. bson.Marshal + bson.Unmarshal per write is real overhead in the
@@ -172,7 +220,153 @@ func syncerOwnedSet(c models.ContractInfo) bson.M {
 	if c.MaxTxLimit != "" {
 		m["maxTxLimit"] = c.MaxTxLimit
 	}
+	// NFT classification, omit when empty/false so the document stays clean
+	// for non-token contracts AND a transient blip that produces zero values
+	// can't clobber a previously-set value (writing `false` would overwrite
+	// `true`; omitting the key leaves the existing value untouched).
+	if c.TokenStandard != "" {
+		m["tokenStandard"] = c.TokenStandard
+	}
+	if c.HasERC165 {
+		m["hasERC165"] = true
+	}
+	if c.BaseURI != "" {
+		m["baseURI"] = c.BaseURI
+	}
+	// Phase 3a collection metadata: classifier writes only the URI; the
+	// resolved fields are owned by the fetcher and updated through
+	// UpdateContractMetadata (below). The omitempty pattern protects
+	// existing fetcher state from being clobbered on classifier passes.
+	if c.MetadataURI != "" {
+		m["metadataURI"] = c.MetadataURI
+	}
 	return m
+}
+
+// UpdateContractMetadata writes the resolved off-chain collection metadata
+// for one contract. The fetcher service is the only caller; the classifier
+// path (StoreContract) deliberately doesn't touch these fields. This
+// separation lets a transient classification blip retain the resolved
+// metadata while still allowing the fetcher to record a new fetch attempt's
+// outcome (success or error) without racing the classifier.
+//
+// Empty `name` / `description` / `image` / `externalURL` arguments PRESERVE
+// the existing database values (last-good state). Only `fetchedAt` and
+// `fetchError` are always written, so an operator can see the latest probe
+// result without blowing away previously-fetched content. The expected
+// pattern is:
+//
+//   - Success: pass the parsed values + FetchedAt = now, FetchError = "".
+//   - Failure: pass empty for the four content fields, FetchedAt = "",
+//     FetchError = the reason. Existing content fields are preserved
+//     because the merge sentinel below skips empty content writes.
+//
+// The caller-supplied ctx scopes both timeout and cancellation. The fetcher
+// passes the shutdown-aware ctx so a pm2 stop interrupts an in-flight write
+// instead of leaking a 10s context.Background goroutine.
+func UpdateContractMetadata(ctx context.Context, address, name, description, image, externalURL, fetchedAt, fetchError string) error {
+	address = validation.ConvertToQAddress(address)
+
+	set := bson.M{
+		"metadataFetchedAt":  fetchedAt,
+		"metadataFetchError": fetchError,
+	}
+	// Only overwrite content fields when we have new content. On failure
+	// the four content args are "" and we skip the writes, preserving the
+	// last-good state.
+	if name != "" {
+		set["metadataName"] = name
+	}
+	if description != "" {
+		set["metadataDescription"] = description
+	}
+	if image != "" {
+		set["metadataImage"] = image
+	}
+	if externalURL != "" {
+		set["metadataExternalURL"] = externalURL
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	_, err := configs.GetContractsCollection().UpdateOne(
+		ctx,
+		bson.M{"address": address},
+		bson.M{"$set": set},
+	)
+	if err != nil {
+		configs.Logger.Error("Failed to update contract metadata",
+			zap.String("address", address),
+			zap.Error(err))
+		return err
+	}
+	return nil
+}
+
+// GetContractsAwaitingMetadata returns up to `limit` NFT contracts that have
+// a populated MetadataURI but have not yet been fetched successfully
+// (FetchedAt is empty AND FetchError is empty/missing). The metadata
+// fetcher service uses this as its work queue and passes its shutdown-aware
+// ctx so a pm2 stop cancels an in-flight read promptly.
+//
+// Filter notes:
+//   - MetadataURI must EXIST and be non-empty. The naked `$ne: ""` form
+//     matches docs where the field is missing entirely (Mongo treats
+//     missing fields as null and null != ""), which would pull in every
+//     unclassified NFT and trigger an "empty URI" loop.
+//   - We do NOT retry rows that already have a metadataFetchError set,
+//     transient gateway errors get retried on a manual operator action
+//     (admin endpoint in Phase 4); the auto-loop would re-attempt every
+//     30s with the same outcome and clog the work queue. The next
+//     classifier pass naturally clears the error by overwriting it.
+func GetContractsAwaitingMetadata(ctx context.Context, limit int) ([]models.ContractInfo, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	filter := bson.M{
+		"metadataURI":   bson.M{"$exists": true, "$ne": ""},
+		"tokenStandard": bson.M{"$in": []string{"ERC-721", "ERC-1155"}},
+		"$and": []bson.M{
+			{"$or": []bson.M{
+				{"metadataFetchedAt": bson.M{"$exists": false}},
+				{"metadataFetchedAt": ""},
+			}},
+			{"$or": []bson.M{
+				{"metadataFetchError": bson.M{"$exists": false}},
+				{"metadataFetchError": ""},
+			}},
+		},
+	}
+	opts := options.Find().SetLimit(int64(limit))
+
+	cur, err := configs.GetContractsCollection().Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+
+	var out []models.ContractInfo
+	if err := cur.All(ctx, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// standardRank orders TokenStandard values for promote-only merging.
+// Higher rank = stricter / more specific classification. Promotions go
+// up the ladder; demotions are silently dropped.
+func standardRank(s string) int {
+	switch s {
+	case "ERC-1155":
+		return 3
+	case "ERC-721":
+		return 2
+	case "ERC-20":
+		return 1
+	default:
+		return 0
+	}
 }
 
 // GetContract retrieves contract information from the database
@@ -236,29 +430,28 @@ func processContracts(tx *models.Transaction) (string, string, string, bool) {
 					zap.Error(err))
 			}
 
-			// Get token information
-			name, symbol, decimals, isToken := rpc.GetTokenInfo(contractAddress)
-
-			// Get total supply if it's a token
-			var totalSupply string
-			if isToken {
-				totalSupply, err = rpc.GetTokenTotalSupply(contractAddress)
-				if err != nil {
-					configs.Logger.Error("Failed to get token total supply",
-						zap.String("address", contractAddress),
-						zap.Error(err))
-				}
+			// Classify the contract (ERC-20 / ERC-721 / ERC-1155 / unknown).
+			// On transient probe failure the result is zero-valued; the
+			// StoreContract merge's promote-only invariant prevents that
+			// from clobbering a previously-good classification.
+			detection, detErr := rpc.DetectContractType(contractAddress)
+			if detErr != nil {
+				configs.Logger.Warn("Contract type detection failed; storing without classification",
+					zap.String("address", contractAddress),
+					zap.Error(detErr))
 			}
 
 			// Store complete contract information
 			contract := models.ContractInfo{
 				Address:             contractAddress,
 				Status:              statusTx,
-				IsToken:             isToken,
-				Name:                name,
-				Symbol:              symbol,
-				Decimals:            decimals,
-				TotalSupply:         totalSupply,
+				IsToken:             detection.Standard != "",
+				Name:                detection.Name,
+				Symbol:              detection.Symbol,
+				Decimals:            detection.Decimals,
+				TotalSupply:         detection.TotalSupply,
+				TokenStandard:       detection.Standard,
+				HasERC165:           detection.HasERC165,
 				ContractCode:        contractCode,
 				CreatorAddress:      tx.From,
 				CreationTransaction: tx.Hash,
@@ -314,18 +507,14 @@ func IsAddressContract(address string) bool {
 		configs.Logger.Info("Detected existing contract",
 			zap.String("address", address))
 
-		// Get token information
-		name, symbol, decimals, isToken := rpc.GetTokenInfo(address)
-
-		// Get total supply if it's a token
-		var totalSupply string
-		if isToken {
-			totalSupply, err = rpc.GetTokenTotalSupply(address)
-			if err != nil {
-				configs.Logger.Error("Failed to get token total supply",
-					zap.String("address", address),
-					zap.Error(err))
-			}
+		// Classify (ERC-20 / 721 / 1155 / unknown). Transient probe
+		// failures are logged but non-fatal, StoreContract preserves
+		// any previously-good classification through its merge.
+		detection, detErr := rpc.DetectContractType(address)
+		if detErr != nil {
+			configs.Logger.Warn("Contract type detection failed; storing without classification",
+				zap.String("address", address),
+				zap.Error(detErr))
 		}
 
 		// First try to get existing contract from both collections to preserve creation data
@@ -333,15 +522,17 @@ func IsAddressContract(address string) bool {
 
 		// Create base contract info
 		contract := models.ContractInfo{
-			Address:      address,
-			Status:       "0x1", // Assume successful
-			IsToken:      isToken,
-			Name:         name,
-			Symbol:       symbol,
-			Decimals:     decimals,
-			TotalSupply:  totalSupply,
-			ContractCode: code,
-			UpdatedAt:    time.Now().UTC().Format(time.RFC3339),
+			Address:       address,
+			Status:        "0x1", // Assume successful
+			IsToken:       detection.Standard != "",
+			Name:          detection.Name,
+			Symbol:        detection.Symbol,
+			Decimals:      detection.Decimals,
+			TotalSupply:   detection.TotalSupply,
+			TokenStandard: detection.Standard,
+			HasERC165:     detection.HasERC165,
+			ContractCode:  code,
+			UpdatedAt:     time.Now().UTC().Format(time.RFC3339),
 		}
 
 		// If we have existing contract data, preserve the creation information
@@ -398,7 +589,13 @@ func ReprocessIncompleteContracts() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Find contracts with missing information, including bare "Q" creator addresses
+	// Find contracts with missing information, including bare "Q" creator
+	// addresses. Phase 3a adds an NFT branch: collections classified before
+	// the contractURI probe shipped have an empty metadataURI, the
+	// fetcher's work-queue filter (metadataURI != "" AND fetchedAt == "")
+	// would never include them, so the hourly reprocess pass picks them
+	// up here and re-probes contractURI(). $or fans out across the same
+	// query, no extra round-trip.
 	filter := bson.M{
 		"$or": []bson.M{
 			{"contractCode": ""},
@@ -406,6 +603,13 @@ func ReprocessIncompleteContracts() error {
 			{"isToken": false, "name": "", "symbol": ""},
 			{"creatorAddress": "Q"},
 			{"creatorAddress": ""},
+			{
+				"tokenStandard": bson.M{"$in": []string{"ERC-721", "ERC-1155"}},
+				"$or": []bson.M{
+					{"metadataURI": bson.M{"$exists": false}},
+					{"metadataURI": ""},
+				},
+			},
 		},
 	}
 
@@ -441,24 +645,24 @@ func ReprocessIncompleteContracts() error {
 			}
 		}
 
-		// Get token information if missing
+		// Get token information if missing. ReprocessIncompleteContracts
+		// is the hourly self-heal pass, a fresh DetectContractType probe
+		// also picks up NFT contracts we previously couldn't classify
+		// (`tokenStandard` migration of legacy rows).
 		if !contract.IsToken && contract.Name == "" && contract.Symbol == "" {
-			name, symbol, decimals, isToken := rpc.GetTokenInfo(contract.Address)
-			if isToken {
-				contract.IsToken = isToken
-				contract.Name = name
-				contract.Symbol = symbol
-				contract.Decimals = decimals
-
-				// Get total supply for new tokens
-				totalSupply, err := rpc.GetTokenTotalSupply(contract.Address)
-				if err != nil {
-					configs.Logger.Error("Failed to get token total supply",
-						zap.String("address", contract.Address),
-						zap.Error(err))
-				} else {
-					contract.TotalSupply = totalSupply
-				}
+			detection, detErr := rpc.DetectContractType(contract.Address)
+			if detErr != nil {
+				configs.Logger.Debug("Contract type detection failed during reprocess; skipping",
+					zap.String("address", contract.Address),
+					zap.Error(detErr))
+			} else if detection.Standard != "" {
+				contract.IsToken = true
+				contract.Name = detection.Name
+				contract.Symbol = detection.Symbol
+				contract.Decimals = detection.Decimals
+				contract.TotalSupply = detection.TotalSupply
+				contract.TokenStandard = detection.Standard
+				contract.HasERC165 = detection.HasERC165
 			}
 		} else if contract.IsToken && contract.TotalSupply == "" {
 			// Get total supply for token with missing supply
@@ -469,6 +673,22 @@ func ReprocessIncompleteContracts() error {
 					zap.Error(err))
 			} else {
 				contract.TotalSupply = totalSupply
+			}
+		}
+
+		// Phase 3a backfill: NFT contracts that were classified before the
+		// metadataURI probe shipped have an empty MetadataURI. The fetcher
+		// service needs a populated URI to enqueue work, so the hourly
+		// reprocess pass also re-probes contractURI() for any NFT row
+		// missing it. Best-effort: a contract-revert (most collections
+		// don't implement contractURI) returns ("", nil) and we leave the
+		// field empty; transient failures don't demote existing state.
+		if (contract.TokenStandard == rpc.StandardERC721 || contract.TokenStandard == rpc.StandardERC1155) && contract.MetadataURI == "" {
+			if uri, err := rpc.GetContractURI(contract.Address); err == nil && uri != "" {
+				contract.MetadataURI = uri
+				configs.Logger.Info("Backfilled contractURI for NFT collection",
+					zap.String("address", contract.Address),
+					zap.String("metadataURI", uri))
 			}
 		}
 

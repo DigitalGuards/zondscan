@@ -6,7 +6,7 @@ package models
 // The verification fields at the bottom are written **only** by the backend
 // verify endpoint (see backendAPI/db/contract.go:MarkContractVerified). The
 // syncer (QRL2MongoDB) treats them as opaque pass-through state and must
-// never write into them — see QRL2MongoDB/db/contracts.go:StoreContract for
+// never write into them, see QRL2MongoDB/db/contracts.go:StoreContract for
 // the field-scoped $set that enforces this invariant.
 //
 // New verification fields MUST be mirrored in QRL2MongoDB/models/contract.go
@@ -26,6 +26,25 @@ type ContractInfo struct {
 	TotalSupply            string `json:"totalSupply" bson:"totalSupply"`
 	UpdatedAt              string `json:"updatedAt" bson:"updatedAt"`
 
+	// NFT / multi-token fields, mirror QRL2MongoDB/models/contract.go.
+	// Written exclusively by the syncer; held here only for round-trip
+	// preservation and to allow the /contracts endpoint to filter on
+	// `?standard=ERC-721`.
+	TokenStandard string `json:"tokenStandard,omitempty" bson:"tokenStandard,omitempty"`
+	HasERC165     bool   `json:"hasERC165,omitempty" bson:"hasERC165,omitempty"`
+	BaseURI       string `json:"baseURI,omitempty" bson:"baseURI,omitempty"`
+
+	// Collection-level off-chain metadata (Phase 3a). Mirrors
+	// QRL2MongoDB/models/contract.go. Written by the syncer's metadata
+	// fetcher service; the backend holds them for read-through to clients.
+	MetadataURI         string `json:"metadataURI,omitempty" bson:"metadataURI,omitempty"`
+	MetadataName        string `json:"metadataName,omitempty" bson:"metadataName,omitempty"`
+	MetadataDescription string `json:"metadataDescription,omitempty" bson:"metadataDescription,omitempty"`
+	MetadataImage       string `json:"metadataImage,omitempty" bson:"metadataImage,omitempty"`
+	MetadataExternalURL string `json:"metadataExternalURL,omitempty" bson:"metadataExternalURL,omitempty"`
+	MetadataFetchedAt   string `json:"metadataFetchedAt,omitempty" bson:"metadataFetchedAt,omitempty"`
+	MetadataFetchError  string `json:"metadataFetchError,omitempty" bson:"metadataFetchError,omitempty"`
+
 	// Source-verification fields. `verified` defaults to false (omitted from
 	// omitempty so it is always present in the JSON shape clients consume).
 	// Everything else uses omitempty so unverified contracts stay clean.
@@ -42,4 +61,19 @@ type ContractInfo struct {
 	License              string            `json:"license,omitempty" bson:"license,omitempty"`
 	VerificationMethod   string            `json:"verificationMethod,omitempty" bson:"verificationMethod,omitempty"`
 	VerifiedAt           string            `json:"verifiedAt,omitempty" bson:"verifiedAt,omitempty"`
+
+	// M6a AI explanation cache. Populated only when an authorised user has
+	// triggered POST /contract/explain/:address. The syncer must NOT write
+	// into these, kept off the syncer's allow-list in
+	// QRL2MongoDB/db/contracts.go:StoreContract.
+	AIExplanation      string `json:"aiExplanation,omitempty" bson:"aiExplanation,omitempty"`
+	AIExplanationAt    string `json:"aiExplanationAt,omitempty" bson:"aiExplanationAt,omitempty"`
+	AIExplanationModel string `json:"aiExplanationModel,omitempty" bson:"aiExplanationModel,omitempty"`
+
+	// Regen cap state. The rolling 7-day window starts when the first
+	// regen in a window fires, then resets after the window expires.
+	// AIExplanationRegenCount counts regens within the current window
+	// (initial generates don't count). See aiexplain.RegenLimitPerWindow.
+	AIExplanationRegenCount       int    `json:"aiExplanationRegenCount,omitempty" bson:"aiExplanationRegenCount,omitempty"`
+	AIExplanationRegenWindowStart string `json:"aiExplanationRegenWindowStart,omitempty" bson:"aiExplanationRegenWindowStart,omitempty"`
 }

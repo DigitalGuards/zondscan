@@ -37,7 +37,7 @@ process.stdin.on('end', () => {
     process.exit(2);
   }
 
-  // Resolve imports STRICTLY from the input.sources map — no filesystem,
+  // Resolve imports STRICTLY from the input.sources map, no filesystem,
   // no network. The Go caller is responsible for inlining every dependency
   // before invoking the runner; anything not present in `sources` is a
   // hard error.

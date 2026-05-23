@@ -1,13 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
+import ImageWithFallback from '../../components/ImageWithFallback';
 import Link from 'next/link';
 import CopyButton from "../../components/CopyButton";
 import QRCodeButton from "../../components/QRCodeButton";
 import ContractTabs from "../../components/ContractTabs";
 import VerifiedBadge from "../../components/VerifiedBadge";
 import type { ContractData } from "../../types/address";
-import { formatAmount } from "../../lib/helpers";
+import { compactTokenIDLabel, formatAmount } from "../../lib/helpers";
 import Breadcrumbs from "../../components/Breadcrumbs";
 
 interface TokenInfo {
@@ -29,6 +31,23 @@ interface TokenHolder {
     balance: string;
     blockNumber: string;
     updatedAt: string;
+    // Phase 2: per-id storage for NFT collections. Always absent for ERC-20.
+    tokenID?: string;
+    tokenStandard?: 'ERC-20' | 'ERC-721' | 'ERC-1155' | string;
+}
+
+interface TokenIDSummary {
+    tokenID: string;
+    holderCount: number;
+    tokenStandard?: string;
+    blockNumber?: string;
+    updatedAt?: string;
+    // Phase 3b: off-chain per-token metadata pulled from contractURI /
+    // tokenURI / uri(id). Absent on tokens whose metadata fetcher pass
+    // hasn't completed or whose contract doesn't implement the getter.
+    name?: string;
+    description?: string;
+    image?: string;
 }
 
 interface TokenTransfer {
@@ -128,7 +147,7 @@ const formatTimestamp = (timestamp: string): string => {
 };
 
 export default function TokenContractView({ address, contractData, handlerUrl }: TokenContractViewProps) {
-    const [activeTab, setActiveTab] = useState<'overview' | 'holders' | 'transfers'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'holders' | 'transfers' | 'tokens'>('overview');
     const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null);
     const [holders, setHolders] = useState<TokenHolder[]>([]);
     const [transfers, setTransfers] = useState<TokenTransfer[]>([]);
@@ -138,6 +157,13 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
     const [transfersPage, setTransfersPage] = useState(0);
     const [loading, setLoading] = useState(true);
     const [creationTx, setCreationTx] = useState<CreationTxData | null>(null);
+    // Phase 2: NFT-specific state. holderTokenIDFilter narrows /holders to
+    // a single tokenID; tokensList drives the new "Tokens" tab listing.
+    const [holderTokenIDFilter, setHolderTokenIDFilter] = useState<string>('');
+    const [holderTokenIDInput, setHolderTokenIDInput] = useState<string>('');
+    const [tokensList, setTokensList] = useState<TokenIDSummary[]>([]);
+    const [tokensTotal, setTokensTotal] = useState(0);
+    const [tokensPage, setTokensPage] = useState(0);
     const limit = 25;
 
     // Fetch token info
@@ -177,14 +203,20 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
         fetchCreationTx();
     }, [tokenInfo?.creationTxHash, contractData.creationTransaction, handlerUrl]);
 
-    // Fetch holders when tab is active
+    // Fetch holders when tab is active. Phase 2: append ?tokenID= when the
+    // filter is set so the backend returns rows for that specific id only.
     useEffect(() => {
         if (activeTab !== 'holders') return;
 
         const fetchHolders = async () => {
             setLoading(true);
             try {
-                const res = await fetch(`${handlerUrl}/token/${address}/holders?page=${holdersPage}&limit=${limit}`);
+                const qs = new URLSearchParams({
+                    page: String(holdersPage),
+                    limit: String(limit),
+                });
+                if (holderTokenIDFilter) qs.set('tokenID', holderTokenIDFilter);
+                const res = await fetch(`${handlerUrl}/token/${address}/holders?${qs.toString()}`);
                 if (res.ok) {
                     const data = await res.json();
                     setHolders(data.holders || []);
@@ -196,7 +228,28 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
             setLoading(false);
         };
         fetchHolders();
-    }, [address, handlerUrl, activeTab, holdersPage]);
+    }, [address, handlerUrl, activeTab, holdersPage, holderTokenIDFilter]);
+
+    // Fetch tokens (distinct tokenID list) when the tokens tab is active.
+    useEffect(() => {
+        if (activeTab !== 'tokens') return;
+
+        const fetchTokens = async () => {
+            setLoading(true);
+            try {
+                const res = await fetch(`${handlerUrl}/token/${address}/tokens?page=${tokensPage}&limit=${limit}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setTokensList(data.tokens || []);
+                    setTokensTotal(data.totalTokenIDs || 0);
+                }
+            } catch (error) {
+                console.error('Failed to fetch tokens:', error);
+            }
+            setLoading(false);
+        };
+        fetchTokens();
+    }, [address, handlerUrl, activeTab, tokensPage]);
 
     // Fetch transfers when tab is active
     useEffect(() => {
@@ -220,22 +273,66 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
     }, [address, handlerUrl, activeTab, transfersPage]);
 
     const decimals = tokenInfo?.decimals ?? contractData.decimals ?? 18;
-    const symbol = tokenInfo?.symbol ?? contractData.symbol ?? 'TOKEN';
-    const name = tokenInfo?.name ?? contractData.name ?? 'Unknown Token';
+    const rawSymbol = tokenInfo?.symbol ?? contractData.symbol ?? '';
+    const rawName = tokenInfo?.name ?? contractData.name ?? '';
+    // Phase 3a: prefer the off-chain metadata-name over the on-chain
+    // name() because most NFT collections leave name() empty and put the
+    // human-readable title in the contractURI JSON instead. The on-chain
+    // symbol still wins for the badge (collection JSONs don't carry one).
+    const metaName = contractData.metadataName?.trim() || '';
+    const metaImage = contractData.metadataImage?.trim() || '';
+    const metaDescription = contractData.metadataDescription?.trim() || '';
+    const metaExternalURL = contractData.metadataExternalURL?.trim() || '';
+    // ERC-1155 collections often omit name()/symbol(), so fall back to a
+    // truncated address rather than rendering "Unknown Token" / "TOKEN".
+    const addrShort = `${address.slice(0, 10)}...${address.slice(-6)}`;
+    const symbol = rawSymbol || addrShort;
+    const name = metaName || rawName || addrShort;
     const totalSupply = tokenInfo?.totalSupply ?? contractData.totalSupply ?? '0';
     const creatorAddress = creationTx?.From || tokenInfo?.creatorAddress || contractData.creatorAddress || '';
     const creationTxHash = tokenInfo?.creationTxHash || contractData.creationTransaction || '';
+    const tokenStandard = contractData.tokenStandard;
+    const isNFT = tokenStandard === 'ERC-721' || tokenStandard === 'ERC-1155';
+    const badgeLabel =
+        tokenStandard === 'ERC-721'
+            ? 'QRC-721 NFT'
+            : tokenStandard === 'ERC-1155'
+              ? 'QRC-1155 Multi-Token'
+              : 'QRC-20 Token';
+    const badgeClasses = isNFT
+        ? 'bg-purple-500/20 text-purple-300'
+        : 'bg-green-500/20 text-green-400';
 
-    const tabs = [
+    const tabs: { id: typeof activeTab; label: string }[] = [
         { id: 'overview', label: 'Overview' },
         { id: 'holders', label: `Holders${tokenInfo ? ` (${tokenInfo.holderCount})` : ''}` },
         { id: 'transfers', label: `Transfers${tokenInfo ? ` (${tokenInfo.transferCount})` : ''}` },
     ];
+    // Phase 2: only NFT collections have a meaningful per-id list.
+    if (isNFT) {
+        tabs.push({ id: 'tokens', label: 'Tokens' });
+    }
+
+    // Three-step breadcrumb: Home > Contracts > <standard tab> > <this contract>.
+    // The middle step deep-links back to the /contracts page with the
+    // correct tab pre-selected so a back-step lands the user where they
+    // came from.
+    const tabHref =
+        tokenStandard === 'ERC-721'  ? '/contracts?tab=erc721'
+      : tokenStandard === 'ERC-1155' ? '/contracts?tab=erc1155'
+      : tokenStandard === 'ERC-20'   ? '/contracts?tab=erc20'
+      :                                '/contracts';
+    const tabLabel =
+        tokenStandard === 'ERC-721'  ? 'NFTs'
+      : tokenStandard === 'ERC-1155' ? 'Multi-Token'
+      : tokenStandard === 'ERC-20'   ? 'Tokens'
+      :                                'All';
 
     return (
-        <div className="py-3 md:py-6 lg:py-8 px-3 md:px-6 lg:px-8 max-w-[1200px] mx-auto">
+        <div className="detail-content">
             <Breadcrumbs items={[
                 { label: 'Contracts', href: '/contracts' },
+                { label: tabLabel, href: tabHref },
                 { label: `${symbol || address.slice(0, 10) + '...' + address.slice(-6)}` },
             ]} />
             {/* Token Header Card */}
@@ -244,17 +341,56 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                     {/* Token Identity */}
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-gray-700">
                         <div className="flex items-center gap-4">
-                            {/* Token Icon */}
-                            <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-gradient-to-br from-[#ffa729] to-[#ff6b00] flex items-center justify-center text-xl md:text-2xl font-bold text-white">
-                                {symbol.charAt(0)}
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <h1 className="text-xl md:text-2xl font-bold text-white">{name}</h1>
-                                    <span className="px-2 py-0.5 rounded bg-[#ffa729]/20 text-[#ffa729] text-sm font-medium">
-                                        {symbol}
-                                    </span>
+                            {/* Token Icon. Phase 3a: render the off-chain
+                                metadata image when present, fall back to the
+                                first-character monogram. Fixed 64px square so
+                                the layout doesn't shift while the next/image
+                                loader resolves. */}
+                            {metaImage ? (
+                                <div className="relative w-12 h-12 md:w-16 md:h-16 rounded-full overflow-hidden border border-gray-700 bg-black/30">
+                                    <ImageWithFallback
+                                        src={metaImage}
+                                        alt={name}
+                                        fill
+                                        sizes="64px"
+                                        className="object-cover"
+                                        fallback={
+                                            <div className="absolute inset-0 bg-gradient-to-br from-[#ffa729] to-[#ff6b00] flex items-center justify-center text-xl md:text-2xl font-bold text-white">
+                                                {symbol.charAt(0)}
+                                            </div>
+                                        }
+                                    />
                                 </div>
+                            ) : (
+                                <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-gradient-to-br from-[#ffa729] to-[#ff6b00] flex items-center justify-center text-xl md:text-2xl font-bold text-white">
+                                    {symbol.charAt(0)}
+                                </div>
+                            )}
+                            <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <h1 className="text-xl md:text-2xl font-bold text-white">{name}</h1>
+                                    {rawSymbol && (
+                                        <span className="px-2 py-0.5 rounded bg-[#ffa729]/20 text-[#ffa729] text-sm font-medium">
+                                            {rawSymbol}
+                                        </span>
+                                    )}
+                                    {metaExternalURL && (
+                                        <a
+                                            href={metaExternalURL}
+                                            target="_blank"
+                                            rel="noreferrer noopener nofollow"
+                                            className="text-xs text-gray-400 hover:text-accent underline"
+                                            title="External URL from contract metadata"
+                                        >
+                                            site ↗
+                                        </a>
+                                    )}
+                                </div>
+                                {metaDescription && (
+                                    <p className="text-xs md:text-sm text-gray-300 mt-1 line-clamp-2 max-w-prose">
+                                        {metaDescription}
+                                    </p>
+                                )}
                                 <div className="flex items-center gap-2 mt-1">
                                     <span className="text-xs md:text-sm text-gray-400 font-mono">{address}</span>
                                     <CopyButton value={address} label="Copy address" />
@@ -262,17 +398,28 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                 </div>
                             </div>
                         </div>
-                        <div className="px-3 py-1.5 rounded-lg bg-green-500/20 text-green-400 text-sm font-medium self-start">
-                            QRC-20 Token
+                        <div className={`px-3 py-1.5 rounded-lg text-sm font-medium self-start ${badgeClasses}`}>
+                            {badgeLabel}
                         </div>
                     </div>
 
-                    {/* Token Stats Grid */}
+                    {/* Token Stats Grid. Decimals hidden for NFT collections (no
+                        fractional units); for ERC-1155 totalSupply is the
+                        operator's reported aggregate and may not be meaningful
+                        per-id (Phase 2 will surface per-id supply on the holders
+                        endpoint). */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div className="bg-black/20 rounded-lg p-3 md:p-4">
-                            <div className="text-xs md:text-sm text-gray-400 mb-1">Total Supply</div>
-                            <div className="text-sm md:text-base font-semibold text-white truncate" title={formatTokenAmount(totalSupply, decimals)}>
-                                {formatTokenAmount(totalSupply, decimals)} {symbol}
+                            <div className="text-xs md:text-sm text-gray-400 mb-1">
+                                {tokenStandard === 'ERC-721' ? 'Total Items' : 'Total Supply'}
+                            </div>
+                            <div
+                                className="text-sm md:text-base font-semibold text-white truncate"
+                                title={isNFT ? totalSupply : formatTokenAmount(totalSupply, decimals)}
+                            >
+                                {isNFT
+                                    ? (totalSupply !== '0' ? `${totalSupply}${rawSymbol ? ' ' + rawSymbol : ''}` : '-')
+                                    : `${formatTokenAmount(totalSupply, decimals)}${rawSymbol ? ' ' + rawSymbol : ''}`}
                             </div>
                         </div>
                         <div className="bg-black/20 rounded-lg p-3 md:p-4">
@@ -288,9 +435,11 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                             </div>
                         </div>
                         <div className="bg-black/20 rounded-lg p-3 md:p-4">
-                            <div className="text-xs md:text-sm text-gray-400 mb-1">Decimals</div>
+                            <div className="text-xs md:text-sm text-gray-400 mb-1">
+                                {isNFT ? 'Standard' : 'Decimals'}
+                            </div>
                             <div className="text-sm md:text-base font-semibold text-white">
-                                {decimals}
+                                {isNFT ? (tokenStandard?.replace(/^ERC-/, 'QRC-') ?? '-') : decimals}
                             </div>
                         </div>
                     </div>
@@ -348,7 +497,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                         </div>
 
                         {/* Contract Code (verified source / ABI / bytecode) + Read / Write tabs.
-                            Replaces the standalone bytecode block on token pages too — same
+                            Replaces the standalone bytecode block on token pages too, same
                             behaviour as the address page, just nested inside the Overview tab. */}
                         {contractData.contractCode && (
                             <div>
@@ -360,7 +509,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                     // Forward the whole contractData and only override
                                     // the few required-string fields that ContractData
                                     // wants non-optional. Avoids hand-listing every
-                                    // optional verification field — adding a new field
+                                    // optional verification field, adding a new field
                                     // to ContractData just flows through.
                                     contractData={{
                                         ...contractData,
@@ -473,6 +622,58 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                 {/* Holders Tab */}
                 {activeTab === 'holders' && (
                     <div>
+                        {/* Phase 2: per-tokenID filter for NFT collections. The input
+                            debounces locally and only sets the actual filter on submit,
+                            so each keystroke doesn't trigger a network request. */}
+                        {isNFT && (
+                            <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-gray-700 bg-black/20">
+                                <label htmlFor="tokenIDFilter" className="text-xs text-gray-400">
+                                    Filter by tokenID:
+                                </label>
+                                <input
+                                    id="tokenIDFilter"
+                                    type="text"
+                                    inputMode="numeric"
+                                    placeholder="e.g. 1"
+                                    value={holderTokenIDInput}
+                                    onChange={(e) => setHolderTokenIDInput(e.target.value.replace(/[^0-9]/g, ''))}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            setHoldersPage(0);
+                                            setHolderTokenIDFilter(holderTokenIDInput.trim());
+                                        }
+                                    }}
+                                    className="px-2 py-1 rounded bg-black/40 border border-gray-700 text-sm text-white font-mono w-32"
+                                />
+                                <button
+                                    onClick={() => {
+                                        setHoldersPage(0);
+                                        setHolderTokenIDFilter(holderTokenIDInput.trim());
+                                    }}
+                                    className="px-3 py-1 rounded bg-[#ffa729]/20 text-[#ffa729] text-sm hover:bg-[#ffa729]/30"
+                                >
+                                    Apply
+                                </button>
+                                {holderTokenIDFilter && (
+                                    <button
+                                        onClick={() => {
+                                            setHolderTokenIDInput('');
+                                            setHolderTokenIDFilter('');
+                                            setHoldersPage(0);
+                                        }}
+                                        className="px-3 py-1 rounded bg-gray-700 text-sm hover:bg-gray-600"
+                                    >
+                                        Clear
+                                    </button>
+                                )}
+                                {holderTokenIDFilter && (
+                                    <span className="text-xs text-gray-400">
+                                        Showing holders of tokenID <span className="font-mono text-white">{holderTokenIDFilter}</span>
+                                    </span>
+                                )}
+                            </div>
+                        )}
+
                         {loading ? (
                             <div className="p-8 text-center text-gray-400">Loading holders...</div>
                         ) : holders.length === 0 ? (
@@ -485,32 +686,70 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                             <tr>
                                                 <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">#</th>
                                                 <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Address</th>
+                                                {isNFT && holderTokenIDFilter === '' && (
+                                                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase hidden md:table-cell">
+                                                        {tokenStandard === 'ERC-721' ? 'NFTs owned' : 'Total quantity'}
+                                                    </th>
+                                                )}
+                                                {isNFT && holderTokenIDFilter !== '' && (
+                                                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Token ID</th>
+                                                )}
                                                 <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Balance</th>
-                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase hidden md:table-cell">Share</th>
+                                                {!isNFT && (
+                                                    <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase hidden md:table-cell">Share</th>
+                                                )}
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-700/50">
                                             {holders.map((holder, idx) => {
                                                 const totalSupplyBigInt = totalSupply ? BigInt(totalSupply) : BigInt(0);
-                                                const share = totalSupplyBigInt > BigInt(0) && holder.balance
-                                                    ? ((BigInt(holder.balance) * BigInt(10000)) / totalSupplyBigInt)
-                                                    : BigInt(0);
-                                                const sharePercent = Number(share) / 100;
+                                                let sharePercent = 0;
+                                                try {
+                                                    const share = totalSupplyBigInt > BigInt(0) && holder.balance
+                                                        ? ((BigInt(holder.balance) * BigInt(10000)) / totalSupplyBigInt)
+                                                        : BigInt(0);
+                                                    sharePercent = Number(share) / 100;
+                                                } catch {
+                                                    sharePercent = 0;
+                                                }
+
+                                                const rowKey = holder.tokenID
+                                                    ? `${holder.holderAddress}-${holder.tokenID}`
+                                                    : holder.holderAddress;
+
+                                                // ERC-721 balance column is the per-id "1"; show
+                                                // a count instead in the aggregated view (which is
+                                                // the sum coming from the backend).
+                                                const balanceCell = isNFT
+                                                    ? holder.balance
+                                                    : `${formatTokenAmount(holder.balance, decimals)}${rawSymbol ? ' ' + rawSymbol : ''}`;
 
                                                 return (
-                                                    <tr key={holder.holderAddress} className="hover:bg-white/5">
+                                                    <tr key={rowKey} className="hover:bg-white/5">
                                                         <td className="px-4 py-3 text-sm text-gray-400">
                                                             {holdersPage * limit + idx + 1}
                                                         </td>
                                                         <td className="px-4 py-3">
                                                             <AddressDisplay address={holder.holderAddress} truncate />
                                                         </td>
+                                                        {isNFT && holderTokenIDFilter === '' && (
+                                                            <td className="px-4 py-3 text-left text-sm text-gray-300 font-mono hidden md:table-cell">
+                                                                {holder.balance}
+                                                            </td>
+                                                        )}
+                                                        {isNFT && holderTokenIDFilter !== '' && (
+                                                            <td className="px-4 py-3 text-left text-sm text-white font-mono">
+                                                                #{holder.tokenID ?? holderTokenIDFilter}
+                                                            </td>
+                                                        )}
                                                         <td className="px-4 py-3 text-right text-sm text-white font-mono">
-                                                            {formatTokenAmount(holder.balance, decimals)} {symbol}
+                                                            {balanceCell}
                                                         </td>
-                                                        <td className="px-4 py-3 text-right text-sm text-gray-400 hidden md:table-cell">
-                                                            {sharePercent.toFixed(2)}%
-                                                        </td>
+                                                        {!isNFT && (
+                                                            <td className="px-4 py-3 text-right text-sm text-gray-400 hidden md:table-cell">
+                                                                {sharePercent.toFixed(2)}%
+                                                            </td>
+                                                        )}
                                                     </tr>
                                                 );
                                             })}
@@ -537,6 +776,117 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                 aria-label="Go to next page"
                                                 onClick={() => setHoldersPage(p => p + 1)}
                                                 disabled={(holdersPage + 1) * limit >= holdersTotal}
+                                                className="px-3 py-1 rounded bg-gray-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600"
+                                            >
+                                                Next
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                )}
+
+                {/* Tokens Tab. Phase 2: lists every distinct tokenID minted
+                    on this NFT contract, with the holder count for each id.
+                    Clicking a row jumps to the holders tab filtered to that id. */}
+                {activeTab === 'tokens' && (
+                    <div>
+                        {loading ? (
+                            <div className="p-8 text-center text-gray-400">Loading tokens...</div>
+                        ) : tokensList.length === 0 ? (
+                            <div className="p-8 text-center text-gray-400">No tokens have been minted yet</div>
+                        ) : (
+                            <>
+                                <div className="overflow-x-auto">
+                                    <table aria-label="Token IDs" className="w-full">
+                                        <thead className="bg-black/30">
+                                            <tr>
+                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase w-16"></th>
+                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Token</th>
+                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Holders</th>
+                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase hidden md:table-cell">Standard</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-700/50">
+                                            {tokensList.map((t) => {
+                                                // Phase 3b: render the off-chain image if the fetcher has
+                                                // populated it; fall back to a #N monogram tile. The "Token"
+                                                // column shows the metadata name when present, otherwise
+                                                // just "#<id>" — keeps unfetched / no-metadata cases clean.
+                                                const tokenLabel = t.name?.trim() || `#${t.tokenID}`;
+                                                const subLabel = t.name?.trim() ? `#${t.tokenID}` : null;
+                                                return (
+                                                    <tr
+                                                        key={t.tokenID}
+                                                        className="hover:bg-white/5 cursor-pointer"
+                                                        onClick={() => {
+                                                            setHolderTokenIDInput(t.tokenID);
+                                                            setHolderTokenIDFilter(t.tokenID);
+                                                            setHoldersPage(0);
+                                                            setActiveTab('holders');
+                                                        }}
+                                                    >
+                                                        <td className="px-4 py-3">
+                                                            {t.image ? (
+                                                                <div className="relative w-10 h-10 rounded-md overflow-hidden border border-gray-700/60 bg-black/30">
+                                                                    <ImageWithFallback
+                                                                        src={t.image}
+                                                                        alt={tokenLabel}
+                                                                        fill
+                                                                        sizes="40px"
+                                                                        className="object-cover"
+                                                                        fallback={
+                                                                            <div className="absolute inset-0 bg-gradient-to-br from-[#3a3a3a] to-[#1f1f1f] flex items-center justify-center text-xs font-mono text-gray-300">
+                                                                                {compactTokenIDLabel(t.tokenID)}
+                                                                            </div>
+                                                                        }
+                                                                    />
+                                                                </div>
+                                                            ) : (
+                                                                <div
+                                                                    className="w-10 h-10 rounded-md bg-gradient-to-br from-[#3a3a3a] to-[#1f1f1f] flex items-center justify-center text-xs font-mono text-gray-300"
+                                                                    title={`#${t.tokenID}`}
+                                                                >
+                                                                    #{compactTokenIDLabel(t.tokenID)}
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm">
+                                                            <div className="text-white">{tokenLabel}</div>
+                                                            {subLabel && <div className="text-xs text-gray-500 font-mono">{subLabel}</div>}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right text-sm text-white">{t.holderCount}</td>
+                                                        <td className="px-4 py-3 text-right text-xs text-gray-400 hidden md:table-cell">
+                                                            {t.tokenStandard ? t.tokenStandard.replace(/^ERC-/, 'QRC-') : '-'}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {/* Pagination */}
+                                {tokensTotal > limit && (
+                                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-700">
+                                        <div className="text-sm text-gray-400">
+                                            Showing {tokensPage * limit + 1} - {Math.min((tokensPage + 1) * limit, tokensTotal)} of {tokensTotal}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button
+                                                aria-label="Go to previous page"
+                                                onClick={() => setTokensPage(p => Math.max(0, p - 1))}
+                                                disabled={tokensPage === 0}
+                                                className="px-3 py-1 rounded bg-gray-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600"
+                                            >
+                                                Previous
+                                            </button>
+                                            <button
+                                                aria-label="Go to next page"
+                                                onClick={() => setTokensPage(p => p + 1)}
+                                                disabled={(tokensPage + 1) * limit >= tokensTotal}
                                                 className="px-3 py-1 rounded bg-gray-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600"
                                             >
                                                 Next
@@ -587,7 +937,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                         <AddressDisplay address={transfer.to} truncate />
                                                     </td>
                                                     <td className="px-4 py-3 text-right text-sm text-white font-mono">
-                                                        {formatTokenAmount(transfer.amount, transfer.tokenDecimals || decimals)} {symbol}
+                                                        {formatTokenAmount(transfer.amount, transfer.tokenDecimals || decimals)}{rawSymbol ? ' ' + rawSymbol : ''}
                                                     </td>
                                                     <td className="px-4 py-3 text-right text-xs text-gray-400 hidden md:table-cell">
                                                         {formatTimestamp(transfer.timestamp)}

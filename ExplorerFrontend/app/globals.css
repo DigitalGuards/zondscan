@@ -100,6 +100,36 @@
            placeholder-gray-500 outline-hidden transition-colors;
 }
 
+/* Tailwind v4 doesn't ship @tailwindcss/forms, so add explicit utilities for
+   the form controls used by the verify / read / write flows. Without these,
+   the bare `<input>` and `<textarea>` elements render with no background,
+   no border, and the parent card bleeds through them, the boxes look
+   "edgeless" and hard to target.
+   Styling mirrors the dapp-example page on zondscan.com/dapp-example so the
+   verify / read / write surfaces feel consistent with the wallet-pairing
+   demo: dark page-bg fill (one tier darker than the surrounding card) with
+   a visible outline. We use `border-border` (#3d3d3d) to match the card's
+   own outer border, `border-background-secondary` would dissolve into
+   `card-simple`'s solid #2d2d2d background. */
+@utility form-input {
+  @apply block w-full bg-background text-gray-200
+           border border-border rounded-md
+           px-3 py-2.5 text-sm
+           focus:outline-none focus:border-accent
+           placeholder-gray-500 transition-colors;
+}
+
+/* Native checkboxes can't be styled with text-color / bg-color directly
+   without `appearance: none`. CSS `accent-color` is the right knob ,
+   browsers paint the box fill and the check mark with this token. We
+   keep the border for the unchecked state. */
+@utility form-checkbox {
+  @apply h-4 w-4 rounded border border-border bg-background
+           accent-accent
+           focus:outline-none focus:border-accent
+           transition-colors;
+}
+
 @utility table-header {
   /* Table styles */
   @apply px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm
@@ -125,7 +155,22 @@
 }
 
 @utility page-content {
-  @apply max-w-[1200px] mx-auto px-4;
+  /* Shared by every <route>/layout.tsx wrapper. Bumped from 1200 → 1536
+     so detail pages can use the full breadth of widescreen monitors and
+     list/index pages get a consistent gutter. Inner views may further
+     constrain with `detail-content` (same cap) for uniform pillarboxing. */
+  @apply max-w-screen-2xl mx-auto px-4;
+}
+
+/* Vertical spacing for tx / address / contract detail content. Width
+   and horizontal centring come from `page-content` (every
+   <route>/layout.tsx already wraps in it), adding max-width / mx-auto
+   here would be redundant, and horizontal padding would stack on top
+   of page-content's px-4 and produce a wider gutter on detail pages
+   than on index pages (breadcrumb misalignment when navigating). Just
+   the per-breakpoint vertical rhythm lives here. */
+@utility detail-content {
+  @apply py-3 md:py-6 lg:py-8;
 }
 
 @utility section-title {
@@ -187,6 +232,19 @@
   :root {
     color-scheme: dark;
   }
+}
+
+/* Accessibility: visible keyboard-focus indicators across all interactive
+   elements inside .detail-content. Without this, the dark theme's hover-only
+   color shift was invisible to keyboard users tabbing through the page.
+   We use :focus-visible (not :focus) so mouse clicks don't trigger the ring,
+   only true keyboard traversal does. The 2 px outline + offset keeps the
+   ring legible against the dark gradient backgrounds the panels use. */
+.detail-content a:focus-visible,
+.detail-content button:focus-visible {
+  outline: 2px solid #ffa729;
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 /* Custom Scrollbar Styles */

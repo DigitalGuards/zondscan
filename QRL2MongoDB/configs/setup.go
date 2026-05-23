@@ -144,6 +144,11 @@ func ConnectDB() *mongo.Client {
 	ensureCollection(db, "totalCirculatingSupply", circulatingValidator)
 
 	// Token Balances
+	//
+	// Phase 2 adds optional `tokenID` (decimal uint256) and `tokenStandard`
+	// (ERC-20/721/1155) so the same collection stores per-tokenID NFT
+	// ownership rows alongside the legacy ERC-20 ones. Both are omitted on
+	// ERC-20 rows so the validator keeps them optional.
 	tokenBalanceValidator := bson.M{
 		"$jsonSchema": bson.M{
 			"bsonType": "object",
@@ -168,6 +173,14 @@ func ConnectDB() *mongo.Client {
 				"updatedAt": bson.M{
 					"bsonType":    "string",
 					"description": "must be a string and is required",
+				},
+				"tokenID": bson.M{
+					"bsonType":    "string",
+					"description": "decimal uint256 token id, optional (NFTs only)",
+				},
+				"tokenStandard": bson.M{
+					"bsonType":    "string",
+					"description": "ERC-20 | ERC-721 | ERC-1155, optional",
 				},
 			},
 		},
@@ -232,25 +245,15 @@ func initializeCollections(db *mongo.Database) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// Initialize token balances collection with compound index
-	tokenBalancesCollection := db.Collection("tokenBalances")
-	_, err := tokenBalancesCollection.Indexes().CreateOne(
-		ctx,
-		mongo.IndexModel{
-			Keys: bson.D{
-				{Key: "contractAddress", Value: 1},
-				{Key: "holderAddress", Value: 1},
-			},
-			Options: options.Index().SetUnique(true),
-		},
-	)
-	if err != nil {
-		Logger.Error("Failed to create index for token balances collection", zap.Error(err))
-	}
+	// tokenBalances indexes are owned by db.InitializeTokenBalancesCollection
+	// (called from synchroniser/token_sync.go at syncer startup). Keeping the
+	// owner in one place lets the Phase 2 migration drop the legacy 2-tuple
+	// unique and replace it with the 3-tuple `(contract, holder, tokenID)`
+	// without a second creator racing it on each restart.
 
 	// Initialize pending token contracts collection with compound index
 	pendingTokenContractsCollection := db.Collection("pending_token_contracts")
-	_, err = pendingTokenContractsCollection.Indexes().CreateOne(
+	_, err := pendingTokenContractsCollection.Indexes().CreateOne(
 		ctx,
 		mongo.IndexModel{
 			Keys: bson.D{
@@ -394,7 +397,7 @@ func initializeCollections(db *mongo.Database) {
 		},
 	)
 	if err != nil {
-		Logger.Warn("Could not create unique index on addresses.id (duplicates may exist — run dedup)", zap.Error(err))
+		Logger.Warn("Could not create unique index on addresses.id (duplicates may exist, run dedup)", zap.Error(err))
 	} else {
 		Logger.Info("Addresses collection initialized with unique id index")
 	}

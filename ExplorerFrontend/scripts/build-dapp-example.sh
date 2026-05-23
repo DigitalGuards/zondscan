@@ -8,7 +8,7 @@ set -euo pipefail
 # Set SKIP_DAPP_EXAMPLE=1 to bypass entirely (useful for fast local builds).
 
 if [[ "${SKIP_DAPP_EXAMPLE:-0}" == "1" ]]; then
-  echo "[dapp-example] SKIP_DAPP_EXAMPLE=1 — skipping build"
+  echo "[dapp-example] SKIP_DAPP_EXAMPLE=1, skipping build"
   exit 0
 fi
 
@@ -38,7 +38,14 @@ else
   else
     # FETCH_HEAD works for both branches and tags; origin/$REF would not resolve for tags.
     git -C "$CACHE_DIR" fetch --depth 1 origin "$REF"
-    git -C "$CACHE_DIR" checkout --detach FETCH_HEAD
+    # `reset --hard` instead of `checkout --detach`: the prior run's
+    # `npm install` inside CACHE_DIR + CACHE_DIR/example bumps the
+    # tracked package-lock.json files, which would make a plain
+    # checkout abort ("local changes would be overwritten"). reset
+    # discards those tracked-file mods and moves HEAD in one step;
+    # untracked files (node_modules/) are preserved so we keep the
+    # install cache between runs.
+    git -C "$CACHE_DIR" reset --hard FETCH_HEAD
   fi
 fi
 

@@ -8,12 +8,16 @@ export const metadata: Metadata = {
   title: 'Balance Checker | QRL Zond Explorer',
   description:
     'Check wallet balances on the Quantum Resistant Ledger network with our intuitive balance checker tool. Verify holdings quickly and accurately.',
+  alternates: {
+    ...sharedMetadata.alternates,
+    canonical: 'https://zondscan.com/checker',
+  },
   openGraph: {
     ...sharedMetadata.openGraph,
     title: 'Balance Checker | QRL Zond Explorer',
     description:
       'Check wallet balances on the Quantum Resistant Ledger network with our intuitive balance checker tool. Verify holdings quickly and accurately.',
-    url: 'https://zondscan.com/balance-checker',
+    url: 'https://zondscan.com/checker',
   },
   twitter: {
     ...sharedMetadata.twitter,
@@ -25,5 +29,10 @@ export const metadata: Metadata = {
 
 
 export default function BalanceChecker(): JSX.Element {
-  return <CheckerClient />;
+  return (
+    <main aria-labelledby="checker-heading">
+      <h1 id="checker-heading" className="sr-only">QRL Balance Checker</h1>
+      <CheckerClient />
+    </main>
+  );
 }

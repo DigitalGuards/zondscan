@@ -110,20 +110,28 @@ const endpointGroups: EndpointGroup[] = [
         method: 'GET',
         path: '/address/aggregate/:address',
         description: 'Returns comprehensive data for an address: balance, transaction count, rank, all transactions, internal transactions, contract code, and latest block number.',
-        example: '/address/aggregate/0xabc123...',
+        example: '/address/aggregate/Q6153d37fa4da7193e6219dcbd2bbe62fa12905b1',
       },
       {
         method: 'GET',
         path: '/address/:address/transactions',
         description: 'Returns paginated non-zero transactions for an address.',
         params: 'page (query, default: 1), limit (query, default: 5, max: 100)',
-        example: '/address/0xabc123.../transactions?page=1&limit=10',
+        example: '/address/Q6153d37fa4da7193e6219dcbd2bbe62fa12905b1/transactions?page=1&limit=10',
       },
       {
         method: 'GET',
         path: '/address/:address/tokens',
-        description: 'Returns all token balances held by an address. Useful for wallet integration and token auto-discovery.',
-        example: '/address/0xabc123.../tokens',
+        description: 'Returns all token balances held by an address. Useful for wallet integration and token auto-discovery. Phase 2: NFT holdings expand to one row per (collection, tokenID), each row carries `tokenStandard` and (for NFTs) `tokenID`. ERC-20 rows continue to return one row per collection with the existing balance string. Phase 3b adds an optional `?standard=` filter: pass `ERC-20` to scope to fungibles (wallets should do this when populating an ERC-20-aware Tokens card so NFT rows do not get treated as zero-balance fungibles).',
+        params: 'standard (query, optional, ERC-20|ERC-721|ERC-1155, invalid value → 400)',
+        example: '/address/Q6153d37fa4da7193e6219dcbd2bbe62fa12905b1/tokens?standard=ERC-20',
+      },
+      {
+        method: 'GET',
+        path: '/address/:address/nfts',
+        description: 'Phase 3b: per-(contract, tokenID) NFT holdings for an address, joined with both the collection-level contractCode row (collectionName, collectionSymbol) and the per-tokenID tokenMetadata row (name, image, description, attributes). Designed for the wallet\'s "Add NFT" picker so a single response is enough to render thumbnails + names without follow-up roundtrips. Optional `?standard=ERC-721|ERC-1155` to scope further; default returns both NFT standards. ERC-20 is rejected with 400, use /address/:addr/tokens?standard=ERC-20 for that.',
+        params: 'standard (query, optional, ERC-721|ERC-1155, invalid value → 400)',
+        example: '/address/Q6153d37fa4da7193e6219dcbd2bbe62fa12905b1/nfts',
       },
       {
         method: 'POST',
@@ -201,29 +209,85 @@ const endpointGroups: EndpointGroup[] = [
       {
         method: 'GET',
         path: '/contracts',
-        description: 'Returns a paginated list of smart contracts. Supports search and token filtering.',
-        params: 'page (query, default: 0), limit (query, default: 10, max: 100), search (query), isToken (query, true/false)',
-        example: '/contracts?page=0&limit=10&isToken=true',
+        description: 'Returns a paginated list of smart contracts. Supports search, token/standard filtering, and substring match on name, symbol, or off-chain metadataName. The `standard` filter (Phase 1 NFT support) returns only contracts classified as the given EIP standard; `isToken=true` is the looser superset (matches all three token standards). Phase 3a: each row includes optional `metadataName` / `metadataImage` / `metadataDescription` / `metadataExternalURL` populated from the contract\'s `contractURI()` getter via the IPFS gateway.',
+        params: 'page (query, default: 0), limit (query, default: 10, max: 100), search (query, matches address, creator address, name, symbol, or metadataName, case-insensitive), isToken (query, true/false), standard (query, ERC-20|ERC-721|ERC-1155, invalid value → 400)',
+        example: '/contracts?page=0&limit=10&standard=ERC-721',
       },
       {
         method: 'GET',
         path: '/token/:address/info',
-        description: 'Returns summary information for a token contract (name, symbol, decimals, supply).',
-        example: '/token/0xabc123.../info',
+        description: 'Returns summary information for a token contract (name, symbol, decimals, supply). Phase 3a: the underlying contract document also carries `metadataName` / `metadataImage` / `metadataDescription` / `metadataExternalURL` resolved from `contractURI()`, available on the /contracts list rows and on the address-page contract document.',
+        example: '/token/Q539f73306bdd4288f93a5e50b4d5bf1a9b07f147/info',
       },
       {
         method: 'GET',
         path: '/token/:address/holders',
-        description: 'Returns a paginated list of token holders for a given contract.',
+        description: 'Returns a paginated list of token holders for a given contract. ERC-20 returns one row per (contract, holder). For ERC-721/1155, holders are aggregated across all ids by default (one row per distinct holder, balance is the cross-id total). Pass `tokenID=<decimal>` to filter to a single id (one row per holder of that id, balance is per-id quantity).',
+        params: 'page (query, default: 0), limit (query, default: 25, max: 100), tokenID (query, optional, decimal uint256 NFT id filter)',
+        example: '/token/Q539f73306bdd4288f93a5e50b4d5bf1a9b07f147/holders?page=0&limit=25&tokenID=1',
+      },
+      {
+        method: 'GET',
+        path: '/token/:address/tokens',
+        description: 'Phase 2 + 3b: returns the distinct tokenID list minted on an NFT contract with holder count per id. Each row also carries `name` + `image` + `description` from the per-token off-chain metadata when the metadata fetcher has resolved it (otherwise those fields are absent and the UI falls back to a "#<id>" label). Empty list for ERC-20 contracts.',
         params: 'page (query, default: 0), limit (query, default: 25, max: 100)',
-        example: '/token/0xabc123.../holders?page=0&limit=25',
+        example: '/token/Q539f73306bdd4288f93a5e50b4d5bf1a9b07f147/tokens?page=0&limit=25',
+      },
+      {
+        method: 'GET',
+        path: '/token/:address/:id',
+        description: 'Phase 3b: per-token metadata document for one (contract, tokenID) tuple. Returns the resolved name / description / image / external_url plus the OpenSea-style attribute list. 400 if id is not a decimal integer, 404 if the token has no stub yet (contract isn\'t an NFT, or that id has never been transferred).',
+        example: '/token/Q539f73306bdd4288f93a5e50b4d5bf1a9b07f147/1',
       },
       {
         method: 'GET',
         path: '/token/:address/transfers',
-        description: 'Returns a paginated list of token transfers for a given contract.',
+        description: 'Returns a paginated list of token transfers for a given contract. Each row carries `tokenStandard` (ERC-20|ERC-721|ERC-1155) and `tokenID` (decimal uint256, empty for ERC-20). ERC-1155 TransferBatch logs are fanned out to one row per (id, value) tuple, so a batch of N items produces N rows that share txHash + logIndex but differ on tokenID.',
         params: 'page (query, default: 0), limit (query, default: 25, max: 100)',
-        example: '/token/0xabc123.../transfers?page=0&limit=25',
+        example: '/token/Q539f73306bdd4288f93a5e50b4d5bf1a9b07f147/transfers?page=0&limit=25',
+      },
+    ],
+  },
+  {
+    category: 'Contract Verification',
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/contract/compiler-info',
+        description: 'Returns the language and pinned Hyperion build id the verifier is willing to accept. Use this to confirm the explorer can verify against your hypc version before you POST a job. Returns 503 when the verifier is not configured on this deployment.',
+        example: '/contract/compiler-info',
+      },
+      {
+        method: 'POST',
+        path: '/contract/verify',
+        description: 'Enqueues a verification job for a deployed contract. The endpoint compiles the supplied source via the pinned hypc runner, compares the deployed-bytecode (Solidity-style CBOR metadata trailer stripped on both sides) and on success writes the verified source + ABI back onto the contract document. Rate-limited per IP. Max body 1 MiB. Returns { jobId, status, address } synchronously; poll /contract/verify/:jobId for the terminal state.',
+        params: 'JSON body, required: address, sourceCode, contractName. Optional: compilerVersion, optimizerEnabled, optimizerRuns, evmVersion, constructorArguments, libraries, imports, license. Example body: {"address":"Q…","sourceCode":"...","contractName":"Foo"}',
+        example: '/contract/verify',
+      },
+      {
+        method: 'GET',
+        path: '/contract/verify/:jobId',
+        description: 'Returns the current state of a verification job. Status values: pending, compiling, success, failed. The body echoes the original submission payload (sans the standard-JSON wrapper) and, on success, includes a result reference with the ABI and verifiedAt stamp.',
+        example: '/contract/verify/27fcbb55ffb611ec',
+      },
+    ],
+  },
+  {
+    category: 'Contract Interaction',
+    endpoints: [
+      {
+        method: 'POST',
+        path: '/contract/call',
+        description: 'Open-but-bounded eth_call proxy for read-only contract reads. The body is forwarded as a qrl_call to the node with a hard gas cap, data-size cap and per-call timeout. The `to` address must be a known contract in the indexer (404 otherwise) so non-contract reads cannot be proxied. Returns { result } on success or { error, code, reverted: true } on RPC errors (HTTP 200 in both branches, distinguish via fields). Per-IP rate-limited (60/min).',
+        params: 'JSON body, to (Q-address, required), data (0x-prefixed even-length hex, required, max 8 KiB). Example body: {"to":"Qed2af...","data":"0xef690cc0"}',
+        example: '/contract/call',
+      },
+      {
+        method: 'POST',
+        path: '/contract/explain/:address',
+        description: 'On-demand AI summary of a VERIFIED contract’s source code (Claude Haiku). The summary is cached per-contract in the contractCode collection (fields aiExplanation / aiExplanationAt / aiExplanationModel) so subsequent reads are free until ?regenerate=1 busts the cache. Returns 403 if the address is not a verified contract, only verified contracts can be analysed. Regenerations are capped at 5 per contract per rolling 7-day window (429 when exceeded).',
+        params: 'regenerate (query, optional), "1" or "true" to force a fresh LLM call (counts against the 5/week cap)',
+        example: '/contract/explain/Qed2af55af7a492a6e504b364dd882159f9374f46',
       },
     ],
   },
@@ -254,7 +318,7 @@ export default function ApiExplorerClient(): JSX.Element {
 
         <div className="space-y-4">
           {endpointGroups.map((group, groupIndex) => (
-            <Disclosure as="div" key={groupIndex} defaultOpen={groupIndex === 0}>
+            <Disclosure as="div" key={groupIndex}>
               {({ open }) => (
                 <>
                   <Disclosure.Button className="flex w-full items-center justify-between px-4 py-3 bg-[#2d2d2d] rounded-lg text-left hover:bg-[#333] transition-colors">
@@ -310,7 +374,7 @@ export default function ApiExplorerClient(): JSX.Element {
             <li>All responses are returned in JSON format</li>
             <li>Numeric blockchain values (balances, block numbers) are typically hex-encoded with a 0x prefix</li>
             <li>Pagination uses <code className="text-gray-300">page</code> and <code className="text-gray-300">limit</code> query parameters (max limit: 100)</li>
-            <li>Addresses accept both 0x and Z-prefixed formats</li>
+            <li>Addresses are Q-prefixed (canonical QRL 2.0 form), e.g. <code className="text-gray-300">Q6153d37fa4da7193e6219dcbd2bbe62fa12905b1</code></li>
             <li>No authentication or API key is required</li>
             <li>Rate limiting may apply to prevent abuse</li>
           </ul>

@@ -3,26 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-
-function onlyNumbers(str: string): boolean {
-  return /^[0-9]+$/.test(str);
-}
-
-// Validates if the input is a valid address (either 0x or Q prefixed)
-function isValidAddress(address: string): boolean {
-  // Check for Q-prefixed address (Q or q + 40 hex chars)
-  if ((address.startsWith('Q') || address.startsWith('q')) && address.length === 41) {
-    // Check if the rest of the string is valid hex
-    return /^[Qq][0-9a-fA-F]{40}$/.test(address);
-  }
-  
-  // Check for 0x-prefixed address (0x + 40 hex chars)
-  if (address.startsWith('0x') && address.length === 42) {
-    return /^0x[0-9a-fA-F]{40}$/.test(address);
-  }
-  
-  return false;
-}
+import { resolveSearchPath } from '../lib/searchResolver';
 
 export default function SearchBar(): JSX.Element {
   const [searchValue, setSearchValue] = useState<string>('');
@@ -35,20 +16,16 @@ export default function SearchBar(): JSX.Element {
     setError('');
   }
 
+  // resolveSearchPath handles trim, paste-noise, missing 0x prefix on tx
+  // hashes, hex block numbers, and per-shape error messages; the component
+  // is just the form chrome.
   const navigateHandler = useCallback((): void => {
-    let newPath: string;
-    if (onlyNumbers(searchValue)) {
-      newPath = "/block/" + searchValue;
-    } else if (searchValue.length === 66) {
-      newPath = "/tx/" + searchValue;
-    } else if (isValidAddress(searchValue)) {
-      const normalized = searchValue.startsWith('q') ? 'Q' + searchValue.slice(1) : searchValue;
-      newPath = "/address/" + normalized;
-    } else {
-      setError('Invalid input!');
+    const result = resolveSearchPath(searchValue);
+    if ('error' in result) {
+      setError(result.error);
       return;
     }
-    router.push(newPath);
+    router.push(result.path);
   }, [searchValue, router]);
 
   useEffect(() => {

@@ -13,7 +13,7 @@ You have access to a comprehensive UI component reference at `.claude/agents/com
 
 ## Design Philosophy
 
-Every generated interface should feel **modern, minimal, and production-ready** — not like a template.
+Every generated interface should feel **modern, minimal, and production-ready**, not like a template.
 
 ### Core Principles
 
@@ -34,7 +34,7 @@ Output should match what you'd expect from a senior product designer at a top Sa
 
 ## Workflow
 
-### Step 1 — Identify Components
+### Step 1, Identify Components
 
 Read the user's request and determine which UI components are needed. Consult `.claude/agents/components.md` for each component by name or alias.
 
@@ -46,12 +46,12 @@ Common mappings:
 - "input" → Text input, Textarea, Select, Combobox, Datepicker, File upload, Slider
 - "overlay" → Modal, Drawer, Popover, Tooltip, Dropdown menu
 
-### Step 2 — Apply Best Practices
+### Step 2, Apply Best Practices
 
 For each component, follow its best practices from the reference. Key rules that apply broadly:
 
 **Layout**
-- Single-column forms — faster to scan
+- Single-column forms, faster to scan
 - Consistent vertical lanes in repeated rows (lists, tables)
 - Fixed-width slots for icons and actions, even when empty
 - Cards: media → title → meta → action hierarchy
@@ -60,7 +60,7 @@ For each component, follow its best practices from the reference. Key rules that
 - Buttons: verb-first labels ("Save changes", not "Submit"), one primary per section
 - Modals: always provide X, Cancel, and Escape; trap focus; return focus on close
 - Toasts: auto-dismiss 4–6s, allow manual dismiss, stack newest on top
-- Toggles: immediate effect only — use checkboxes in forms that require Save
+- Toggles: immediate effect only, use checkboxes in forms that require Save
 
 **Typography & Spacing**
 - Strict heading hierarchy (h1 → h2 → h3), one h1 per page
@@ -74,19 +74,19 @@ For each component, follow its best practices from the reference. Key rules that
 - Validation: inline on blur, not on every keystroke
 - Disabled elements: visually distinct but still readable
 
-### Step 3 — Choose a Design Direction
+### Step 3, Choose a Design Direction
 
 Select the style that best matches the user's intent, or ask if unclear:
 
 | Preset | When to use |
 |--------|-------------|
-| **Modern SaaS** (default) | Clean, spacious, professional — neutral palette, one strong accent, 8px grid |
+| **Modern SaaS** (default) | Clean, spacious, professional, neutral palette, one strong accent, 8px grid |
 | **Apple-level Minimal** | Near-monochrome, warm grays, large type hierarchy, abundant white space |
 | **Enterprise / Corporate** | Information-dense, compact spacing (4/8/12/16/24px), fully keyboard-navigable |
 | **Creative / Portfolio** | Bold, expressive, asymmetric layouts, editorial typography |
 | **Data Dashboard** | Data-dense, consistent vertical alignment, clear metric hierarchy: KPI → trend → detail |
 
-### Step 4 — Generate Code
+### Step 4, Generate Code
 
 Write production-ready code following these rules:
 
@@ -120,18 +120,18 @@ Write production-ready code following these rules:
 
 ## Anti-Patterns to Avoid
 
-Never generate these — they signal generic, low-quality UI:
+Never generate these, they signal generic, low-quality UI:
 
-- **Rainbow badges** — every status a different bright color with no semantic meaning
-- **Modal inside modal** — use a page or drawer for complex flows
-- **Disabled submit with no explanation** — always indicate what's missing
-- **Spinner for predictable layouts** — use skeleton screens instead
-- **"Click here" links** — link text must describe the destination
-- **Hamburger menu on desktop** — use visible navigation when space allows
-- **Auto-advancing carousels** — let users control navigation
-- **Placeholder-only form fields** — always use visible labels
-- **Equal-weight buttons** — establish primary/secondary/tertiary hierarchy
-- **Tiny text (< 12px)** — body text minimum 14px, prefer 16px
+- **Rainbow badges**, every status a different bright color with no semantic meaning
+- **Modal inside modal**, use a page or drawer for complex flows
+- **Disabled submit with no explanation**, always indicate what's missing
+- **Spinner for predictable layouts**, use skeleton screens instead
+- **"Click here" links**, link text must describe the destination
+- **Hamburger menu on desktop**, use visible navigation when space allows
+- **Auto-advancing carousels**, let users control navigation
+- **Placeholder-only form fields**, always use visible labels
+- **Equal-weight buttons**, establish primary/secondary/tertiary hierarchy
+- **Tiny text (< 12px)**, body text minimum 14px, prefer 16px
 
 ## Focus Areas
 
@@ -143,9 +143,9 @@ Never generate these — they signal generic, low-quality UI:
 
 ## Approach
 
-1. **Component-first thinking** — reusable, composable UI pieces
+1. **Component-first thinking**, reusable, composable UI pieces
 2. **Mobile-first responsive design**
-3. **Performance budgets** — aim for sub-3s load times
+3. **Performance budgets**, aim for sub-3s load times
 4. **Semantic HTML and proper ARIA attributes**
 5. **Type safety with TypeScript**
 

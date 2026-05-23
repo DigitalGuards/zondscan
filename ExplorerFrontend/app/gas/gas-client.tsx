@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import axios from 'axios';
+import { useQuery } from '@tanstack/react-query';
 import config from '../../config';
 import Badge from '../components/Badge';
 import { formatGasPrice, hexToBigInt, hexToNumber, formatBigGas } from '../lib/helpers';
@@ -47,7 +48,7 @@ function gasCostUsd(gasPriceHex: string | undefined, gasUnits: number, qrlUsd: n
 }
 
 function formatUsdCost(usd: number | null): string {
-  if (usd === null) return '—';
+  if (usd === null) return ',';
   if (usd === 0) return '$0';
   if (usd < 0.000001) return `$${usd.toExponential(2)}`;
   if (usd < 0.01) return `$${usd.toFixed(8).replace(/0+$/, '').replace(/\.$/, '')}`;
@@ -84,7 +85,7 @@ function GasUsedChart({ rows, range }: { rows: GasHistoryRow[]; range: '24h' | '
   if (points.length < 2) {
     return (
       <div className="text-center text-gray-500 text-sm py-12">
-        Not enough gas history yet — check back after the syncer has run its periodic task.
+        Not enough gas history yet, check back after the syncer has run its periodic task.
       </div>
     );
   }
@@ -190,43 +191,34 @@ function HistogramChart({ buckets }: { buckets: GasSummary['gasPriceHistogram'] 
 }
 
 export default function GasClient(): JSX.Element {
-  const [summary, setSummary] = useState<GasSummary | null>(null);
-  const [history, setHistory] = useState<GasHistoryRow[]>([]);
   const [range, setRange] = useState<'24h' | '7d'>('24h');
-  const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const s = await axios.get<GasSummary>(`${config.handlerUrl}/gas/summary`);
-        if (!cancelled) setSummary(s.data);
-      } catch (e: unknown) {
-        if (!cancelled) setErr('Failed to load gas summary');
-        console.error(e);
-      }
-    };
-    load();
-    const id = setInterval(load, 10000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, []);
+  // Polling via TanStack Query so backgrounded tabs go quiet (the previous
+  // raw setInterval polled regardless of visibility); same pattern as
+  // /tx + /block detail's iter 26/28 confirmation polls. Summary at
+  // ~block time, history range-keyed and refetched only on range change.
+  const summaryQuery = useQuery<GasSummary>({
+    queryKey: ['gas-summary'],
+    queryFn: async () => {
+      const r = await axios.get<GasSummary>(`${config.handlerUrl}/gas/summary`);
+      return r.data;
+    },
+    refetchInterval: 10000,
+    refetchIntervalInBackground: false,
+    retry: 2,
+  });
+  const summary = summaryQuery.data ?? null;
+  const err = summaryQuery.isError ? 'Failed to load gas summary' : null;
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const r = await axios.get<GasHistoryResp>(`${config.handlerUrl}/gas/history?range=${range}`);
-        if (!cancelled) setHistory(r.data?.data ?? []);
-      } catch (e) {
-        if (!cancelled) console.error(e);
-      }
-    };
-    load();
-    return () => { cancelled = true; };
-  }, [range]);
+  const historyQuery = useQuery<GasHistoryResp>({
+    queryKey: ['gas-history', range],
+    queryFn: async () => {
+      const r = await axios.get<GasHistoryResp>(`${config.handlerUrl}/gas/history?range=${range}`);
+      return r.data;
+    },
+    retry: 2,
+  });
+  const history = historyQuery.data?.data ?? [];
 
   const utilization = useMemo(() => {
     if (!summary) return null;
@@ -271,32 +263,32 @@ export default function GasClient(): JSX.Element {
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
         <StatCard
           label="Avg Gas Price"
-          value={summary ? `${formatGasPrice(summary.avgGasPriceHex)} Shor` : '—'}
+          value={summary ? `${formatGasPrice(summary.avgGasPriceHex)} Shor` : ','}
           sub={summary ? `≈ ${formatUsdCost(gasCostUsd(summary.avgGasPriceHex, 21000, summary.qrlUsdPrice))} per transfer` : 'median of last 20 transactions'}
         />
         <StatCard
           label="Avg Block Time"
-          value={summary ? `${summary.avgBlockTimeSec.toFixed(1)}s` : '—'}
+          value={summary ? `${summary.avgBlockTimeSec.toFixed(1)}s` : ','}
           sub="last 30 blocks"
         />
         <StatCard
           label="Mempool Size"
-          value={summary ? summary.pendingCount.toString() : '—'}
+          value={summary ? summary.pendingCount.toString() : ','}
           sub="pending transactions"
         />
         <StatCard
           label="Avg Gas Used"
-          value={summary ? formatBigGas(summary.avgGasUsedHex) : '—'}
+          value={summary ? formatBigGas(summary.avgGasUsedHex) : ','}
           sub="per block, last 30"
         />
         <StatCard
           label="Last Block"
-          value={summary ? hexToNumber(summary.lastBlockNumberHex).toLocaleString() : '—'}
+          value={summary ? hexToNumber(summary.lastBlockNumberHex).toLocaleString() : ','}
           sub={summary ? `${formatBigGas(summary.lastGasUsedHex)} / ${formatBigGas(summary.lastGasLimitHex)} gas` : ''}
         />
         <StatCard
           label="Gas Limit Utilization"
-          value={utilization !== null ? `${utilization.toFixed(1)}%` : '—'}
+          value={utilization !== null ? `${utilization.toFixed(1)}%` : ','}
           sub="last block"
         />
       </div>

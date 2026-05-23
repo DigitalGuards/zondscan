@@ -9,14 +9,14 @@ export const metadata: Metadata = {
     'Convert Quanta to Shor quickly and accurately using our conversion tool. Get real-time conversion rates and insights on the QRL network.',
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: 'https://zondscan.com/quanta-to-shor',
+    canonical: 'https://zondscan.com/converter',
   },
   openGraph: {
     ...sharedMetadata.openGraph,
     title: 'Quanta to Shor Converter | QRL Explorer',
     description:
       'Convert Quanta to Shor quickly and accurately using our conversion tool. Get real-time conversion rates and insights on the QRL network.',
-    url: 'https://zondscan.com/quanta-to-shor',
+    url: 'https://zondscan.com/converter',
     siteName: 'ZondScan',
     type: 'website',
   },
@@ -29,5 +29,10 @@ export const metadata: Metadata = {
 };
 
 export default function QuantaToShorPage(): JSX.Element {
-  return <ConverterClient />;
+  return (
+    <main aria-labelledby="converter-heading">
+      <h1 id="converter-heading" className="sr-only">Quanta to Shor Converter</h1>
+      <ConverterClient />
+    </main>
+  );
 }

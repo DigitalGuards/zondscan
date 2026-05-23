@@ -24,7 +24,7 @@ const faqs = [
   },
   {
     question: "How do I verify smart contract source code?",
-    answer: "To verify a smart contract on Zondscan:\n\n1. Navigate to the contract address page and open the Code tab\n2. Click on the 'Verify & Publish' button (or go to /verify-contract directly)\n3. Paste the original source code (and any imports as a JSON map)\n4. Match the exact optimizer settings used at deploy time\n5. Submit — Zondscan re-compiles with the pinned Hyperion build and byte-matches against the on-chain runtime\n\nOnce verified, the contract's source code and ABI become publicly visible on the address page."
+    answer: "To verify a smart contract on Zondscan:\n\n1. Navigate to the contract address page and open the Code tab\n2. Click on the 'Verify & Publish' button (or go to /verify-contract directly)\n3. Paste the original source code (and any imports as a JSON map)\n4. Match the exact optimizer settings used at deploy time\n5. Submit, Zondscan re-compiles with the pinned Hyperion build and byte-matches against the on-chain runtime\n\nOnce verified, the contract's source code and ABI become publicly visible on the address page."
   },
   {
     question: "What are the differences between QRL Zond and Ethereum?",

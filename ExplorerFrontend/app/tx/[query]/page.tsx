@@ -1,16 +1,69 @@
+import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import TransactionView from './transaction-view';
 import type { TransactionDetails } from '@/app/types';
+import { sharedMetadata } from '@/app/lib/seo/metaData';
 import config from '../../../config';
 
 interface PageProps {
   params: Promise<{ query: string }>;
 }
 
-function isEmptyTransaction(txData: any): boolean {
-  return !txData.TxHash && 
-         !txData.From && 
-         !txData.To && 
+// Per-tx metadata so shared /tx/<hash> links surface a meaningful title +
+// description in OG / Twitter previews. We deliberately don't fetch the
+// tx body here (adds latency to crawlers + harms the page TTFB); a
+// truncated hash + a stable description is enough for link previews.
+// Mirrors the shape already used on /block/:n and /address/:addr.
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const resolvedParams = await params;
+  const txHash = resolvedParams.query;
+  const shortHash = txHash.length > 16
+    ? `${txHash.slice(0, 10)}...${txHash.slice(-6)}`
+    : txHash;
+  const canonicalUrl = `https://zondscan.com/tx/${txHash}`;
+  const title = `Transaction ${shortHash} | ZondScan`;
+  const description = `View detailed information for QRL Zond transaction ${shortHash}. See from / to, value, gas, decoded events, and contract calls.`;
+
+  return {
+    ...sharedMetadata,
+    title,
+    description,
+    alternates: {
+      ...sharedMetadata.alternates,
+      canonical: canonicalUrl,
+    },
+    openGraph: {
+      ...sharedMetadata.openGraph,
+      title,
+      description,
+      url: canonicalUrl,
+      siteName: 'ZondScan',
+      type: 'website',
+    },
+    twitter: {
+      ...sharedMetadata.twitter,
+      title,
+      description,
+    },
+  };
+}
+
+// Loose shape: the backend may return any subset of these fields and we
+// just check whether the row is meaningful. Casting through `unknown` lets
+// us narrow per-field without committing to a stricter Transaction type
+// that's already represented elsewhere in app/types/transaction.ts.
+type MaybeTxRecord = {
+  TxHash?: string;
+  From?: string;
+  To?: string;
+  Value?: string;
+  BlockNumber?: string;
+};
+
+function isEmptyTransaction(txData: MaybeTxRecord): boolean {
+  return !txData.TxHash &&
+         !txData.From &&
+         !txData.To &&
          (!txData.Value || txData.Value === '0x0') &&
          (!txData.BlockNumber || txData.BlockNumber === '0x0');
 }
@@ -68,7 +121,16 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
     latestBlock: data.latestBlock,
     PaidFees: txData.PaidFees ? Number(txData.PaidFees) : undefined,
     contractCreated: data.contractCreated || undefined,
-    tokenTransfer: data.tokenTransfer || undefined
+    tokenTransfers: Array.isArray(data.tokenTransfers) ? data.tokenTransfers : undefined,
+    // input comes from the top-level data.input field. The backend fetches
+    // it from the node via qrl_getTransactionByHash because the syncer's
+    // Transaction struct uses the wrong JSON tag (`data` instead of `input`),
+    // leaving txData.Input empty for every historical tx.
+    input: typeof data.input === 'string' ? data.input : (txData.Input || undefined),
+    logs: Array.isArray(data.logs) ? data.logs : undefined,
+    targetContract: data.targetContract || undefined,
+    internalTransactions: Array.isArray(data.internalTransactions) ? data.internalTransactions : undefined,
+    receiptStatus: typeof data.receiptStatus === 'string' ? data.receiptStatus : undefined,
   };
 
   return transaction;
@@ -106,7 +168,7 @@ export default async function TransactionPage({ params }: PageProps): Promise<JS
   }
 
   // redirect() throws a NEXT_REDIRECT sentinel that the framework must
-  // receive uncaught — keep this call outside any try/catch.
+  // receive uncaught, keep this call outside any try/catch.
   if (await isPendingTransaction(txHash)) {
     redirect(`/pending/tx/${txHash}`);
   }

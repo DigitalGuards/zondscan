@@ -99,7 +99,7 @@ func ReturnRankAddress(address string) (int64, error) {
 	err := configs.AddressesCollections.FindOne(ctx, bson.D{{Key: "id", Value: addressHex}}).Decode(&target)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			// Address not found — return 0 to signal unknown rank
+			// Address not found, return 0 to signal unknown rank
 			return 0, nil
 		}
 		return 0, fmt.Errorf("error looking up address for rank: %v", err)

@@ -217,6 +217,14 @@ func InitializeTokenCollections() error {
 		configs.Logger.Info("Successfully initialized token balances collection")
 	}
 
+	// Phase 3b: initialize per-tokenID metadata collection.
+	if err := db.InitializeTokenMetadataCollection(); err != nil {
+		configs.Logger.Error("Failed to initialize token metadata collection", zap.Error(err))
+		initErrors = append(initErrors, err)
+	} else {
+		configs.Logger.Info("Successfully initialized token metadata collection")
+	}
+
 	// Return combined errors if any occurred
 	if len(initErrors) > 0 {
 		configs.Logger.Error("Token collection initialization completed with errors",

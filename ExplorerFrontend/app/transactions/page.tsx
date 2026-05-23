@@ -1,9 +1,37 @@
 import React from 'react';
+import type { Metadata } from 'next';
 import TransactionsList from './[query]/TransactionsList';
 import type { Transaction } from '@/app/types';
+import { sharedMetadata } from '../lib/seo/metaData';
 import config from '../../config';
 
 export const dynamic = 'force-dynamic';
+
+// Static metadata for the global transactions list. Mirrors the per-detail
+// page pattern (canonical / OG / Twitter spread from sharedMetadata) so
+// social previews are consistent across the explorer.
+export const metadata: Metadata = {
+  ...sharedMetadata,
+  title: 'Transactions | ZondScan',
+  description: 'Browse the latest transactions on the QRL Zond blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
+  alternates: {
+    ...sharedMetadata.alternates,
+    canonical: 'https://zondscan.com/transactions',
+  },
+  openGraph: {
+    ...sharedMetadata.openGraph,
+    title: 'Transactions | ZondScan',
+    description: 'Browse the latest transactions on the QRL Zond blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
+    url: 'https://zondscan.com/transactions',
+    siteName: 'ZondScan',
+    type: 'website',
+  },
+  twitter: {
+    ...sharedMetadata.twitter,
+    title: 'Transactions | ZondScan',
+    description: 'Browse the latest transactions on the QRL Zond blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
+  },
+};
 
 interface TransactionsResponse {
   txs: Transaction[];

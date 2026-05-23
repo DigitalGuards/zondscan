@@ -30,7 +30,7 @@ export default function EpochInfoPanel({ epochInfo, loading }: EpochInfoPanelPro
     setTimeRemaining(currentTimeToNextEpoch);
   }
 
-  // Countdown timer — only calls setState inside the interval callback (deferred)
+  // Countdown timer, only calls setState inside the interval callback (deferred)
   useEffect(() => {
     if (currentTimeToNextEpoch <= 0) return;
     const start = Date.now();

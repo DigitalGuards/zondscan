@@ -43,7 +43,7 @@ func (v *Verifier) RunAsync(jobID string, req VerifyRequest) {
 
 func (v *Verifier) run(ctx context.Context, jobID string, req VerifyRequest) {
 	if err := db.UpdateVerificationJob(jobID, bson.M{"status": models.VerificationJobCompiling}); err != nil {
-		// Status transition failures aren't fatal — the rest of the run
+		// Status transition failures aren't fatal, the rest of the run
 		// continues and the client will see the eventual terminal state.
 		// But we log so persistent mongo issues don't go unnoticed.
 		log.Printf("verifier: failed to mark job %s compiling: %v", jobID, err)
@@ -73,7 +73,8 @@ func (v *Verifier) run(ctx context.Context, jobID string, req VerifyRequest) {
 		return
 	}
 
-	match, err := Match(contract.ZVM.DeployedBytecode.Object, onchain, contract.ZVM.DeployedBytecode.ImmutableReferences)
+	dbc := contract.DeployedBytecode()
+	match, err := Match(dbc.Object, onchain, dbc.ImmutableReferences)
 	if err != nil {
 		failJob(jobID, fmt.Sprintf("match: %s", err.Error()))
 		return
@@ -140,22 +141,36 @@ func wrapStandardJSON(req VerifyRequest) StandardJSONInput {
 		sources[normalizeImportPath(path)] = StandardJSONSource{Content: content}
 	}
 
+	// hypc 0.2.x treats "no optimizer block" and "optimizer: {enabled:false}"
+	// as different inputs, the latter still applies a baseline optimization
+	// pass that shrinks output by ~100 bytes. Since the standard CLI flow
+	// (`hypc --bin` with no flags) omits the optimizer entirely, we mirror
+	// that for the "optimizer off" path. Explicit enable still includes the
+	// block with the requested runs.
 	settings := StandardJSONSettings{
-		Optimizer: &Optimizer{
-			Enabled: req.OptimizerEnabled,
-			Runs:    req.OptimizerRuns,
-		},
 		EVMVersion: req.EvmVersion,
 		OutputSelection: map[string]map[string][]string{
 			"*": {
 				"*": {
 					"abi",
+					// Request both naming conventions so we work against
+					// hypc 0.0.2 (zvm) and 0.2.x+ (qrvm). Unknown keys are
+					// ignored by the compiler.
 					"zvm.deployedBytecode.object",
 					"zvm.deployedBytecode.immutableReferences",
+					"qrvm.deployedBytecode.object",
+					"qrvm.deployedBytecode.immutableReferences",
 					"metadata",
 				},
 			},
 		},
+	}
+	if req.OptimizerEnabled {
+		runs := req.OptimizerRuns
+		if runs <= 0 {
+			runs = 200
+		}
+		settings.Optimizer = &Optimizer{Enabled: true, Runs: runs}
 	}
 	if len(req.Libraries) > 0 {
 		// Libraries map is keyed by file → name → address. Best-effort:
@@ -226,7 +241,7 @@ func AlreadyVerified(address string) (bool, error) {
 // HasPendingJob returns true when a job for `address` is currently
 // pending or compiling. Used to reject duplicate submissions.
 func HasPendingJob(address string) (bool, error) {
-	// Walk through (limited) — only a tiny number of jobs per contract
+	// Walk through (limited), only a tiny number of jobs per contract
 	// are expected in practice.
 	for _, status := range []models.VerificationJobStatus{models.VerificationJobPending, models.VerificationJobCompiling} {
 		jobs, err := db.FindVerificationJobsByAddress(address, status, 1)
@@ -241,7 +256,7 @@ func HasPendingJob(address string) (bool, error) {
 }
 
 // ErrAlreadyVerified is returned by Enqueue when the contract is already
-// verified — callers should treat this as success (idempotency).
+// verified, callers should treat this as success (idempotency).
 var ErrAlreadyVerified = errors.New("verification: address already verified")
 
 // ErrDuplicateJob is returned by Enqueue when a pending job already exists
