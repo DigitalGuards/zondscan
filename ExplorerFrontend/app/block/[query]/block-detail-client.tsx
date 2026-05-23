@@ -248,7 +248,7 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
     : parseInt(blockData.timestamp);
 
   return (
-    <div className="p-4 sm:p-8 max-w-6xl mx-auto">
+    <main className="p-4 sm:p-8 max-w-6xl mx-auto" aria-labelledby="block-heading">
       <Breadcrumbs items={[
         { label: 'Blocks', href: '/blocks/1' },
         { label: `Block #${blockNumber}` },
@@ -259,14 +259,14 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
       </Suspense>
 
       {/* Block Details Card */}
-      <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+      <section aria-labelledby="block-heading" className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-[#3d3d3d]">
           <div className="flex items-center gap-3">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
             </svg>
-            <h1 className="text-xl sm:text-2xl font-bold text-[#ffa729]">Block #{formatHexValue(blockData.number)}</h1>
+            <h1 id="block-heading" className="text-xl sm:text-2xl font-bold text-[#ffa729]">Block #{formatHexValue(blockData.number)}</h1>
             {/* Live depth: surfaces how settled this block is. "Latest"
                 when we're looking at the head, otherwise "N
                 confirmations". Hidden until the first /latestblock
@@ -337,12 +337,12 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
             <DetailRow label="Extra Data" mono>{blockData.extraData}</DetailRow>
           )}
         </div>
-      </div>
+      </section>
 
       {/* Transactions Table */}
-      <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden">
+      <section aria-labelledby="block-txs-heading" className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden">
         <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
-          <h2 className="text-[15px] font-semibold text-[#ffa729]">
+          <h2 id="block-txs-heading" className="text-[15px] font-semibold text-[#ffa729]">
             Transactions ({blockData.transactions?.length ?? 0})
           </h2>
         </div>
@@ -426,7 +426,7 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
         ) : (
           <EmptyState title="No transactions in this block" description="This block was produced without any transactions." />
         )}
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
