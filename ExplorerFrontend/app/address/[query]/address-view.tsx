@@ -5,14 +5,12 @@ import CopyButton from "../../components/CopyButton";
 import QRCodeButton from "../../components/QRCodeButton";
 import ContractTabs from "../../components/ContractTabs";
 import VerifiedBadge from "../../components/VerifiedBadge";
-import TanStackTable from "../../components/TanStackTable";
 import BalanceDisplay from "./balance-display";
 import ActivityDisplay from "./activity-display";
-import HoldingsDisplay from "./holdings-display";
+import AddressTabs from "./address-tabs";
 import type { AddressData } from "@/app/types";
 import Link from "next/link";
 import Breadcrumbs from "../../components/Breadcrumbs";
-import EmptyState from "../../components/EmptyState";
 
 interface AddressViewProps {
     addressData: AddressData;
@@ -261,41 +259,24 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                 </div>
             </section>
 
-            {/* Holdings (tokens + NFTs). Data was already collected by the
-                syncer into tokenBalances; this just surfaces it. The
-                component self-renders empty when the address has nothing,
-                so there's no spacer when it's not relevant. */}
-            <HoldingsDisplay address={addressSegment} />
-
-            {/* Transactions Section. The table itself surfaces three tabs:
-                Transactions (native), Internal Txns (sub-frame calls), and
-                Token Transfers (NFT / ERC-20 events for the holder). Token
-                transfers are lazy-loaded server-side, so an address with no
-                native txs but plenty of NFT activity still gets the tabs.
-                We only fall back to the EmptyState when there's literally no
-                activity of any kind on this address. */}
-            <section aria-labelledby="address-transactions-heading" className="space-y-3 md:space-y-4">
-                <h2 id="address-transactions-heading" className="text-base md:text-lg lg:text-xl font-semibold text-accent">Activity</h2>
-                <div className="overflow-hidden rounded-xl border border-border">
-                    {(
-                        (addressData.transactions_by_address && addressData.transactions_by_address.length > 0)
-                        || (addressData.internal_transactions_by_address && addressData.internal_transactions_by_address.length > 0)
-                    ) ? (
-                        <TanStackTable
-                            transactions={addressData.transactions_by_address || []}
-                            internalt={addressData.internal_transactions_by_address || []}
-                            tokenTransferAddress={addressSegment}
-                        />
-                    ) : (
-                        <EmptyState
-                            title="No transactions yet"
-                            description="This address has no transaction history."
-                            actionLabel="Explore latest transactions"
-                            actionHref="/transactions/1"
-                        />
-                    )}
-                </div>
-            </section>
+            {/* Unified activity tab bar. Replaces the old stacked
+                HoldingsDisplay + Activity sections. Each panel inside
+                lazy-loads its own data on first activation, persists the
+                active tab in the URL (?tab=...), and keeps its pagination /
+                filter state across tab switches. */}
+            <AddressTabs
+                // Force full remount on address change so the lazy-mount
+                // accumulator + child fetch caches start fresh per holder.
+                key={addressSegment}
+                address={addressSegment}
+                transactions={addressData.transactions_by_address || []}
+                transactionsCount={
+                    typeof addressData.transactions_count === 'number'
+                        ? addressData.transactions_count
+                        : (addressData.transactions_by_address?.length ?? 0)
+                }
+                internalt={addressData.internal_transactions_by_address || []}
+            />
         </main>
     );
 }
