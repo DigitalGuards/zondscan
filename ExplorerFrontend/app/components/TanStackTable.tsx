@@ -150,12 +150,13 @@ export default function TanStackTable({ transactions, internalt, tokenTransferAd
   const [mounted, setMounted] = useState(false);
   const [windowWidth, setWindowWidth] = useState(0);
   const [globalFilter, setGlobalFilter] = useState("");
-  // Default to the first tab with data. Falling back to "transactions"
+  // Default to the first tab with rows. Falling back to "transactions"
   // would show an empty table for contract-call-only addresses (no native
   // txs but plenty of internal calls / token transfers). Token transfers
-  // aren't fetched yet at this point, so we can only pick between native
-  // and internal here, with a deferred switch to "tokenTransfers" below
-  // once the lazy fetch confirms there's something there.
+  // are lazy-fetched, so the only signal we have here is "is the page
+  // wired to fetch them" (tokenTransferAddress is set), not "are there
+  // any". If the fetch later returns zero rows the tab still shows the
+  // empty-state message, which is fine.
   const initialActiveTab: TabKey =
     transactions.length > 0
       ? "transactions"
@@ -173,6 +174,31 @@ export default function TanStackTable({ transactions, internalt, tokenTransferAd
   const [tokenTransfersLoaded, setTokenTransfersLoaded] = useState(false);
   const [tokenTransfersLoading, setTokenTransfersLoading] = useState(false);
   const [tokenTransfersError, setTokenTransfersError] = useState<string | null>(null);
+
+  // When the addressee changes mid-mount (Next.js client-side route from
+  // /address/A to /address/B reuses this component), wipe the lazy-fetched
+  // token-transfer state so the new address triggers a fresh fetch instead
+  // of rendering the previous holder's rows. Same goes for the active tab
+  // and the search filter — both should reset to the new address's default.
+  useEffect(() => {
+    setTokenTransfers([]);
+    setTokenTransfersTotal(0);
+    setTokenTransfersLoaded(false);
+    setTokenTransfersLoading(false);
+    setTokenTransfersError(null);
+    const nextDefault: TabKey =
+      transactions.length > 0
+        ? "transactions"
+        : internalt.length > 0
+          ? "internal"
+          : tokenTransferAddress
+            ? "tokenTransfers"
+            : "transactions";
+    setActiveTab(nextDefault);
+    setGlobalFilter("");
+    // Length-based deps keep the effect stable across renders that pass new
+    // array identities for the same address.
+  }, [tokenTransferAddress, transactions.length, internalt.length]);
 
   useEffect(() => {
     setMounted(true);
