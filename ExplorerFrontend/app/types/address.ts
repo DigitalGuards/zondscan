@@ -70,6 +70,10 @@ export interface AddressData {
     balance: number;
   };
   rank: number;
+  // True total from db.CountTransactions, independent of how many rows the
+  // aggregate inlined into transactions_by_address (capped at limit=50).
+  // Used by the address-page tab badge so the count is honest.
+  transactions_count?: number;
   transactions_by_address: Transaction[];
   internal_transactions_by_address: InternalTransaction[];
   contract_code: ContractData | null;
