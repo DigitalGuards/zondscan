@@ -242,7 +242,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                 details. */}
             {transaction.contractCreated?.address ? (
               <div className="flex items-start gap-2 flex-wrap">
-                <span className="inline-flex items-center gap-1 text-xs text-green-400">
+                <span className="inline-flex items-center gap-1 text-xs text-green-400 font-sans">
                   <svg
                     className="w-3.5 h-3.5"
                     fill="none"
