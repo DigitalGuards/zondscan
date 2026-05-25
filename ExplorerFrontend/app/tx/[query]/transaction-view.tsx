@@ -652,66 +652,105 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                 )}
               </div>
             </div>
-            <div className="p-4 sm:p-6">
-              {decodedInput && (
-                <p className="text-xs text-gray-500 font-mono mb-2">
-                  {decodedInput.standard} · {decodedInput.methodName}
+            {/* Whole body of the card is a native <details> disclosure
+                so the only visible row when collapsed is the toggle
+                row directly under the header — no empty padded body
+                creating dead space, no stray divider hanging above
+                the toggle. Decoded args, raw hex, and the verify
+                nudge all live inside the expanded region. Order
+                preserved: decoded view (if any) renders first, raw
+                hex below, matching the "default to decoded when
+                verified" intent. */}
+            <details className="group">
+              <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center gap-2 px-4 sm:px-6 py-3 hover:bg-white/5 transition-colors">
+                {/* Heroicons-style chevron-right; rotates 90° to point
+                    down when the disclosure is open. currentColor so
+                    the surrounding text-gray-400 / group-hover accent
+                    apply. */}
+                <svg
+                  className="w-4 h-4 text-gray-400 group-hover:text-[#ffa729] group-open:rotate-90 transition-transform duration-150"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  aria-hidden="true"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                </svg>
+                <span className="text-sm text-gray-300 group-hover:text-white">More Details</span>
+                <span className="text-xs text-gray-500">
+                  ({transaction.input.length.toLocaleString('en-US')} chars)
+                </span>
+              </summary>
+              <div className="px-4 sm:px-6 py-4 border-t border-[#3d3d3d]">
+                {decodedInput && (
+                  <p className="text-xs text-gray-500 font-mono mb-2">
+                    {decodedInput.standard} · {decodedInput.methodName}
+                  </p>
+                )}
+                {decodedCall && (
+                  <>
+                    <p className="text-xs text-gray-500 font-mono mb-2">{decodedCall.signature}</p>
+                    <div className="space-y-1 mb-3">
+                      {decodedCall.args.map((arg) => (
+                        <div key={arg.label} className="text-xs flex flex-wrap items-start gap-2">
+                          <span className="text-gray-400 font-mono min-w-[80px]">{arg.label}:</span>
+                          {arg.type === 'address' && arg.value ? (
+                            <Link
+                              href={`/address/${arg.value}`}
+                              className="text-gray-200 hover:text-[#ffa729] transition-colors break-all font-mono"
+                            >
+                              {arg.value}
+                            </Link>
+                          ) : arg.type === 'bool' ? (
+                            <Badge variant={arg.value === 'true' ? 'success' : 'error'}>{arg.value}</Badge>
+                          ) : arg.type === 'uint256' ? (
+                            <span className="text-gray-200 font-mono break-all">
+                              {(() => { try { return BigInt(arg.value || '0').toLocaleString('en-US'); } catch { return arg.value || ''; } })()}
+                            </span>
+                          ) : arg.type === 'uint256[]' ? (
+                            <span className="text-gray-200 font-mono break-all">
+                              {arg.values && arg.values.length > 0
+                                ? arg.values.map((v) => { try { return BigInt(v).toLocaleString('en-US'); } catch { return v; } }).join(', ')
+                                : '[]'}
+                            </span>
+                          ) : arg.type === 'string' ? (
+                            <span className="text-gray-200 break-all">{arg.value}</span>
+                          ) : (
+                            <span className="text-gray-200 font-mono break-all">{arg.value}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] text-gray-500 uppercase tracking-wide">
+                    Raw input data (hex)
+                  </span>
+                  <CopyButton value={transaction.input} label="Copy raw input" size="sm" />
+                </div>
+                <p className="font-mono text-gray-300 break-all text-xs leading-relaxed">
+                  {transaction.input}
                 </p>
-              )}
-              {decodedCall && (
-                <>
-                  <p className="text-xs text-gray-500 font-mono mb-2">{decodedCall.signature}</p>
-                  <div className="space-y-1 mb-3">
-                    {decodedCall.args.map((arg) => (
-                      <div key={arg.label} className="text-xs flex flex-wrap items-start gap-2">
-                        <span className="text-gray-400 font-mono min-w-[80px]">{arg.label}:</span>
-                        {arg.type === 'address' && arg.value ? (
-                          <Link
-                            href={`/address/${arg.value}`}
-                            className="text-gray-200 hover:text-[#ffa729] transition-colors break-all font-mono"
-                          >
-                            {arg.value}
-                          </Link>
-                        ) : arg.type === 'bool' ? (
-                          <Badge variant={arg.value === 'true' ? 'success' : 'error'}>{arg.value}</Badge>
-                        ) : arg.type === 'uint256' ? (
-                          <span className="text-gray-200 font-mono break-all">
-                            {(() => { try { return BigInt(arg.value || '0').toLocaleString('en-US'); } catch { return arg.value || ''; } })()}
-                          </span>
-                        ) : arg.type === 'uint256[]' ? (
-                          <span className="text-gray-200 font-mono break-all">
-                            {arg.values && arg.values.length > 0
-                              ? arg.values.map((v) => { try { return BigInt(v).toLocaleString('en-US'); } catch { return v; } }).join(', ')
-                              : '[]'}
-                          </span>
-                        ) : arg.type === 'string' ? (
-                          <span className="text-gray-200 break-all">{arg.value}</span>
-                        ) : (
-                          <span className="text-gray-200 font-mono break-all">{arg.value}</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-              <p className="font-mono text-gray-300 break-all text-xs leading-relaxed">{transaction.input}</p>
-              {/* Neither the well-known-token-selector decoder nor the
-                  ABI decoder produced a hit. If the target has a
-                  contractCode row but isn't verified, nudge users
-                  toward verification so future hits to this tx show
-                  a labelled method instead of raw hex. */}
-              {!decodedInput && !decodedCall && transaction.to && transaction.targetContract && !transaction.targetContract.verified && (
-                <p className="mt-2 text-[11px] text-gray-500">
-                  <Link
-                    href={`/verify-contract?address=${transaction.to}`}
-                    className="text-[#ffa729] hover:text-[#ffb84d] hover:underline"
-                  >
-                    Verify this contract
-                  </Link>
-                  {' '}to see the method name + labelled arguments instead of raw calldata.
-                </p>
-              )}
-            </div>
+                {/* Neither the well-known-token-selector decoder nor
+                    the ABI decoder produced a hit. If the target has
+                    a contractCode row but isn't verified, nudge users
+                    toward verification so future hits to this tx
+                    show a labelled method instead of raw hex. */}
+                {!decodedInput && !decodedCall && transaction.to && transaction.targetContract && !transaction.targetContract.verified && (
+                  <p className="mt-3 text-[11px] text-gray-500">
+                    <Link
+                      href={`/verify-contract?address=${transaction.to}`}
+                      className="text-[#ffa729] hover:text-[#ffb84d] hover:underline"
+                    >
+                      Verify this contract
+                    </Link>
+                    {' '}to see the method name + labelled arguments instead of raw calldata.
+                  </p>
+                )}
+              </div>
+            </details>
           </section>
         );
       })()}
