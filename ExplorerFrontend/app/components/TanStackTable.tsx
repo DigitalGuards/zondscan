@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import axios from "axios";
 import {
   createColumnHelper,
   flexRender,
@@ -17,11 +18,33 @@ import type {
   Cell,
   ColumnDef
 } from "@tanstack/react-table";
-import { formatAmount, formatTimestamp, normalizeHexString, formatAddress } from "../lib/helpers";
+import { formatAmount, formatTimestamp, normalizeHexString, formatAddress, formatTokenAmount } from "../lib/helpers";
 import DebouncedInput from "./DebouncedInput";
 import { DownloadBtn, DownloadBtnInternal } from "./DownloadBtn";
 import Link from "next/link";
+import config from "../../config";
 import type { Transaction, InternalTransaction } from "@/app/types";
+
+// Token transfer rows for the new "Token Transfers" tab. Mirrors the backend's
+// models.TokenTransfer (json tags). All amount math is BigInt-safe via
+// formatTokenAmount so an NFT row's "1" renders identically to an ERC-20 row's
+// "12345600000000000000".
+interface TokenTransferRow {
+  contractAddress: string;
+  from: string;
+  to: string;
+  amount: string;
+  blockNumber: string;
+  txHash: string;
+  logIndex?: string;
+  timestamp: string;
+  tokenSymbol: string;
+  tokenDecimals: number;
+  tokenName: string;
+  transferType: string;
+  tokenStandard?: string;
+  tokenID?: string;
+}
 
 const truncateMiddle = (str: string, startChars = 8, endChars = 8): string => {
   if (str.length <= startChars + endChars) return str;
@@ -35,15 +58,25 @@ const TX_TYPE_MAP = ["Coinbase", "Attest", "Transfer", "Stake"] as const;
 // Create column helpers outside component to avoid type inference issues
 const columnHelper = createColumnHelper<Transaction & { formattedAmount: string; formattedFees: string }>();
 const internalColumnHelper = createColumnHelper<InternalTransaction & { formattedValue: string }>();
+const tokenTransferColumnHelper = createColumnHelper<TokenTransferRow & { formattedAmount: string; tsSeconds: number }>();
 
 interface TableProps {
   transactions: Transaction[];
   internalt: InternalTransaction[];
+  // Required for the lazy-loaded "Token Transfers" tab. The tab issues
+  // /address/:addr/token-transfers, paginated client-side after a single
+  // 250-row fetch so the search input filters across all rows the holder
+  // has touched without round-tripping per page. When absent the tab is
+  // hidden, callers outside the address page don't surface it.
+  tokenTransferAddress?: string;
 }
 
 type TableInstance<T> = Table<T>;
 
-const renderTableHeader = <T extends Transaction | InternalTransaction>(
+// Generic over any row shape so the Token Transfers tab can reuse the same
+// renderer without expanding the union, the heads/bodies don't read row
+// fields, they only walk the table's own header/cell descriptors.
+const renderTableHeader = <T,>(
   table: TableInstance<T>
 ): JSX.Element[] => {
   return table.getHeaderGroups().map((headerGroup: HeaderGroup<T>) => (
@@ -66,7 +99,7 @@ const renderTableHeader = <T extends Transaction | InternalTransaction>(
   ));
 };
 
-const renderTableBody = <T extends Transaction | InternalTransaction>(
+const renderTableBody = <T,>(
   table: TableInstance<T>
 ): JSX.Element[] => {
   return table.getRowModel().rows.map((row: Row<T>) => (
@@ -111,11 +144,17 @@ const calculateFees = (tx: Transaction): number => {
   }
 };
 
-export default function TanStackTable({ transactions, internalt }: TableProps): JSX.Element | null {
+type TabKey = "transactions" | "internal" | "tokenTransfers";
+
+export default function TanStackTable({ transactions, internalt, tokenTransferAddress }: TableProps): JSX.Element | null {
   const [mounted, setMounted] = useState(false);
   const [windowWidth, setWindowWidth] = useState(0);
   const [globalFilter, setGlobalFilter] = useState("");
-  const [showInternal, setShowInternal] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabKey>("transactions");
+  const [tokenTransfers, setTokenTransfers] = useState<TokenTransferRow[]>([]);
+  const [tokenTransfersLoaded, setTokenTransfersLoaded] = useState(false);
+  const [tokenTransfersLoading, setTokenTransfersLoading] = useState(false);
+  const [tokenTransfersError, setTokenTransfersError] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -124,6 +163,47 @@ export default function TanStackTable({ transactions, internalt }: TableProps): 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Lazy-load token transfers on first visit to the tab. One server hit with
+  // a generous limit (250) is cheaper than paginating server-side, the address
+  // page already pages native txs server-side and a per-tab server round-trip
+  // every time the user clicks Next/Prev would feel sluggish vs the local
+  // pagination the Transactions tab uses on its 10-row payload. Fetch is
+  // gated on tokenTransferAddress so callers without an address can't trip
+  // a no-op fetch.
+  useEffect(() => {
+    if (!tokenTransferAddress) return;
+    if (activeTab !== "tokenTransfers") return;
+    if (tokenTransfersLoaded || tokenTransfersLoading) return;
+
+    let cancelled = false;
+    (async () => {
+      setTokenTransfersLoading(true);
+      setTokenTransfersError(null);
+      try {
+        // page-1-indexed on the wire (matches sibling /address routes); we
+        // ask for the first page at limit=250 to give the search box something
+        // useful to chew on without paging through the server.
+        const res = await axios.get(
+          `${config.handlerUrl}/address/${tokenTransferAddress}/token-transfers`,
+          { params: { page: 1, limit: 250 } }
+        );
+        if (cancelled) return;
+        const rows: TokenTransferRow[] = Array.isArray(res.data?.transfers) ? res.data.transfers : [];
+        setTokenTransfers(rows);
+        setTokenTransfersLoaded(true);
+      } catch (err) {
+        if (cancelled) return;
+        console.error("Failed to load token transfers:", err);
+        setTokenTransfersError("Failed to load token transfers");
+      } finally {
+        if (!cancelled) setTokenTransfersLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, tokenTransferAddress, tokenTransfersLoaded, tokenTransfersLoading]);
 
   // Pre-format the transaction data
   const formattedTransactions = useMemo(() => transactions.map(tx => {
@@ -287,6 +367,118 @@ export default function TanStackTable({ transactions, internalt }: TableProps): 
     }),
   ], [internalt.length, internalColumnHelper]);
 
+  // Token transfers, normalised once per fetch. tsSeconds turns the syncer's
+  // hex timestamp into the seconds-int formatTimestamp expects; falling back
+  // to 0 yields formatTimestamp's empty-string sentinel so a missing field
+  // doesn't render "NaN" or "Invalid Date".
+  const formattedTokenTransfers = useMemo(() => tokenTransfers.map((row) => {
+    const decimals = typeof row.tokenDecimals === "number" ? row.tokenDecimals : 0;
+    const formattedAmount = formatTokenAmount(row.amount, decimals);
+    let tsSeconds = 0;
+    if (row.timestamp) {
+      try {
+        tsSeconds = row.timestamp.startsWith("0x") ? parseInt(row.timestamp, 16) : parseInt(row.timestamp, 10);
+        if (Number.isNaN(tsSeconds)) tsSeconds = 0;
+      } catch {
+        tsSeconds = 0;
+      }
+    }
+    return { ...row, formattedAmount, tsSeconds };
+  }), [tokenTransfers]);
+
+  const tokenTransferColumns = useMemo(() => [
+    // Token column: name + standard badge + per-id tag for NFTs. Single
+    // cell with two lines so the table stays compact on the address page.
+    tokenTransferColumnHelper.accessor((row) => ({
+      name: row.tokenName,
+      symbol: row.tokenSymbol,
+      standard: row.tokenStandard,
+      tokenID: row.tokenID,
+      contractAddress: row.contractAddress,
+    }), {
+      id: "Token",
+      cell: (info) => {
+        const { name, symbol, standard, tokenID, contractAddress } = info.getValue();
+        const label = name || symbol || (contractAddress ? truncateMiddle(contractAddress) : "Token");
+        // Surface the QRC-X branding on the row badge (DB rows stay ERC-X)
+        // so users reading the explorer see consistent QRL-flavoured terminology.
+        const badge = standard ? standard.replace(/^ERC-/, "QRC-") : "Token";
+        return (
+          <div className="flex flex-col">
+            <Link
+              href={`/address/${contractAddress}`}
+              className="text-[#ffa729] hover:text-[#ffb954] font-medium"
+              title={contractAddress}
+            >
+              {label}
+            </Link>
+            <div className="flex items-center gap-2 text-xs text-gray-400">
+              <span className="font-mono">{badge}</span>
+              {tokenID && <span className="font-mono">#{tokenID}</span>}
+              {symbol && symbol !== name && <span className="font-mono">({symbol})</span>}
+            </div>
+          </div>
+        );
+      },
+      header: "Token",
+    }),
+    tokenTransferColumnHelper.accessor((row) => ({ from: row.from, to: row.to }), {
+      id: "Parties",
+      cell: (info) => {
+        const { from, to } = info.getValue();
+        return (
+          <div className="flex flex-col gap-1">
+            {from && (
+              <div className="flex items-center gap-1">
+                <span className="text-gray-400 text-sm">From:</span>
+                <Link href={`/address/${from}`} title={from} className="text-[#ffa729] hover:text-[#ffb954]">
+                  {truncateMiddle(from)}
+                </Link>
+              </div>
+            )}
+            {to && (
+              <div className="flex items-center gap-1">
+                <span className="text-gray-400 text-sm">To:</span>
+                <Link href={`/address/${to}`} title={to} className="text-[#ffa729] hover:text-[#ffb954]">
+                  {truncateMiddle(to)}
+                </Link>
+              </div>
+            )}
+          </div>
+        );
+      },
+      header: "From/To",
+    }),
+    tokenTransferColumnHelper.accessor("formattedAmount", {
+      cell: (info) => {
+        const row = info.row.original;
+        const symbol = row.tokenSymbol;
+        return (
+          <span className="font-mono">
+            {info.getValue()}
+            {symbol && <span className="text-gray-500 ml-2">{symbol}</span>}
+          </span>
+        );
+      },
+      header: "Amount",
+    }),
+    tokenTransferColumnHelper.accessor("txHash", {
+      cell: (info) => {
+        const fullHash = info.getValue();
+        return (
+          <Link href={`/tx/${fullHash}`} title={fullHash} className="text-[#ffa729] hover:text-[#ffb954]">
+            {truncateMiddle(fullHash)}
+          </Link>
+        );
+      },
+      header: "Transaction Hash",
+    }),
+    tokenTransferColumnHelper.accessor("tsSeconds", {
+      cell: (info) => <span>{formatTimestamp(info.getValue())}</span>,
+      header: "Timestamp",
+    }),
+  ], []);
+
   const transactionTable = useReactTable({
     data: formattedTransactions,
     // @ts-expect-error - ColumnDef types conflict with index signature in Transaction type
@@ -304,6 +496,18 @@ export default function TanStackTable({ transactions, internalt }: TableProps): 
     data: formattedInternalTransactions,
     // @ts-expect-error - ColumnDef types conflict with index signature in InternalTransaction type
     columns: internalTransactionColumns,
+    state: {
+      globalFilter,
+    },
+    onGlobalFilterChange: setGlobalFilter,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+  });
+
+  const tokenTransferTable = useReactTable({
+    data: formattedTokenTransfers,
+    columns: tokenTransferColumns as ColumnDef<TokenTransferRow & { formattedAmount: string; tsSeconds: number }>[],
     state: {
       globalFilter,
     },
@@ -451,22 +655,129 @@ export default function TanStackTable({ transactions, internalt }: TableProps): 
     );
   };
 
+  const renderTokenTransferCard = (row: Row<TokenTransferRow & { formattedAmount: string; tsSeconds: number }>): JSX.Element => {
+    const data = row.original;
+    const badge = data.tokenStandard ? data.tokenStandard.replace(/^ERC-/, "QRC-") : "Token";
+    const label = data.tokenName || data.tokenSymbol || data.contractAddress;
+    return (
+      <div key={row.id} className="p-4 border-b border-[#3d3d3d] last:border-b-0">
+        <div className="space-y-3">
+          <div className="flex justify-between items-start">
+            <div className="space-y-1">
+              <div className="text-xs text-gray-400">Token</div>
+              <Link
+                href={`/address/${data.contractAddress}`}
+                className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
+              >
+                {label}
+              </Link>
+              <div className="text-xs text-gray-400 font-mono">
+                {badge}{data.tokenID ? ` #${data.tokenID}` : ""}
+              </div>
+            </div>
+            <div className="px-2 py-1 rounded bg-[#3d3d3d] bg-opacity-40">
+              <span className="text-xs text-[#ffa729]">{data.formattedAmount}{data.tokenSymbol ? " " + data.tokenSymbol : ""}</span>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-xs text-gray-400">Transaction Hash</div>
+            <Link
+              href={`/tx/${data.txHash}`}
+              className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
+            >
+              {data.txHash}
+            </Link>
+          </div>
+
+          <div>
+            <div className="text-xs text-gray-400">From</div>
+            {data.from && (
+              <Link href={`/address/${data.from}`} className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all">
+                {truncateMiddle(data.from)}
+              </Link>
+            )}
+          </div>
+
+          <div>
+            <div className="text-xs text-gray-400">To</div>
+            {data.to && (
+              <Link href={`/address/${data.to}`} className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all">
+                {truncateMiddle(data.to)}
+              </Link>
+            )}
+          </div>
+
+          <div>
+            <div className="text-xs text-gray-400">Time</div>
+            <div className="text-sm text-white">{formatTimestamp(data.tsSeconds)}</div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (!mounted) {
     return null;
   }
+
+  const showTokenTab = !!tokenTransferAddress;
+  const tabId = activeTab === "transactions" ? "tab-transactions" : activeTab === "internal" ? "tab-internal" : "tab-token-transfers";
+  const tableLabel = activeTab === "transactions"
+    ? "Transaction history"
+    : activeTab === "internal"
+      ? "Internal transactions"
+      : "Token transfers";
+  const searchPlaceholder = activeTab === "tokenTransfers"
+    ? "Search token transfers..."
+    : "Search transactions...";
+
+  // Single switch keeps the table-selection ternaries below readable; without
+  // it every render branch (mobile cards, desktop table, paginator, page
+  // counter) repeats the same 3-way conditional and drifts over time.
+  const activeTable: Table<Transaction & { formattedAmount: string; formattedFees: string }>
+    | Table<InternalTransaction & { formattedValue: string }>
+    | Table<TokenTransferRow & { formattedAmount: string; tsSeconds: number }> =
+      activeTab === "internal"
+        ? internalTransactionTable
+        : activeTab === "tokenTransfers"
+          ? tokenTransferTable
+          : transactionTable;
+
+  const renderActiveCards = (): JSX.Element[] => {
+    if (activeTab === "internal") {
+      return internalTransactionTable.getRowModel().rows.map((row) => renderInternalTransactionCard(row));
+    }
+    if (activeTab === "tokenTransfers") {
+      return tokenTransferTable.getRowModel().rows.map((row) => renderTokenTransferCard(row));
+    }
+    return transactionTable.getRowModel().rows.map((row) => renderTransactionCard(row));
+  };
+
+  const renderActiveHeader = (): JSX.Element[] => {
+    if (activeTab === "internal") return renderTableHeader(internalTransactionTable);
+    if (activeTab === "tokenTransfers") return renderTableHeader(tokenTransferTable);
+    return renderTableHeader(transactionTable);
+  };
+
+  const renderActiveBody = (): JSX.Element[] => {
+    if (activeTab === "internal") return renderTableBody(internalTransactionTable);
+    if (activeTab === "tokenTransfers") return renderTableBody(tokenTransferTable);
+    return renderTableBody(transactionTable);
+  };
 
   return (
     <div className="w-full">
       <div className="p-4 border-b border-[#3d3d3d] space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div role="tablist" className="flex items-center space-x-4">
+          <div role="tablist" className="flex items-center flex-wrap gap-2 md:gap-4">
             <button
               id="tab-transactions"
               role="tab"
-              aria-selected={!showInternal}
-              onClick={() => setShowInternal(false)}
+              aria-selected={activeTab === "transactions"}
+              onClick={() => setActiveTab("transactions")}
               className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                !showInternal
+                activeTab === "transactions"
                   ? "bg-[#ffa729] text-black"
                   : "text-gray-400 hover:text-white"
               }`}
@@ -476,141 +787,113 @@ export default function TanStackTable({ transactions, internalt }: TableProps): 
             <button
               id="tab-internal"
               role="tab"
-              aria-selected={showInternal}
-              onClick={() => setShowInternal(true)}
+              aria-selected={activeTab === "internal"}
+              onClick={() => setActiveTab("internal")}
               className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                showInternal
+                activeTab === "internal"
                   ? "bg-[#ffa729] text-black"
                   : "text-gray-400 hover:text-white"
               }`}
             >
               Internal Txns
             </button>
+            {showTokenTab && (
+              <button
+                id="tab-token-transfers"
+                role="tab"
+                aria-selected={activeTab === "tokenTransfers"}
+                onClick={() => setActiveTab("tokenTransfers")}
+                className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                  activeTab === "tokenTransfers"
+                    ? "bg-[#ffa729] text-black"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                Token Transfers
+                {tokenTransfersLoaded && (
+                  <span className="ml-1 text-xs opacity-75">({tokenTransfers.length})</span>
+                )}
+              </button>
+            )}
           </div>
           <div className="flex items-center space-x-4">
             <DebouncedInput
               value={globalFilter ?? ""}
               onChange={(value) => setGlobalFilter(String(value))}
               className="px-4 py-2 text-sm bg-[#1a1a1a] border border-[#3d3d3d] rounded-lg focus:outline-none focus:border-[#ffa729] text-white w-full md:w-auto"
-              placeholder="Search transactions..."
+              placeholder={searchPlaceholder}
             />
-            {showInternal ? (
+            {activeTab === "internal" ? (
               <DownloadBtnInternal data={internalt} />
-            ) : (
+            ) : activeTab === "transactions" ? (
               <DownloadBtn data={transactions} />
-            )}
+            ) : null}
           </div>
         </div>
       </div>
 
-      <div role="tabpanel" aria-labelledby={showInternal ? "tab-internal" : "tab-transactions"} className="overflow-x-auto">
-        {windowWidth < 768 ? (
-          <div className="overflow-hidden">
-            {showInternal
-              ? internalTransactionTable.getRowModel().rows.map((row) => renderInternalTransactionCard(row))
-              : transactionTable.getRowModel().rows.map((row) => renderTransactionCard(row))
-            }
-          </div>
-        ) : (
-          <table aria-label={showInternal ? "Internal transactions" : "Transaction history"} className="w-full">
-            <thead>
-              {showInternal
-                ? renderTableHeader(internalTransactionTable)
-                : renderTableHeader(transactionTable)
-              }
-            </thead>
-            <tbody>
-              {showInternal
-                ? renderTableBody(internalTransactionTable)
-                : renderTableBody(transactionTable)
-              }
-            </tbody>
-          </table>
+      <div role="tabpanel" aria-labelledby={tabId} className="overflow-x-auto">
+        {activeTab === "tokenTransfers" && tokenTransfersLoading && (
+          <div className="p-8 text-center text-gray-400">Loading token transfers...</div>
+        )}
+        {activeTab === "tokenTransfers" && !tokenTransfersLoading && tokenTransfersError && (
+          <div className="p-8 text-center text-red-400">{tokenTransfersError}</div>
+        )}
+        {activeTab === "tokenTransfers" && !tokenTransfersLoading && !tokenTransfersError && tokenTransfersLoaded && tokenTransfers.length === 0 && (
+          <div className="p-8 text-center text-gray-400">No token transfers for this address.</div>
+        )}
+        {(activeTab !== "tokenTransfers" || (tokenTransfersLoaded && tokenTransfers.length > 0)) && (
+          windowWidth < 768 ? (
+            <div className="overflow-hidden">
+              {renderActiveCards()}
+            </div>
+          ) : (
+            <table aria-label={tableLabel} className="w-full">
+              <thead>{renderActiveHeader()}</thead>
+              <tbody>{renderActiveBody()}</tbody>
+            </table>
+          )
         )}
       </div>
 
       <div className="p-4 border-t border-[#3d3d3d]">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
-            {showInternal ? (
-              <>
-                <button
-                  aria-label="Go to first page"
-                  className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
-                  onClick={() => internalTransactionTable.setPageIndex(0)}
-                  disabled={!internalTransactionTable.getCanPreviousPage()}
-                >
-                  {"<<"}
-                </button>
-                <button
-                  aria-label="Go to previous page"
-                  className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
-                  onClick={() => internalTransactionTable.previousPage()}
-                  disabled={!internalTransactionTable.getCanPreviousPage()}
-                >
-                  Previous
-                </button>
-                <button
-                  aria-label="Go to next page"
-                  className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
-                  onClick={() => internalTransactionTable.nextPage()}
-                  disabled={!internalTransactionTable.getCanNextPage()}
-                >
-                  Next
-                </button>
-                <button
-                  aria-label="Go to last page"
-                  className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
-                  onClick={() => internalTransactionTable.setPageIndex(internalTransactionTable.getPageCount() - 1)}
-                  disabled={!internalTransactionTable.getCanNextPage()}
-                >
-                  {">>"}
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  aria-label="Go to first page"
-                  className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
-                  onClick={() => transactionTable.setPageIndex(0)}
-                  disabled={!transactionTable.getCanPreviousPage()}
-                >
-                  {"<<"}
-                </button>
-                <button
-                  aria-label="Go to previous page"
-                  className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
-                  onClick={() => transactionTable.previousPage()}
-                  disabled={!transactionTable.getCanPreviousPage()}
-                >
-                  Previous
-                </button>
-                <button
-                  aria-label="Go to next page"
-                  className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
-                  onClick={() => transactionTable.nextPage()}
-                  disabled={!transactionTable.getCanNextPage()}
-                >
-                  Next
-                </button>
-                <button
-                  aria-label="Go to last page"
-                  className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
-                  onClick={() => transactionTable.setPageIndex(transactionTable.getPageCount() - 1)}
-                  disabled={!transactionTable.getCanNextPage()}
-                >
-                  {">>"}
-                </button>
-              </>
-            )}
+            <button
+              aria-label="Go to first page"
+              className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
+              onClick={() => activeTable.setPageIndex(0)}
+              disabled={!activeTable.getCanPreviousPage()}
+            >
+              {"<<"}
+            </button>
+            <button
+              aria-label="Go to previous page"
+              className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
+              onClick={() => activeTable.previousPage()}
+              disabled={!activeTable.getCanPreviousPage()}
+            >
+              Previous
+            </button>
+            <button
+              aria-label="Go to next page"
+              className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
+              onClick={() => activeTable.nextPage()}
+              disabled={!activeTable.getCanNextPage()}
+            >
+              Next
+            </button>
+            <button
+              aria-label="Go to last page"
+              className="px-3 py-1.5 text-sm text-gray-400 hover:text-white disabled:text-gray-600"
+              onClick={() => activeTable.setPageIndex(activeTable.getPageCount() - 1)}
+              disabled={!activeTable.getCanNextPage()}
+            >
+              {">>"}
+            </button>
           </div>
           <div className="text-sm text-gray-400">
-            Page {showInternal
-              ? internalTransactionTable.getState().pagination.pageIndex + 1
-              : transactionTable.getState().pagination.pageIndex + 1} of{" "}
-            {showInternal
-              ? internalTransactionTable.getPageCount()
-              : transactionTable.getPageCount()}
+            Page {activeTable.getState().pagination.pageIndex + 1} of {Math.max(1, activeTable.getPageCount())}
           </div>
         </div>
       </div>
