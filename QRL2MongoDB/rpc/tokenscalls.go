@@ -46,7 +46,11 @@ var (
 const (
 	TransferEventSignature       = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 	TransferSingleEventSignature = "0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62"
-	TransferBatchEventSignature  = "0x4a39dc06d4c0dbc64b50af327f5f6b67b0c4b21be9d6c92d40b00b3e7ec1c3ef"
+	// keccak256("TransferBatch(address,address,address,uint256[],uint256[])").
+	// The earlier value (…b50af327f5f6b67…) was a typo, so qrl_getLogs filtered
+	// by it never returned TransferBatch logs and the explorer silently dropped
+	// every ERC-1155 batch mint / batch transfer.
+	TransferBatchEventSignature = "0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb"
 )
 
 // CallContractMethod makes a qrl_call to a contract method and returns the result

@@ -524,6 +524,75 @@ func normalizeAddress(addr string) string {
 	return addr
 }
 
+// dropLegacyConflictingIndexes scans `collection`'s indexes and drops any
+// whose key spec matches one of `targets`, regardless of the index name.
+// Used to migrate off auto-named indexes (Mongo's default `field_1_field_1`)
+// before re-creating the same key spec under a stable name. Without this
+// step Mongo rejects the second create with IndexOptionsConflict and aborts
+// the whole CreateMany batch.
+//
+// Key match is direction-aware and order-aware (the `bson.D` is a slice).
+// Pass exactly the key spec you intend to recreate.
+func dropLegacyConflictingIndexes(ctx context.Context, collection *mongo.Collection, targets []bson.D) {
+	cursor, err := collection.Indexes().List(ctx)
+	if err != nil {
+		configs.Logger.Warn("Could not list indexes for legacy cleanup; existing autoindexes may cause IndexOptionsConflict",
+			zap.Error(err))
+		return
+	}
+	defer cursor.Close(ctx)
+
+	for cursor.Next(ctx) {
+		var idx struct {
+			Name string `bson:"name"`
+			Key  bson.D `bson:"key"`
+		}
+		if decErr := cursor.Decode(&idx); decErr != nil {
+			continue
+		}
+		if idx.Name == "_id_" {
+			continue
+		}
+		for _, want := range targets {
+			if !sameKeySpec(idx.Key, want) {
+				continue
+			}
+			if _, dErr := collection.Indexes().DropOne(ctx, idx.Name); dErr != nil {
+				msg := dErr.Error()
+				if !strings.Contains(msg, "IndexNotFound") &&
+					!strings.Contains(msg, "ns does not exist") &&
+					!strings.Contains(msg, "NamespaceNotFound") {
+					configs.Logger.Warn("Could not drop legacy conflicting index",
+						zap.String("indexName", idx.Name),
+						zap.Error(dErr))
+				}
+			} else {
+				configs.Logger.Info("Dropped legacy conflicting index",
+					zap.String("indexName", idx.Name))
+			}
+			break
+		}
+	}
+}
+
+// sameKeySpec returns true when two index key specs are identical in field
+// order, name, and direction. Mongo treats `{a:1,b:1}` and `{b:1,a:1}` as
+// different indexes, so order matters for collision detection.
+func sameKeySpec(a, b bson.D) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Key != b[i].Key {
+			return false
+		}
+		if a[i].Value != b[i].Value {
+			return false
+		}
+	}
+	return true
+}
+
 // InitializeTokenTransfersCollection ensures the token transfers collection is set up with proper indexes.
 // Uses CreateMany which is a no-op for indexes that already exist, safe to call on every restart.
 func InitializeTokenTransfersCollection() error {
@@ -545,6 +614,29 @@ func InitializeTokenTransfersCollection() error {
 				zap.Error(err))
 		}
 	}
+
+	// Drop legacy auto-named indexes that collide on key spec with the
+	// named ones we're about to create. configs/setup.go used to register
+	// these without SetName(), so Mongo gave them auto-generated names
+	// like "contractAddress_1_blockNumber_1" / "txHash_1". When the named
+	// versions below are later submitted via CreateMany, Mongo rejects
+	// the whole batch with IndexOptionsConflict — including the new
+	// 4-tuple unique that ERC-1155 TransferBatch + ERC-721 batch mint
+	// depend on. Same pattern as the tokenBalances migration further
+	// down: match by key spec (not name), drop everything that conflicts
+	// with what we're about to (re)create. Crucially this includes the
+	// legacy "txHash_1" unique-on-txHash, which would otherwise reject
+	// every Transfer event after the first per tx (E11000 duplicate-key).
+	// See https://github.com/DigitalGuards/zondscan/pull/110 for the
+	// incident write-up.
+	dropLegacyConflictingIndexes(ctx, collection,
+		[]bson.D{
+			{{Key: "contractAddress", Value: 1}, {Key: "blockNumber", Value: 1}},
+			{{Key: "from", Value: 1}, {Key: "blockNumber", Value: 1}},
+			{{Key: "to", Value: 1}, {Key: "blockNumber", Value: 1}},
+			{{Key: "txHash", Value: 1}},
+		},
+	)
 
 	// Create the new 4-tuple unique index BEFORE dropping the old 3-tuple
 	// version. Order matters: if creation fails (duplicate-key on legacy
