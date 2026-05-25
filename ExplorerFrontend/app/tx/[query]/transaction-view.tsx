@@ -694,7 +694,34 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                   </div>
                 </>
               )}
-              <p className="font-mono text-gray-300 break-all text-xs leading-relaxed">{transaction.input}</p>
+              {/* Raw calldata lives inside a native <details> disclosure
+                  so it doesn't dominate the page on huge inputs (a
+                  contract deploy can be 15 KB+ of bytecode). When the
+                  call decoded successfully the disclosure is closed by
+                  default — users land on the decoded args view; the
+                  raw hex is one click away. When nothing decoded,
+                  Etherscan keeps it closed too, signalling "click to
+                  see raw data" instead of dumping the hex inline. */}
+              <details className="mt-3 group border-t border-[#3d3d3d] pt-3">
+                <summary className="cursor-pointer text-xs text-gray-400 hover:text-gray-200 select-none flex items-center gap-2 list-none">
+                  <span className="inline-block transition-transform group-open:rotate-90">▶</span>
+                  <span>More Details</span>
+                  <span className="text-gray-500 font-mono">
+                    ({transaction.input.length.toLocaleString('en-US')} chars)
+                  </span>
+                </summary>
+                <div className="mt-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] text-gray-500 uppercase tracking-wide">
+                      Raw input data (hex)
+                    </span>
+                    <CopyButton value={transaction.input} label="Copy raw input" size="sm" />
+                  </div>
+                  <p className="font-mono text-gray-300 break-all text-xs leading-relaxed">
+                    {transaction.input}
+                  </p>
+                </div>
+              </details>
               {/* Neither the well-known-token-selector decoder nor the
                   ABI decoder produced a hit. If the target has a
                   contractCode row but isn't verified, nudge users
