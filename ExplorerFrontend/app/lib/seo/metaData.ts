@@ -26,10 +26,10 @@ export const sharedMetadata: Partial<Metadata> = {
     siteName: 'QRL Zond Explorer',
     images: [
       {
-        url: '/QRL.png',
-        width: 512,
-        height: 512,
-        alt: 'QRL Logo',
+        url: '/ZondScan_Logo.png',
+        width: 1200,
+        height: 800,
+        alt: 'ZondScan Logo',
       },
     ],
   },
@@ -37,7 +37,7 @@ export const sharedMetadata: Partial<Metadata> = {
     card: 'summary_large_image',
     creator: '@QRLedger',
     site: '@QRLedger',
-    images: ['/QRL.png'],
+    images: ['/ZondScan_Logo.png'],
   },
   authors: [{ name: 'DigitalGuards' }],
   robots: {

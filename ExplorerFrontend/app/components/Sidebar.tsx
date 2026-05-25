@@ -166,7 +166,7 @@ export default function Sidebar(): JSX.Element {
           <Link href="/" >
             <div className="relative w-14 h-12">
               <Image
-                src="/ZondScan_Logo_Z.gif"
+                src="/ZondScan_Logo.gif"
                 alt="ZondScan home"
                 fill
                 sizes="56px"
@@ -203,7 +203,7 @@ export default function Sidebar(): JSX.Element {
           <Link href="/" className="flex flex-col items-center mb-6 px-1 group">
             <div className="w-32 h-24 relative">
               <Image
-                src="/ZondScan_Logo_Z.gif"
+                src="/ZondScan_Logo.gif"
                 alt="ZondScan home"
                 fill
                 sizes="128px"
