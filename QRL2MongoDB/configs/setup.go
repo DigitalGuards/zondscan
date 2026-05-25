@@ -279,40 +279,15 @@ func initializeCollections(db *mongo.Database) {
 		Logger.Error("Failed to create processed index for pending token contracts collection", zap.Error(err))
 	}
 
-	// Initialize token transfers collection with indexes
-	tokenTransfersCollection := db.Collection("tokenTransfers")
-	_, err = tokenTransfersCollection.Indexes().CreateMany(
-		ctx,
-		[]mongo.IndexModel{
-			{
-				Keys: bson.D{
-					{Key: "contractAddress", Value: 1},
-					{Key: "blockNumber", Value: 1},
-				},
-			},
-			{
-				Keys: bson.D{
-					{Key: "from", Value: 1},
-					{Key: "blockNumber", Value: 1},
-				},
-			},
-			{
-				Keys: bson.D{
-					{Key: "to", Value: 1},
-					{Key: "blockNumber", Value: 1},
-				},
-			},
-			{
-				Keys:    bson.D{{Key: "txHash", Value: 1}},
-				Options: options.Index().SetUnique(true),
-			},
-		},
-	)
-	if err != nil {
-		Logger.Error("Failed to create indexes for token transfers collection", zap.Error(err))
-	} else {
-		Logger.Info("Token transfers collection initialized with indexes")
-	}
+	// tokenTransfers indexes are owned by db.InitializeTokenTransfersCollection
+	// (called from synchroniser.InitializeTokenCollections at startup). Creating
+	// a duplicate, auto-named set here causes IndexOptionsConflict against the
+	// named set declared in db/tokentransfers.go, which aborts the entire
+	// CreateMany in the proper init — including the (txHash, contract, logIndex,
+	// tokenID) unique that ERC-1155 TransferBatch + ERC-721 batch mint depend on
+	// to land more than one row per tx. Leaving that single source of truth in
+	// place here keeps the indexes aligned with the model that the writer code
+	// actually expects.
 
 	// Initialize CoinGecko collection with empty document
 	_, err = db.Collection("coingecko").UpdateOne(
