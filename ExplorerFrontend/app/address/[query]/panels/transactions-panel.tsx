@@ -13,7 +13,6 @@ import type { ColumnDef, Row } from '@tanstack/react-table';
 import {
   formatAddress,
   formatAmount,
-  formatPlanckAdaptive,
   formatTimestamp,
   normalizeHexString,
 } from '../../../lib/helpers';
@@ -70,23 +69,23 @@ export default function TransactionsPanel({
       transactions.map((tx) => {
         const [amount, amountUnit] = formatAmount(tx.Amount);
         // PaidFees comes off the wire as a decimal-Quanta string
-        // ("0.0000787..."); lift to Planck (×1e18) and let the shared
-        // formatPlanckAdaptive pick the Shor / Planck / Quanta tier the
-        // same way the /gas page does. Cast via unknown because the
-        // type still says `number?` even though the wire shape is a
-        // string.
+        // ("0.0000787..."). Render in QRL with up to 8 decimals,
+        // Etherscan-style ("0.00428184 QRL"). Cast via unknown because
+        // the type still says `number?` even though the wire shape is
+        // a string. Trailing zeros trim out via parseFloat round-trip
+        // so 0.10000000 displays as 0.1, not 0.10000000.
         const rawFees = tx.PaidFees as unknown;
-        const feesPlanck =
+        const feeQuanta =
           typeof rawFees === 'string' || typeof rawFees === 'number'
-            ? Math.round(parseFloat(String(rawFees)) * 1e18)
+            ? parseFloat(String(rawFees))
             : 0;
-        const [feeValue, feeUnit] = formatPlanckAdaptive(
-          Number.isFinite(feesPlanck) ? feesPlanck : 0,
-        );
+        const formattedFees = Number.isFinite(feeQuanta)
+          ? `${parseFloat(feeQuanta.toFixed(8))} QRL`
+          : '0 QRL';
         return {
           ...tx,
           formattedAmount: `${amount} ${amountUnit}`,
-          formattedFees: `${feeValue} ${feeUnit}`,
+          formattedFees,
         };
       }),
     [transactions],
