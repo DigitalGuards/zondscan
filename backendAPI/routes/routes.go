@@ -1250,6 +1250,35 @@ func UserRoute(router *gin.Engine) {
 		})
 	})
 
+	// Token / NFT transfer events touching this wallet (sender OR recipient),
+	// across every contract. Powers the "Token Transfers" tab on the address
+	// page, which previously had no data source: /address/aggregate only
+	// returns native-value transactions, and /token/:addr/transfers is keyed
+	// by contract not by holder. Paginated like /address/:addr/transactions.
+	router.GET("/address/:address/token-transfers", func(c *gin.Context) {
+		address := c.Param("address")
+		// Match the address-page Transactions table's 5-rows-per-page default
+		// (paginated server-side, page-1-indexed). Cap matches the DB layer.
+		page, limit := getPaginationParams(c, 1, 5)
+		// db helper is 0-indexed; getPaginationParams returns the 1-indexed
+		// form so the query-string contract stays consistent with siblings.
+		transfers, total, err := db.GetTokenTransfersByAddress(address, page-1, limit)
+		if err != nil {
+			log.Printf("Error fetching token transfers for %s: %v", address, err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to fetch token transfers: %v", err),
+			})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"address":   address,
+			"transfers": transfers,
+			"total":     total,
+			"page":      page,
+			"limit":     limit,
+		})
+	})
+
 	// Get all token balances for a wallet address.
 	//
 	// Default behaviour returns every standard the explorer indexes for

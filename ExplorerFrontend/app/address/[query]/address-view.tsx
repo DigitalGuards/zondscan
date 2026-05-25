@@ -267,14 +267,24 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                 so there's no spacer when it's not relevant. */}
             <HoldingsDisplay address={addressSegment} />
 
-            {/* Transactions Section */}
+            {/* Transactions Section. The table itself surfaces three tabs:
+                Transactions (native), Internal Txns (sub-frame calls), and
+                Token Transfers (NFT / ERC-20 events for the holder). Token
+                transfers are lazy-loaded server-side, so an address with no
+                native txs but plenty of NFT activity still gets the tabs.
+                We only fall back to the EmptyState when there's literally no
+                activity of any kind on this address. */}
             <section aria-labelledby="address-transactions-heading" className="space-y-3 md:space-y-4">
-                <h2 id="address-transactions-heading" className="text-base md:text-lg lg:text-xl font-semibold text-accent">Transactions</h2>
+                <h2 id="address-transactions-heading" className="text-base md:text-lg lg:text-xl font-semibold text-accent">Activity</h2>
                 <div className="overflow-hidden rounded-xl border border-border">
-                    {addressData.transactions_by_address && addressData.transactions_by_address.length > 0 ? (
-                        <TanStackTable 
-                            transactions={addressData.transactions_by_address} 
+                    {(
+                        (addressData.transactions_by_address && addressData.transactions_by_address.length > 0)
+                        || (addressData.internal_transactions_by_address && addressData.internal_transactions_by_address.length > 0)
+                    ) ? (
+                        <TanStackTable
+                            transactions={addressData.transactions_by_address || []}
                             internalt={addressData.internal_transactions_by_address || []}
+                            tokenTransferAddress={addressSegment}
                         />
                     ) : (
                         <EmptyState
