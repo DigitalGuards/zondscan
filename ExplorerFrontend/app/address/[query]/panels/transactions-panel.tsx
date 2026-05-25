@@ -13,9 +13,11 @@ import type { ColumnDef, Row } from '@tanstack/react-table';
 import {
   formatAddress,
   formatAmount,
+  formatPlanckAdaptive,
   formatTimestamp,
   normalizeHexString,
 } from '../../../lib/helpers';
+import CopyButton from '../../../components/CopyButton';
 import DebouncedInput from '../../../components/DebouncedInput';
 import { DownloadBtn } from '../../../components/DownloadBtn';
 import EmptyState from '../../../components/EmptyState';
@@ -52,42 +54,6 @@ const columnHelper = createColumnHelper<
   Transaction & { formattedAmount: string; formattedFees: string }
 >();
 
-/**
- * Convert the wire PaidFees value (decimal Quanta as string OR number)
- * into a human-readable Shor string. 1 Quanta = 10^9 Shor, mirroring
- * Eth's Gwei / wei split. Tiny fees that round to 0 Shor surface as
- * "<1 Shor" instead of a misleading "0".
- */
-const formatPaidFeesShor = (tx: Transaction): string => {
-  // PaidFees is typed `number?` but the syncer writes a decimal string
-  // ("0.000078750000357000"), and the type's never been updated. Coerce
-  // via `unknown` so the runtime check can branch correctly.
-  const raw = tx.PaidFees as unknown;
-  let quanta: number;
-  if (typeof raw === 'number') {
-    quanta = raw;
-  } else if (typeof raw === 'string' && raw.trim() !== '') {
-    const parsed = parseFloat(raw);
-    quanta = Number.isFinite(parsed) ? parsed : NaN;
-  } else if (typeof tx.gasUsed === 'number' && typeof tx.gasPrice === 'number') {
-    // Legacy fallback for rows lacking PaidFees: gasUsed * gasPrice / 10^18.
-    try {
-      quanta = Number(BigInt(tx.gasUsed) * BigInt(tx.gasPrice)) / 1e18;
-    } catch {
-      quanta = NaN;
-    }
-  } else {
-    quanta = NaN;
-  }
-  if (!Number.isFinite(quanta) || quanta === 0) return '0 Shor';
-  const shor = quanta * 1e9;
-  if (shor < 1) return `${parseFloat(shor.toFixed(4))} Shor`;
-  // Integer Shor amounts get a thousands separator; fractional values
-  // keep up to 2 decimals to avoid 9-digit tails on gas-priced fees.
-  return `${shor >= 1 && Math.abs(shor - Math.round(shor)) < 0.005
-    ? Math.round(shor).toLocaleString('en-US')
-    : shor.toLocaleString('en-US', { maximumFractionDigits: 2 })} Shor`;
-};
 
 interface TransactionsPanelProps {
   transactions: Transaction[];
@@ -103,10 +69,24 @@ export default function TransactionsPanel({
     () =>
       transactions.map((tx) => {
         const [amount, amountUnit] = formatAmount(tx.Amount);
+        // PaidFees comes off the wire as a decimal-Quanta string
+        // ("0.0000787..."); lift to Planck (×1e18) and let the shared
+        // formatPlanckAdaptive pick the Shor / Planck / Quanta tier the
+        // same way the /gas page does. Cast via unknown because the
+        // type still says `number?` even though the wire shape is a
+        // string.
+        const rawFees = tx.PaidFees as unknown;
+        const feesPlanck =
+          typeof rawFees === 'string' || typeof rawFees === 'number'
+            ? Math.round(parseFloat(String(rawFees)) * 1e18)
+            : 0;
+        const [feeValue, feeUnit] = formatPlanckAdaptive(
+          Number.isFinite(feesPlanck) ? feesPlanck : 0,
+        );
         return {
           ...tx,
           formattedAmount: `${amount} ${amountUnit}`,
-          formattedFees: formatPaidFeesShor(tx),
+          formattedFees: `${feeValue} ${feeUnit}`,
         };
       }),
     [transactions],
@@ -161,9 +141,12 @@ export default function TransactionsPanel({
         cell: (info) => {
           const fullHash = '0x' + normalizeHexString(info.getValue());
           return (
-            <Link href={'/tx/' + fullHash} title={fullHash}>
-              {truncateMiddle(fullHash)}
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link href={'/tx/' + fullHash} title={fullHash}>
+                {truncateMiddle(fullHash)}
+              </Link>
+              <CopyButton value={fullHash} label="Copy hash" size="sm" stopPropagation />
+            </div>
           );
         },
       }),
@@ -220,12 +203,20 @@ export default function TransactionsPanel({
 
           <div>
             <div className="text-xs text-gray-400">Transaction Hash</div>
-            <Link
-              href={'/tx/0x' + normalizeHexString(r.TxHash)}
-              className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
-            >
-              {'0x' + normalizeHexString(r.TxHash)}
-            </Link>
+            <div className="flex items-start gap-2">
+              <Link
+                href={'/tx/0x' + normalizeHexString(r.TxHash)}
+                className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
+              >
+                {'0x' + normalizeHexString(r.TxHash)}
+              </Link>
+              <CopyButton
+                value={'0x' + normalizeHexString(r.TxHash)}
+                label="Copy hash"
+                size="sm"
+                stopPropagation
+              />
+            </div>
           </div>
 
           {r.From && (

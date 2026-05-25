@@ -12,6 +12,7 @@ import {
 } from '@tanstack/react-table';
 import type { ColumnDef, Row } from '@tanstack/react-table';
 import { formatTimestamp, formatTokenAmount } from '../../../lib/helpers';
+import CopyButton from '../../../components/CopyButton';
 import DebouncedInput from '../../../components/DebouncedInput';
 import config from '../../../../config';
 import {
@@ -231,13 +232,16 @@ export default function TokenTransfersPanel({
         cell: (info) => {
           const fullHash = info.getValue();
           return (
-            <Link
-              href={`/tx/${fullHash}`}
-              title={fullHash}
-              className="text-[#ffa729] hover:text-[#ffb954]"
-            >
-              {truncateMiddle(fullHash)}
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/tx/${fullHash}`}
+                title={fullHash}
+                className="text-[#ffa729] hover:text-[#ffb954]"
+              >
+                {truncateMiddle(fullHash)}
+              </Link>
+              <CopyButton value={fullHash} label="Copy hash" size="sm" stopPropagation />
+            </div>
           );
         },
       }),
@@ -308,12 +312,15 @@ export default function TokenTransfersPanel({
 
           <div>
             <div className="text-xs text-gray-400">Transaction Hash</div>
-            <Link
-              href={`/tx/${r.txHash}`}
-              className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
-            >
-              {r.txHash}
-            </Link>
+            <div className="flex items-start gap-2">
+              <Link
+                href={`/tx/${r.txHash}`}
+                className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
+              >
+                {r.txHash}
+              </Link>
+              <CopyButton value={r.txHash} label="Copy hash" size="sm" stopPropagation />
+            </div>
           </div>
 
           {r.from && (
