@@ -150,8 +150,26 @@ export default function TanStackTable({ transactions, internalt, tokenTransferAd
   const [mounted, setMounted] = useState(false);
   const [windowWidth, setWindowWidth] = useState(0);
   const [globalFilter, setGlobalFilter] = useState("");
-  const [activeTab, setActiveTab] = useState<TabKey>("transactions");
+  // Default to the first tab with data. Falling back to "transactions"
+  // would show an empty table for contract-call-only addresses (no native
+  // txs but plenty of internal calls / token transfers). Token transfers
+  // aren't fetched yet at this point, so we can only pick between native
+  // and internal here, with a deferred switch to "tokenTransfers" below
+  // once the lazy fetch confirms there's something there.
+  const initialActiveTab: TabKey =
+    transactions.length > 0
+      ? "transactions"
+      : internalt.length > 0
+        ? "internal"
+        : tokenTransferAddress
+          ? "tokenTransfers"
+          : "transactions";
+  const [activeTab, setActiveTab] = useState<TabKey>(initialActiveTab);
   const [tokenTransfers, setTokenTransfers] = useState<TokenTransferRow[]>([]);
+  // Server-reported unbounded count for the tab badge. tokenTransfers.length
+  // only reflects what was paginated into memory (capped at 250), which would
+  // misleadingly stop growing for very active addresses.
+  const [tokenTransfersTotal, setTokenTransfersTotal] = useState(0);
   const [tokenTransfersLoaded, setTokenTransfersLoaded] = useState(false);
   const [tokenTransfersLoading, setTokenTransfersLoading] = useState(false);
   const [tokenTransfersError, setTokenTransfersError] = useState<string | null>(null);
@@ -190,7 +208,9 @@ export default function TanStackTable({ transactions, internalt, tokenTransferAd
         );
         if (cancelled) return;
         const rows: TokenTransferRow[] = Array.isArray(res.data?.transfers) ? res.data.transfers : [];
+        const total = typeof res.data?.total === "number" ? res.data.total : rows.length;
         setTokenTransfers(rows);
+        setTokenTransfersTotal(total);
         setTokenTransfersLoaded(true);
       } catch (err) {
         if (cancelled) return;
@@ -811,7 +831,7 @@ export default function TanStackTable({ transactions, internalt, tokenTransferAd
               >
                 Token Transfers
                 {tokenTransfersLoaded && (
-                  <span className="ml-1 text-xs opacity-75">({tokenTransfers.length})</span>
+                  <span className="ml-1 text-xs opacity-75">({tokenTransfersTotal})</span>
                 )}
               </button>
             )}

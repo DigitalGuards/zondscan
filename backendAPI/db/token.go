@@ -508,8 +508,15 @@ func GetTokenTransfersByAddress(address string, page, limit int) ([]models.Token
 	if limit < 1 {
 		limit = 25
 	}
-	if limit > 50 {
-		limit = 50
+	// 250 matches the frontend's bulk fetch (TanStackTable lazy-loads the
+	// full holder history once so the in-table search/pagination work
+	// without per-page round-trips). A lower ceiling here silently
+	// truncated active addresses, and the "(N)" tab badge then under-
+	// reported their real activity. The `total` returned in the response
+	// is still the unbounded CountDocuments, so the tab can render the
+	// true number regardless of what was paginated in.
+	if limit > 250 {
+		limit = 250
 	}
 
 	canonical := normalizeAddress(address)
