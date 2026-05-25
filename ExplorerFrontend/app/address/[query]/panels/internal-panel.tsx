@@ -16,6 +16,7 @@ import {
   formatTimestamp,
   normalizeHexString,
 } from '../../../lib/helpers';
+import CopyButton from '../../../components/CopyButton';
 import DebouncedInput from '../../../components/DebouncedInput';
 import { DownloadBtnInternal } from '../../../components/DownloadBtn';
 import EmptyState from '../../../components/EmptyState';
@@ -99,9 +100,12 @@ export default function InternalPanel({
         cell: (info) => {
           const h = '0x' + normalizeHexString(info.getValue());
           return (
-            <Link href={'/tx/' + h} title={h}>
-              {truncateMiddle(h)}
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link href={'/tx/' + h} title={h}>
+                {truncateMiddle(h)}
+              </Link>
+              <CopyButton value={h} label="Copy hash" size="sm" stopPropagation />
+            </div>
           );
         },
       }),
@@ -165,12 +169,20 @@ export default function InternalPanel({
 
           <div>
             <div className="text-xs text-gray-400">Transaction Hash</div>
-            <Link
-              href={'/tx/0x' + normalizeHexString(r.Hash)}
-              className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
-            >
-              {'0x' + normalizeHexString(r.Hash)}
-            </Link>
+            <div className="flex items-start gap-2">
+              <Link
+                href={'/tx/0x' + normalizeHexString(r.Hash)}
+                className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
+              >
+                {'0x' + normalizeHexString(r.Hash)}
+              </Link>
+              <CopyButton
+                value={'0x' + normalizeHexString(r.Hash)}
+                label="Copy hash"
+                size="sm"
+                stopPropagation
+              />
+            </div>
           </div>
 
           <div>
