@@ -487,6 +487,64 @@ func GetTokenTransfers(contractAddress string, page, limit int) ([]models.TokenT
 	return transfers, totalCount, nil
 }
 
+// GetTokenTransfersByAddress returns token transfer events touching the given
+// holder address (either side: from or to), with pagination. Matches the
+// shape of GetTokenTransfers so the address-page consumer can render the
+// same row schema produced by /token/:address/transfers. Sorted by
+// blockNumber desc so the most recent transfer is first.
+//
+// The address is normalised to the canonical Q-prefix lowercase form the
+// syncer writes; we don't expand to a multi-variant $in here because every
+// token transfer row is written via validation.ConvertToQAddress(), so a
+// single canonical lookup hits the from_block_idx / to_block_idx indexes
+// without forcing the planner onto a slower variant scan.
+func GetTokenTransfersByAddress(address string, page, limit int) ([]models.TokenTransfer, int64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	if page < 0 {
+		page = 0
+	}
+	if limit < 1 {
+		limit = 25
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	canonical := normalizeAddress(address)
+	filter := bson.M{"$or": []bson.M{
+		{"from": canonical},
+		{"to": canonical},
+	}}
+	collection := configs.GetCollection(configs.DB, "tokenTransfers")
+
+	totalCount, err := collection.CountDocuments(ctx, filter)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	opts := options.Find().
+		SetSort(bson.D{{Key: "blockNumber", Value: -1}}).
+		SetSkip(int64(page * limit)).
+		SetLimit(int64(limit))
+
+	cursor, err := collection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer cursor.Close(ctx)
+
+	var transfers []models.TokenTransfer
+	if err := cursor.All(ctx, &transfers); err != nil {
+		return nil, 0, err
+	}
+	if transfers == nil {
+		transfers = make([]models.TokenTransfer, 0)
+	}
+	return transfers, totalCount, nil
+}
+
 // GetTokenInfo returns summary information about a token
 func GetTokenInfo(contractAddress string) (*models.TokenInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
