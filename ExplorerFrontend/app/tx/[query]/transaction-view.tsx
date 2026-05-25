@@ -233,15 +233,53 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             </div>
           </DetailRow>
           <DetailRow label="To" mono>
-            <div className="flex items-start gap-2">
-              <Link
-                href={`/address/${transaction.to}`}
-                className="text-gray-200 hover:text-[#ffa729] transition-colors break-all"
-              >
-                {displayAddr(transaction.to)}
-              </Link>
-              <CopyButton value={transaction.to} label="Copy address" size="sm" />
-            </div>
+            {/* Contract-creation txs have an empty `to` because the tx
+                doesn't target an existing address; the new contract's
+                address comes back on the receipt. Render Etherscan-style:
+                "[Contract Created]" label + the new contract address as
+                a link, instead of an empty field. The separate "Contract
+                Created" section below still surfaces the token / standard
+                details. */}
+            {transaction.contractCreated?.address ? (
+              <div className="flex items-start gap-2 flex-wrap">
+                <span className="inline-flex items-center gap-1 text-xs text-green-400">
+                  <svg
+                    className="w-3.5 h-3.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    stroke="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                  Contract Created
+                </span>
+                <Link
+                  href={`/address/${transaction.contractCreated.address}`}
+                  className="text-gray-200 hover:text-[#ffa729] transition-colors break-all"
+                >
+                  {displayAddr(transaction.contractCreated.address)}
+                </Link>
+                <CopyButton
+                  value={transaction.contractCreated.address}
+                  label="Copy contract address"
+                  size="sm"
+                />
+              </div>
+            ) : transaction.to ? (
+              <div className="flex items-start gap-2">
+                <Link
+                  href={`/address/${transaction.to}`}
+                  className="text-gray-200 hover:text-[#ffa729] transition-colors break-all"
+                >
+                  {displayAddr(transaction.to)}
+                </Link>
+                <CopyButton value={transaction.to} label="Copy address" size="sm" />
+              </div>
+            ) : (
+              <span className="text-gray-500">—</span>
+            )}
           </DetailRow>
           <DetailRow label="Value">
             <span className="font-semibold text-[#ffa729]">{formattedValue}</span>
