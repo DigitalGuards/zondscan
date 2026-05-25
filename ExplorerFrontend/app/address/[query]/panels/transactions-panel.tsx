@@ -32,26 +32,61 @@ import {
  * Native transactions panel. Renders the rows the parent address-view
  * already received from `/address/aggregate/:addr` (no fetch here).
  *
- * Column set + mobile card layout match the pre-refactor TanStackTable's
- * Transactions tab so the visual result is unchanged across the UX redesign.
+ * Notable departures from the pre-refactor TanStackTable Transactions tab:
+ *   - "Transaction Type" column dropped. The syncer writes TxType as a hex
+ *     string ("0x2") rather than the int the old TX_TYPE_MAP lookup
+ *     expected, so the cell rendered empty for every row. Removed rather
+ *     than translated because the value adds no information the In/Out
+ *     column doesn't already convey.
+ *   - "Paid Fees" now renders in Shor (10^-9 QRL / "Quanta") with a
+ *     thousands-separator. The wire value is a decimal-Quanta string like
+ *     "0.000078750000357000"; the old calculateFees only accepted a
+ *     numeric type and fell back to 0 when handed the string, which is
+ *     why the column showed "0.00 QRL" for every native tx. Multiplied
+ *     by 1e9 to land in the Shor / Gwei range users actually read.
  */
 
 const IN_OUT_MAP = ['Out', 'In'] as const;
-const TX_TYPE_MAP = ['Coinbase', 'Attest', 'Transfer', 'Stake'] as const;
 
 const columnHelper = createColumnHelper<
   Transaction & { formattedAmount: string; formattedFees: string }
 >();
 
-const calculateFees = (tx: Transaction): number => {
-  // PaidFees is the source of truth when present (decimal QRL).
-  if (typeof tx.PaidFees === 'number') return tx.PaidFees;
-  if (typeof tx.gasUsed !== 'number' || typeof tx.gasPrice !== 'number') return 0;
-  try {
-    return Number(BigInt(tx.gasUsed) * BigInt(tx.gasPrice)) / 1e18;
-  } catch {
-    return 0;
+/**
+ * Convert the wire PaidFees value (decimal Quanta as string OR number)
+ * into a human-readable Shor string. 1 Quanta = 10^9 Shor, mirroring
+ * Eth's Gwei / wei split. Tiny fees that round to 0 Shor surface as
+ * "<1 Shor" instead of a misleading "0".
+ */
+const formatPaidFeesShor = (tx: Transaction): string => {
+  // PaidFees is typed `number?` but the syncer writes a decimal string
+  // ("0.000078750000357000"), and the type's never been updated. Coerce
+  // via `unknown` so the runtime check can branch correctly.
+  const raw = tx.PaidFees as unknown;
+  let quanta: number;
+  if (typeof raw === 'number') {
+    quanta = raw;
+  } else if (typeof raw === 'string' && raw.trim() !== '') {
+    const parsed = parseFloat(raw);
+    quanta = Number.isFinite(parsed) ? parsed : NaN;
+  } else if (typeof tx.gasUsed === 'number' && typeof tx.gasPrice === 'number') {
+    // Legacy fallback for rows lacking PaidFees: gasUsed * gasPrice / 10^18.
+    try {
+      quanta = Number(BigInt(tx.gasUsed) * BigInt(tx.gasPrice)) / 1e18;
+    } catch {
+      quanta = NaN;
+    }
+  } else {
+    quanta = NaN;
   }
+  if (!Number.isFinite(quanta) || quanta === 0) return '0 Shor';
+  const shor = quanta * 1e9;
+  if (shor < 1) return `${parseFloat(shor.toFixed(4))} Shor`;
+  // Integer Shor amounts get a thousands separator; fractional values
+  // keep up to 2 decimals to avoid 9-digit tails on gas-priced fees.
+  return `${shor >= 1 && Math.abs(shor - Math.round(shor)) < 0.005
+    ? Math.round(shor).toLocaleString('en-US')
+    : shor.toLocaleString('en-US', { maximumFractionDigits: 2 })} Shor`;
 };
 
 interface TransactionsPanelProps {
@@ -68,12 +103,10 @@ export default function TransactionsPanel({
     () =>
       transactions.map((tx) => {
         const [amount, amountUnit] = formatAmount(tx.Amount);
-        const fees = calculateFees(tx);
-        const [feesFormatted, feesUnit] = formatAmount(fees);
         return {
           ...tx,
           formattedAmount: `${amount} ${amountUnit}`,
-          formattedFees: `${feesFormatted} ${feesUnit}`,
+          formattedFees: formatPaidFeesShor(tx),
         };
       }),
     [transactions],
@@ -89,10 +122,6 @@ export default function TransactionsPanel({
       columnHelper.accessor('InOut', {
         header: 'In/Out',
         cell: (info) => <span>{IN_OUT_MAP[info.getValue()]}</span>,
-      }),
-      columnHelper.accessor('TxType', {
-        header: 'Transaction Type',
-        cell: (info) => <span>{TX_TYPE_MAP[info.getValue()]}</span>,
       }),
       columnHelper.accessor((row) => ({ from: row.From, to: row.To }), {
         id: 'Addresses',
@@ -183,11 +212,7 @@ export default function TransactionsPanel({
     return (
       <div key={row.id} className="p-4 border-b border-[#3d3d3d] last:border-b-0">
         <div className="space-y-3">
-          <div className="flex justify-between items-start">
-            <div className="space-y-1">
-              <div className="text-xs text-gray-400">Transaction Type</div>
-              <div className="text-sm text-white">{TX_TYPE_MAP[r.TxType]}</div>
-            </div>
+          <div className="flex justify-end">
             <div className="px-2 py-1 rounded bg-[#3d3d3d] bg-opacity-40">
               <span className="text-xs text-[#ffa729]">{IN_OUT_MAP[r.InOut]}</span>
             </div>
