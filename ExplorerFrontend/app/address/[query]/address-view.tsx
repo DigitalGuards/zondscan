@@ -23,7 +23,7 @@ interface AddressViewProps {
 // display the complete address rather than a truncated form.
 const AddressDisplay = ({ address }: { address: string }): JSX.Element => {
     return (
-        <div className="text-sm lg:text-base font-mono text-gray-300 break-all lg:break-normal">
+        <div className="text-sm lg:text-base font-mono text-gray-300 break-all">
             {address}
         </div>
     );
