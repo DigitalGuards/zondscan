@@ -18,7 +18,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-
 func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	var transactions []models.TransactionByAddress
@@ -33,7 +32,9 @@ func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
 		{Key: "txHash", Value: 1},
 		{Key: "timeStamp", Value: 1},
 		{Key: "amount", Value: 1},
+		{Key: "amountWei", Value: 1},
 		{Key: "paidFees", Value: 1},
+		{Key: "paidFeesWei", Value: 1},
 		{Key: "blockNumber", Value: 1},
 	}
 
@@ -169,12 +170,14 @@ func ReturnAllTransactionsByAddress(address string, page, limit int) ([]models.T
 	projection := primitive.D{
 		{Key: "timeStamp", Value: 1},
 		{Key: "amount", Value: 1},
+		{Key: "amountWei", Value: 1},
 		{Key: "inOut", Value: 1},
 		{Key: "txHash", Value: 1},
 		{Key: "txType", Value: 1},
 		{Key: "from", Value: 1},
 		{Key: "to", Value: 1},
 		{Key: "paidFees", Value: 1},
+		{Key: "paidFeesWei", Value: 1},
 		{Key: "blockNumber", Value: 1},
 	}
 
@@ -238,7 +241,9 @@ func ReturnTransactionsNetwork(page, limit int) ([]models.TransactionByAddress, 
 		{Key: "txHash", Value: 1},
 		{Key: "timeStamp", Value: 1},
 		{Key: "amount", Value: 1},
+		{Key: "amountWei", Value: 1},
 		{Key: "paidFees", Value: 1},
+		{Key: "paidFeesWei", Value: 1},
 		{Key: "blockNumber", Value: 1},
 	}
 
@@ -283,6 +288,7 @@ func ReturnTransactions(address string, page, limit int) ([]models.TransactionBy
 		{Key: "txHash", Value: 1},
 		{Key: "timeStamp", Value: 1},
 		{Key: "amount", Value: 1},
+		{Key: "amountWei", Value: 1},
 	}
 
 	opts := options.Find().
@@ -595,6 +601,7 @@ func ReturnNonZeroTransactions(address string, page, limit int) ([]models.Transa
 		{Key: "txHash", Value: 1},
 		{Key: "timeStamp", Value: 1},
 		{Key: "amount", Value: 1},
+		{Key: "amountWei", Value: 1},
 		{Key: "from", Value: 1},
 		{Key: "to", Value: 1},
 		{Key: "blockNumber", Value: 1},
