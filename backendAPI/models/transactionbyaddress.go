@@ -33,8 +33,9 @@ type TransactionByAddress struct {
 
 // weiPerQuanta is 10^18: one QRL expressed in wei. Kept as a big.Int so the
 // wei -> QRL conversion stays in exact integer/rational arithmetic and never
-// touches a float64.
-var weiPerQuanta = new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)
+// touches a float64. 10^18 fits in an int64 (max ~9.22e18), so a literal is
+// cheaper and clearer than computing it with Exp at init.
+var weiPerQuanta = big.NewInt(1_000_000_000_000_000_000)
 
 // quantaFromWei converts a raw wei amount, given as a base-10 integer string,
 // into an exact QRL decimal string with 18 fractional digits. Because the
