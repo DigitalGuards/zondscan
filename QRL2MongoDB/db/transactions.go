@@ -411,20 +411,24 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 
 	feesBig := new(big.Int).Mul(gasPriceBig, gasUsedBig)
 
+	// Ensure fees are never zero for successful transactions. Apply the
+	// minimal-fee floor to the wei integer (0.000001 QRL = 1e12 wei) so the
+	// exact paidFeesWei string and the legacy paidFees float stay consistent.
+	if feesBig.Sign() == 0 && statusTx == "0x1" {
+		configs.Logger.Warn("Calculated fees is zero for a successful transaction, using minimal fee",
+			zap.String("txHash", txHash))
+		feesBig = big.NewInt(1_000_000_000_000)
+	}
+
+	// Legacy float fields, kept for backward-compatible numeric queries (e.g.
+	// amount $gt 0). The exact, drift-free value travels alongside them as the
+	// amountWei / paidFeesWei base-10 integer strings (value and feesBig).
 	divisor = new(big.Float).SetFloat64(float64(configs.QUANTA))
 	feesFloat := new(big.Float).SetInt(feesBig)
 	feesResult := new(big.Float).Quo(feesFloat, divisor)
 	fees, _ := feesResult.Float64()
 
-	// Ensure fees are never zero for successful transactions
-	if fees == 0 && statusTx == "0x1" {
-		configs.Logger.Warn("Calculated fees is zero for a successful transaction, using minimal fee",
-			zap.String("txHash", txHash))
-		// Set a minimal fee value rather than zero
-		fees = 0.000001
-	}
-
-	TransactionByAddressCollection(blockTimestamp, txType, from, to, txHash, valueFloat64, fees, blockNumber)
+	TransactionByAddressCollection(blockTimestamp, txType, from, to, txHash, valueFloat64, fees, blockNumber, value.String(), feesBig.String())
 	TransferCollection(blockNumber, blockTimestamp, from, to, txHash, pk, signature, nonce, valueFloat64, data, contractAddress, statusTx, size, fees)
 }
 
@@ -518,7 +522,11 @@ func InternalTransactionByAddressCollection(transactionType string, callType str
 	return result, nil
 }
 
-func TransactionByAddressCollection(timeStamp string, txType string, from string, to string, hash string, amount float64, paidFees float64, blockNumber string) (*mongo.InsertOneResult, error) {
+// TransactionByAddressCollection persists a per-address transaction row.
+// amount/paidFees are the legacy float64 columns (kept for backward-compatible
+// numeric queries); amountWei/paidFeesWei are the exact base-10 wei integer
+// strings the API uses to render QRL without float64 precision drift.
+func TransactionByAddressCollection(timeStamp string, txType string, from string, to string, hash string, amount float64, paidFees float64, blockNumber string, amountWei string, paidFeesWei string) (*mongo.InsertOneResult, error) {
 	// Normalize addresses to canonical Q-prefix form
 	from = validation.ConvertToQAddress(from)
 	if to != "" {
@@ -532,7 +540,9 @@ func TransactionByAddressCollection(timeStamp string, txType string, from string
 		{Key: "txHash", Value: hash},
 		{Key: "timeStamp", Value: timeStamp},
 		{Key: "amount", Value: amount},
+		{Key: "amountWei", Value: amountWei},
 		{Key: "paidFees", Value: paidFees},
+		{Key: "paidFeesWei", Value: paidFeesWei},
 		{Key: "blockNumber", Value: blockNumber},
 	}
 
