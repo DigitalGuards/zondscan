@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import CopyButton from "../../components/CopyButton";
 import QRCodeButton from "../../components/QRCodeButton";
 import ContractTabs from "../../components/ContractTabs";
@@ -17,24 +16,13 @@ interface AddressViewProps {
     addressSegment: string;
 }
 
+// Show the full address on every screen size. The container wraps
+// long values (`break-all`) so even on a narrow phone there's room to
+// display the complete address rather than a truncated form.
 const AddressDisplay = ({ address }: { address: string }): JSX.Element => {
-    const [isMobile, setIsMobile] = useState(false);
-
-    useEffect(() => {
-        const checkScreenSize = (): void => {
-            setIsMobile(window.innerWidth < 768);
-        };
-        
-        checkScreenSize();
-        window.addEventListener('resize', checkScreenSize);
-        return () => window.removeEventListener('resize', checkScreenSize);
-    }, []);
-
-    const displayAddress = isMobile ? `${address.slice(0, 8)}...${address.slice(-6)}` : address;
-
     return (
-        <div className="text-sm lg:text-base font-mono text-gray-300 break-all lg:break-normal">
-            {displayAddress}
+        <div className="text-sm lg:text-base font-mono text-gray-300 break-all">
+            {address}
         </div>
     );
 };
