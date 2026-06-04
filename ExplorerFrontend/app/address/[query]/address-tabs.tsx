@@ -53,6 +53,19 @@ const parseTabKey = (raw: string | null): TabKey => {
   return 'transactions';
 };
 
+/** Render an integer gas quantity (decimal or 0x-hex string, or number) as a
+ *  0x-hex string. BigInt avoids the precision loss Number() suffers above
+ *  2^53, matching this repo's exact-integer handling of on-chain values. The
+ *  try/catch keeps a malformed value from throwing inside render (BigInt
+ *  rejects non-integer input, where Number would have yielded NaN). */
+const toHexQuantity = (value: string | number): string => {
+  try {
+    return `0x${BigInt(value).toString(16)}`;
+  } catch {
+    return '0x0';
+  }
+};
+
 interface AddressTabsProps {
   address: string;
   transactions: Transaction[];
@@ -124,17 +137,15 @@ export default function AddressTabs({
   // polled rows missing it get a computed fallback.
   const transactions = useMemo<Transaction[]>(
     () =>
-      (data.transactions_by_address ?? []).map((tx) => ({
+      (data?.transactions_by_address ?? []).map((tx) => ({
         ...tx,
-        gasUsedStr:
-          tx.gasUsedStr || (tx.gasUsed ? `0x${Number(tx.gasUsed).toString(16)}` : '0x0'),
-        gasPriceStr:
-          tx.gasPriceStr || (tx.gasPrice ? `0x${Number(tx.gasPrice).toString(16)}` : '0x0'),
+        gasUsedStr: tx.gasUsedStr || (tx.gasUsed ? toHexQuantity(tx.gasUsed) : '0x0'),
+        gasPriceStr: tx.gasPriceStr || (tx.gasPrice ? toHexQuantity(tx.gasPrice) : '0x0'),
       })),
-    [data.transactions_by_address],
+    [data?.transactions_by_address],
   );
-  const transactionsCount = data.transactions_count ?? 0;
-  const internalt = data.internal_transactions_by_address ?? [];
+  const transactionsCount = data?.transactions_count ?? 0;
+  const internalt = data?.internal_transactions_by_address ?? [];
 
   const activeTab = parseTabKey(searchParams?.get('tab') ?? null);
 
