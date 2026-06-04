@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
@@ -62,6 +62,15 @@ interface AddressTabsProps {
   internalt: InternalTransaction[];
 }
 
+/** Subset of the `/address/aggregate` payload this component consumes. The
+ *  server page seeds the first page via props; the client poll refetches the
+ *  same fields to keep them live. */
+interface AddressAggregateResponse {
+  transactions_by_address?: Transaction[];
+  transactions_count?: number;
+  internal_transactions_by_address?: InternalTransaction[];
+}
+
 export default function AddressTabs({
   address,
   transactions: initialTransactions,
@@ -72,60 +81,60 @@ export default function AddressTabs({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // The server rendered page 1 of the native-tx feed + counts. Seed local
-  // state from those props, then keep them live by polling the same
-  // /address/aggregate endpoint client-side, so a transaction mined after
-  // the user lands (e.g. one they just sent from the wallet) appears on its
-  // own instead of requiring a manual page refresh.
+  // Keep the native-tx feed + counts live by polling the same
+  // /address/aggregate endpoint the server rendered, so a transaction mined
+  // after the user lands (e.g. one they just sent from the wallet) appears on
+  // its own instead of requiring a manual page refresh.
   //
-  // Safe to seed once via the initializer: the parent (address-view) passes
-  // key={addressSegment}, so this whole component unmounts + remounts on
-  // address change and the seed re-runs with the new holder's data.
-  const [transactions, setTransactions] = useState(initialTransactions);
-  const [transactionsCount, setTransactionsCount] = useState(initialTransactionsCount);
-  const [internalt, setInternalt] = useState(initialInternalt);
-
-  // Visibility-aware polling, same TanStack Query discipline as the
-  // home/gas/validators pages (backgrounded tabs go quiet). The interval
-  // sits just above the backend's 10s aggregate cache so each poll has a
-  // chance at fresh data rather than re-reading the same cached snapshot.
-  // refetchOnMount:'always' fires one client fetch right after hydration,
-  // which bypasses the page's 10s ISR and surfaces a tx that landed between
-  // the (possibly cached) server render and the user arriving.
-  useQuery<number>({
+  // The query owns the data: initialData seeds the cache from the server
+  // props (first paint shows server data, no flash) and the values below are
+  // derived straight from `data`, no useState mirror written inside queryFn.
+  // Visibility-aware, same TanStack Query discipline as the home/gas/
+  // validators pages (backgrounded tabs go quiet). The 15s interval sits just
+  // above the backend's 10s aggregate cache so each poll has a chance at
+  // fresh data. refetchOnMount:'always' fires one client fetch right after
+  // hydration, bypassing the page's 10s ISR to surface a tx that landed
+  // between the (possibly cached) server render and the user arriving.
+  //
+  // Per-address reset is free: the parent (address-view) passes
+  // key={addressSegment}, remounting this component on address change.
+  const { data } = useQuery<AddressAggregateResponse>({
     queryKey: ['address-aggregate', address],
     queryFn: async () => {
-      const res = await axios.get(
+      const res = await axios.get<AddressAggregateResponse>(
         `${config.handlerUrl}/address/aggregate/${address}`,
         { params: { page: 1, limit: 10 } },
       );
-      const data = res.data ?? {};
-      if (Array.isArray(data.transactions_by_address)) {
-        // Mirror the gas-field normalization the server page applies so the
-        // CSV export and any downstream readers see the same row shape.
-        setTransactions(
-          data.transactions_by_address.map((tx: any) => ({
-            ...tx,
-            gasUsedStr:
-              tx.gasUsedStr || (tx.gasUsed ? `0x${tx.gasUsed.toString(16)}` : '0x0'),
-            gasPriceStr:
-              tx.gasPriceStr || (tx.gasPrice ? `0x${tx.gasPrice.toString(16)}` : '0x0'),
-          })),
-        );
-      }
-      if (typeof data.transactions_count === 'number') {
-        setTransactionsCount(data.transactions_count);
-      }
-      if (Array.isArray(data.internal_transactions_by_address)) {
-        setInternalt(data.internal_transactions_by_address);
-      }
-      return Date.now();
+      return res.data ?? {};
+    },
+    initialData: {
+      transactions_by_address: initialTransactions,
+      transactions_count: initialTransactionsCount,
+      internal_transactions_by_address: initialInternalt,
     },
     refetchInterval: 15000,
     refetchIntervalInBackground: false,
     refetchOnMount: 'always',
     staleTime: 0,
   });
+
+  // Normalize gas fields to hex the same way the server page does so the CSV
+  // export sees a consistent row shape. Rows that already carry a server-set
+  // gasUsedStr/gasPriceStr keep it (the `||` short-circuits); only fresh
+  // polled rows missing it get a computed fallback.
+  const transactions = useMemo<Transaction[]>(
+    () =>
+      (data.transactions_by_address ?? []).map((tx) => ({
+        ...tx,
+        gasUsedStr:
+          tx.gasUsedStr || (tx.gasUsed ? `0x${Number(tx.gasUsed).toString(16)}` : '0x0'),
+        gasPriceStr:
+          tx.gasPriceStr || (tx.gasPrice ? `0x${Number(tx.gasPrice).toString(16)}` : '0x0'),
+      })),
+    [data.transactions_by_address],
+  );
+  const transactionsCount = data.transactions_count ?? 0;
+  const internalt = data.internal_transactions_by_address ?? [];
 
   const activeTab = parseTabKey(searchParams?.get('tab') ?? null);
 
