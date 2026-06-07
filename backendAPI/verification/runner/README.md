@@ -32,23 +32,33 @@ The verifier supports **multiple** builds; a submission picks one via
 ### Preferred: `HYPC_COMPILERS` manifest
 
 Set `HYPC_COMPILERS` to either an inline JSON array or a path to a JSON file
-of `CompilerSpec` entries. See [`compilers.example.json`](./compilers.example.json):
+of `CompilerSpec` entries. See [`compilers.example.json`](./compilers.example.json).
 
-```jsonc
+The manifest is parsed with Go's standard `encoding/json`, so it must be
+**strict JSON — no comments, no trailing commas**:
+
+```json
 [
   {
-    "buildId": "0.2.0-develop.2026.4.13+commit.d5d1b977.Linux.g++", // required; runner MUST report this
-    "nodeBin": "/bin/sh",                                            // default "node"
-    "runner":  "/abs/path/to/hypc-native.sh",                        // required
-    "bin":     "/usr/local/bin/hypc-0.2.0",                          // optional; native hypc path (HYPC_BIN)
-    "default": true                                                  // optional; the build used when compilerVersion omitted
+    "buildId": "0.2.0-develop.2026.4.13+commit.d5d1b977.Linux.g++",
+    "nodeBin": "/bin/sh",
+    "runner": "/abs/path/to/hypc-native.sh",
+    "bin": "/usr/local/bin/hypc-0.2.0",
+    "default": true
   },
   {
     "buildId": "0.0.2+commit.3e18e55d.Emscripten.clang",
-    "runner":  "/abs/path/to/hypc-runner.js"
+    "runner": "/abs/path/to/hypc-runner.js"
   }
 ]
 ```
+
+Per-entry fields:
+- `buildId` *(required)* — the version string the runner must report from `--version`; the build is skipped if it reports anything else.
+- `runner` *(required)* — absolute path to `hypc-runner.js` (WASM) or `hypc-native.sh` (native).
+- `nodeBin` *(optional, default `"node"`)* — interpreter; use `/bin/sh` for the native wrapper.
+- `bin` *(optional)* — native hypc path, exported to the runner as `HYPC_BIN`.
+- `default` *(optional)* — the build used when a submission omits `compilerVersion`; if none is flagged, the first surviving build wins.
 
 ```bash
 # file path
