@@ -6,27 +6,31 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 	"time"
 )
 
-// Compiler wraps the @theqrl/hypc WASM via a one-shot Node subprocess
-// (backendAPI/verification/runner/hypc-runner.js). The Go layer holds the
-// sandboxing budget, timeout, concurrency cap, stdin size cap, scratch
-// env, so the runner can stay tiny.
+// Compiler wraps ONE pinned @theqrl/hypc build behind a one-shot subprocess
+// (the WASM-via-Node runner hypc-runner.js, or the native hypc-native.sh
+// wrapper). One Compiler == one build id.
+//
+// The sandboxing budget — per-compile timeout, stdin size cap, and the
+// concurrency semaphore — is supplied by the owning Registry and SHARED
+// across every build, so the total number of in-flight runner processes is
+// bounded regardless of which build a request selects.
 type Compiler struct {
-	NodeBin    string        // path to the `node` binary
-	RunnerPath string        // absolute path to hypc-runner.js
-	BuildID    string        // pinned version string (e.g. "0.0.2+commit.3e18e55d.Emscripten.clang")
-	Timeout    time.Duration // per-compile hard deadline
-	MaxStdin   int           // bytes, reject standard-JSON inputs larger than this
+	Language   string // always "Hyperion" today; carried explicitly for the API
+	NodeBin    string // path to the interpreter (`node`, or `/bin/sh` for the native wrapper)
+	RunnerPath string // absolute path to the runner (hypc-runner.js / hypc-native.sh)
+	Bin        string // optional native hypc path, passed to the runner as HYPC_BIN
+	BuildID    string // pinned version string the runner must report
+	Default    bool   // true for the build used when the client omits compilerVersion
 
-	sem  chan struct{}
-	once sync.Once
+	Timeout  time.Duration // per-compile hard deadline (shared across builds)
+	MaxStdin int           // standard-JSON payload cap in bytes (shared across builds)
+	sem      chan struct{} // concurrency permit, SHARED across all builds
 }
 
 // ErrPayloadTooLarge is returned when the standard-JSON payload exceeds
@@ -37,58 +41,42 @@ var ErrPayloadTooLarge = errors.New("verification: standard-JSON payload exceeds
 // ErrCompileTimeout is returned when the per-call deadline fires.
 var ErrCompileTimeout = errors.New("verification: compile timed out")
 
-// NewCompiler constructs a Compiler from environment variables:
-//
-//	HYPC_NODE_BIN           path to the node binary           (default "node")
-//	HYPC_RUNNER             abs path to hypc-runner.js        (required)
-//	HYPC_BUILD_ID           pinned version string             (required)
-//	VERIFIER_MAX_CONCURRENCY in-process concurrent compiles   (default 2)
-//	VERIFIER_COMPILE_TIMEOUT per-compile hard timeout         (default 30s)
-//	VERIFIER_SOURCE_MAX_BYTES standard-JSON payload cap       (default 256KiB)
-//
-// The Compiler fails fast at startup if HYPC_RUNNER / HYPC_BUILD_ID are
-// missing or if the runner's reported version doesn't match HYPC_BUILD_ID.
-func NewCompiler() (*Compiler, error) {
-	nodeBin := envWithDefault("HYPC_NODE_BIN", "node")
-	runner := os.Getenv("HYPC_RUNNER")
-	if runner == "" {
-		return nil, errors.New("HYPC_RUNNER env var is required (abs path to hypc-runner.js)")
+// newCompiler builds a single Compiler from a spec, wires in the shared
+// limits, and gates construction on a successful version probe: the runner
+// must report exactly spec.BuildID. A probe failure / mismatch is returned
+// as an error so the Registry can skip just this build.
+func newCompiler(spec CompilerSpec, sem chan struct{}, timeout time.Duration, maxStdin int) (*Compiler, error) {
+	nodeBin := spec.NodeBin
+	if nodeBin == "" {
+		nodeBin = "node"
 	}
-	buildID := os.Getenv("HYPC_BUILD_ID")
-	if buildID == "" {
-		return nil, errors.New("HYPC_BUILD_ID env var is required (pinned hypc version string)")
+	if spec.Runner == "" {
+		return nil, errors.New("runner path is required")
 	}
-	maxConc := envInt("VERIFIER_MAX_CONCURRENCY", 2)
-	if maxConc < 1 {
-		maxConc = 1
+	if spec.BuildID == "" {
+		return nil, errors.New("buildId is required")
 	}
-	timeout := envDuration("VERIFIER_COMPILE_TIMEOUT", 30*time.Second)
-	maxStdin := envInt("VERIFIER_SOURCE_MAX_BYTES", 256*1024)
 
 	c := &Compiler{
+		Language:   "Hyperion",
 		NodeBin:    nodeBin,
-		RunnerPath: runner,
-		BuildID:    buildID,
+		RunnerPath: spec.Runner,
+		Bin:        spec.Bin,
+		BuildID:    spec.BuildID,
+		Default:    spec.Default,
 		Timeout:    timeout,
 		MaxStdin:   maxStdin,
-		sem:        make(chan struct{}, maxConc),
+		sem:        sem,
 	}
 
-	// Validate the runner can be invoked + reports the expected build.
 	got, err := c.probeVersion()
 	if err != nil {
-		return nil, fmt.Errorf("hypc-runner version probe failed: %w", err)
+		return nil, fmt.Errorf("version probe failed: %w", err)
 	}
-	if got != buildID {
-		return nil, fmt.Errorf("hypc-runner build mismatch: want %q, got %q", buildID, got)
+	if got != spec.BuildID {
+		return nil, fmt.Errorf("build mismatch: want %q, got %q", spec.BuildID, got)
 	}
-	log.Printf("verification.Compiler ready: runner=%s build=%s timeout=%s concurrency=%d", runner, buildID, timeout, maxConc)
 	return c, nil
-}
-
-// CompilerInfo returns the pinned build ID. Used by GET /contract/compiler-info.
-func (c *Compiler) CompilerInfo() CompilerInfoResponse {
-	return CompilerInfoResponse{Language: "Hyperion", BuildID: c.BuildID}
 }
 
 // Compile invokes the runner with the supplied standard-JSON input and
@@ -125,7 +113,7 @@ func (c *Compiler) Compile(ctx context.Context, input StandardJSONInput) (*Stand
 	//   HYPC_BIN , lets the native-binary runner (hypc-native.sh) pin an
 	//               absolute hypc path independent of PATH order. Ignored
 	//               by the WASM-via-Node runner.
-	cmd.Env = runnerEnv()
+	cmd.Env = c.runnerEnv()
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -151,7 +139,7 @@ func (c *Compiler) probeVersion() (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, c.NodeBin, c.RunnerPath, "--version")
-	cmd.Env = runnerEnv()
+	cmd.Env = c.runnerEnv()
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err
@@ -159,13 +147,19 @@ func (c *Compiler) probeVersion() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// runnerEnv builds the minimal env passed to the runner subprocess.
-// Kept in one place so the Compile and probeVersion paths can't drift
-// from each other.
-func runnerEnv() []string {
+// runnerEnv builds the minimal env passed to this build's runner subprocess.
+// Each build pins its own HYPC_BIN (so two native builds can point at
+// different hypc binaries). When a build doesn't set Bin we fall back to a
+// process-level HYPC_BIN — this preserves the pre-multi-version single-build
+// deploy where HYPC_BIN was exported once in the environment.
+func (c *Compiler) runnerEnv() []string {
 	env := []string{"PATH=" + os.Getenv("PATH")}
-	if v := os.Getenv("HYPC_BIN"); v != "" {
-		env = append(env, "HYPC_BIN="+v)
+	bin := c.Bin
+	if bin == "" {
+		bin = os.Getenv("HYPC_BIN")
+	}
+	if bin != "" {
+		env = append(env, "HYPC_BIN="+bin)
 	}
 	return env
 }

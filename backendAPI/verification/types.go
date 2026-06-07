@@ -33,11 +33,24 @@ type VerifyEnqueueResponse struct {
 	Address string `json:"address"`
 }
 
-// CompilerInfoResponse is the body of GET /contract/compiler-info, the
-// single pinned hypc build the backend is willing to verify against.
+// CompilerInfoResponse is the body of GET /contract/compiler-info: every
+// hypc build the backend can verify against, plus which one is used when a
+// submission omits compilerVersion. The top-level Language/BuildID mirror
+// the default build so single-build clients (which only read those two
+// fields) keep working unchanged.
 type CompilerInfoResponse struct {
-	Language string `json:"language"`
+	Language  string          `json:"language"`
+	BuildID   string          `json:"buildId"`
+	Default   string          `json:"default"`
+	Compilers []CompilerBuild `json:"compilers"`
+}
+
+// CompilerBuild describes one selectable compiler build in the
+// /contract/compiler-info response.
+type CompilerBuild struct {
 	BuildID  string `json:"buildId"`
+	Language string `json:"language"`
+	Default  bool   `json:"default"`
 }
 
 // StandardJSONInput is the Hyperion standard-JSON shape we feed to the

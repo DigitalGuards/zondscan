@@ -30,7 +30,7 @@ func RegisterVerificationRoutes(router *gin.Engine) {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "contract verification not configured"})
 			return
 		}
-		c.JSON(http.StatusOK, v.Compiler.CompilerInfo())
+		c.JSON(http.StatusOK, v.Registry.Info())
 	})
 
 	// Maximum body size for a verify submission. The compiler also has
@@ -62,14 +62,19 @@ func RegisterVerificationRoutes(router *gin.Engine) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "contractName and sourceCode are required"})
 			return
 		}
-		if req.CompilerVersion != "" && req.CompilerVersion != v.Compiler.BuildID {
+		// Resolve the requested build (empty selects the registry default).
+		// Pin the request to the resolved build id so the stored payload and
+		// the async compile can't drift from what we validated here.
+		comp, ok := v.Registry.Resolve(req.CompilerVersion)
+		if !ok {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error":           "unsupported compilerVersion, see /contract/compiler-info",
-				"supportedBuild":  v.Compiler.BuildID,
 				"requestedBuild":  req.CompilerVersion,
+				"supportedBuilds": v.Registry.SupportedBuildIDs(),
 			})
 			return
 		}
+		req.CompilerVersion = comp.BuildID
 
 		// Idempotency: if the contract is already verified, return success
 		// without spawning another compile.
@@ -97,7 +102,7 @@ func RegisterVerificationRoutes(router *gin.Engine) {
 			Payload: models.VerificationJobPayload{
 				SourceCode:           req.SourceCode,
 				ContractName:         req.ContractName,
-				CompilerVersion:      v.Compiler.BuildID,
+				CompilerVersion:      comp.BuildID,
 				OptimizationEnabled:  req.OptimizerEnabled,
 				OptimizationRuns:     req.OptimizerRuns,
 				EvmVersion:           req.EvmVersion,

@@ -1,0 +1,14 @@
+[
+  {
+    "buildId": "0.2.0-develop.2026.4.13+commit.d5d1b977.Linux.g++",
+    "nodeBin": "/bin/sh",
+    "runner": "/home/ops/zondscan/backendAPI/verification/runner/hypc-native.sh",
+    "bin": "/usr/local/bin/hypc-0.2.0",
+    "default": true
+  },
+  {
+    "buildId": "0.0.2+commit.3e18e55d.Emscripten.clang",
+    "nodeBin": "node",
+    "runner": "/home/ops/zondscan/backendAPI/verification/runner/hypc-runner.js"
+  }
+]
