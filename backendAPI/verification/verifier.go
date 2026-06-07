@@ -15,16 +15,21 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 )
 
-// Verifier ties Compiler + on-chain code + byte match + the M1 storage
-// layer (MarkContractVerified + UpdateVerificationJob) into a single
+// Verifier ties the compiler Registry + on-chain code + byte match + the M1
+// storage layer (MarkContractVerified + UpdateVerificationJob) into a single
 // background runner. One Verifier per process.
 type Verifier struct {
-	Compiler *Compiler
+	Registry *Registry
 }
 
 // RunAsync runs the verification flow in the background and updates the
 // job document along the way. Returns immediately so the HTTP handler
 // can hand the jobId back to the client without blocking.
+//
+// req.CompilerVersion selects which configured build to compile with; an
+// empty value uses the registry default. (The routes layer already validated
+// it, so an unknown id here only happens for a direct/internal caller — we
+// fail the job rather than leave it stuck in 'pending'.)
 //
 // Status transitions:
 //
@@ -34,14 +39,19 @@ type Verifier struct {
 // The supplied ctx should typically be context.Background() so the job
 // survives the client connection being torn down mid-compile.
 func (v *Verifier) RunAsync(jobID string, req VerifyRequest) {
+	comp, ok := v.Registry.Resolve(req.CompilerVersion)
+	if !ok {
+		failJob(jobID, fmt.Sprintf("unsupported compilerVersion %q", req.CompilerVersion))
+		return
+	}
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), v.Compiler.Timeout+15*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), comp.Timeout+15*time.Second)
 		defer cancel()
-		v.run(ctx, jobID, req)
+		v.run(ctx, jobID, req, comp)
 	}()
 }
 
-func (v *Verifier) run(ctx context.Context, jobID string, req VerifyRequest) {
+func (v *Verifier) run(ctx context.Context, jobID string, req VerifyRequest, comp *Compiler) {
 	if err := db.UpdateVerificationJob(jobID, bson.M{"status": models.VerificationJobCompiling}); err != nil {
 		// Status transition failures aren't fatal, the rest of the run
 		// continues and the client will see the eventual terminal state.
@@ -51,7 +61,7 @@ func (v *Verifier) run(ctx context.Context, jobID string, req VerifyRequest) {
 
 	input := wrapStandardJSON(req)
 
-	out, err := v.Compiler.Compile(ctx, input)
+	out, err := comp.Compile(ctx, input)
 	if err != nil {
 		failJob(jobID, fmt.Sprintf("compile invocation failed: %s", err.Error()))
 		return
@@ -94,7 +104,7 @@ func (v *Verifier) run(ctx context.Context, jobID string, req VerifyRequest) {
 		SourceCode:           req.SourceCode,
 		Abi:                  string(abiBytes),
 		ContractName:         req.ContractName,
-		CompilerVersion:      v.Compiler.BuildID,
+		CompilerVersion:      comp.BuildID,
 		OptimizationEnabled:  req.OptimizerEnabled,
 		OptimizationRuns:     req.OptimizerRuns,
 		EvmVersion:           req.EvmVersion,
