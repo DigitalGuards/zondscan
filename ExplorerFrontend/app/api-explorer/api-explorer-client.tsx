@@ -254,14 +254,14 @@ const endpointGroups: EndpointGroup[] = [
       {
         method: 'GET',
         path: '/contract/compiler-info',
-        description: 'Returns the language and pinned Hyperion build id the verifier is willing to accept. Use this to confirm the explorer can verify against your hypc version before you POST a job. Returns 503 when the verifier is not configured on this deployment.',
+        description: 'Returns every Hyperion build the verifier can compile against: { language, buildId, default, compilers: [{ buildId, language, default }] }. The top-level buildId/language mirror the default build. Use this to pick a compilerVersion before you POST a job. Returns 503 when the verifier is not configured on this deployment.',
         example: '/contract/compiler-info',
       },
       {
         method: 'POST',
         path: '/contract/verify',
-        description: 'Enqueues a verification job for a deployed contract. The endpoint compiles the supplied source via the pinned hypc runner, compares the deployed-bytecode (Solidity-style CBOR metadata trailer stripped on both sides) and on success writes the verified source + ABI back onto the contract document. Rate-limited per IP. Max body 1 MiB. Returns { jobId, status, address } synchronously; poll /contract/verify/:jobId for the terminal state.',
-        params: 'JSON body, required: address, sourceCode, contractName. Optional: compilerVersion, optimizerEnabled, optimizerRuns, evmVersion, constructorArguments, libraries, imports, license. Example body: {"address":"Q…","sourceCode":"...","contractName":"Foo"}',
+        description: 'Enqueues a verification job for a deployed contract. The endpoint compiles the supplied source via the selected hypc build (compilerVersion; the default build is used when omitted), compares the deployed-bytecode (Solidity-style CBOR metadata trailer stripped on both sides) and on success writes the verified source + ABI back onto the contract document. An unknown compilerVersion returns 400 with the supportedBuilds list. Rate-limited per IP. Max body 1 MiB. Returns { jobId, status, address } synchronously; poll /contract/verify/:jobId for the terminal state.',
+        params: 'JSON body, required: address, sourceCode, contractName. Optional: compilerVersion (one of /contract/compiler-info buildIds; defaults to the default build), optimizerEnabled, optimizerRuns, evmVersion, constructorArguments, libraries, imports, license. Example body: {"address":"Q…","sourceCode":"...","contractName":"Foo"}',
         example: '/contract/verify',
       },
       {

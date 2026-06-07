@@ -14,6 +14,8 @@ backendAPI/main.exe
 backendAPI/.env.production
 backendAPI/.env.development
 backendAPI/verification/runner/node_modules
+# Host-specific compiler manifest (HYPC_COMPILERS); commit compilers.example.json instead
+backendAPI/verification/runner/compilers.json
 *.exe
 .DS_Store
 npm-debug.log*
