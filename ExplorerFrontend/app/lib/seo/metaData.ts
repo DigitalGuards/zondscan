@@ -24,20 +24,11 @@ export const sharedMetadata: Partial<Metadata> = {
     type: 'website',
     locale: 'en_US',
     siteName: 'QRL Zond Explorer',
-    images: [
-      {
-        url: '/ZondScan_Logo.png',
-        width: 1200,
-        height: 800,
-        alt: 'ZondScan Logo',
-      },
-    ],
   },
   twitter: {
-    card: 'summary_large_image',
+    card: 'summary',
     creator: '@QRLedger',
     site: '@QRLedger',
-    images: ['/ZondScan_Logo.png'],
   },
   authors: [{ name: 'DigitalGuards' }],
   robots: {

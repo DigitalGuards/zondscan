@@ -60,7 +60,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
   return {
     ...sharedMetadata,
     title: `Transactions - Page ${pageNumber} | ZondScan`,
-    description: `View all transactions on the Zond blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
+    description: `View all transactions on the QRL blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
     alternates: {
       ...sharedMetadata.alternates,
       canonical: canonicalUrl,
@@ -68,7 +68,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     openGraph: {
       ...sharedMetadata.openGraph,
       title: `Transactions - Page ${pageNumber} | ZondScan`,
-      description: `View all transactions on the Zond blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
+      description: `View all transactions on the QRL blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
       url: `https://zondscan.com/transactions/${pageNumber}`,
       siteName: 'ZondScan',
       type: 'website',
@@ -76,7 +76,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     twitter: {
       ...sharedMetadata.twitter,
       title: `Transactions - Page ${pageNumber} | ZondScan`,
-      description: `View all transactions on the Zond blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
+      description: `View all transactions on the QRL blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
     },
   };
 }

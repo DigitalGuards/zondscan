@@ -44,7 +44,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     ...sharedMetadata,
     title: `Pending Transactions - Page ${pageNumber} | ZondScan`,
     description:
-      `View all pending transactions waiting to be included in the next block on the Zond blockchain network. Page ${pageNumber} of the mempool transactions list.`,
+      `View all pending transactions waiting to be included in the next block on the QRL blockchain network. Page ${pageNumber} of the mempool transactions list.`,
     alternates: {
       ...sharedMetadata.alternates,
       canonical: canonicalUrl,
@@ -53,7 +53,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
       ...sharedMetadata.openGraph,
       title: `Pending Transactions - Page ${pageNumber} | ZondScan`,
       description:
-        `View all pending transactions waiting to be included in the next block on the Zond blockchain network. Page ${pageNumber} of the mempool transactions list.`,
+        `View all pending transactions waiting to be included in the next block on the QRL blockchain network. Page ${pageNumber} of the mempool transactions list.`,
       url: canonicalUrl,
       siteName: 'ZondScan',
       type: 'website',
@@ -62,7 +62,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
       ...sharedMetadata.twitter,
       title: `Pending Transactions - Page ${pageNumber} | ZondScan`,
       description:
-        `View all pending transactions waiting to be included in the next block on the Zond blockchain network. Page ${pageNumber} of the mempool transactions list.`,
+        `View all pending transactions waiting to be included in the next block on the QRL blockchain network. Page ${pageNumber} of the mempool transactions list.`,
     },
   };
 }

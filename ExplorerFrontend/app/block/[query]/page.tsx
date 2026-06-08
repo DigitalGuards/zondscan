@@ -10,7 +10,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
   return {
     ...sharedMetadata,
     title: `Block #${blockNumber} | ZondScan`,
-    description: `View detailed information for Zond blockchain block #${blockNumber}. See block hash, timestamp, transactions, gas used, and more.`,
+    description: `View detailed information for QRL blockchain block #${blockNumber}. See block hash, timestamp, transactions, gas used, and more.`,
     alternates: {
       ...sharedMetadata.alternates,
       canonical: canonicalUrl,
@@ -18,7 +18,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     openGraph: {
       ...sharedMetadata.openGraph,
       title: `Block #${blockNumber} | ZondScan`,
-      description: `View detailed information for Zond blockchain block #${blockNumber}. See block hash, timestamp, transactions, gas used, and more.`,
+      description: `View detailed information for QRL blockchain block #${blockNumber}. See block hash, timestamp, transactions, gas used, and more.`,
       url: `https://zondscan.com/block/${blockNumber}`,
       siteName: 'ZondScan',
       type: 'website',
@@ -26,7 +26,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     twitter: {
       ...sharedMetadata.twitter,
       title: `Block #${blockNumber} | ZondScan`,
-      description: `View detailed information for Zond blockchain block #${blockNumber}. See block hash, timestamp, transactions, gas used, and more.`,
+      description: `View detailed information for QRL blockchain block #${blockNumber}. See block hash, timestamp, transactions, gas used, and more.`,
     },
   };
 }

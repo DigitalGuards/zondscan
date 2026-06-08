@@ -42,7 +42,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
   return {
     ...sharedMetadata,
     title: `Latest Synced Blocks - Page ${pageNumber} | ZondScan`,
-    description: `View the most recently synced blocks on the Zond blockchain network. Page ${pageNumber} of the blocks list.`,
+    description: `View the most recently synced blocks on the QRL blockchain network. Page ${pageNumber} of the blocks list.`,
     alternates: {
       ...sharedMetadata.alternates,
       canonical: canonicalUrl,
@@ -50,7 +50,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     openGraph: {
       ...sharedMetadata.openGraph,
       title: `Latest Synced Blocks - Page ${pageNumber} | ZondScan`,
-      description: `View the most recently synced blocks on the Zond blockchain network. Page ${pageNumber} of the blocks list.`,
+      description: `View the most recently synced blocks on the QRL blockchain network. Page ${pageNumber} of the blocks list.`,
       url: `https://zondscan.com/blocks/${pageNumber}`,
       siteName: 'ZondScan',
       type: 'website',
@@ -58,7 +58,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     twitter: {
       ...sharedMetadata.twitter,
       title: `Latest Synced Blocks - Page ${pageNumber} | ZondScan`,
-      description: `View the most recently synced blocks on the Zond blockchain network. Page ${pageNumber} of the blocks list.`,
+      description: `View the most recently synced blocks on the QRL blockchain network. Page ${pageNumber} of the blocks list.`,
     },
   };
 }
