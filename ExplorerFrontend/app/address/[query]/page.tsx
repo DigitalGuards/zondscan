@@ -18,7 +18,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     return {
         ...sharedMetadata,
         title: `Address ${address} | ZondScan`,
-        description: `View details for Zond address ${address}. See balance, transactions, and other blockchain data.`,
+        description: `View details for QRL address ${address}. See balance, transactions, and other blockchain data.`,
         alternates: {
           ...sharedMetadata.alternates,
           canonical: canonicalUrl,
@@ -26,7 +26,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
         openGraph: {
           ...sharedMetadata.openGraph,
           title: `Address ${address} | ZondScan`,
-          description: `View details for Zond address ${address}. See balance, transactions, and other blockchain data.`,
+          description: `View details for QRL address ${address}. See balance, transactions, and other blockchain data.`,
           url: canonicalUrl,
           siteName: 'ZondScan',
           type: 'website',
@@ -34,7 +34,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
         twitter: {
           ...sharedMetadata.twitter,
           title: `Address ${address} | ZondScan`,
-          description: `View details for Zond address ${address}. See balance, transactions, and other blockchain data.`,
+          description: `View details for QRL address ${address}. See balance, transactions, and other blockchain data.`,
         },
       };
     }
