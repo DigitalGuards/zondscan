@@ -22,7 +22,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     : txHash;
   const canonicalUrl = `https://zondscan.com/tx/${txHash}`;
   const title = `Transaction ${shortHash} | ZondScan`;
-  const description = `View detailed information for QRL Zond transaction ${shortHash}. See from / to, value, gas, decoded events, and contract calls.`;
+  const description = `View detailed information for QRL 2.0 transaction ${shortHash}. See from / to, value, gas, decoded events, and contract calls.`;
 
   return {
     ...sharedMetadata,

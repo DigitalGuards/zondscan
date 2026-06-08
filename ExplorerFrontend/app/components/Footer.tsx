@@ -12,7 +12,7 @@ export default function Footer(): JSX.Element {
         <div className="flex-1">
           <h2 className="text-xl font-bold text-accent mb-4">ZondScan</h2>
           <p className="text-sm leading-relaxed">
-            ZondScan is your gateway to the QRL Zond network. Explore blocks, transactions, smart contracts, and more.
+            ZondScan is your gateway to the QRL 2.0 network. Explore blocks, transactions, smart contracts, and more.
           </p>
         </div>
 

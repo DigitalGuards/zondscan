@@ -236,7 +236,7 @@ export default function GasClient(): JSX.Element {
         <div>
           <h2 className="text-2xl font-bold text-[#ffa729]">Network Gas</h2>
           <p className="text-sm text-gray-400 mt-1">
-            Live mempool + block stats from the QRL Zond network. Updated every 10s.
+            Live mempool + block stats from the QRL 2.0 network. Updated every 10s.
           </p>
         </div>
         <div className="flex items-center gap-2">

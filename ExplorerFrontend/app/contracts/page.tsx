@@ -75,7 +75,7 @@ export default async function ContractsPage(): Promise<JSX.Element> {
 
   return (
     <main aria-labelledby="contracts-heading">
-      <h1 id="contracts-heading" className="sr-only">QRL Zond Smart Contracts</h1>
+      <h1 id="contracts-heading" className="sr-only">QRL 2.0 Smart Contracts</h1>
       <Suspense fallback={<div className="p-4 text-center">Loading contracts...</div>}>
         <ContractsWrapper
           initialData={initialData}

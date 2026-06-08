@@ -4,7 +4,7 @@ import VerifyContractClient from './verify-contract-client';
 
 export const metadata: Metadata = {
   title: 'Verify Contract | Zondscan',
-  description: 'Verify and publish a Hyperion smart contract on the QRL Zond network.',
+  description: 'Verify and publish a Hyperion smart contract on the QRL 2.0 network.',
 };
 
 export default function VerifyContractPage(): JSX.Element {

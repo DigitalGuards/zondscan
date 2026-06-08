@@ -305,7 +305,7 @@ export default function ApiExplorerClient(): JSX.Element {
           API Explorer
         </h1>
         <p className="text-gray-400 mb-2">
-          The Zondscan API provides free, open access to QRL Zond blockchain data. No API key required.
+          The Zondscan API provides free, open access to QRL 2.0 blockchain data. No API key required.
         </p>
         <p className="text-gray-500 text-sm mb-8">
           As the world transitions to post-quantum cryptography, we believe blockchain data should remain freely accessible to everyone. This API will always be free to use.

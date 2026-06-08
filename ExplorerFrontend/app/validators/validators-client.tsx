@@ -165,7 +165,7 @@ export default function ValidatorsWrapper(): JSX.Element {
       <div className="mb-6">
         <h1 className="text-xl sm:text-2xl font-bold text-[#ffa729] mb-2">Validators</h1>
         <p className="text-gray-400">
-          View all validators on the QRL Zond network
+          View all validators on the QRL 2.0 network
         </p>
       </div>
 

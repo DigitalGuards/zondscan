@@ -22,7 +22,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     : hash;
   const canonicalUrl = `https://zondscan.com/pending/tx/${hash}`;
   const title = `Pending Transaction ${shortHash} | ZondScan`;
-  const description = `Track QRL Zond pending transaction ${shortHash}: mempool status, ETA to inclusion, gas price vs median, and decoded calldata.`;
+  const description = `Track QRL 2.0 pending transaction ${shortHash}: mempool status, ETA to inclusion, gas price vs median, and decoded calldata.`;
 
   return {
     ...sharedMetadata,
