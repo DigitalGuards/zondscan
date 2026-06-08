@@ -10,7 +10,7 @@ async function getTransactions(page: string): Promise<TransactionsResponse> {
   try {
     const pageNum = parseInt(page, 10) || 1;
 
-    // Cache the response server-side for 10 s. Block time on QRL Zond is
+    // Cache the response server-side for 10 s. Block time on QRL 2.0 is
     // O(1 minute), so 10 s is well within a "freshness" SLA for a listing
     // page and lets ISR absorb concurrent traffic instead of hammering
     // the backend with one fetch per pageview. Drop the _t cache-buster

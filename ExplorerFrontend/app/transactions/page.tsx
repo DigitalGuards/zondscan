@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   ...sharedMetadata,
   title: 'Transactions | ZondScan',
-  description: 'Browse the latest transactions on the QRL Zond blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
+  description: 'Browse the latest transactions on the QRL 2.0 blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
   alternates: {
     ...sharedMetadata.alternates,
     canonical: 'https://zondscan.com/transactions',
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   openGraph: {
     ...sharedMetadata.openGraph,
     title: 'Transactions | ZondScan',
-    description: 'Browse the latest transactions on the QRL Zond blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
+    description: 'Browse the latest transactions on the QRL 2.0 blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
     url: 'https://zondscan.com/transactions',
     siteName: 'ZondScan',
     type: 'website',
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   twitter: {
     ...sharedMetadata.twitter,
     title: 'Transactions | ZondScan',
-    description: 'Browse the latest transactions on the QRL Zond blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
+    description: 'Browse the latest transactions on the QRL 2.0 blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
   },
 };
 

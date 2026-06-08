@@ -14,7 +14,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { id } = await params;
   const canonicalUrl = `https://zondscan.com/validators/${id}`;
   const title = `Validator #${id} | ZondScan`;
-  const description = `Stake, status, age, and activation history for QRL Zond validator #${id}.`;
+  const description = `Stake, status, age, and activation history for QRL 2.0 validator #${id}.`;
 
   return {
     ...sharedMetadata,
@@ -44,7 +44,7 @@ export default async function ValidatorDetailPage({ params }: PageProps): Promis
   const { id } = await params;
   return (
     <main aria-labelledby="validator-detail-heading">
-      <h1 id="validator-detail-heading" className="sr-only">QRL Zond Validator #{id}</h1>
+      <h1 id="validator-detail-heading" className="sr-only">QRL 2.0 Validator #{id}</h1>
       <ValidatorDetailClient id={id} />
     </main>
   );

@@ -23,7 +23,7 @@ export const sharedMetadata: Partial<Metadata> = {
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    siteName: 'QRL Zond Explorer',
+    siteName: 'QRL 2.0 Explorer',
   },
   twitter: {
     card: 'summary',

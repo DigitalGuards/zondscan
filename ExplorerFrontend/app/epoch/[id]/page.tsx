@@ -9,7 +9,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return {
     ...sharedMetadata,
     title: `Epoch ${epochId} | ZondScan`,
-    description: `View detailed information for epoch ${epochId} on the QRL Zond beacon chain.`,
+    description: `View detailed information for epoch ${epochId} on the QRL 2.0 beacon chain.`,
     alternates: {
       ...sharedMetadata.alternates,
       canonical: `https://zondscan.com/epoch/${epochId}`,
@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     openGraph: {
       ...sharedMetadata.openGraph,
       title: `Epoch ${epochId} | ZondScan`,
-      description: `View detailed information for epoch ${epochId} on the QRL Zond beacon chain.`,
+      description: `View detailed information for epoch ${epochId} on the QRL 2.0 beacon chain.`,
       url: `https://zondscan.com/epoch/${epochId}`,
       siteName: 'ZondScan',
       type: 'website',

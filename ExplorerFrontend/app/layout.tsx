@@ -10,19 +10,19 @@ export const metadata: Metadata = {
   ...sharedMetadata,
   title: 'ZondScan - QRL v2 Explorer',
   description:
-    'Blockchain explorer for QRL Zond, an EVM-compatible blockchain secured with post-quantum cryptography. Track transactions, smart contracts, blocks, and validators.',
+    'Blockchain explorer for QRL 2.0, an EVM-compatible blockchain secured with post-quantum cryptography. Track transactions, smart contracts, blocks, and validators.',
   openGraph: {
     ...sharedMetadata.openGraph,
     title: 'ZondScan - QRL v2 Explorer',
     description:
-      'Blockchain explorer for QRL Zond. Track smart contracts, blocks, and transactions on a quantum-resistant EVM-compatible chain.',
+      'Blockchain explorer for QRL 2.0. Track smart contracts, blocks, and transactions on a quantum-resistant EVM-compatible chain.',
     url: 'https://zondscan.com',
   },
   twitter: {
     ...sharedMetadata.twitter,
     title: 'ZondScan - QRL v2 Explorer',
     description:
-      'Blockchain explorer for QRL Zond. Track transactions, blocks, smart contracts, and validators on a post-quantum EVM chain.',
+      'Blockchain explorer for QRL 2.0. Track transactions, blocks, smart contracts, and validators on a post-quantum EVM chain.',
   },
 
 
@@ -46,8 +46,8 @@ export default function RootLayout({ children }: RootLayoutProps): JSX.Element {
             {
               "@context": "https://schema.org",
               "@type": "WebApplication",
-              "name": "QRL Zond Explorer",
-              "description": "Blockchain explorer for QRL Zond. Track transactions, blocks, smart contracts, and validators on the quantum-resistant proof-of-stake network.",
+              "name": "QRL 2.0 Explorer",
+              "description": "Blockchain explorer for QRL 2.0. Track transactions, blocks, smart contracts, and validators on the quantum-resistant proof-of-stake network.",
               "url": "https://zondscan.com",
               "applicationCategory": "Blockchain Explorer",
               "operatingSystem": "All",
@@ -59,7 +59,7 @@ export default function RootLayout({ children }: RootLayoutProps): JSX.Element {
               },
               "relatedApplication": {
                 "@type": "SoftwareApplication",
-                "name": "QRL Zond Web Wallet",
+                "name": "QRL 2.0 Web Wallet",
                 "url": "https://qrlwallet.com",
                 "applicationCategory": "Blockchain Wallet",
                 "operatingSystem": "All"

@@ -281,7 +281,7 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-xl sm:text-2xl font-bold text-[#ffa729] mb-2">Smart Contracts</h1>
-        <p className="text-gray-400">Browse deployed tokens and smart contracts on the QRL Zond network</p>
+        <p className="text-gray-400">Browse deployed tokens and smart contracts on the QRL 2.0 network</p>
       </div>
 
       {/* Tabs, QRC-X is the QRL-branded form of the EIP standards; the

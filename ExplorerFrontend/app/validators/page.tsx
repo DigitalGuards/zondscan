@@ -28,7 +28,7 @@ export const metadata: Metadata = {
 export default async function ValidatorsPage(): Promise<JSX.Element> {
   return (
     <main>
-      <h1 className="sr-only">QRL Zond Network Validators</h1>
+      <h1 className="sr-only">QRL 2.0 Network Validators</h1>
       <Suspense fallback={<div className="p-4 text-center">Loading validators...</div>}>
         <ValidatorsWrapper />
       </Suspense>
