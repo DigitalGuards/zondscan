@@ -125,7 +125,12 @@ export default function RootLayout({ children }: RootLayoutProps): JSX.Element {
           </a>
           <div className="flex min-h-screen">
             <Sidebar />
-            <div className="flex-1 lg:ml-64 min-h-screen relative transition-all duration-300 mt-[72px] lg:mt-4 flex flex-col">
+            {/* min-w-0 is load-bearing: without it this flex item refuses to
+                shrink below its content's intrinsic width (flexbox min-width:
+                auto), so any wide table or long unbroken hash stretches the
+                whole page beyond the mobile viewport instead of scrolling
+                inside its own overflow-x-auto container. */}
+            <div className="flex-1 min-w-0 lg:ml-64 min-h-screen relative transition-all duration-300 mt-[72px] lg:mt-4 flex flex-col">
               <main id="main-content" className="flex-1 relative">
                 {children}
               </main>
