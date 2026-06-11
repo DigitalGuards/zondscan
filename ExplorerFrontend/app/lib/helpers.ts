@@ -1,6 +1,8 @@
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
+const textDecoder = new TextDecoder();
+
 // keccak256 of a utf8 signature string, as a bare lowercase hex string.
 // @noble/hashes replaces ethereumjs-util here: same Keccak-256 (original
 // padding, not NIST SHA-3) at ~6 KB gz instead of dragging the whole
@@ -990,7 +992,7 @@ function decodeDynamicAt(label: string, type: string, argsBlock: string, headOff
   if (type === 'string') {
     try {
       const bytes = hexToBytes(hex);
-      return { label, type: 'string', value: new TextDecoder().decode(bytes) };
+      return { label, type: 'string', value: textDecoder.decode(bytes) };
     } catch {
       return { label, type: 'raw', value: '0x' + hex };
     }
