@@ -98,7 +98,7 @@ const AddressDisplay = ({ address, truncate = false }: { address: string; trunca
 
     const display = truncate ? `${address.slice(0, 10)}...${address.slice(-8)}` : address;
     return (
-        <Link href={`/address/${address}`} className="text-accent hover:text-accent-hover font-mono text-xs md:text-sm">
+        <Link href={`/address/${address}`} className="text-accent hover:text-accent-hover font-mono text-xs md:text-sm break-all">
             {display}
         </Link>
     );
@@ -366,7 +366,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                     {symbol.charAt(0)}
                                 </div>
                             )}
-                            <div>
+                            <div className="min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <h1 className="text-xl md:text-2xl font-bold text-white">{name}</h1>
                                     {rawSymbol && (
@@ -391,8 +391,8 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                         {metaDescription}
                                     </p>
                                 )}
-                                <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-xs md:text-sm text-gray-400 font-mono">{address}</span>
+                                <div className="flex items-center gap-2 mt-1 min-w-0">
+                                    <span className="text-xs md:text-sm text-gray-400 font-mono break-all">{address}</span>
                                     <CopyButton value={address} label="Copy address" />
                                     <QRCodeButton address={address} />
                                 </div>
@@ -535,10 +535,10 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                             <div className="bg-black/20 rounded-lg p-4 space-y-3">
                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
                                     <div className="text-xs md:text-sm text-gray-400">Transaction Hash</div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
                                         <Link
                                             href={`/tx/${creationTxHash}`}
-                                            className="text-accent hover:text-accent-hover font-mono text-xs md:text-sm"
+                                            className="text-accent hover:text-accent-hover font-mono text-xs md:text-sm break-all"
                                         >
                                             {creationTxHash || 'Unknown'}
                                         </Link>
