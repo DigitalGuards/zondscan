@@ -20,14 +20,18 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
-import { keccak256 } from 'ethereumjs-util';
-import { Buffer } from 'buffer';
+import { keccak_256 } from '@noble/hashes/sha3.js';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import {
   decodeEventLog,
   decodeTokenTransferInput,
   decodeContractCall,
 } from './helpers';
 import { resolveSearchPath } from './searchResolver';
+
+// Mirrors the production selector computation (keccak256 of the utf8
+// canonical signature) so fuzz cases construct valid calldata.
+const keccakHex = (sig: string): string => bytesToHex(keccak_256(utf8ToBytes(sig)));
 
 // Tiny seeded RNG so fuzz iterations are reproducible. mulberry32 from
 // public-domain references; no crypto strength needed.
@@ -203,7 +207,7 @@ describe('decodeContractCall adversarial inputs', () => {
 
   it('does not infinite-loop on a selector that DOES match but with truncated args', () => {
     const sig = 'foo(uint256)';
-    const selector = '0x' + keccak256(Buffer.from(sig, 'utf8')).toString('hex').slice(0, 8);
+    const selector = '0x' + keccakHex(sig).slice(0, 8);
     const abi = JSON.stringify([
       { type: 'function', name: 'foo', inputs: [{ name: 'x', type: 'uint256' }] },
     ]);
@@ -222,7 +226,7 @@ describe('decodeContractCall adversarial inputs', () => {
 
   it('handles a string arg whose declared length exceeds the calldata', () => {
     const sig = 'setName(string)';
-    const selector = '0x' + keccak256(Buffer.from(sig, 'utf8')).toString('hex').slice(0, 8);
+    const selector = '0x' + keccakHex(sig).slice(0, 8);
     const abi = JSON.stringify([
       { type: 'function', name: 'setName', inputs: [{ name: 'who', type: 'string' }] },
     ]);

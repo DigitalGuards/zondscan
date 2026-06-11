@@ -17,8 +17,8 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
-import { keccak256 } from 'ethereumjs-util';
-import { Buffer } from 'buffer';
+import { keccak_256 } from '@noble/hashes/sha3.js';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import {
   decodeEventLog,
   decodeTokenTransferInput,
@@ -26,6 +26,10 @@ import {
 } from './helpers';
 
 // Helpers ────────────────────────────────────────────────────────────────
+
+// Mirrors the production selector/topic computation (keccak256 of the utf8
+// canonical signature) so tests construct inputs the same way helpers.ts does.
+const keccakHex = (sig: string): string => bytesToHex(keccak_256(utf8ToBytes(sig)));
 
 // Pad a 20-byte address (without 0x / Q prefix) to a 32-byte topic slot.
 function addrTopic(hex40: string): string {
@@ -169,7 +173,7 @@ describe('decodeEventLog', () => {
   // tests independent of any precomputed hash table.
   function eventTopic(name: string, types: string[]): string {
     const sig = `${name}(${types.join(',')})`;
-    return '0x' + keccak256(Buffer.from(sig, 'utf8')).toString('hex');
+    return '0x' + keccakHex(sig);
   }
 
   it('falls back to ABI decode when topic[0] matches a verified event', () => {
@@ -399,9 +403,8 @@ describe('decodeContractCall', () => {
     //
     // We replicate the production selector computation locally to construct
     // the right input.
-    // keccak256 imported below at top of file.
     const sig = 'setMatka1(address)';
-    const selector = '0x' + keccak256(Buffer.from(sig, 'utf8')).toString('hex').slice(0, 8);
+    const selector = '0x' + keccakHex(sig).slice(0, 8);
     const input = selector + addrTopic(ADDR_A).slice(2);
     const decoded = decodeContractCall(input, setMatka1Abi);
     expect(decoded).not.toBeNull();
@@ -424,7 +427,7 @@ describe('decodeContractCall', () => {
       },
     ]);
     const sig = 'multi(address,uint256,bool)';
-    const selector = '0x' + keccak256(Buffer.from(sig, 'utf8')).toString('hex').slice(0, 8);
+    const selector = '0x' + keccakHex(sig).slice(0, 8);
     const input = selector +
       addrTopic(ADDR_A).slice(2) +
       uintSlot(123).slice(2) +
@@ -453,7 +456,7 @@ describe('decodeContractCall', () => {
         ],
       },
     ]);
-    const selector = '0x' + keccak256(Buffer.from('three(address,uint256,bool)', 'utf8')).toString('hex').slice(0, 8);
+    const selector = '0x' + keccakHex('three(address,uint256,bool)').slice(0, 8);
     const truncated = selector + addrTopic(ADDR_A).slice(2) + uintSlot(1).slice(2); // missing 3rd slot
     expect(decodeContractCall(truncated, abi)).toBeNull();
   });
@@ -466,11 +469,10 @@ describe('decodeContractCall', () => {
         inputs: [{ name: 'who', type: 'string' }],
       },
     ]);
-    // keccak256 imported below at top of file.
-    const selector = '0x' + keccak256(Buffer.from('setName(string)', 'utf8')).toString('hex').slice(0, 8);
+    const selector = '0x' + keccakHex('setName(string)').slice(0, 8);
     // Head: pointer to string at offset 0x20 (32 bytes into args block).
     // Then length (5 = "hello".length), then "hello" padded to 32 bytes.
-    const helloHex = Buffer.from('hello', 'utf8').toString('hex'); // 68656c6c6f
+    const helloHex = bytesToHex(utf8ToBytes('hello')); // 68656c6c6f
     const input = selector +
       uintSlot(0x20).slice(2) +
       uintSlot(5).slice(2) +
