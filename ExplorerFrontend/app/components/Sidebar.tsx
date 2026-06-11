@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { Disclosure } from '@headlessui/react'
+import AnimatedLogo from './AnimatedLogo'
 import { ChevronDownIcon, Bars3Icon, XMarkIcon, QuestionMarkCircleIcon, ArrowTopRightOnSquareIcon, CodeBracketIcon } from '@heroicons/react/20/solid'
 import LookUpIcon from '../../public/lookup.svg'
 import TokenIcon from '../../public/token.svg'
@@ -164,17 +165,8 @@ export default function Sidebar(): JSX.Element {
             )}
           </button>
           <Link href="/" >
-            <div className="relative w-14 h-12">
-              <Image
-                src="/ZondScan_Logo.gif"
-                alt="ZondScan home"
-                fill
-                sizes="56px"
-                style={{ objectFit: 'contain' }}
-                loading="eager"
-                unoptimized
-                className="hover:scale-110 transition-transform duration-300"
-              />
+            <div className="relative w-14 h-12 hover:scale-110 transition-transform duration-300">
+              <AnimatedLogo alt="ZondScan home" />
             </div>
           </Link>
         </div>
@@ -201,17 +193,8 @@ export default function Sidebar(): JSX.Element {
       >
         <div className="px-4 pt-4 pb-8">
           <Link href="/" className="flex flex-col items-center mb-6 px-1 group">
-            <div className="w-32 h-24 relative">
-              <Image
-                src="/ZondScan_Logo.gif"
-                alt="ZondScan home"
-                fill
-                sizes="128px"
-                style={{ objectFit: 'contain' }}
-                loading="eager"
-                unoptimized
-                className="group-hover:scale-110 transition-transform duration-300"
-              />
+            <div className="w-32 h-24 relative group-hover:scale-110 transition-transform duration-300">
+              <AnimatedLogo />
             </div>
             <div className="flex flex-col items-center mt-2">
               <span className="text-lg font-semibold text-gray-300 whitespace-nowrap group-hover:text-[#ffa729] transition-colors">
