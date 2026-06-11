@@ -2,18 +2,7 @@
 const nextConfig = {
   distDir: 'build',
   output: 'standalone',
-  // Turbopack configuration (empty for now, may need buffer polyfill in future)
   turbopack: {},
-  webpack: (config, { isServer }) => {
-    if (!isServer) {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        buffer: require.resolve('buffer/'),
-      };
-    }
-    return config;
-  },
-  transpilePackages: ['buffer'],
   env: {
     HANDLER_URL: process.env.HANDLER_URL,
     DOMAIN_NAME: process.env.DOMAIN_NAME,
