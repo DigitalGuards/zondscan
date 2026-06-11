@@ -204,6 +204,16 @@
   @apply bg-gray-700 animate-pulse rounded-sm;
 }
 
+/* Hide the scrollbar entirely (pill tab rows scroll horizontally on
+   mobile; the chips themselves are the affordance, like Etherscan). */
+@utility scrollbar-none {
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* Custom scrollbar for dark mode */
 @utility scrollbar-dark {
   scrollbar-color: #2d2d2d #1a1a1a;
