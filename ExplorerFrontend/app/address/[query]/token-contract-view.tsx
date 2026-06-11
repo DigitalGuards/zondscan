@@ -98,7 +98,7 @@ const AddressDisplay = ({ address, truncate = false }: { address: string; trunca
 
     const display = truncate ? `${address.slice(0, 10)}...${address.slice(-8)}` : address;
     return (
-        <Link href={`/address/${address}`} className="text-accent hover:text-accent-hover font-mono text-xs md:text-sm break-all">
+        <Link href={`/address/${address}`} className={`text-accent hover:text-accent-hover font-mono text-xs md:text-sm${truncate ? '' : ' break-all'}`}>
             {display}
         </Link>
     );
