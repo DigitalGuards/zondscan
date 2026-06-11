@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import type { InternalTransaction, Transaction } from '@/app/types';
 import config from '../../../config';
+import TabPillBar from '../../components/TabPillBar';
 import TransactionsPanel from './panels/transactions-panel';
 import InternalPanel from './panels/internal-panel';
 import TokenTransfersPanel from './panels/token-transfers-panel';
@@ -212,37 +213,17 @@ export default function AddressTabs({
         Address activity
       </h2>
 
-      <div
-        role="tablist"
-        aria-label="Address activity sections"
-        className="flex gap-1 border-b border-[#3d3d3d] overflow-x-auto"
-      >
-        {TAB_KEYS.map((key) => {
-          const active = key === activeTab;
-          const b = badge(key);
-          return (
-            <button
-              key={key}
-              id={`tab-${key}`}
-              role="tab"
-              aria-selected={active}
-              aria-controls={`tabpanel-${key}`}
-              onClick={() => setTab(key)}
-              type="button"
-              className={`whitespace-nowrap px-3 md:px-4 py-2 text-xs md:text-sm border-b-2 -mb-px transition-colors ${
-                active
-                  ? 'border-[#ffa729] text-[#ffa729]'
-                  : 'border-transparent text-gray-400 hover:text-gray-200'
-              }`}
-            >
-              {TAB_LABEL[key]}
-              {b !== null && (
-                <span className="ml-1 text-xs opacity-75">({b})</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      <TabPillBar
+        ariaLabel="Address activity sections"
+        withPanelIds
+        activeKey={activeTab}
+        onSelect={setTab}
+        tabs={TAB_KEYS.map((key) => ({
+          key,
+          label: TAB_LABEL[key],
+          badge: badge(key),
+        }))}
+      />
 
       <div className="overflow-hidden rounded-xl border border-[#3d3d3d]">
         {isPanelMounted('transactions') && (
