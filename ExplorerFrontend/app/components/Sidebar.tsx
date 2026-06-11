@@ -166,7 +166,7 @@ export default function Sidebar(): JSX.Element {
           </button>
           <Link href="/" >
             <div className="relative w-14 h-12 hover:scale-110 transition-transform duration-300">
-              <AnimatedLogo />
+              <AnimatedLogo alt="ZondScan home" />
             </div>
           </Link>
         </div>
