@@ -1,5 +1,15 @@
-import { keccak256 } from 'ethereumjs-util';
-import { Buffer } from 'buffer';
+import { keccak_256 } from '@noble/hashes/sha3.js';
+import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+
+const textDecoder = new TextDecoder();
+
+// keccak256 of a utf8 signature string, as a bare lowercase hex string.
+// @noble/hashes replaces ethereumjs-util here: same Keccak-256 (original
+// padding, not NIST SHA-3) at ~6 KB gz instead of dragging the whole
+// bn.js/elliptic/secp256k1 tree (~135 KB gz) into every page bundle.
+function keccakHex(sig: string): string {
+  return bytesToHex(keccak_256(utf8ToBytes(sig)));
+}
 
 export function timeAgo(unixSeconds: number): string {
   const now = Math.floor(Date.now() / 1000);
@@ -799,7 +809,7 @@ function eventSignatureAndHash(entry: AbiEventEntry): { signature: string; hash:
   if (types.length !== entry.inputs.length) return null;
   const sig = `${entry.name}(${types.join(',')})`;
   try {
-    const hash = '0x' + keccak256(Buffer.from(sig, 'utf8')).toString('hex');
+    const hash = '0x' + keccakHex(sig);
     return { signature: sig, hash };
   } catch {
     return null;
@@ -949,7 +959,7 @@ function functionSelector(entry: AbiFunctionEntry): { signature: string; selecto
   if (types.length !== entry.inputs.length) return null;
   const sig = `${entry.name}(${types.join(',')})`;
   try {
-    const full = keccak256(Buffer.from(sig, 'utf8')).toString('hex');
+    const full = keccakHex(sig);
     return { signature: sig, selector: '0x' + full.slice(0, 8) };
   } catch {
     return null;
@@ -981,8 +991,8 @@ function decodeDynamicAt(label: string, type: string, argsBlock: string, headOff
   const hex = argsBlock.slice(dataStart, dataEnd);
   if (type === 'string') {
     try {
-      const bytes = Buffer.from(hex, 'hex');
-      return { label, type: 'string', value: bytes.toString('utf8') };
+      const bytes = hexToBytes(hex);
+      return { label, type: 'string', value: textDecoder.decode(bytes) };
     } catch {
       return { label, type: 'raw', value: '0x' + hex };
     }
