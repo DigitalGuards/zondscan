@@ -15,18 +15,33 @@ import React from "react"
  * block autoplay (e.g. iOS Low Power Mode) gracefully keep the static
  * logo with no black box or play-button overlay.
  */
-export default function AnimatedLogo({ className = "" }: { className?: string }) {
+export default function AnimatedLogo({
+  className = "",
+  alt = "",
+}: {
+  className?: string
+  /** Accessible name. Leave empty (decorative) when the surrounding link already has visible text. */
+  alt?: string
+}) {
   const [playing, setPlaying] = React.useState(false)
+
+  // React renders the muted attribute but does not reliably set the DOM
+  // property before the autoplay check in all browsers (React has no
+  // defaultMuted prop), so set it imperatively on mount.
+  const videoRef = React.useCallback((el: HTMLVideoElement | null) => {
+    if (el) el.muted = true
+  }, [])
 
   return (
     <div className={`relative h-full w-full ${className}`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/ZondScan_Logo_static.webp"
-        alt="ZondScan home"
+        alt={alt}
         className="absolute inset-0 h-full w-full object-contain"
       />
       <video
+        ref={videoRef}
         muted
         autoPlay
         loop
