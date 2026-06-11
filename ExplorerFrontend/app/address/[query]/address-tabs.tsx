@@ -217,7 +217,7 @@ export default function AddressTabs({
         ariaLabel="Address activity sections"
         withPanelIds
         activeKey={activeTab}
-        onSelect={(key) => setTab(key as TabKey)}
+        onSelect={setTab}
         tabs={TAB_KEYS.map((key) => ({
           key,
           label: TAB_LABEL[key],
