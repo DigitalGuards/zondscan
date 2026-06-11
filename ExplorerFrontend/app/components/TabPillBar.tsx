@@ -1,7 +1,7 @@
 'use client';
 
-export interface TabPill {
-  key: string;
+export interface TabPill<T extends string = string> {
+  key: T;
   label: string;
   /** Optional count rendered as "(badge)" after the label. */
   badge?: string | null;
@@ -17,17 +17,20 @@ export interface TabPill {
  *
  * When `withPanelIds` is set, buttons emit the tab-<key> / tabpanel-<key>
  * id pairing the address page's tabpanels reference via aria-labelledby.
+ *
+ * Generic over the tab key union so callers' onSelect handlers take their
+ * own key type directly, no `as` assertions at the call sites.
  */
-export default function TabPillBar({
+export default function TabPillBar<T extends string>({
   tabs,
   activeKey,
   onSelect,
   ariaLabel,
   withPanelIds = false,
 }: {
-  tabs: TabPill[];
-  activeKey: string;
-  onSelect: (key: string) => void;
+  tabs: TabPill<T>[];
+  activeKey: T;
+  onSelect: (key: T) => void;
   ariaLabel: string;
   withPanelIds?: boolean;
 }): JSX.Element {
@@ -35,7 +38,7 @@ export default function TabPillBar({
     <div
       role="tablist"
       aria-label={ariaLabel}
-      className="flex gap-2 overflow-x-auto scrollbar-none -mx-1 px-1 py-1"
+      className="flex gap-2 overflow-x-auto hide-scrollbar -mx-1 px-1 py-1"
     >
       {tabs.map((tab) => {
         const active = tab.key === activeKey;

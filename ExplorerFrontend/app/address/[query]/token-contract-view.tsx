@@ -452,7 +452,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                 <TabPillBar
                     ariaLabel="Token contract sections"
                     activeKey={activeTab}
-                    onSelect={(key) => setActiveTab(key as typeof activeTab)}
+                    onSelect={setActiveTab}
                     tabs={tabs.map((tab) => ({ key: tab.id, label: tab.label }))}
                 />
             </div>
