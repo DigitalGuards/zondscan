@@ -7,6 +7,7 @@ import Link from 'next/link';
 import CopyButton from "../../components/CopyButton";
 import QRCodeButton from "../../components/QRCodeButton";
 import ContractTabs from "../../components/ContractTabs";
+import TabPillBar from "../../components/TabPillBar";
 import VerifiedBadge from "../../components/VerifiedBadge";
 import type { ContractData } from "../../types/address";
 import { compactTokenIDLabel, formatAmount } from "../../lib/helpers";
@@ -447,23 +448,13 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
             </div>
 
             {/* Tabs */}
-            <div className="flex border-b border-gray-700 mb-4">
-                {tabs.map((tab) => (
-                    <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                        className={`px-4 py-3 text-sm font-medium transition-colors relative
-                            ${activeTab === tab.id
-                                ? 'text-[#ffa729]'
-                                : 'text-gray-400 hover:text-gray-300'
-                            }`}
-                    >
-                        {tab.label}
-                        {activeTab === tab.id && (
-                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#ffa729]" />
-                        )}
-                    </button>
-                ))}
+            <div className="mb-4">
+                <TabPillBar
+                    ariaLabel="Token contract sections"
+                    activeKey={activeTab}
+                    onSelect={setActiveTab}
+                    tabs={tabs.map((tab) => ({ key: tab.id, label: tab.label }))}
+                />
             </div>
 
             {/* Tab Content */}
