@@ -45,7 +45,6 @@ export default function FaucetClient(): JSX.Element {
   const turnstileRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
   const tokenRef = useRef<string>('');
-  const [scriptReady, setScriptReady] = useState<boolean>(false);
 
   // Load faucet config so we can show the drip amount / disabled state and know
   // whether captcha is enforced.
@@ -64,9 +63,14 @@ export default function FaucetClient(): JSX.Element {
     };
   }, []);
 
+  // Render the widget when every prerequisite is in place. We gate on
+  // `window.turnstile` existing rather than a "script loaded" state flag: that
+  // way the render is driven purely by external readiness and can be retried
+  // safely from both the status effect and the script's onLoad — including the
+  // client-side-nav case where the script is already cached and onLoad never
+  // refires. Idempotent: the widgetIdRef guard prevents a double render.
   const renderTurnstile = useCallback(() => {
     if (
-      !scriptReady ||
       !status?.captchaEnabled ||
       !SITE_KEY ||
       !turnstileRef.current ||
@@ -88,8 +92,11 @@ export default function FaucetClient(): JSX.Element {
         tokenRef.current = '';
       },
     });
-  }, [scriptReady, status?.captchaEnabled]);
+  }, [status?.captchaEnabled]);
 
+  // Retry the render whenever its inputs change (notably once the status fetch
+  // resolves). If the script hasn't loaded yet this is a no-op and onLoad will
+  // drive it; if the script is already present this is what renders the widget.
   useEffect(() => {
     renderTurnstile();
   }, [renderTurnstile]);
@@ -144,7 +151,7 @@ export default function FaucetClient(): JSX.Element {
       {status?.captchaEnabled && (
         <Script
           src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
-          onLoad={() => setScriptReady(true)}
+          onLoad={() => renderTurnstile()}
         />
       )}
       <div className="flex flex-col items-center justify-center">
