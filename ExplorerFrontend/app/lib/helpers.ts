@@ -1194,3 +1194,31 @@ export function qNormaliseAbiValue(v: unknown, type: string): unknown {
   }
   return v;
 }
+
+/**
+ * Cheap client-side format check for a QRL address: a `Q`/`q` prefix (or bare
+ * hex) followed by exactly 40 hex chars. QRL addresses are Q-prefixed; `0x` is
+ * only for block/tx hashes, so it's intentionally not accepted here. This is a
+ * UX guard only — the server's normalizeQrlAddress remains authoritative; we
+ * use it to avoid a wasted round-trip + Turnstile token on obvious typos.
+ */
+export function isValidQrlAddressFormat(address: string): boolean {
+  let core = address.trim();
+  if (/^[Qq]/.test(core)) core = core.slice(1);
+  return /^[0-9a-fA-F]{40}$/.test(core);
+}
+
+/**
+ * Render a duration in seconds as a compact human-readable string
+ * (e.g. "45s", "12 min", "2h 5m", "1h"). Used for faucet cooldown messaging;
+ * shared here so other countdown surfaces can reuse it.
+ */
+export function formatDuration(totalSeconds: number): string {
+  const secs = Math.max(0, Math.ceil(totalSeconds));
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.ceil(secs / 60);
+  if (mins < 60) return `${mins} min`;
+  const hours = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return remMins > 0 ? `${hours}h ${remMins}m` : `${hours}h`;
+}
