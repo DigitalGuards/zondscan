@@ -46,7 +46,10 @@ export function getFaucetConfig(): FaucetConfig {
     dripQuanta: process.env.FAUCET_DRIP_QUANTA || '10',
     cooldownHours: Number(process.env.FAUCET_COOLDOWN_HOURS || '24'),
     rpcUrl: process.env.FAUCET_RPC_URL || DEFAULT_RPC_URL,
-    configured: Boolean(process.env.FAUCET_SEED),
+    // The faucet needs both a funding seed AND a Mongo connection for the
+    // cooldown store; without the latter every claim would fail at runtime, so
+    // we only report "online" when both are present.
+    configured: Boolean(process.env.FAUCET_SEED && process.env.DATABASE_URL),
     captchaEnabled: Boolean(
       process.env.TURNSTILE_SECRET && process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
     ),
@@ -75,16 +78,15 @@ export class FaucetError extends Error {
 
 /**
  * Validate and normalise a user-supplied QRL address to the canonical
- * `Q`+lowercase-hex form the @theqrl/web3 lib accepts for `to`. Accepts the
- * common input shapes (`Q…`, `Z…`, `0x…`, bare hex). Returns null when the
- * value isn't a 40-hex-character address.
+ * `Q`+lowercase-hex form the @theqrl/web3 lib accepts for `to`. QRL addresses
+ * are Q-prefixed — the `0x` prefix is only ever used for block/tx hashes — so we
+ * accept a `Q`/`q` prefix or bare hex. Returns null when the value isn't a
+ * 40-hex-character address.
  */
 export function normalizeQrlAddress(input: string): string | null {
   if (!input) return null;
-  const trimmed = input.trim();
-  let core = trimmed;
-  if (/^0x/i.test(core)) core = core.slice(2);
-  else if (/^[QZqz]/.test(core)) core = core.slice(1);
+  let core = input.trim();
+  if (/^[Qq]/.test(core)) core = core.slice(1);
   if (!/^[0-9a-fA-F]{40}$/.test(core)) return null;
   return 'Q' + core.toLowerCase();
 }
