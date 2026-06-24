@@ -44,6 +44,9 @@ export default function FaucetClient(): JSX.Element {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [result, setResult] = useState<ClaimSuccess | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Mirrors tokenRef in React state so the submit button can react to whether a
+  // captcha has been solved (refs don't trigger re-renders).
+  const [captchaToken, setCaptchaToken] = useState<string>('');
 
   const turnstileRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
@@ -96,12 +99,15 @@ export default function FaucetClient(): JSX.Element {
       theme: 'dark',
       callback: (token: string) => {
         tokenRef.current = token;
+        setCaptchaToken(token);
       },
       'expired-callback': () => {
         tokenRef.current = '';
+        setCaptchaToken('');
       },
       'error-callback': () => {
         tokenRef.current = '';
+        setCaptchaToken('');
       },
     });
   }, [status?.captchaEnabled]);
@@ -123,7 +129,13 @@ export default function FaucetClient(): JSX.Element {
     // round-trip or a one-time Turnstile token on a typo.
     const cleanAddress = address.replace(/\s/g, '');
     if (!isValidQrlAddressFormat(cleanAddress)) {
-      setError('Enter a valid QRL address (Q… followed by 40 hex characters).');
+      // Common mix-up: pasting a 0x-prefixed (Ethereum/hash) form. QRL wallet
+      // addresses are Q-prefixed, so point the user at that specifically.
+      setError(
+        /^0x/i.test(cleanAddress)
+          ? 'QRL addresses start with “Q”, not “0x”. Paste your Q… wallet address.'
+          : 'Enter a valid QRL address (Q… followed by 40 hex characters).',
+      );
       setIsLoading(false);
       return;
     }
@@ -156,6 +168,7 @@ export default function FaucetClient(): JSX.Element {
       if (widgetIdRef.current && window.turnstile) {
         window.turnstile.reset(widgetIdRef.current);
         tokenRef.current = '';
+        setCaptchaToken('');
       }
     }
   };
@@ -241,7 +254,7 @@ export default function FaucetClient(): JSX.Element {
 
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={isLoading || (status?.captchaEnabled === true && !captchaToken)}
                 className="w-full px-6 py-3 bg-gradient-to-r from-accent to-accent-hover text-white font-bold rounded-lg hover:from-accent-hover hover:to-accent transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
               >
                 {isLoading ? (
