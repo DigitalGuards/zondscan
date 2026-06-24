@@ -154,6 +154,13 @@ export function ipCooldownKey(ip: string | null): string | null {
   const addr = raw.split('%')[0];
   if (!addr.includes(':')) return addr; // IPv4 (or already a key)
 
+  // IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1), which a dual-stack socket hands
+  // back for plain IPv4 clients. Its first four hextets are all zero, so the
+  // /64 reduction below would collapse every such client into one shared
+  // bucket — key on the embedded IPv4 instead.
+  const mapped = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i.exec(addr);
+  if (mapped) return mapped[1];
+
   // Expand `::` and take the first four hextets (the /64 network prefix).
   const halves = addr.split('::');
   if (halves.length > 2) return raw; // malformed — more than one '::'
