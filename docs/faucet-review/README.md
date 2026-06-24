@@ -179,3 +179,29 @@ these at startup and fall back to safe defaults with a warning.
   failure so users aren't wrongly stuck on cooldown.
 - `FaucetError.meta` (which contains the faucet address) is never serialized to
   the client — only `err.message` is returned.
+
+---
+
+## Resolution — fixes applied
+
+The following changes were made on top of the faucet branch (see the same
+commit/branch as this doc):
+
+| Finding | Fix |
+|---------|-----|
+| 1 — captcha fail-open / address rotation | Production now **refuses claims when no captcha is configured** (`allowNoCaptcha`, default off in prod; `FAUCET_ALLOW_NO_CAPTCHA=true` to override) and logs a one-time loud warning. Added an optional **global daily quanta cap** (`FAUCET_DAILY_CAP_QUANTA`) enforced inside the drip. |
+| 2 — per-IP bypass | IPv6 is now keyed on its **`/64` prefix** (`ipCooldownKey`) so a single allocation can't rotate around the cooldown. The Cloudflare/origin-lock requirement is documented in `.env.example`. |
+| 3 — nonce collisions | The read-nonce → sign → broadcast path is **serialized** through a per-process mutex (`runExclusive`). Multi-instance caveat documented in-code. |
+| 4 — TTL / orphaned PENDING | Added a **TTL index** (fixed 7-day retention) to bound growth; orphaned `PENDING` reservations now stop blocking after a **2-minute** reservation timeout instead of the full cooldown. |
+| 5 — global rate limit | Covered by the daily cap in #1 (a per-request rate limiter is still worth adding at the edge — noted, not implemented here). |
+| 7 — config validation | `FAUCET_DRIP_QUANTA` / `FAUCET_COOLDOWN_HOURS` are validated and fall back to safe defaults on invalid input. |
+| 8 — UX papercuts | Submit button is **disabled until the captcha is solved**; a `0x…`-prefixed address now gets a clear "QRL addresses start with Q" message. |
+
+Finding 6 (concurrent first-claim double-reject) is left as-is by design — it
+fails closed (no double drip); the reservation-timeout in #4 also shortens its
+retry window. A per-edge rate limiter (#5) and external multi-instance nonce
+coordination (#3) remain as future hardening.
+
+> Note: this branch also bundles an unrelated UI fix — the mobile footer now
+> lays its link groups out in a 2-column grid instead of one tall stacked
+> column (`app/components/Footer.tsx`).
