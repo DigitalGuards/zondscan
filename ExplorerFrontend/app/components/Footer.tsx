@@ -17,7 +17,7 @@ export default function Footer(): JSX.Element {
         </div>
 
         {/* Navigation */}
-        <nav aria-label="Footer navigation" className="flex-1 flex flex-col sm:flex-row gap-8">
+        <nav aria-label="Footer navigation" className="flex-1 grid grid-cols-2 gap-x-8 gap-y-8 sm:flex sm:flex-row">
           <div>
             <h3 className="text-sm font-semibold text-accent uppercase mb-4">Explore</h3>
             <ul className="space-y-2 text-sm">

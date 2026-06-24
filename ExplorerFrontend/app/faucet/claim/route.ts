@@ -58,6 +58,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
+  // Refuse to serve an unprotected faucet in production. Without a captcha the
+  // only gate is the cooldown, which address rotation defeats — so a misconfigured
+  // (seed set, Turnstile missing) production deploy is disabled rather than
+  // openly drainable. `FAUCET_ALLOW_NO_CAPTCHA=true` is the explicit opt-out.
+  if (!cfg.captchaEnabled && !cfg.allowNoCaptcha) {
+    return NextResponse.json(
+      { error: 'The faucet is temporarily unavailable.' },
+      { status: 503 },
+    );
+  }
+
   let payload: { address?: string; turnstileToken?: string };
   try {
     payload = await req.json();
@@ -127,7 +138,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     await deletePendingClaim(slot.claimId);
     if (err instanceof FaucetError) {
       const status =
-        err.code === 'INSUFFICIENT_FAUCET_FUNDS' || err.code === 'NOT_CONFIGURED'
+        err.code === 'INSUFFICIENT_FAUCET_FUNDS' ||
+        err.code === 'NOT_CONFIGURED' ||
+        err.code === 'DAILY_CAP'
           ? 503
           : err.code === 'BROADCAST_FAILED'
             ? 502
