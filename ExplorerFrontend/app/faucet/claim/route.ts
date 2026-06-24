@@ -2,10 +2,11 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import {
   FaucetError,
-  checkCooldown,
+  claimSlot,
+  deletePendingClaim,
+  finalizeClaim,
   getFaucetConfig,
   normalizeQrlAddress,
-  recordClaim,
   sendFaucetDrip,
   verifyTurnstile,
 } from '../../lib/faucet';
@@ -15,11 +16,25 @@ import {
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/** First hop of X-Forwarded-For (the real client), falling back to X-Real-IP. */
+/**
+ * Best-effort client IP for the per-IP cooldown.
+ *
+ * `NextRequest.ip` was removed in Next 15, so we read headers. We prefer
+ * `CF-Connecting-IP`, which Cloudflare sets to the true client and overwrites
+ * on every request — clients can't forge it through the CF edge. We fall back
+ * to `X-Real-IP`, then to the first hop of `X-Forwarded-For` only as a last
+ * resort (spoofable when not fronted by a trusted proxy that rewrites it). All
+ * deployments here sit behind Cloudflare, so the first branch is the live path;
+ * captcha + the per-address cooldown remain the primary defenses regardless.
+ */
 function clientIp(req: NextRequest): string | null {
+  const cf = req.headers.get('cf-connecting-ip');
+  if (cf) return cf.trim();
+  const real = req.headers.get('x-real-ip');
+  if (real) return real.trim();
   const fwd = req.headers.get('x-forwarded-for');
   if (fwd) return fwd.split(',')[0].trim();
-  return req.headers.get('x-real-ip');
+  return null;
 }
 
 /** GET /faucet/claim — public status so the page can render config/disabled state. */
@@ -46,6 +61,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let payload: { address?: string; turnstileToken?: string };
   try {
     payload = await req.json();
+    // A literal `null`/non-object body is valid JSON but would throw on the
+    // property access below, outside any try/catch — guard it here.
+    if (!payload || typeof payload !== 'object') throw new Error('non-object body');
   } catch {
     return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
   }
@@ -68,20 +86,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  try {
-    const remaining = await checkCooldown(address, ip);
-    if (remaining !== null) {
-      return NextResponse.json(
-        {
-          error: 'You have already claimed recently. Please wait before claiming again.',
-          retryAfterSeconds: remaining,
-        },
-        { status: 429, headers: { 'Retry-After': String(remaining) } },
-      );
-    }
+  // Reserve the cooldown slot BEFORE broadcasting. claimSlot inserts a pending
+  // row and then checks for rivals, so two concurrent requests for the same
+  // address/IP can't both pass the cooldown while the (slow) drip is in flight.
+  const slot = await claimSlot(address, ip);
+  if (!slot.ok || !slot.claimId) {
+    const remaining = slot.retryAfterSeconds ?? 1;
+    return NextResponse.json(
+      {
+        error: 'You have already claimed recently. Please wait before claiming again.',
+        retryAfterSeconds: remaining,
+      },
+      { status: 429, headers: { 'Retry-After': String(remaining) } },
+    );
+  }
 
+  try {
     const result = await sendFaucetDrip(address);
-    await recordClaim(result, ip);
+    // Promote the reservation to a real claim now that the tx is broadcast.
+    await finalizeClaim(slot.claimId, result);
 
     return NextResponse.json({
       txHash: result.txHash,
@@ -90,6 +113,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       explorerUrl: `/tx/${result.txHash}`,
     });
   } catch (err) {
+    // Drip failed — release the reservation so the user isn't stuck on cooldown.
+    await deletePendingClaim(slot.claimId);
     if (err instanceof FaucetError) {
       const status =
         err.code === 'INSUFFICIENT_FAUCET_FUNDS' || err.code === 'NOT_CONFIGURED'

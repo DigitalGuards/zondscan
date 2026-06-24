@@ -3,6 +3,8 @@ import 'server-only';
 import { Web3 } from '@theqrl/web3';
 import { MLDSA87 } from '@theqrl/wallet.js';
 
+import type { Collection, ObjectId } from 'mongodb';
+
 import { getFaucetDb } from './mongodb';
 
 /**
@@ -275,45 +277,94 @@ interface FaucetClaim {
   createdAt: Date;
 }
 
+/** Marker txHash for a reserved-but-not-yet-broadcast claim. */
+const PENDING_TX = 'PENDING';
+
 /**
- * Reject the claim if either the address or the IP has claimed inside the
- * cooldown window. Returns the seconds remaining when blocked, or null when the
- * claim is allowed to proceed.
+ * createIndex is idempotent, but each call is still a round-trip to Mongo.
+ * Ensure the cooldown indexes exist once per process rather than on every
+ * claim. Best-effort: a failure here just means the lookups aren't indexed.
  */
-export async function checkCooldown(address: string, ip: string | null): Promise<number | null> {
-  const { cooldownHours } = getFaucetConfig();
-  const db = await getFaucetDb();
-  const col = db.collection<FaucetClaim>(CLAIMS_COLLECTION);
-
-  const windowStart = new Date(Date.now() - cooldownHours * 3600 * 1000);
-  const or: Record<string, unknown>[] = [{ address }];
-  if (ip) or.push({ ip });
-
-  const recent = await col.findOne(
-    { createdAt: { $gt: windowStart }, $or: or },
-    { sort: { createdAt: -1 } },
-  );
-  if (!recent) return null;
-
-  const elapsedMs = Date.now() - recent.createdAt.getTime();
-  const remainingMs = cooldownHours * 3600 * 1000 - elapsedMs;
-  return Math.max(1, Math.ceil(remainingMs / 1000));
-}
-
-/** Record a successful claim so future requests are rate-limited. */
-export async function recordClaim(result: DripResult, ip: string | null): Promise<void> {
-  const db = await getFaucetDb();
-  const col = db.collection<FaucetClaim>(CLAIMS_COLLECTION);
-  // Best-effort indexes; createIndex is idempotent and cheap after the first call.
+let claimIndexesEnsured = false;
+async function ensureClaimIndexes(col: Collection<FaucetClaim>): Promise<void> {
+  if (claimIndexesEnsured) return;
   await Promise.all([
     col.createIndex({ address: 1, createdAt: -1 }),
     col.createIndex({ ip: 1, createdAt: -1 }),
-  ]).catch(() => undefined);
-  await col.insertOne({
-    address: result.to,
+  ])
+    .then(() => {
+      claimIndexesEnsured = true;
+    })
+    .catch(() => undefined);
+}
+
+export interface ClaimSlot {
+  /** True when the slot was reserved and the caller may broadcast. */
+  ok: boolean;
+  /** Reservation id — pass to finalizeClaim or deletePendingClaim. */
+  claimId?: ObjectId;
+  /** Seconds until the cooldown clears, when ok is false. */
+  retryAfterSeconds?: number;
+}
+
+/**
+ * Atomically reserve a claim slot for (address, ip), closing the TOCTOU race a
+ * naive check-then-send leaves open. We INSERT a PENDING row first, THEN look
+ * for any *other* claim inside the cooldown window: because both concurrent
+ * requests insert before they check, neither can slip through unseen. Fails
+ * closed — if a rival row exists we delete our own and report the cooldown, so
+ * the worst case is a spurious retry, never a double drip.
+ *
+ * On `ok`, the caller MUST settle the reservation: finalizeClaim once the drip
+ * is broadcast, or deletePendingClaim if it fails.
+ */
+export async function claimSlot(address: string, ip: string | null): Promise<ClaimSlot> {
+  const { cooldownHours, dripQuanta } = getFaucetConfig();
+  const db = await getFaucetDb();
+  const col = db.collection<FaucetClaim>(CLAIMS_COLLECTION);
+  await ensureClaimIndexes(col);
+
+  const now = new Date();
+  const { insertedId } = await col.insertOne({
+    address,
     ip,
-    txHash: result.txHash,
-    amount: result.amount,
-    createdAt: new Date(),
+    txHash: PENDING_TX,
+    amount: dripQuanta,
+    createdAt: now,
   });
+
+  const windowStart = new Date(now.getTime() - cooldownHours * 3600 * 1000);
+  const or: Record<string, unknown>[] = [{ address }];
+  if (ip) or.push({ ip });
+
+  const rival = await col.findOne(
+    { _id: { $ne: insertedId }, createdAt: { $gt: windowStart }, $or: or },
+    { sort: { createdAt: 1 } },
+  );
+
+  if (rival) {
+    await col.deleteOne({ _id: insertedId }).catch(() => undefined);
+    const elapsedMs = now.getTime() - rival.createdAt.getTime();
+    const remainingMs = cooldownHours * 3600 * 1000 - elapsedMs;
+    return { ok: false, retryAfterSeconds: Math.max(1, Math.ceil(remainingMs / 1000)) };
+  }
+
+  return { ok: true, claimId: insertedId };
+}
+
+/** Promote a reserved slot to a real claim once the drip is broadcast. */
+export async function finalizeClaim(claimId: ObjectId, result: DripResult): Promise<void> {
+  const db = await getFaucetDb();
+  const col = db.collection<FaucetClaim>(CLAIMS_COLLECTION);
+  await col.updateOne(
+    { _id: claimId },
+    { $set: { txHash: result.txHash, amount: result.amount, address: result.to } },
+  );
+}
+
+/** Release a reserved slot when the drip fails, so the user can retry. */
+export async function deletePendingClaim(claimId: ObjectId): Promise<void> {
+  const db = await getFaucetDb();
+  const col = db.collection<FaucetClaim>(CLAIMS_COLLECTION);
+  await col.deleteOne({ _id: claimId }).catch(() => undefined);
 }
