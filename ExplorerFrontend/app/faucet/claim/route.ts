@@ -89,7 +89,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Reserve the cooldown slot BEFORE broadcasting. claimSlot inserts a pending
   // row and then checks for rivals, so two concurrent requests for the same
   // address/IP can't both pass the cooldown while the (slow) drip is in flight.
-  const slot = await claimSlot(address, ip);
+  // A Mongo outage here should degrade to a clean 503, not an unhandled 500.
+  let slot: Awaited<ReturnType<typeof claimSlot>>;
+  try {
+    slot = await claimSlot(address, ip);
+  } catch (err) {
+    console.error('faucet cooldown check failed:', err);
+    return NextResponse.json(
+      { error: 'The faucet is temporarily unavailable. Please try again later.' },
+      { status: 503 },
+    );
+  }
   if (!slot.ok || !slot.claimId) {
     const remaining = slot.retryAfterSeconds ?? 1;
     return NextResponse.json(

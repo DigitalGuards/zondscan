@@ -5,6 +5,8 @@ import type { FormEvent, ChangeEvent } from 'react';
 import Link from 'next/link';
 import Script from 'next/script';
 
+import { formatDuration, isValidQrlAddressFormat } from '../lib/helpers';
+
 interface FaucetStatus {
   configured: boolean;
   captchaEnabled: boolean;
@@ -38,6 +40,7 @@ const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 export default function FaucetClient(): JSX.Element {
   const [address, setAddress] = useState<string>('');
   const [status, setStatus] = useState<FaucetStatus | null>(null);
+  const [loadingStatus, setLoadingStatus] = useState<boolean>(true);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [result, setResult] = useState<ClaimSuccess | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -47,16 +50,25 @@ export default function FaucetClient(): JSX.Element {
   const tokenRef = useRef<string>('');
 
   // Load faucet config so we can show the drip amount / disabled state and know
-  // whether captcha is enforced.
+  // whether captcha is enforced. Until this resolves we render a spinner rather
+  // than a half-initialised form (which could be submitted without a captcha
+  // token, or flash before the offline notice). On failure, treat the faucet as
+  // offline rather than leaving an interactive but broken form.
   useEffect(() => {
     let cancelled = false;
     fetch('/faucet/claim')
       .then(r => r.json())
       .then((s: FaucetStatus) => {
-        if (!cancelled) setStatus(s);
+        if (!cancelled) {
+          setStatus(s);
+          setLoadingStatus(false);
+        }
       })
       .catch(() => {
-        if (!cancelled) setStatus(null);
+        if (!cancelled) {
+          setStatus({ configured: false, captchaEnabled: false, dripQuanta: '10', cooldownHours: 24 });
+          setLoadingStatus(false);
+        }
       });
     return () => {
       cancelled = true;
@@ -107,12 +119,21 @@ export default function FaucetClient(): JSX.Element {
     setError(null);
     setResult(null);
 
+    // Reject obviously malformed addresses up front so we don't burn a network
+    // round-trip or a one-time Turnstile token on a typo.
+    const cleanAddress = address.replace(/\s/g, '');
+    if (!isValidQrlAddressFormat(cleanAddress)) {
+      setError('Enter a valid QRL address (Q… followed by 40 hex characters).');
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const res = await fetch('/faucet/claim', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          address: address.replace(/\s/g, ''),
+          address: cleanAddress,
           turnstileToken: tokenRef.current || undefined,
         }),
       });
@@ -120,8 +141,7 @@ export default function FaucetClient(): JSX.Element {
 
       if (!res.ok) {
         if (res.status === 429 && data.retryAfterSeconds) {
-          const mins = Math.ceil(data.retryAfterSeconds / 60);
-          setError(`${data.error} (try again in ~${mins} min)`);
+          setError(`${data.error} (try again in ~${formatDuration(data.retryAfterSeconds)})`);
         } else {
           setError(data.error || 'Failed to claim testnet funds.');
         }
@@ -143,6 +163,16 @@ export default function FaucetClient(): JSX.Element {
   const handleAddressChange = (e: ChangeEvent<HTMLInputElement>): void => {
     setAddress(e.target.value);
   };
+
+  // Hold the UI until the faucet status is known, so the form never renders in
+  // an ambiguous half-loaded state.
+  if (loadingStatus) {
+    return (
+      <div className="max-w-[1200px] mx-auto p-8 flex justify-center items-center min-h-[400px]">
+        <div className="animate-spin h-8 w-8 border-4 border-accent border-t-transparent rounded-full" />
+      </div>
+    );
+  }
 
   const disabled = status !== null && !status.configured;
 
