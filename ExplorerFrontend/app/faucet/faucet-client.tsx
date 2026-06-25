@@ -157,13 +157,6 @@ export default function FaucetClient(): JSX.Element {
       });
       const data = await res.json();
 
-      // Keep the spinner up for a perceptible beat even when the node accepts
-      // the broadcast near-instantly, so the claim doesn't feel like a no-op.
-      const elapsed = performance.now() - startedAt;
-      if (elapsed < MIN_SENDING_MS) {
-        await new Promise(resolve => setTimeout(resolve, MIN_SENDING_MS - elapsed));
-      }
-
       if (!res.ok) {
         if (res.status === 429 && data.retryAfterSeconds) {
           setError(`${data.error} (try again in ~${formatDuration(data.retryAfterSeconds)})`);
@@ -172,6 +165,15 @@ export default function FaucetClient(): JSX.Element {
         }
         return;
       }
+
+      // Keep the spinner up for a perceptible beat even when the node accepts
+      // the broadcast near-instantly, so a successful claim doesn't feel like a
+      // no-op. Errors above skip this and surface immediately.
+      const elapsed = performance.now() - startedAt;
+      if (elapsed < MIN_SENDING_MS) {
+        await new Promise(resolve => setTimeout(resolve, MIN_SENDING_MS - elapsed));
+      }
+
       setResult(data as ClaimSuccess);
     } catch {
       setError('Network error. Please try again.');

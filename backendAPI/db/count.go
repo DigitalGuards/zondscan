@@ -2,10 +2,17 @@ package db
 
 import (
 	"context"
+	"log"
+	"sync"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
+
+// fallbackLogged tracks which collections have already logged the
+// metadata-fallback warning, so we surface it once per collection per process
+// instead of on every (currently always-0) count call.
+var fallbackLogged sync.Map
 
 // countDocumentsResilient returns an accurate document count for list-pagination
 // totals.
@@ -29,6 +36,9 @@ func countDocumentsResilient(ctx context.Context, coll *mongo.Collection) (int64
 	}
 	if est > 0 {
 		return est, nil
+	}
+	if _, seen := fallbackLogged.LoadOrStore(coll.Name(), true); !seen {
+		log.Printf("[count] EstimatedDocumentCount returned 0 for %q on a query; using exact CountDocuments. The WiredTiger fast-count metadata is stale: run validate() on this collection to rebuild it and restore the fast path.", coll.Name())
 	}
 	return coll.CountDocuments(ctx, primitive.D{})
 }
