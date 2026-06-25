@@ -280,14 +280,14 @@ func ReturnContractCode(address string) (models.ContractInfo, error) {
 }
 
 // CountContracts returns the total number of smart contracts. Uses
-// EstimatedDocumentCount (metadata read, ~microseconds) instead of
-// CountDocuments({}) which is O(rows) and blocked hot endpoints
-// (/overview) under any concurrency.
+// countDocumentsResilient (fast metadata read with an exact-count fallback when
+// the metadata reads 0, which it currently does on this deployment). The result
+// is cached by callers (/overview), so the fallback runs at most once per window.
 func CountContracts() (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	count, err := configs.ContractInfoCollection.EstimatedDocumentCount(ctx)
+	count, err := countDocumentsResilient(ctx, configs.ContractInfoCollection)
 	if err != nil {
 		return 0, err
 	}
