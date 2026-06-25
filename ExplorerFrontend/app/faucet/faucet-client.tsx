@@ -37,6 +37,11 @@ declare global {
 
 const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
+// A claim resolves the moment the node accepts the broadcast (the tx is then
+// pending on-chain), which can be well under 100ms. Floor the visible
+// "Sending..." state so the action registers instead of flashing past.
+const MIN_SENDING_MS = 700;
+
 export default function FaucetClient(): JSX.Element {
   const [address, setAddress] = useState<string>('');
   const [status, setStatus] = useState<FaucetStatus | null>(null);
@@ -140,6 +145,7 @@ export default function FaucetClient(): JSX.Element {
       return;
     }
 
+    const startedAt = performance.now();
     try {
       const res = await fetch('/faucet/claim', {
         method: 'POST',
@@ -150,6 +156,13 @@ export default function FaucetClient(): JSX.Element {
         }),
       });
       const data = await res.json();
+
+      // Keep the spinner up for a perceptible beat even when the node accepts
+      // the broadcast near-instantly, so the claim doesn't feel like a no-op.
+      const elapsed = performance.now() - startedAt;
+      if (elapsed < MIN_SENDING_MS) {
+        await new Promise(resolve => setTimeout(resolve, MIN_SENDING_MS - elapsed));
+      }
 
       if (!res.ok) {
         if (res.status === 429 && data.retryAfterSeconds) {
@@ -164,7 +177,7 @@ export default function FaucetClient(): JSX.Element {
       setError('Network error. Please try again.');
     } finally {
       setIsLoading(false);
-      // One token per challenge — reset so the next claim gets a fresh one.
+      // One token per challenge: reset so the next claim gets a fresh one.
       if (widgetIdRef.current && window.turnstile) {
         window.turnstile.reset(widgetIdRef.current);
         tokenRef.current = '';

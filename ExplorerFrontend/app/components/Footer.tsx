@@ -31,6 +31,7 @@ export default function Footer(): JSX.Element {
           <div>
             <h3 className="text-sm font-semibold text-accent uppercase mb-4">Tools</h3>
             <ul className="space-y-2 text-sm">
+              <li><Link href="/faucet" className="hover:text-accent transition">Testnet Faucet</Link></li>
               <li><Link href="/checker" className="hover:text-accent transition">Balance Checker</Link></li>
               <li><Link href="/converter" className="hover:text-accent transition">Quanta ↔ Shor</Link></li>
             </ul>
