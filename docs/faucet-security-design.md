@@ -27,7 +27,7 @@ An auto-signing faucet needs some online key with spend authority. The design go
 
 - Rung 0 (current): raw seed in the Next server `.env`. Surface and secret co-located; the whole balance is at risk on any server-side compromise.
 - Rung 1 (cheap, most of the win): dedicated faucet-only wallet with a small float; treasury stays cold; `.env` `chmod 600` owned by the service user; `FAUCET_DAILY_CAP_QUANTA` set near the float. Caps loss at the float and un-shares the deploy wallet. Rotating `FAUCET_SEED` is server-only runtime env, so it only needs `pm2 restart frontend`, no rebuild.
-- Rung 2 (privilege separation): move signing into a tiny separate process, own OS user, localhost-only, single `drip(addr)` endpoint, enforces cooldown/cap itself. A web-app RCE no longer hands over the key; an attacker can at most call the rate-limited signer. Limit is still code-enforced, so an attacker who fully owns the signer process can bypass it.
+- Rung 2 (privilege separation): move signing into a tiny separate process, own OS user, localhost-only, single `drip(addr)` endpoint, enforcing cooldown/cap from its own rate-limit state that the web app cannot write to. State isolation is load-bearing here: if the signer and the web app share a database, a web-app RCE can reset cooldowns and bypass the cap without ever touching the key. A web-app RCE no longer hands over the key; an attacker can at most call the rate-limited signer. The limit is still code-enforced, so an attacker who fully owns the signer process can bypass it.
 - Rung 3 (KMS/HSM): key never leaves a signing oracle. Constraint: no managed KMS signs ML-DSA-87, so for QRL this collapses back into Rung 2 (run your own signer). Not available off the shelf today.
 
 ## Target design: on-chain faucet contract
@@ -47,7 +47,7 @@ Caveats:
 - Trades key-custody risk for contract-correctness risk. A logic bug can lose the entire contract balance in one transaction. So the contract is not the treasury: fund it with a working balance and top up from cold.
 - The hot key is not eliminated, only demoted from a treasury key to a capped-drip key.
 - The chain cannot do Sybil resistance (no captcha, no IP). Keep the off-chain layer for fairness; the contract backstops custody.
-- The operator EOA needs a small gas float.
+- The operator EOA needs a small gas float. That float is itself fully drainable on operator-key compromise via a plain native transfer (which bypasses the contract entirely), so keep it to the minimum needed for operational gas.
 - Do not make `drip` permissionless: zero-balance users cannot pay gas to call it. Server-relayed is the right variant.
 
 ## "Only drip via the explorer" and contract-compromise containment
