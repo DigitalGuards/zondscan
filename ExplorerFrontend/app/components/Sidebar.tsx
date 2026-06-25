@@ -51,6 +51,7 @@ const navGroups: NavGroup[] = [
     items: [
       { name: 'Smart Contracts', description: 'View QRL contracts', href: '/contracts', imgSrc: ContractIcon },
       { name: 'Balance Checker', description: 'Check Account balance', href: '/checker', imgSrc: LookUpIcon },
+      { name: 'Testnet Faucet', description: 'Get free testnet QRL', href: '/faucet', imgSrc: SendIcon },
       { name: 'Unit Converter', description: 'Convert QRL currencies', href: '/converter', imgSrc: TokenIcon },
       { name: 'Richlist', description: 'Top QRL holders', href: '/richlist', imgSrc: RichIcon },
     ],
