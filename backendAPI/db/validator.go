@@ -89,13 +89,13 @@ func ReturnValidators(pageToken string) (*models.ValidatorResponse, error) {
 }
 
 // CountValidators returns the total validator count. Uses
-// EstimatedDocumentCount (metadata read) rather than CountDocuments({}),
-// which is O(rows) and ran on every /overview hit.
+// countDocumentsResilient (fast metadata read with an exact-count fallback when
+// the metadata reads 0, which it currently does on this deployment).
 func CountValidators() (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	count, err := configs.ValidatorsCollections.EstimatedDocumentCount(ctx)
+	count, err := countDocumentsResilient(ctx, configs.ValidatorsCollections)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count validators: %v", err)
 	}
@@ -263,10 +263,10 @@ func GetEpochs(page, limit int) (*models.EpochsResponse, error) {
 	finalizedEpoch := parseEpoch(epochInfo.FinalizedEpoch)
 	justifiedEpoch := parseEpoch(epochInfo.JustifiedEpoch)
 
-	// Count total epoch records. EstimatedDocumentCount is metadata-based
-	// and accurate enough for "total pages" pagination since epoch records
-	// are append-only.
-	total, err := configs.ValidatorHistoryCollection.EstimatedDocumentCount(ctx)
+	// Count total epoch records for "total pages" pagination. Uses
+	// countDocumentsResilient: the fast metadata read collapses to 0 on this
+	// deployment, which would wrongly show a single page.
+	total, err := countDocumentsResilient(ctx, configs.ValidatorHistoryCollection)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count epochs: %v", err)
 	}
@@ -453,11 +453,11 @@ func GetValidatorStats() (*models.ValidatorStatsResponse, error) {
 	}
 	currentEpoch := HexToInt(latestBlock) / 128
 
-	// Check whether the collection has any documents at all. The
-	// EstimatedDocumentCount metadata can be 0 on a brand-new collection
-	// or briefly stale during heavy writes; the == 0 guard below handles
-	// both cases the same way.
-	totalCount, err := configs.ValidatorsCollections.EstimatedDocumentCount(ctx)
+	// Check whether the collection has any documents at all. Uses
+	// countDocumentsResilient because the EstimatedDocumentCount metadata reads
+	// 0 for populated collections on this deployment, which would wrongly short
+	// circuit to an empty stats response below.
+	totalCount, err := countDocumentsResilient(ctx, configs.ValidatorsCollections)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count validators: %v", err)
 	}

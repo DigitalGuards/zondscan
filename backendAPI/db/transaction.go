@@ -329,15 +329,15 @@ func ReturnTransactions(address string, page, limit int) ([]models.TransactionBy
 }
 
 // CountTransactionsNetwork returns the total transactionByAddress row count.
-// Uses EstimatedDocumentCount (metadata read) rather than CountDocuments({}),
-// which is O(rows) on a collection that grows linearly with chain activity.
+// Uses countDocumentsResilient (fast metadata read with an exact-count fallback
+// when the metadata reads 0, which it currently does on this deployment).
 // Returns int64 to match sibling count helpers and to avoid an implicit cap
 // at 2^31-1 on long-running chains.
 func CountTransactionsNetwork() (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	count, err := configs.GetCollection(configs.DB, "transactionByAddress").EstimatedDocumentCount(ctx)
+	count, err := countDocumentsResilient(ctx, configs.GetCollection(configs.DB, "transactionByAddress"))
 	if err != nil {
 		return 0, fmt.Errorf("failed to count transactions: %v", err)
 	}
