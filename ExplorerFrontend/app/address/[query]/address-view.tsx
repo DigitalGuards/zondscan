@@ -223,7 +223,9 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                             <Link href={`/tx/${contractData.creationTransaction}`} className="text-xs md:text-sm text-accent hover:text-accent-hover break-all min-w-0">
                                                 {contractData.creationTransaction}
                                             </Link>
-                                            <CopyButton value={contractData.creationTransaction} label="Copy hash" />
+                                            <div className="shrink-0">
+                                                <CopyButton value={contractData.creationTransaction} label="Copy hash" />
+                                            </div>
                                         </div>
                                     </div>
 
