@@ -46,7 +46,7 @@ export default function AnimatedLogo({
         autoPlay
         loop
         playsInline
-        preload="auto"
+        preload="metadata"
         aria-hidden="true"
         tabIndex={-1}
         onPlaying={() => setPlaying(true)}

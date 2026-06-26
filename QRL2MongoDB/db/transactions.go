@@ -324,9 +324,12 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 	nonce := tx.Nonce
 	txType := tx.Type
 
-	// Convert value to float64 for display
+	// Convert value to float64 for display. Guard against empty/short
+	// values, slicing [2:] on those panics; treat too-short as zero.
 	value := new(big.Int)
-	value.SetString(tx.Value[2:], 16)
+	if len(tx.Value) > 2 {
+		value.SetString(tx.Value[2:], 16)
+	}
 	divisor := new(big.Float).SetFloat64(float64(configs.QUANTA))
 	bigIntAsFloat := new(big.Float).SetInt(value)
 	resultBigFloat := new(big.Float).Quo(bigIntAsFloat, divisor)
@@ -379,9 +382,12 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 		)
 	}
 
-	// Calculate fees using hex strings
+	// Calculate fees using hex strings. Guard against empty/short
+	// gasPrice, slicing [2:] on those panics; treat too-short as zero.
 	gasPriceBig := new(big.Int)
-	gasPriceBig.SetString(gasPrice[2:], 16)
+	if len(gasPrice) > 2 {
+		gasPriceBig.SetString(gasPrice[2:], 16)
+	}
 
 	gasUsedBig := new(big.Int)
 	// If trace.GasUsed is 0, try to use gasUsed from the transaction receipt
