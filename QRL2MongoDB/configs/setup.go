@@ -14,7 +14,14 @@ import (
 )
 
 func ConnectDB() *mongo.Client {
-	client, err := mongo.NewClient(options.Client().ApplyURI(EnvMongoURI()))
+	uri := EnvMongoURI()
+	if uri == "" {
+		// Runs at package init (DB is an eager package-level var), so this is
+		// the real fail-fast point for a missing MONGOURI: a clear, actionable
+		// message instead of an opaque driver error.
+		log.Fatal("Required environment variable MONGOURI is not set")
+	}
+	client, err := mongo.NewClient(options.Client().ApplyURI(uri))
 	if err != nil {
 		log.Fatal(err)
 	}
