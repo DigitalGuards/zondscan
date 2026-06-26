@@ -38,27 +38,35 @@ const maxTokenStringRunes = 128
 //   - caps the result at maxTokenStringRunes runes (rune-safe, never splits a
 //     multibyte codepoint).
 func sanitizeTokenString(s string) string {
+	s = strings.TrimSpace(s)
 	if s == "" {
 		return s
 	}
 
-	// Drop control characters; keep everything else (letters, marks, digits,
-	// punctuation, symbols, spaces) intact so legitimate unicode is preserved.
-	cleaned := strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
-			return -1
-		}
-		return r
-	}, s)
-
-	cleaned = strings.TrimSpace(cleaned)
-
-	// Rune-safe length cap.
-	if runes := []rune(cleaned); len(runes) > maxTokenStringRunes {
-		cleaned = string(runes[:maxTokenStringRunes])
+	// name()/symbol() are attacker-controlled on-chain strings of unbounded
+	// length, so this must not allocate or scan the whole input. Cap the bytes
+	// examined first (a rune is at most 4 bytes, so maxTokenStringRunes runes
+	// fit in 4x that), then single-pass: drop control characters, keep all
+	// other unicode, and stop as soon as the rune budget is reached.
+	if len(s) > maxTokenStringRunes*4 {
+		s = s[:maxTokenStringRunes*4]
 	}
 
-	return cleaned
+	var b strings.Builder
+	b.Grow(len(s))
+	runeCount := 0
+	for _, r := range s {
+		if unicode.IsControl(r) {
+			continue
+		}
+		b.WriteRune(r)
+		runeCount++
+		if runeCount >= maxTokenStringRunes {
+			break
+		}
+	}
+
+	return strings.TrimSpace(b.String())
 }
 
 // StoreContract stores or merges contract information in the database.
