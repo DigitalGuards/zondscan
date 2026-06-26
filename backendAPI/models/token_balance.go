@@ -42,6 +42,7 @@ type TokenTransfer struct {
 	To              string `json:"to" bson:"to"`
 	Amount          string `json:"amount" bson:"amount"`
 	BlockNumber     string `json:"blockNumber" bson:"blockNumber"`
+	BlockNumberInt  int64  `json:"blockNumberInt" bson:"blockNumberInt"`
 	TxHash          string `json:"txHash" bson:"txHash"`
 	LogIndex        string `json:"logIndex,omitempty" bson:"logIndex,omitempty"`
 	Timestamp       string `json:"timestamp" bson:"timestamp"`

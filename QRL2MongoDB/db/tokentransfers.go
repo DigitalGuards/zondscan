@@ -39,6 +39,11 @@ func StoreTokenTransfer(transfer models.TokenTransfer) error {
 	transfer.To = validation.ConvertToQAddress(transfer.To)
 	transfer.ContractAddress = validation.ConvertToQAddress(transfer.ContractAddress)
 
+	// Populate the numeric block number so sort operations order correctly.
+	// BlockNumber is the raw hex string; HexToInt64 lives in the same db
+	// package (db/blocks.go) and returns 0 on any parse error.
+	transfer.BlockNumberInt = HexToInt64(transfer.BlockNumber)
+
 	// Debug-level log for per-record operations; Info is reserved for batch summaries.
 	configs.Logger.Debug("Inserting token transfer document",
 		zap.String("token", transfer.TokenSymbol),
@@ -61,6 +66,103 @@ func StoreTokenTransfer(transfer models.TokenTransfer) error {
 	return nil
 }
 
+// BackfillTokenTransferBlockNumberInt populates the blockNumberInt field on any
+// tokenTransfers document that predates it. Rows written before the field was
+// introduced were sorted by the hex STRING blockNumber, which lex-orders
+// incorrectly past width boundaries (0xffff -> 0x10000). This one-time, idempotent
+// pass derives the numeric value from the existing hex blockNumber so the new
+// numeric sorts (and the backend) order correctly across the full history.
+//
+// Design:
+//   - Only touches rows missing the field ({blockNumberInt: {$exists: false}}),
+//     so a second invocation after completion is a pure no-op (the cursor is
+//     empty).
+//   - Streams a projection of just _id + blockNumber, batches UpdateOne models
+//     and flushes via BulkWrite every backfillBatchSize rows, bounded memory.
+//   - The outer context is the caller's; each bulk flush uses a bounded child
+//     timeout so a stalled write can't hang the pass forever.
+//   - Cursor errors are logged and returned (never panic).
+func BackfillTokenTransferBlockNumberInt(ctx context.Context) error {
+	const backfillBatchSize = 1000
+
+	collection := configs.GetTokenTransfersCollection()
+
+	filter := bson.M{"blockNumberInt": bson.M{"$exists": false}}
+	findOpts := options.Find().SetProjection(bson.M{"_id": 1, "blockNumber": 1})
+
+	cursor, err := collection.Find(ctx, filter, findOpts)
+	if err != nil {
+		configs.Logger.Error("Backfill: failed to query tokenTransfers missing blockNumberInt",
+			zap.Error(err))
+		return err
+	}
+	defer cursor.Close(ctx)
+
+	configs.Logger.Info("Backfill: starting tokenTransfers blockNumberInt backfill")
+
+	var (
+		models  []mongo.WriteModel
+		updated int64
+	)
+
+	flush := func() error {
+		if len(models) == 0 {
+			return nil
+		}
+		flushCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+		defer cancel()
+		res, bwErr := collection.BulkWrite(flushCtx, models, options.BulkWrite().SetOrdered(false))
+		if bwErr != nil {
+			configs.Logger.Error("Backfill: bulk write failed",
+				zap.Int("batchSize", len(models)),
+				zap.Error(bwErr))
+			return bwErr
+		}
+		updated += res.ModifiedCount
+		models = models[:0]
+		configs.Logger.Info("Backfill: tokenTransfers blockNumberInt progress",
+			zap.Int64("updatedSoFar", updated))
+		return nil
+	}
+
+	for cursor.Next(ctx) {
+		var doc struct {
+			ID          interface{} `bson:"_id"`
+			BlockNumber string      `bson:"blockNumber"`
+		}
+		if decErr := cursor.Decode(&doc); decErr != nil {
+			configs.Logger.Error("Backfill: failed to decode tokenTransfers document",
+				zap.Error(decErr))
+			return decErr
+		}
+
+		models = append(models, mongo.NewUpdateOneModel().
+			SetFilter(bson.M{"_id": doc.ID}).
+			SetUpdate(bson.M{"$set": bson.M{"blockNumberInt": HexToInt64(doc.BlockNumber)}}))
+
+		if len(models) >= backfillBatchSize {
+			if flushErr := flush(); flushErr != nil {
+				return flushErr
+			}
+		}
+	}
+
+	if curErr := cursor.Err(); curErr != nil {
+		configs.Logger.Error("Backfill: cursor error while iterating tokenTransfers",
+			zap.Error(curErr))
+		return curErr
+	}
+
+	// Flush the final partial batch.
+	if flushErr := flush(); flushErr != nil {
+		return flushErr
+	}
+
+	configs.Logger.Info("Backfill: completed tokenTransfers blockNumberInt backfill",
+		zap.Int64("totalUpdated", updated))
+	return nil
+}
+
 // GetTokenTransfersByContract retrieves all transfers for a specific token contract
 func GetTokenTransfersByContract(contractAddress string, skip, limit int64) ([]models.TokenTransfer, error) {
 	collection := configs.GetCollection(configs.DB, "tokenTransfers")
@@ -69,7 +171,7 @@ func GetTokenTransfersByContract(contractAddress string, skip, limit int64) ([]m
 	defer cancel()
 
 	opts := options.Find().
-		SetSort(bson.D{{Key: "blockNumber", Value: -1}}).
+		SetSort(bson.D{{Key: "blockNumberInt", Value: -1}}).
 		SetSkip(skip).
 		SetLimit(limit)
 
@@ -98,7 +200,7 @@ func GetTokenTransfersByAddress(address string, skip, limit int64) ([]models.Tok
 	defer cancel()
 
 	opts := options.Find().
-		SetSort(bson.D{{Key: "blockNumber", Value: -1}}).
+		SetSort(bson.D{{Key: "blockNumberInt", Value: -1}}).
 		SetSkip(skip).
 		SetLimit(limit)
 
@@ -635,6 +737,7 @@ func InitializeTokenTransfersCollection() error {
 			{{Key: "from", Value: 1}, {Key: "blockNumber", Value: 1}},
 			{{Key: "to", Value: 1}, {Key: "blockNumber", Value: 1}},
 			{{Key: "txHash", Value: 1}},
+			{{Key: "blockNumberInt", Value: -1}},
 		},
 	)
 
@@ -696,6 +799,19 @@ func InitializeTokenTransfersCollection() error {
 			},
 			Options: options.Index().
 				SetName("contract_tokenID_block_idx").
+				SetBackground(true),
+		},
+		{
+			// Numeric block-number sort. The contract/from/to + blockNumber
+			// compound indexes above still key on the hex STRING blockNumber
+			// (lexicographic), so the recency sorts in GetTokenTransfersBy*
+			// use this standalone numeric index instead. Descending to match
+			// the SetSort(blockNumberInt: -1) on those queries.
+			Keys: bson.D{
+				{Key: "blockNumberInt", Value: -1},
+			},
+			Options: options.Index().
+				SetName("blockNumberInt_desc_idx").
 				SetBackground(true),
 		},
 	}
