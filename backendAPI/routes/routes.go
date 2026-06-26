@@ -1566,6 +1566,13 @@ func UserRoute(router *gin.Engine) {
 			return
 		}
 
+		// Cap the length before SetString: a uint256 token ID is at most 78
+		// decimal digits, so anything longer is invalid and parsing an
+		// arbitrarily long string into big.Int is a CPU-DoS vector.
+		if len(tokenID) > 80 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "tokenID is too large"})
+			return
+		}
 		if _, ok := new(big.Int).SetString(tokenID, 10); !ok {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "tokenID must be a decimal integer"})
 			return
