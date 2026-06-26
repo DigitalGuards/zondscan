@@ -328,7 +328,9 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 	// values, slicing [2:] on those panics; treat too-short as zero.
 	value := new(big.Int)
 	if len(tx.Value) > 2 {
-		value.SetString(tx.Value[2:], 16)
+		if _, ok := value.SetString(tx.Value[2:], 16); !ok {
+			value.SetInt64(0)
+		}
 	}
 	divisor := new(big.Float).SetFloat64(float64(configs.QUANTA))
 	bigIntAsFloat := new(big.Float).SetInt(value)
@@ -386,7 +388,9 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 	// gasPrice, slicing [2:] on those panics; treat too-short as zero.
 	gasPriceBig := new(big.Int)
 	if len(gasPrice) > 2 {
-		gasPriceBig.SetString(gasPrice[2:], 16)
+		if _, ok := gasPriceBig.SetString(gasPrice[2:], 16); !ok {
+			gasPriceBig.SetInt64(0)
+		}
 	}
 
 	gasUsedBig := new(big.Int)
