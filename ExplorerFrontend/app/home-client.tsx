@@ -6,6 +6,7 @@ import Link from 'next/link';
 import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import { formatNumberWithCommas, timeAgo, formatStaked, formatGasPrice, truncateHash, formatAmount, formatAddress } from './lib/helpers';
+import type { EpochInfo } from './types';
 import config from '../config.js';
 import SearchBar from './components/SearchBar';
 
@@ -20,24 +21,14 @@ const Charts = dynamic(() => import('./components/Charts'), {
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-interface EpochInfo {
-  headEpoch: string;
-  headSlot: string;
-  finalizedEpoch: string;
-  justifiedEpoch: string;
-  slotsPerEpoch: number;
-  secondsPerSlot: number;
-  slotInEpoch: number;
-  timeToNextEpoch: number;
-  updatedAt: number;
-}
-
 interface BlockResult {
   number: string;
   timestamp: string;
   hash: string;
   miner: string;
-  transactions: any[];
+  // Only `.length` is read on the home page; the per-tx shape varies by
+  // endpoint, so `unknown[]` keeps it honest without inventing a type.
+  transactions: unknown[];
 }
 
 interface TxResult {

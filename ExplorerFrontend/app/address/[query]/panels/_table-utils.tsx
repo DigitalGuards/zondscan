@@ -1,8 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { flexRender } from '@tanstack/react-table';
 import type { Cell, Header, HeaderGroup, Row, Table } from '@tanstack/react-table';
+
+// Re-exported from the shared hooks module so existing panel imports
+// (`useIsMobile` from this file) keep working after consolidation.
+export { useIsMobile } from '../../../lib/hooks';
 
 /**
  * Shared TanStack table primitives for the address-page tab panels.
@@ -129,19 +132,3 @@ export const Paginator = ({
   );
 };
 
-/**
- * Mobile / desktop switch for panels that render a card list under the
- * 768px breakpoint and a `<table>` above it. Lifted out of the old
- * TanStackTable so every panel can use the same threshold instead of
- * redefining the listener.
- */
-export const useIsMobile = (breakpointPx = 768): boolean => {
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const check = (): void => setIsMobile(window.innerWidth < breakpointPx);
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, [breakpointPx]);
-  return isMobile;
-};
