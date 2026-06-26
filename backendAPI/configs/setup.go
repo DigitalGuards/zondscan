@@ -2,7 +2,6 @@ package configs
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -20,7 +19,17 @@ var dbOnce sync.Once
 // It uses a sync.Once to ensure the connection is only established once
 func ConnectDB() *mongo.Client {
 	dbOnce.Do(func() {
-		client, err := mongo.NewClient(options.Client().ApplyURI(EnvMongoURI()))
+		// Conservative connection-pool defaults so a burst of concurrent HTTP
+		// handlers doesn't exhaust or thrash Mongo connections. The driver's
+		// zero-value pool is effectively unbounded, which lets a traffic spike
+		// open an unbounded number of sockets.
+		clientOpts := options.Client().
+			ApplyURI(EnvMongoURI()).
+			SetMaxPoolSize(100).
+			SetMinPoolSize(5).
+			SetMaxConnIdleTime(60 * time.Second)
+
+		client, err := mongo.NewClient(clientOpts)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -38,7 +47,7 @@ func ConnectDB() *mongo.Client {
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println("Connected to MongoDB")
+		log.Println("Connected to MongoDB")
 
 		// Initialize collections with validators and indexes
 		db := client.Database("qrldata-z")

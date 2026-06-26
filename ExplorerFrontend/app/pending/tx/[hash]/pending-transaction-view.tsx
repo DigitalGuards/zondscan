@@ -134,6 +134,7 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
       }
     },
     refetchInterval: 5000,
+    refetchIntervalInBackground: false,
     enabled: statusQuery.data?.status === 'pending',
   });
 
