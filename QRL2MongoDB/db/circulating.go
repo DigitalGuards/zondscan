@@ -11,8 +11,12 @@ import (
 	"go.uber.org/zap"
 )
 
+// Balance is decoded as float64 because the addresses collection stores the
+// balance (in QRL units) as a BSON double. Decoding it into an int64 field made
+// the driver error on every document, which left the circulating total stuck
+// at 0.
 type Address struct {
-	Balance int64              `bson:"balance"`
+	Balance float64            `bson:"balance"`
 	ID      primitive.ObjectID `bson:"_id"`
 }
 
@@ -24,8 +28,10 @@ func UpdateTotalBalance() {
 
 	destCollection := configs.GetCollection(configs.DB, "totalCirculatingSupply")
 
-	// Get initial total balance
-	total := big.NewInt(0)
+	// Accumulate in a big.Float so summing many balances does not lose
+	// precision, then emit an integer-QRL string to preserve the existing
+	// `circulating` string contract the backend reads.
+	total := new(big.Float).SetPrec(256)
 	cursor, err := configs.AddressesCollections.Find(ctx, primitive.D{})
 	if err != nil {
 		configs.Logger.Error("Failed to query addresses", zap.Error(err))
@@ -40,9 +46,7 @@ func UpdateTotalBalance() {
 			continue // Skip this address but continue processing others
 		}
 
-		balanceBigInt := new(big.Int)
-		balanceBigInt.SetInt64(address.Balance)
-		total.Add(total, balanceBigInt)
+		total.Add(total, new(big.Float).SetFloat64(address.Balance))
 	}
 
 	if err := cursor.Err(); err != nil {
@@ -50,11 +54,15 @@ func UpdateTotalBalance() {
 		return
 	}
 
+	// Integer-QRL decimal string (no scientific notation), matching the prior
+	// big.Int string contract the backend's `circulating` field expects.
+	totalStr := total.Text('f', 0)
+
 	// Upsert the total balance
 	filter := primitive.D{{Key: "_id", Value: "totalBalance"}}
 	update := primitive.D{
 		{Key: "$set", Value: primitive.D{
-			{Key: "circulating", Value: total.String()},
+			{Key: "circulating", Value: totalStr},
 		}},
 	}
 
@@ -66,5 +74,5 @@ func UpdateTotalBalance() {
 	}
 
 	configs.Logger.Info("Successfully updated total circulating supply",
-		zap.String("total", total.String()))
+		zap.String("total", totalStr))
 }
