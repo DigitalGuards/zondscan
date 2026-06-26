@@ -47,26 +47,37 @@ func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool
 		// address + creatorAddress exact-match branches).
 		normalizedSearch := normalizeAddress(search)
 
-		// Escape regex metacharacters in the user input so a `.` or `*`
-		// in the search term doesn't behave as a wildcard or DoS vector.
-		escaped := regexp.QuoteMeta(search)
-		nameRegex := bson.D{{Key: "$regex", Value: escaped}, {Key: "$options", Value: "i"}}
+		// Build the $or branches. Exact address/creatorAddress matches are
+		// always included so short queries can still resolve a contract by
+		// its address. The case-insensitive name/symbol/metadataName regex
+		// branches run an unanchored full-collection scan, so we only add
+		// them for queries of at least 3 chars: a 1-2 char regex matches
+		// nearly every row and turns search into a table scan with no useful
+		// result. Shorter queries simply return the exact-match results
+		// (often empty), which the contracts page renders as a normal empty
+		// paginated list.
+		orBranches := bson.A{
+			bson.D{{Key: "address", Value: normalizedSearch}},
+			bson.D{{Key: "creatorAddress", Value: normalizedSearch}},
+		}
+		if len(search) >= 3 {
+			// Escape regex metacharacters in the user input so a `.` or `*`
+			// in the search term doesn't behave as a wildcard or DoS vector.
+			escaped := regexp.QuoteMeta(search)
+			nameRegex := bson.D{{Key: "$regex", Value: escaped}, {Key: "$options", Value: "i"}}
 
-		// Search by exact address, exact creator address, OR partial
-		// case-insensitive match against name + symbol + metadataName.
-		// Symbol was previously absent, searching "MQW" missed tokens whose
-		// `name` field held the full project label instead of the ticker.
-		// Phase 3a adds metadataName so a user searching by the off-chain
-		// display title hits the row even when on-chain name() is empty.
-		searchFilter := bson.D{
-			{Key: "$or", Value: bson.A{
-				bson.D{{Key: "address", Value: normalizedSearch}},
-				bson.D{{Key: "creatorAddress", Value: normalizedSearch}},
+			// Symbol was previously absent, searching "MQW" missed tokens whose
+			// `name` field held the full project label instead of the ticker.
+			// Phase 3a adds metadataName so a user searching by the off-chain
+			// display title hits the row even when on-chain name() is empty.
+			orBranches = append(orBranches,
 				bson.D{{Key: "name", Value: nameRegex}},
 				bson.D{{Key: "symbol", Value: nameRegex}},
 				bson.D{{Key: "metadataName", Value: nameRegex}},
-			}},
+			)
 		}
+
+		searchFilter := bson.D{{Key: "$or", Value: orBranches}}
 		// Combine with existing filter
 		if len(filter) > 0 {
 			filter = bson.D{{Key: "$and", Value: bson.A{filter, searchFilter}}}

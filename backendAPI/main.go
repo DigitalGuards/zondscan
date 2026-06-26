@@ -1,6 +1,7 @@
 package main
 
 import (
+	"backendAPI/configs"
 	"backendAPI/handler"
 	"fmt"
 	"io"
@@ -22,6 +23,11 @@ func main() {
 
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
 	log.Println("BackendAPI starting...")
+
+	// Fail fast on missing required config before serving. A missing MONGOURI
+	// would otherwise surface only as a late log.Fatal inside ConnectDB, and a
+	// missing NODE_URL would silently default to localhost in db.NodeRPC.
+	configs.ValidateEnv()
 
 	// Recover from panics
 	defer func() {

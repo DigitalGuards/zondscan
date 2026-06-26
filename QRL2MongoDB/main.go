@@ -6,6 +6,7 @@ import (
 	"QRL2MongoDB/synchroniser"
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,11 +17,32 @@ import (
 	"go.uber.org/zap"
 )
 
+// validateEnv fails fast if the env vars the syncer cannot run without are
+// missing. Without this, an empty NODE_URLS/NODE_URL only logs a warning in
+// rpc.newEndpointSelectorFromEnv and the first RPC call returns "no node
+// endpoints configured", so Sync exits silently with no obvious cause.
+// MONGOURI is also required (ConnectDB would already fail without it, but
+// naming the variable here gives an actionable message before any work starts).
+// .env has already been loaded by configs.ConnectDB (via EnvMongoURI) during
+// package init, so os.Getenv here sees any values from the .env file.
+func validateEnv() {
+	if os.Getenv("MONGOURI") == "" {
+		log.Fatal("Required environment variable MONGOURI is not set")
+	}
+	if os.Getenv("NODE_URLS") == "" && os.Getenv("NODE_URL") == "" {
+		log.Fatal("Required environment variable NODE_URLS (or legacy NODE_URL) is not set")
+	}
+}
+
 func main() {
 	// Ensure logger resources are properly released
 	defer configs.Logger.Sync()
 
 	configs.Logger.Info("Initializing QRL to MongoDB synchronizer...")
+
+	// Fail fast before any sync work if required env vars are missing.
+	validateEnv()
+
 	configs.Logger.Info("Connecting to MongoDB and RPC node...")
 
 	// stopCh is closed when a termination signal is received. Sync() and other
