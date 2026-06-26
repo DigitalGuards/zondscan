@@ -15,34 +15,36 @@ import (
 )
 
 const (
-	MEMPOOL_SYNC_INTERVAL       = 1 * time.Second  // Reduced for faster detection
-	CLEANUP_INTERVAL            = 1 * time.Hour
-	VERIFY_PENDING_INTERVAL     = 5 * time.Minute
-	MAX_PENDING_AGE             = 24 * time.Hour
+	MEMPOOL_SYNC_INTERVAL   = 1 * time.Second // Reduced for faster detection
+	CLEANUP_INTERVAL        = 1 * time.Hour
+	VERIFY_PENDING_INTERVAL = 5 * time.Minute
+	MAX_PENDING_AGE         = 24 * time.Hour
 )
 
-// StartPendingTransactionSync starts the periodic mempool monitoring
-func StartPendingTransactionSync() {
+// StartPendingTransactionSync starts the periodic mempool monitoring. The
+// stopCh is threaded into each periodic task so they stop accepting new work
+// when a shutdown signal arrives.
+func StartPendingTransactionSync(stopCh <-chan struct{}) {
 	// Start mempool sync
-	go runPeriodicTask(func() {
+	runPeriodicTask(func() {
 		if err := syncMempool(); err != nil {
 			configs.Logger.Error("Failed to sync mempool", zap.Error(err))
 		}
-	}, MEMPOOL_SYNC_INTERVAL, "mempool sync")
+	}, MEMPOOL_SYNC_INTERVAL, "mempool sync", stopCh)
 
 	// Start cleanup of old transactions
-	go runPeriodicTask(func() {
+	runPeriodicTask(func() {
 		if err := db.CleanupOldPendingTransactions(MAX_PENDING_AGE); err != nil {
 			configs.Logger.Error("Failed to cleanup old pending transactions", zap.Error(err))
 		}
-	}, CLEANUP_INTERVAL, "pending cleanup")
+	}, CLEANUP_INTERVAL, "pending cleanup", stopCh)
 
 	// Start verification of pending transactions against node
-	go runPeriodicTask(func() {
+	runPeriodicTask(func() {
 		if err := verifyPendingTransactions(); err != nil {
 			configs.Logger.Error("Failed to verify pending transactions", zap.Error(err))
 		}
-	}, VERIFY_PENDING_INTERVAL, "pending verification")
+	}, VERIFY_PENDING_INTERVAL, "pending verification", stopCh)
 }
 
 // UpdatePendingTransactionsInBlock checks if any pending transactions are included in the new block

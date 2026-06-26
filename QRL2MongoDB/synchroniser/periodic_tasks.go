@@ -15,17 +15,25 @@ import (
 	"go.uber.org/zap"
 )
 
-// runPeriodicTask runs a task at regular intervals with panic recovery
-func runPeriodicTask(task func(), interval time.Duration, taskName string) {
+// runPeriodicTask runs a task at regular intervals with panic recovery.
+// The goroutine returns promptly once stopCh is closed so a graceful
+// shutdown does not start new work while in-flight DB ops are draining.
+func runPeriodicTask(task func(), interval time.Duration, taskName string, stopCh <-chan struct{}) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 				configs.Logger.Error("Recovered from panic in periodic task",
 					zap.String("task", taskName),
 					zap.Any("error", r))
-				// Restart the task after a short delay
-				time.Sleep(5 * time.Second)
-				runPeriodicTask(task, interval, taskName)
+				// Restart the task after a short delay, but exit promptly if a
+				// shutdown signal arrives during the wait instead of blocking
+				// the whole delay on time.Sleep.
+				select {
+				case <-stopCh:
+					return
+				case <-time.After(5 * time.Second):
+					runPeriodicTask(task, interval, taskName, stopCh)
+				}
 			}
 		}()
 
@@ -39,8 +47,15 @@ func runPeriodicTask(task func(), interval time.Duration, taskName string) {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
-		for range ticker.C {
-			runTaskWithRetry(task, taskName)
+		for {
+			select {
+			case <-ticker.C:
+				runTaskWithRetry(task, taskName)
+			case <-stopCh:
+				configs.Logger.Info("Stopping periodic task on shutdown signal",
+					zap.String("task", taskName))
+				return
+			}
 		}
 	}()
 }
@@ -291,8 +306,11 @@ func updateDataPeriodically() {
 	}
 }
 
-// singleBlockInsertion starts continuous block monitoring with periodic tasks
-func singleBlockInsertion() {
+// singleBlockInsertion starts continuous block monitoring with periodic tasks.
+// Each periodic goroutine watches stopCh so a graceful shutdown stops them
+// from starting new work; wg.Wait then returns once they have all exited,
+// which lets Sync() (and therefore main.go's doneCh) complete cleanly.
+func singleBlockInsertion(stopCh <-chan struct{}) {
 	configs.Logger.Info("Starting single block insertion process")
 
 	// Initialize collections if they don't exist
@@ -322,8 +340,14 @@ func singleBlockInsertion() {
 			// Run immediately on start
 			processBlockPeriodically()
 
-			for range ticker.C {
-				processBlockPeriodically()
+			for {
+				select {
+				case <-ticker.C:
+					processBlockPeriodically()
+				case <-stopCh:
+					configs.Logger.Info("Stopping block processing on shutdown signal")
+					return
+				}
 			}
 		}
 	}()
@@ -341,8 +365,14 @@ func singleBlockInsertion() {
 		// Run immediately on start
 		updateDataPeriodically()
 
-		for range ticker.C {
-			updateDataPeriodically()
+		for {
+			select {
+			case <-ticker.C:
+				updateDataPeriodically()
+			case <-stopCh:
+				configs.Logger.Info("Stopping data updates on shutdown signal")
+				return
+			}
 		}
 	}()
 
@@ -359,8 +389,14 @@ func singleBlockInsertion() {
 		// Run immediately on start
 		updateValidatorsPeriodically()
 
-		for range ticker.C {
-			updateValidatorsPeriodically()
+		for {
+			select {
+			case <-ticker.C:
+				updateValidatorsPeriodically()
+			case <-stopCh:
+				configs.Logger.Info("Stopping validator updates on shutdown signal")
+				return
+			}
 		}
 	}()
 
@@ -374,15 +410,27 @@ func singleBlockInsertion() {
 		ticker := time.NewTicker(time.Minute * 5)
 		defer ticker.Stop()
 
-		// Wait 1 minute before first run to let initial sync settle
-		time.Sleep(time.Minute)
+		// Wait 1 minute before first run to let initial sync settle, but bail
+		// out early if a shutdown arrives during that initial delay.
+		select {
+		case <-time.After(time.Minute):
+		case <-stopCh:
+			configs.Logger.Info("Stopping gap detection on shutdown signal")
+			return
+		}
 
-		for range ticker.C {
-			detectAndFillGapsPeriodically()
+		for {
+			select {
+			case <-ticker.C:
+				detectAndFillGapsPeriodically()
+			case <-stopCh:
+				configs.Logger.Info("Stopping gap detection on shutdown signal")
+				return
+			}
 		}
 	}()
 
-	// Keep the main goroutine alive
+	// Keep the main goroutine alive until every periodic task has stopped.
 	wg.Wait()
 }
 
