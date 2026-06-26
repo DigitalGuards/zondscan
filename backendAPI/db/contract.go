@@ -92,12 +92,25 @@ func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool
 		return nil, 0, err
 	}
 
-	// Set up pagination options
+	// Set up pagination options. The contracts list/grid renders only the
+	// lightweight summary fields (address, name, symbol, decimals, standard,
+	// metadata thumbnail, etc), so project out the heavy verification blobs
+	// (full source, ABI, constructor args, libraries, raw bytecode, AI
+	// explanation). These can be tens to hundreds of KB per row and would
+	// otherwise be streamed for every page even though no consumer reads them.
 	skip := page * limit
 	opts := options.Find().
 		SetSkip(skip).
 		SetLimit(limit).
-		SetSort(bson.D{{Key: "_id", Value: -1}}) // Latest first
+		SetSort(bson.D{{Key: "_id", Value: -1}}). // Latest first
+		SetProjection(bson.D{
+			{Key: "sourceCode", Value: 0},
+			{Key: "abi", Value: 0},
+			{Key: "constructorArguments", Value: 0},
+			{Key: "libraries", Value: 0},
+			{Key: "contractCode", Value: 0},
+			{Key: "aiExplanation", Value: 0},
+		})
 
 	cursor, err := configs.ContractInfoCollection.Find(ctx, filter, opts)
 	if err != nil {
@@ -232,9 +245,22 @@ func GetContractsByAddresses(addresses []string) (map[string]models.ContractInfo
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// The /tx and /pending-transaction consumers read only the lightweight
+	// metadata (name, symbol, tokenStandard, verified, contractName) plus the
+	// ABI (used for calldata/event decoding when the contract is verified), so
+	// project out the heavy verification blobs that aren't consumed here:
+	// full source, constructor args, libraries, raw bytecode, AI explanation.
+	// The ABI itself is kept because the callers decode against it.
+	opts := options.Find().SetProjection(bson.D{
+		{Key: "sourceCode", Value: 0},
+		{Key: "constructorArguments", Value: 0},
+		{Key: "libraries", Value: 0},
+		{Key: "contractCode", Value: 0},
+		{Key: "aiExplanation", Value: 0},
+	})
 	cursor, err := configs.ContractInfoCollection.Find(ctx, bson.M{
 		"address": bson.M{"$in": normalized},
-	})
+	}, opts)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return out, nil

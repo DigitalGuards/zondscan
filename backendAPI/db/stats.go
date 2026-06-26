@@ -38,6 +38,32 @@ func getCoinGeckoData() (*models.CoinGecko, error) {
 	return &result, err
 }
 
+// MarketSnapshot bundles the three CoinGecko-derived values so a caller that
+// needs all of them (e.g. /overview) can fetch the single coingecko document
+// once instead of issuing three separate FindOne reads via GetMarketCap /
+// GetCurrentPrice / GetCurrentVolume.
+type MarketSnapshot struct {
+	MarketCapUSD float64
+	PriceUSD     float64
+	VolumeUSD    float64
+}
+
+// GetMarketSnapshot reads the coingecko document once and returns all three
+// values. On error it logs and returns a zero snapshot, matching the
+// individual getters' fallback behaviour.
+func GetMarketSnapshot() MarketSnapshot {
+	data, err := getCoinGeckoData()
+	if err != nil {
+		log.Printf("error fetching market snapshot: %v", err)
+		return MarketSnapshot{}
+	}
+	return MarketSnapshot{
+		MarketCapUSD: data.MarketCapUSD,
+		PriceUSD:     data.PriceUSD,
+		VolumeUSD:    data.VolumeUSD,
+	}
+}
+
 func GetMarketCap() float64 {
 	data, err := getCoinGeckoData()
 	if err != nil {

@@ -1,6 +1,7 @@
 "use client"
 
 import React from "react"
+import Image from "next/image"
 
 /**
  * ZondScan logo with a lightweight video animation.
@@ -34,11 +35,13 @@ export default function AnimatedLogo({
 
   return (
     <div className={`relative h-full w-full ${className}`}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
+      <Image
         src="/ZondScan_Logo_static.webp"
         alt={alt}
-        className="absolute inset-0 h-full w-full object-contain"
+        fill
+        priority
+        sizes="(max-width: 768px) 50vw, 200px"
+        className="object-contain"
       />
       <video
         ref={videoRef}
