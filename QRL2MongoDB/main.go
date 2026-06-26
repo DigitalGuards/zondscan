@@ -125,9 +125,11 @@ func main() {
 		}
 	}()
 
-	// Start pending transaction sync (this is not started in sync.go)
+	// Start pending transaction sync (this is not started in sync.go).
+	// stopCh is threaded in so the mempool/cleanup/verify tickers stop
+	// accepting new work when a shutdown signal arrives.
 	configs.Logger.Info("Starting pending transaction sync service...")
-	synchroniser.StartPendingTransactionSync()
+	synchroniser.StartPendingTransactionSync(stopCh)
 
 	// Phase 3a: start the off-chain NFT collection metadata fetcher.
 	// Background goroutine that polls contractCode for unfetched
@@ -147,8 +149,9 @@ func main() {
 	go func() {
 		defer close(doneCh)
 		// Sync will now handle starting wallet count and contract reprocessing
-		// services after initial sync is complete
-		synchroniser.Sync()
+		// services after initial sync is complete. stopCh is threaded in so
+		// every background ticker goroutine Sync starts can observe shutdown.
+		synchroniser.Sync(stopCh)
 	}()
 
 	// Block until either sync finishes naturally or a shutdown signal arrives.
