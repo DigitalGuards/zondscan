@@ -381,6 +381,7 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 			trace.AddressFunctionIdentifier,
 			fmt.Sprintf("0x%x", trace.AmountFunctionIdentifier),
 			blockTimestamp,
+			blockNumber,
 		)
 	}
 
@@ -491,7 +492,7 @@ func TransferCollection(blockNumber string, blockTimestamp string, from string, 
 	return result, err
 }
 
-func InternalTransactionByAddressCollection(transactionType string, callType string, hash string, from string, to string, input string, output string, traceAddress []int, value float64, gas string, gasUsed string, addressFunctionIdentifier string, amountFunctionIdentifier string, blockTimestamp string) (*mongo.InsertOneResult, error) {
+func InternalTransactionByAddressCollection(transactionType string, callType string, hash string, from string, to string, input string, output string, traceAddress []int, value float64, gas string, gasUsed string, addressFunctionIdentifier string, amountFunctionIdentifier string, blockTimestamp string, blockNumber string) (*mongo.InsertOneResult, error) {
 	// Normalize addresses to canonical Q-prefix form
 	if from != "" {
 		from = validation.ConvertToQAddress(from)
@@ -503,6 +504,8 @@ func InternalTransactionByAddressCollection(transactionType string, callType str
 		addressFunctionIdentifier = validation.ConvertToQAddress(addressFunctionIdentifier)
 	}
 
+	// blockNumber (raw hex string) lets Rollback delete this row on a reorg via
+	// the same $in companionFilter used for the other append-only collections.
 	doc := bson.D{
 		{Key: "type", Value: transactionType},
 		{Key: "callType", Value: callType},
@@ -518,6 +521,7 @@ func InternalTransactionByAddressCollection(transactionType string, callType str
 		{Key: "addressFunctionIdentifier", Value: addressFunctionIdentifier},
 		{Key: "amountFunctionIdentifier", Value: amountFunctionIdentifier},
 		{Key: "blockTimestamp", Value: blockTimestamp},
+		{Key: "blockNumber", Value: blockNumber},
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

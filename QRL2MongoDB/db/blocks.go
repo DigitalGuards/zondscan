@@ -644,9 +644,11 @@ func Rollback(blockNumber string) error {
 		//     balances from RPC whenever a contract is next processed, so a
 		//     left-in-place snapshot self-heals; a deleted one does not. Leave
 		//     it untouched.
-		//   - internalTransactionByAddress stores no block-number field (only
-		//     blockTimestamp), so there is nothing to filter on. Orphan
-		//     internal-tx rows may linger after a reorg; flagged for follow-up.
+		//
+		// internalTransactionByAddress now stores blockNumber (raw hex string),
+		// so it is cleaned here too. Rows written by an older syncer before that
+		// field existed lack blockNumber and will not match the $in filter, so
+		// pre-existing orphans cannot be cleaned retroactively; that is expected.
 		if len(badBlockNumbers) > 0 {
 			companionFilter := bson.M{"blockNumber": bson.M{"$in": badBlockNumbers}}
 
@@ -655,6 +657,9 @@ func Rollback(blockNumber string) error {
 			}
 			if _, err := configs.TransactionByAddressCollections.DeleteMany(sessCtx, companionFilter); err != nil {
 				return nil, fmt.Errorf("rollback: failed to delete transactionByAddress rows: %w", err)
+			}
+			if _, err := configs.InternalTransactionByAddressCollections.DeleteMany(sessCtx, companionFilter); err != nil {
+				return nil, fmt.Errorf("rollback: failed to delete internalTransactionByAddress rows: %w", err)
 			}
 
 			tokenTransfers := configs.GetTokenTransfersCollection()
