@@ -87,13 +87,7 @@ func normalizeContractAddr(addr string) string {
 	if addr == "" {
 		return ""
 	}
-	if strings.HasPrefix(addr, "0x") || strings.HasPrefix(addr, "0X") {
-		return "Q" + strings.ToLower(addr[2:])
-	}
-	if strings.HasPrefix(addr, "Q") || strings.HasPrefix(addr, "q") {
-		return "Q" + strings.ToLower(addr[1:])
-	}
-	return "Q" + strings.ToLower(addr)
+	return db.NormalizeAddress(addr)
 }
 
 // receiptLog mirrors the subset of qrl_getTransactionReceipt.logs[] the tx

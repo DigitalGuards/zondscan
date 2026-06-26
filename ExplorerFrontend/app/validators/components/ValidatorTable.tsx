@@ -228,7 +228,9 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
             </tr>
           </thead>
           <tbody className="divide-y divide-[#3d3d3d]">
-            {currentValidators.map((validator) => (
+            {currentValidators.map((validator) => {
+              const [stakeValue, stakeUnit] = formatValidatorStake(validator.stakedAmount);
+              return (
               <tr
                 key={validator.index}
                 className="hover:bg-[#2d2d2d]/30 cursor-pointer"
@@ -261,10 +263,11 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
                   {epochsToDays(validator.age).toFixed(1)} days
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-300 font-mono">
-                  {formatValidatorStake(validator.stakedAmount)[0]} {formatValidatorStake(validator.stakedAmount)[1]}
+                  {stakeValue} {stakeUnit}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

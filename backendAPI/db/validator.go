@@ -477,10 +477,14 @@ func GetValidatorStats() (*models.ValidatorStatsResponse, error) {
 		}, nil
 	}
 
-	// Use aggregation to compute per-status counts and total staked in one pass.
+	// Use a single aggregation to compute per-status counts and total staked.
 	// Status computation requires knowing currentEpoch, which MongoDB doesn't know,
 	// so we project the fields needed and compute buckets in a $group stage using
-	// $cond expressions that mirror getValidatorStatus logic.
+	// $cond expressions that mirror getValidatorStatus logic. A $facet then fans
+	// the same scanned documents into the status buckets and the balance sum so
+	// the whole thing is one cursor over the collection instead of two passes.
+	// $sum needs numeric input and balances are decimal strings, so the sum
+	// branch converts with $toLong inside the pipeline.
 	currentEpochStr := fmt.Sprintf("%d", currentEpoch)
 
 	pipeline := mongo.Pipeline{
@@ -512,11 +516,19 @@ func GetValidatorStats() (*models.ValidatorStatsResponse, error) {
 				},
 			},
 		}}},
-		bson.D{{Key: "$group", Value: bson.M{
-			"_id":   "$_computedStatus",
-			"count": bson.M{"$sum": 1},
-			// We sum effective balance as strings; MongoDB can't do numeric sum on
-			// decimal-string fields, so we fall back to a cursor scan for totalStaked.
+		bson.D{{Key: "$facet", Value: bson.M{
+			"statusCounts": []bson.M{
+				{"$group": bson.M{
+					"_id":   "$_computedStatus",
+					"count": bson.M{"$sum": 1},
+				}},
+			},
+			"totals": []bson.M{
+				{"$group": bson.M{
+					"_id":         nil,
+					"totalStaked": bson.M{"$sum": bson.M{"$toLong": "$effectiveBalance"}},
+				}},
+			},
 		}}},
 	}
 
@@ -526,15 +538,26 @@ func GetValidatorStats() (*models.ValidatorStatsResponse, error) {
 	}
 	defer cursor.Close(ctx)
 
-	var activeCount, pendingCount, exitedCount, slashedCount int
-	for cursor.Next(ctx) {
-		var row struct {
+	var facetResult struct {
+		StatusCounts []struct {
 			ID    string `bson:"_id"`
 			Count int    `bson:"count"`
+		} `bson:"statusCounts"`
+		Totals []struct {
+			TotalStaked int64 `bson:"totalStaked"`
+		} `bson:"totals"`
+	}
+	if cursor.Next(ctx) {
+		if err := cursor.Decode(&facetResult); err != nil {
+			return nil, fmt.Errorf("failed to decode validator stats: %v", err)
 		}
-		if err := cursor.Decode(&row); err != nil {
-			continue
-		}
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("cursor error while reading validator stats: %v", err)
+	}
+
+	var activeCount, pendingCount, exitedCount, slashedCount int
+	for _, row := range facetResult.StatusCounts {
 		switch row.ID {
 		case "active":
 			activeCount = row.Count
@@ -546,33 +569,10 @@ func GetValidatorStats() (*models.ValidatorStatsResponse, error) {
 			slashedCount = row.Count
 		}
 	}
-	if err := cursor.Err(); err != nil {
-		return nil, fmt.Errorf("cursor error while reading validator stats: %v", err)
-	}
-
-	// Compute total staked via a second aggregation (sum of effectiveBalance).
-	// MongoDB $sum works on numeric types; balances are stored as decimal strings,
-	// so we convert with $toLong inside the pipeline.
-	sumPipeline := mongo.Pipeline{
-		bson.D{{Key: "$group", Value: bson.M{
-			"_id":         nil,
-			"totalStaked": bson.M{"$sum": bson.M{"$toLong": "$effectiveBalance"}},
-		}}},
-	}
-	sumCursor, err := configs.ValidatorsCollections.Aggregate(ctx, sumPipeline)
-	if err != nil {
-		return nil, fmt.Errorf("failed to aggregate total staked: %v", err)
-	}
-	defer sumCursor.Close(ctx)
 
 	totalStaked := int64(0)
-	if sumCursor.Next(ctx) {
-		var sumRow struct {
-			TotalStaked int64 `bson:"totalStaked"`
-		}
-		if err := sumCursor.Decode(&sumRow); err == nil {
-			totalStaked = sumRow.TotalStaked
-		}
+	if len(facetResult.Totals) > 0 {
+		totalStaked = facetResult.Totals[0].TotalStaked
 	}
 
 	return &models.ValidatorStatsResponse{
