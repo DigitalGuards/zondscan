@@ -351,6 +351,45 @@ func StoreInitialSyncStartBlock(blockNumber string) error {
 }
 
 // BlockExists checks if a block with the given number already exists in the database
+// BlocksExist returns the set of the given block numbers that already exist in
+// the blocks collection, as a map[blockNumber]bool. It runs a single $in query
+// rather than one round-trip per block, so the batch consumer can check a whole
+// batch (128/256 blocks) at once. A block absent from the returned map is not
+// present in the DB. On query error it returns a nil map (callers treat every
+// block as new, i.e. reprocess, which is the safe direction).
+func BlocksExist(blockNumbers []string) (map[string]bool, error) {
+	if len(blockNumbers) == 0 {
+		return map[string]bool{}, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	filter := bson.M{"result.number": bson.M{"$in": blockNumbers}}
+	projection := options.Find().SetProjection(bson.M{"result.number": 1, "_id": 0})
+
+	cursor, err := configs.BlocksCollections.Find(ctx, filter, projection)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var results []struct {
+		Result struct {
+			Number string `bson:"number"`
+		} `bson:"result"`
+	}
+	if err := cursor.All(ctx, &results); err != nil {
+		return nil, err
+	}
+
+	existsMap := make(map[string]bool, len(results))
+	for _, r := range results {
+		existsMap[r.Result.Number] = true
+	}
+	return existsMap, nil
+}
+
 func BlockExists(blockNumber string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
