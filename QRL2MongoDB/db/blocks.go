@@ -595,8 +595,20 @@ func Rollback(blockNumber string) error {
 		return err
 	}
 
-	// Log blocks being removed
+	// Collect the exact hex block-number strings of the blocks being removed.
+	// The companion collections (transfer, transactionByAddress,
+	// tokenTransfers, tokenBalances) store blockNumber as the raw hex string
+	// (e.g. "0x1a2b"), NOT an int, so a numeric $gt range filter like the one
+	// used on the blocks collection would be unsafe here (hex strings lex-sort
+	// wrong, "0xa" > "0x100"). Matching the exact set of removed block numbers
+	// with $in is precise: it deletes rows for the rolled-back blocks and
+	// nothing else.
+	badBlockNumbers := make([]string, 0, len(blocks))
 	for _, block := range blocks {
+		if block.Result.Number != "" {
+			badBlockNumbers = append(badBlockNumbers, block.Result.Number)
+		}
+		// Log blocks being removed
 		configs.Logger.Info("Rolling back block",
 			zap.String("number", block.Result.Number),
 			zap.String("hash", block.Result.Hash))
@@ -616,6 +628,42 @@ func Rollback(blockNumber string) error {
 		_, err := configs.BlocksCollections.DeleteMany(sessCtx, filter)
 		if err != nil {
 			return nil, err
+		}
+
+		// Delete companion rows for the removed blocks so a rolled-back block
+		// leaves no orphans. All three of these collections key blockNumber as
+		// the raw hex string, so the exact-match $in filter is correct.
+		//
+		// NOT cleaned here (intentional, see report):
+		//   - internalTransactionByAddress stores no block-number field at all
+		//     (only blockTimestamp), so there is nothing to filter on. We do not
+		//     fabricate one. Orphan internal-tx rows may linger after a reorg;
+		//     flagged for manual review.
+		//   - tokenBalances is a last-write-wins snapshot keyed on
+		//     (contractAddress, holderAddress), not a per-block append. We delete
+		//     only the snapshots whose last update happened in a rolled-back
+		//     block (blockNumber $in badBlockNumbers); those values are stale and
+		//     get re-derived from RPC when the block is reprocessed. Snapshots
+		//     last touched by an older block are left intact.
+		if len(badBlockNumbers) > 0 {
+			companionFilter := bson.M{"blockNumber": bson.M{"$in": badBlockNumbers}}
+
+			if _, err := configs.TransferCollections.DeleteMany(sessCtx, companionFilter); err != nil {
+				return nil, fmt.Errorf("rollback: failed to delete transfer rows: %w", err)
+			}
+			if _, err := configs.TransactionByAddressCollections.DeleteMany(sessCtx, companionFilter); err != nil {
+				return nil, fmt.Errorf("rollback: failed to delete transactionByAddress rows: %w", err)
+			}
+
+			tokenTransfers := configs.GetTokenTransfersCollection()
+			if _, err := tokenTransfers.DeleteMany(sessCtx, companionFilter); err != nil {
+				return nil, fmt.Errorf("rollback: failed to delete tokenTransfers rows: %w", err)
+			}
+
+			tokenBalances := configs.GetTokenBalancesCollection()
+			if _, err := tokenBalances.DeleteMany(sessCtx, companionFilter); err != nil {
+				return nil, fmt.Errorf("rollback: failed to delete tokenBalances rows: %w", err)
+			}
 		}
 
 		// Update sync state
