@@ -68,7 +68,7 @@ func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
 // $or+sort cost from blowing past the 10 s context budget on high-volume
 // addresses (validators, contracts) where the unpaginated 200-row hit
 // would routinely time out.
-func ReturnAllInternalTransactionsByAddress(address string, page, limit int) ([]models.TraceResult, error) {
+func ReturnAllInternalTransactionsByAddress(address string, page, limit int) ([]models.InternalTx, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -82,7 +82,7 @@ func ReturnAllInternalTransactionsByAddress(address string, page, limit int) ([]
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	var transactions []models.TraceResult
+	var transactions []models.InternalTx
 
 	// Normalize to canonical Q-prefix format used by the syncer.
 	normalizedAddress := normalizeAddress(address)
@@ -122,16 +122,9 @@ func ReturnAllInternalTransactionsByAddress(address string, page, limit int) ([]
 	defer results.Close(ctx)
 
 	for results.Next(ctx) {
-		var singleTransaction models.TraceResult
+		var singleTransaction models.InternalTx
 		if err := results.Decode(&singleTransaction); err != nil {
 			continue
-		}
-
-		// Determine transaction direction based on matching from/to
-		if strings.EqualFold(string(singleTransaction.From), normalizedAddress) {
-			singleTransaction.InOut = 0 // Outgoing
-		} else {
-			singleTransaction.InOut = 1 // Incoming
 		}
 
 		transactions = append(transactions, singleTransaction)
@@ -274,60 +267,6 @@ func ReturnTransactionsNetwork(page, limit int) ([]models.TransactionByAddress, 
 	return transactions, nil
 }
 
-func ReturnTransactions(address string, page, limit int) ([]models.TransactionByAddress, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	var transactions []models.TransactionByAddress
-	defer cancel()
-
-	log.Printf("querying transactions for address=%s page=%d limit=%d", address, page, limit)
-
-	projection := primitive.D{
-		{Key: "inOut", Value: 1},
-		{Key: "txType", Value: 1},
-		{Key: "address", Value: 1},
-		{Key: "txHash", Value: 1},
-		{Key: "timeStamp", Value: 1},
-		{Key: "amount", Value: 1},
-		{Key: "amountWei", Value: 1},
-	}
-
-	opts := options.Find().
-		SetProjection(projection).
-		SetSort(primitive.D{{Key: "timeStamp", Value: -1}})
-
-	if limit != 0 {
-		if page == 0 {
-			page = 1
-		}
-		opts.SetSkip(int64((page - 1) * limit))
-		opts.SetLimit(int64(limit))
-	}
-
-	// Normalize address to handle both uppercase and lowercase Q prefix
-	normalizedAddress := strings.TrimPrefix(strings.TrimPrefix(address, "Q"), "q")
-	decoded, err := hex.DecodeString(normalizedAddress)
-	if err != nil {
-		log.Printf("error decoding address hex: %v", err)
-	}
-
-	filter := primitive.D{{Key: "address", Value: decoded}}
-	results, err := configs.TransactionByAddressCollection.Find(ctx, filter, opts)
-	if err != nil {
-		log.Printf("error querying transactions by address: %v", err)
-	}
-
-	defer results.Close(ctx)
-	for results.Next(ctx) {
-		var singleTransaction models.TransactionByAddress
-		if err = results.Decode(&singleTransaction); err != nil {
-			log.Printf("error decoding transaction: %v", err)
-		}
-		transactions = append(transactions, singleTransaction)
-	}
-
-	return transactions, nil
-}
-
 // CountTransactionsNetwork returns the total transactionByAddress row count.
 // Uses countDocumentsResilient (fast metadata read with an exact-count fallback
 // when the metadata reads 0, which it currently does on this deployment).
@@ -443,7 +382,7 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 	// If not found in blocks, try the transfers collection (fallback)
 	decoded, err := hex.DecodeString(strings.TrimPrefix(query, "0x"))
 	if err != nil {
-		log.Printf("error decoding tx hash hex: %v", err)
+		return result, fmt.Errorf("invalid tx hash: %w", err)
 	}
 
 	filter := primitive.D{{Key: "txHash", Value: decoded}}

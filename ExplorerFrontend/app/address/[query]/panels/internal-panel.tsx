@@ -14,6 +14,7 @@ import {
   formatAddress,
   formatAmount,
   formatTimestamp,
+  hexToNumber,
   normalizeHexString,
 } from '../../../lib/helpers';
 import CopyButton from '../../../components/CopyButton';
@@ -71,12 +72,14 @@ export default function InternalPanel({
       }),
       columnHelper.accessor('Type', {
         header: 'Type',
-        cell: (info) => <span>{atob(String(info.getValue()))}</span>,
+        cell: (info) => <span>{info.getValue() ? String(info.getValue()) : '-'}</span>,
       }),
       columnHelper.accessor('From', {
         header: 'From',
         cell: (info) => {
-          const a = formatAddress('0x' + normalizeHexString(info.getValue()));
+          const raw = info.getValue();
+          if (!raw) return <span>-</span>;
+          const a = formatAddress(String(raw));
           return (
             <Link href={'/address/' + a} title={a}>
               {truncateMiddle(a)}
@@ -87,7 +90,9 @@ export default function InternalPanel({
       columnHelper.accessor('To', {
         header: 'To',
         cell: (info) => {
-          const a = formatAddress('0x' + normalizeHexString(info.getValue()));
+          const raw = info.getValue();
+          if (!raw) return <span>-</span>;
+          const a = formatAddress(String(raw));
           return (
             <Link href={'/address/' + a} title={a}>
               {truncateMiddle(a)}
@@ -115,7 +120,7 @@ export default function InternalPanel({
       }),
       columnHelper.accessor('GasUsed', {
         header: 'Gas Used (in Units)',
-        cell: (info) => <span>{info.getValue()} Units</span>,
+        cell: (info) => <span>{hexToNumber(String(info.getValue()))} Units</span>,
       }),
       columnHelper.accessor('AmountFunctionIdentifier', {
         header: 'Token Units',
@@ -124,12 +129,6 @@ export default function InternalPanel({
       columnHelper.accessor('BlockTimestamp', {
         header: 'Timestamp',
         cell: (info) => <span>{formatTimestamp(info.getValue())}</span>,
-      }),
-      columnHelper.accessor('Output', {
-        header: 'Status',
-        cell: (info) => (
-          <span>{info.getValue() === 1 ? 'Success' : 'Failure'}</span>
-        ),
       }),
     ],
     [internalt.length],
@@ -164,7 +163,7 @@ export default function InternalPanel({
         <div className="space-y-3">
           <div>
             <div className="text-xs text-gray-400">Type</div>
-            <div className="text-sm text-white">{atob(String(r.Type))}</div>
+            <div className="text-sm text-white">{r.Type ? String(r.Type) : '-'}</div>
           </div>
 
           <div>
@@ -187,22 +186,30 @@ export default function InternalPanel({
 
           <div>
             <div className="text-xs text-gray-400">From</div>
-            <Link
-              href={'/address/' + formatAddress('0x' + normalizeHexString(r.From))}
-              className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
-            >
-              {truncateMiddle(formatAddress('0x' + normalizeHexString(r.From)))}
-            </Link>
+            {r.From ? (
+              <Link
+                href={'/address/' + formatAddress(String(r.From))}
+                className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
+              >
+                {truncateMiddle(formatAddress(String(r.From)))}
+              </Link>
+            ) : (
+              <div className="text-sm text-white">-</div>
+            )}
           </div>
 
           <div>
             <div className="text-xs text-gray-400">To</div>
-            <Link
-              href={'/address/' + formatAddress('0x' + normalizeHexString(r.To))}
-              className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
-            >
-              {truncateMiddle(formatAddress('0x' + normalizeHexString(r.To)))}
-            </Link>
+            {r.To ? (
+              <Link
+                href={'/address/' + formatAddress(String(r.To))}
+                className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
+              >
+                {truncateMiddle(formatAddress(String(r.To)))}
+              </Link>
+            ) : (
+              <div className="text-sm text-white">-</div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -212,20 +219,13 @@ export default function InternalPanel({
             </div>
             <div>
               <div className="text-xs text-gray-400">Gas Used</div>
-              <div className="text-sm text-white">{r.GasUsed} Units</div>
+              <div className="text-sm text-white">{hexToNumber(String(r.GasUsed))} Units</div>
             </div>
           </div>
 
           <div>
             <div className="text-xs text-gray-400">Time</div>
             <div className="text-sm text-white">{formatTimestamp(r.BlockTimestamp)}</div>
-          </div>
-
-          <div>
-            <div className="text-xs text-gray-400">Status</div>
-            <div className="text-sm text-white">
-              {r.Output === 1 ? 'Success' : 'Failure'}
-            </div>
           </div>
         </div>
       </div>

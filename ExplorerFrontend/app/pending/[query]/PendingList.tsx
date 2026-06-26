@@ -11,16 +11,6 @@ import Badge from '../../components/Badge';
 import Pagination from '../../components/Pagination';
 
 interface PaginatedResponse {
-  jsonrpc?: string;
-  id?: number;
-  result?: {
-    pending: {
-      [address: string]: {
-        [nonce: string]: PendingTransaction;
-      };
-    };
-    queued: Record<string, unknown>;
-  };
   transactions?: PendingTransaction[];
   total?: number;
   page?: number;
@@ -40,13 +30,7 @@ const fetchPendingTransactions = async (page: number): Promise<PaginatedResponse
 function flattenTransactions(data: PaginatedResponse | undefined): PendingTransaction[] {
   const transactions: PendingTransaction[] = [];
   try {
-    if (data?.result?.pending) {
-      Object.entries(data.result.pending).forEach(([_address, nonceMap]) => {
-        Object.entries(nonceMap).forEach(([_nonce, tx]) => {
-          transactions.push(tx as PendingTransaction);
-        });
-      });
-    } else if (Array.isArray(data?.transactions)) {
+    if (Array.isArray(data?.transactions)) {
       transactions.push(...data.transactions);
     }
   } catch (err) {

@@ -524,9 +524,24 @@ func InsertManyBlockDocuments(blocks []interface{}) {
 		zap.Int("originalCount", len(blocks)),
 		zap.Int("uniqueCount", len(uniqueBlocks)))
 
-	_, err = configs.BlocksCollections.InsertMany(ctx, uniqueBlocks)
+	// Unordered insert so one duplicate-key error doesn't silently drop the
+	// rest of the batch (ordered=true stops at the first failing document).
+	_, err = configs.BlocksCollections.InsertMany(ctx, uniqueBlocks, options.InsertMany().SetOrdered(false))
 	if err != nil {
-		configs.Logger.Warn("Failed to insert many block documents", zap.Error(err))
+		// Duplicate-key errors (code 11000) are expected for already-synced
+		// blocks and benign; log any other write error.
+		if bwe, ok := err.(mongo.BulkWriteException); ok {
+			for _, we := range bwe.WriteErrors {
+				if we.Code == 11000 {
+					continue
+				}
+				configs.Logger.Warn("Block document write error",
+					zap.Int("code", we.Code),
+					zap.String("message", we.Message))
+			}
+		} else {
+			configs.Logger.Warn("Failed to insert many block documents", zap.Error(err))
+		}
 	}
 }
 
