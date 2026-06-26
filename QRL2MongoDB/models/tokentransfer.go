@@ -17,18 +17,23 @@ type TokenTransfer struct {
 	To              string `bson:"to"`
 	Amount          string `bson:"amount"`
 	BlockNumber     string `bson:"blockNumber"`
-	TxHash          string `bson:"txHash"`
+	// BlockNumberInt is the numeric form of BlockNumber, set at write time
+	// via HexToInt64. Sorting on the hex string lex-orders incorrectly
+	// ("0x9" sorts after "0x10", and width boundaries like 0xffff -> 0x10000
+	// break ordering entirely), so all sort operations use this field instead.
+	BlockNumberInt int64  `bson:"blockNumberInt"`
+	TxHash         string `bson:"txHash"`
 	// Stored ALWAYS, including the empty-string sentinel for the
 	// direct-calldata path. The `omitempty` tag would drop the field
 	// when LogIndex is "", and then BSON queries `{logIndex: ""}`
 	// would no longer match those documents, which is exactly what
 	// TokenTransferExists relies on for idempotent reprocess.
-	LogIndex        string `bson:"logIndex"`
-	Timestamp       string `bson:"timestamp"`
-	TokenSymbol     string `bson:"tokenSymbol"`
-	TokenDecimals   uint8  `bson:"tokenDecimals"`
-	TokenName       string `bson:"tokenName"`
-	TransferType    string `bson:"transferType"` // "direct" for direct transfers, "event" for Transfer events
+	LogIndex      string `bson:"logIndex"`
+	Timestamp     string `bson:"timestamp"`
+	TokenSymbol   string `bson:"tokenSymbol"`
+	TokenDecimals uint8  `bson:"tokenDecimals"`
+	TokenName     string `bson:"tokenName"`
+	TransferType  string `bson:"transferType"` // "direct" for direct transfers, "event" for Transfer events
 	// TokenStandard denormalises ContractInfo.TokenStandard for query
 	// convenience (so /token-transfer endpoints can filter by standard
 	// without joining contractCode). Empty for legacy ERC-20 rows.

@@ -220,32 +220,39 @@ func createIndexes(db *mongo.Database) {
 	}
 
 	// tokenTransfers collection indexes.
-	// The (contractAddress, blockNumber desc) compound backs the per-contract
-	// transfer feed in GetTokenTransfers; the (from|to, blockNumber desc) pair
+	// The (contractAddress, blockNumberInt desc) compound backs the per-contract
+	// transfer feed in GetTokenTransfers; the (from|to, blockNumberInt desc) pair
 	// backs the by-holder $or+sort in GetTokenTransfersByAddress; the txHash
 	// index backs the per-tx lookups in GetTokenTransfersByTxHash and
 	// CountTokenTransfersByTxHashes.
+	//
+	// The compound sorts run on the numeric blockNumberInt field (true chain
+	// order) rather than the hex string blockNumber (lexicographic). The index
+	// names carry an _int suffix so they are created fresh on DBs that still
+	// hold the older blockNumber-keyed indexes (the existence check is by name;
+	// the legacy token_*_block_desc indexes become redundant and can be dropped
+	// manually).
 	tokenTransfersIndexes := []mongo.IndexModel{
 		{
 			Keys: bson.D{
 				{Key: "contractAddress", Value: 1},
-				{Key: "blockNumber", Value: -1},
+				{Key: "blockNumberInt", Value: -1},
 			},
-			Options: options.Index().SetName("token_contract_block_desc"),
+			Options: options.Index().SetName("token_contract_block_int_desc"),
 		},
 		{
 			Keys: bson.D{
 				{Key: "from", Value: 1},
-				{Key: "blockNumber", Value: -1},
+				{Key: "blockNumberInt", Value: -1},
 			},
-			Options: options.Index().SetName("token_from_block_desc"),
+			Options: options.Index().SetName("token_from_block_int_desc"),
 		},
 		{
 			Keys: bson.D{
 				{Key: "to", Value: 1},
-				{Key: "blockNumber", Value: -1},
+				{Key: "blockNumberInt", Value: -1},
 			},
-			Options: options.Index().SetName("token_to_block_desc"),
+			Options: options.Index().SetName("token_to_block_int_desc"),
 		},
 		{
 			Keys:    bson.D{{Key: "txHash", Value: 1}},
