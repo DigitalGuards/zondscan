@@ -102,6 +102,15 @@ func createIndexes(db *mongo.Database) {
 			},
 			Options: options.Index().SetName("result_hash"),
 		},
+		{
+			// Backs the $elemMatch tx-by-hash lookup in ReturnSingleTransfer,
+			// which scans blocks for a transaction whose hash matches the
+			// query. Without this the lookup is a full collection scan.
+			Keys: bson.D{
+				{Key: "result.transactions.hash", Value: 1},
+			},
+			Options: options.Index().SetName("result_transactions_hash"),
+		},
 	}
 
 	// transactionByAddress collection indexes
@@ -183,6 +192,14 @@ func createIndexes(db *mongo.Database) {
 			Keys:    bson.D{{Key: "address", Value: 1}},
 			Options: options.Index().SetName("contract_address_unique").SetUnique(true),
 		},
+		{
+			// Backs GetContractByCreationTx (the /tx/:hash "contract created"
+			// lookup). Sparse because most contractCode rows have no
+			// creationTransaction field, so the index only holds the rows that
+			// do, keeping it small.
+			Keys:    bson.D{{Key: "creationTransaction", Value: 1}},
+			Options: options.Index().SetName("contract_creation_tx").SetSparse(true),
+		},
 	}
 
 	// transfer collection indexes
@@ -190,6 +207,40 @@ func createIndexes(db *mongo.Database) {
 		{
 			Keys:    bson.D{{Key: "txHash", Value: 1}},
 			Options: options.Index().SetName("transfer_txhash_unique").SetUnique(true),
+		},
+	}
+
+	// tokenTransfers collection indexes.
+	// The (contractAddress, blockNumber desc) compound backs the per-contract
+	// transfer feed in GetTokenTransfers; the (from|to, blockNumber desc) pair
+	// backs the by-holder $or+sort in GetTokenTransfersByAddress; the txHash
+	// index backs the per-tx lookups in GetTokenTransfersByTxHash and
+	// CountTokenTransfersByTxHashes.
+	tokenTransfersIndexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				{Key: "contractAddress", Value: 1},
+				{Key: "blockNumber", Value: -1},
+			},
+			Options: options.Index().SetName("token_contract_block_desc"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "from", Value: 1},
+				{Key: "blockNumber", Value: -1},
+			},
+			Options: options.Index().SetName("token_from_block_desc"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "to", Value: 1},
+				{Key: "blockNumber", Value: -1},
+			},
+			Options: options.Index().SetName("token_to_block_desc"),
+		},
+		{
+			Keys:    bson.D{{Key: "txHash", Value: 1}},
+			Options: options.Index().SetName("token_txhash"),
 		},
 	}
 
@@ -218,6 +269,7 @@ func createIndexes(db *mongo.Database) {
 		"contractCode":                 contractCodeIndexes,
 		"transfer":                     transferIndexes,
 		"validators":                   validatorsIndexes,
+		"tokenTransfers":               tokenTransfersIndexes,
 	}
 
 	for collName, indexes := range collections {

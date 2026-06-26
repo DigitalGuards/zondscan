@@ -637,6 +637,7 @@ func UpsertTransactions(address string, value float64, isContract bool) (*mongo.
 }
 
 func GetContractByAddress(address string) *models.ContractInfo {
+	address = validation.ConvertToQAddress(address)
 	collection := configs.GetCollection(configs.DB, "contractCode")
 	var contract models.ContractInfo
 

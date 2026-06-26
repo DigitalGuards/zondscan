@@ -4,6 +4,7 @@ import axios from 'axios';
 import React, { useState } from 'react';
 import config from '../../../config';
 import { useQuery } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatAmount, formatGasPrice, timeAgo, truncateHash } from '../../lib/helpers';
 import type { PendingTransaction } from '@/app/types';
@@ -46,6 +47,7 @@ interface PendingListProps {
 }
 
 export default function PendingList({ initialData, currentPage }: PendingListProps): JSX.Element {
+  const router = useRouter();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const { data, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['pending-transactions', currentPage],
@@ -173,8 +175,8 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
             <Pagination
               currentPage={currentPage}
               totalPages={totalPages}
-              onPrevious={() => window.location.href = `/pending/${Math.max(currentPage - 1, 1)}`}
-              onNext={() => window.location.href = `/pending/${Math.min(currentPage + 1, totalPages)}`}
+              onPrevious={() => router.push(`/pending/${Math.max(currentPage - 1, 1)}`)}
+              onNext={() => router.push(`/pending/${Math.min(currentPage + 1, totalPages)}`)}
             />
           )}
         </>
