@@ -471,9 +471,11 @@ func GetTokenTransfers(contractAddress string, page, limit int) ([]models.TokenT
 		return nil, 0, err
 	}
 
-	// Find with pagination, sorted by block number descending (most recent first)
+	// Find with pagination, sorted by block number descending (most recent first).
+	// Sort on the numeric blockNumberInt field, not the hex string blockNumber,
+	// so ordering is true chain order rather than lexicographic.
 	opts := options.Find().
-		SetSort(bson.D{{Key: "blockNumber", Value: -1}}).
+		SetSort(bson.D{{Key: "blockNumberInt", Value: -1}}).
 		SetSkip(int64(page * limit)).
 		SetLimit(int64(limit))
 
@@ -499,7 +501,7 @@ func GetTokenTransfers(contractAddress string, page, limit int) ([]models.TokenT
 // holder address (either side: from or to), with pagination. Matches the
 // shape of GetTokenTransfers so the address-page consumer can render the
 // same row schema produced by /token/:address/transfers. Sorted by
-// blockNumber desc so the most recent transfer is first.
+// blockNumberInt desc so the most recent transfer is first.
 //
 // The address is normalised to the canonical Q-prefix lowercase form the
 // syncer writes; we don't expand to a multi-variant $in here because every
@@ -540,7 +542,7 @@ func GetTokenTransfersByAddress(address string, page, limit int) ([]models.Token
 	}
 
 	opts := options.Find().
-		SetSort(bson.D{{Key: "blockNumber", Value: -1}}).
+		SetSort(bson.D{{Key: "blockNumberInt", Value: -1}}).
 		SetSkip(int64(page * limit)).
 		SetLimit(int64(limit))
 
