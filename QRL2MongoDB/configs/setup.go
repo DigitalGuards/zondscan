@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -13,7 +14,14 @@ import (
 )
 
 func ConnectDB() *mongo.Client {
-	client, err := mongo.NewClient(options.Client().ApplyURI(EnvMongoURI()))
+	uri := EnvMongoURI()
+	if uri == "" {
+		// Runs at package init (DB is an eager package-level var), so this is
+		// the real fail-fast point for a missing MONGOURI: a clear, actionable
+		// message instead of an opaque driver error.
+		log.Fatal("Required environment variable MONGOURI is not set")
+	}
+	client, err := mongo.NewClient(options.Client().ApplyURI(uri))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -264,7 +272,19 @@ func initializeCollections(db *mongo.Database) {
 		},
 	)
 	if err != nil {
-		Logger.Error("Failed to create index for pending token contracts collection", zap.Error(err))
+		// A previously-created index over the same (contractAddress, txHash)
+		// keys under a different name (e.g. the named "contract_tx_idx" set
+		// by db.InitializePendingTokenContractsCollection) makes Mongo reject
+		// this auto-named duplicate with IndexOptionsConflict. That is benign:
+		// the index already exists, so do not treat it as an error.
+		msg := err.Error()
+		if strings.Contains(msg, "IndexOptionsConflict") ||
+			strings.Contains(msg, "IndexKeySpecsConflict") ||
+			strings.Contains(msg, "already exists") {
+			Logger.Info("Pending token contracts unique index already exists, skipping")
+		} else {
+			Logger.Error("Failed to create index for pending token contracts collection", zap.Error(err))
+		}
 	}
 
 	// Also add index on the processed field for efficient querying

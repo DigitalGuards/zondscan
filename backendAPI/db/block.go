@@ -130,7 +130,12 @@ func ReturnBlockSizes() ([]primitive.M, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	opts := options.Find().SetSort(primitive.D{{Key: "timestamp", Value: 1}})
+	// Cap the result set: averageBlockSize grows without bound as the syncer
+	// appends time-series rows, and this feeds a chart that only renders a
+	// finite window. 2000 points is well past what any chart shows.
+	opts := options.Find().
+		SetSort(primitive.D{{Key: "timestamp", Value: 1}}).
+		SetLimit(2000)
 
 	cursor, err := configs.BlockSizesCollection.Find(ctx, primitive.D{}, opts)
 	if err != nil {

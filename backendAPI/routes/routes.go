@@ -304,7 +304,7 @@ func UserRoute(router *gin.Engine) {
 		})
 		if err != nil {
 			log.Printf("Error fetching pending transactions: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
 		c.JSON(http.StatusOK, v)
@@ -319,7 +319,8 @@ func UserRoute(router *gin.Engine) {
 		}
 		transaction, err := db.GetPendingTransactionByHash(hash)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			log.Printf("error fetching pending transaction %s: %v", hash, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
 
@@ -327,7 +328,8 @@ func UserRoute(router *gin.Engine) {
 		if transaction == nil {
 			tx, err := db.GetTransactionByHash(hash)
 			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				log.Printf("error fetching transaction %s: %v", hash, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 				return
 			}
 
@@ -442,7 +444,8 @@ func UserRoute(router *gin.Engine) {
 			}, nil
 		})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			log.Printf("error building overview: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
 		c.JSON(http.StatusOK, v)
@@ -470,7 +473,7 @@ func UserRoute(router *gin.Engine) {
 		if err != nil {
 			log.Printf("Error fetching price history: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to fetch price history: %v", err),
+				"error": "internal server error",
 			})
 			return
 		}
@@ -533,7 +536,8 @@ func UserRoute(router *gin.Engine) {
 			}, nil
 		})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			log.Printf("error fetching transactions: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
 		c.JSON(http.StatusOK, v)
@@ -648,7 +652,8 @@ func UserRoute(router *gin.Engine) {
 			}, nil
 		})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			log.Printf("error aggregating address %s: %v", param, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
 		c.JSON(http.StatusOK, v)
@@ -665,18 +670,30 @@ func UserRoute(router *gin.Engine) {
 			log.Printf("error fetching transfer %s: %v", value, err)
 		}
 
+		// ReturnSingleTransfer returns a zero-value Transfer (no error path
+		// distinguishes "found" from "missing" for the transfers-collection
+		// fallback), so detect not-found via an empty TxHash and return 404
+		// instead of a misleading 200 with empty fields. The frontend tx page
+		// maps 404 to notFound().
+		if query.TxHash == "" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "transaction not found"})
+			return
+		}
+
 		latestBlockNumber, err := db.GetLatestBlockFromSyncState()
 		if err != nil {
+			log.Printf("error getting latest block: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to get latest block: %v", err),
+				"error": "internal server error",
 			})
 			return
 		}
 
 		latestBlockNum, err := parseHexBlockNumber(latestBlockNumber)
 		if err != nil {
+			log.Printf("error parsing latest block number %q: %v", latestBlockNumber, err)
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to parse block number: %v", err),
+				"error": "internal server error",
 			})
 			return
 		}
@@ -903,7 +920,8 @@ func UserRoute(router *gin.Engine) {
 			}, nil
 		})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			log.Printf("error fetching latest block: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
 		c.JSON(http.StatusOK, v)
@@ -933,7 +951,8 @@ func UserRoute(router *gin.Engine) {
 			return gin.H{"richlist": db.ReturnRichlist()}, nil
 		})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			log.Printf("error fetching richlist: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
 		c.JSON(http.StatusOK, v)
@@ -1016,7 +1035,8 @@ func UserRoute(router *gin.Engine) {
 			return gin.H{"blocks": blocks, "total": countBlocks, "blockActivity": blockActivity}, nil
 		})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			log.Printf("error fetching blocks: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
 		c.JSON(http.StatusOK, v)
@@ -1033,7 +1053,8 @@ func UserRoute(router *gin.Engine) {
 			return gin.H{"response": query}, nil
 		})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			log.Printf("error fetching block sizes: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
 		c.JSON(http.StatusOK, v)
@@ -1045,8 +1066,9 @@ func UserRoute(router *gin.Engine) {
 
 		result, err := db.GetEpochs(page, limit)
 		if err != nil {
+			log.Printf("error fetching epochs: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to fetch epochs: %v", err),
+				"error": "internal server error",
 			})
 			return
 		}
@@ -1070,8 +1092,9 @@ func UserRoute(router *gin.Engine) {
 			return db.ReturnValidators(pageToken)
 		})
 		if err != nil {
+			log.Printf("error fetching validators: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to fetch validators: %v", err),
+				"error": "internal server error",
 			})
 			return
 		}
@@ -1088,8 +1111,9 @@ func UserRoute(router *gin.Engine) {
 				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 				return
 			}
+			log.Printf("error fetching epoch detail %s: %v", epochId, err)
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to fetch epoch detail: %v", err),
+				"error": "internal server error",
 			})
 			return
 		}
@@ -1100,8 +1124,9 @@ func UserRoute(router *gin.Engine) {
 	router.GET("/epoch", func(c *gin.Context) {
 		epochInfo, err := db.GetEpochInfo()
 		if err != nil {
+			log.Printf("error fetching epoch info: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to fetch epoch info: %v", err),
+				"error": "internal server error",
 			})
 			return
 		}
@@ -1114,8 +1139,9 @@ func UserRoute(router *gin.Engine) {
 
 		history, err := db.GetValidatorHistory(limit)
 		if err != nil {
+			log.Printf("error fetching validator history: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to fetch validator history: %v", err),
+				"error": "internal server error",
 			})
 			return
 		}
@@ -1126,8 +1152,9 @@ func UserRoute(router *gin.Engine) {
 	router.GET("/validators/stats", func(c *gin.Context) {
 		stats, err := db.GetValidatorStats()
 		if err != nil {
+			log.Printf("error fetching validator stats: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to fetch validator stats: %v", err),
+				"error": "internal server error",
 			})
 			return
 		}
@@ -1167,7 +1194,8 @@ func UserRoute(router *gin.Engine) {
 			return gin.H{"response": query}, nil
 		})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			log.Printf("error fetching latest transactions: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
 		c.JSON(http.StatusOK, v)
@@ -1185,7 +1213,8 @@ func UserRoute(router *gin.Engine) {
 			return counts, nil
 		})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			log.Printf("error counting contracts by standard: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
 		c.JSON(http.StatusOK, v)
@@ -1222,8 +1251,9 @@ func UserRoute(router *gin.Engine) {
 
 		query, total, err := db.ReturnContracts(page, limit, search, isTokenFilter, standardFilter)
 		if err != nil {
+			log.Printf("error fetching contracts: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to fetch contracts: %v", err),
+				"error": "internal server error",
 			})
 			return
 		}
@@ -1327,7 +1357,7 @@ func UserRoute(router *gin.Engine) {
 		if err != nil {
 			log.Printf("Error fetching non-zero transactions: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to fetch transactions: %v", err),
+				"error": "internal server error",
 			})
 			return
 		}
@@ -1372,7 +1402,7 @@ func UserRoute(router *gin.Engine) {
 		if err != nil {
 			log.Printf("Error fetching token transfers for %s: %v", address, err)
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to fetch token transfers: %v", err),
+				"error": "internal server error",
 			})
 			return
 		}
@@ -1685,7 +1715,8 @@ func UserRoute(router *gin.Engine) {
 			}, nil
 		})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			log.Printf("error computing pending-tx eta %s: %v", hash, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
 		if v == nil {
@@ -1759,7 +1790,8 @@ func UserRoute(router *gin.Engine) {
 			}, nil
 		})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			log.Printf("error computing gas summary: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
 		c.JSON(http.StatusOK, v)
@@ -1792,7 +1824,8 @@ func UserRoute(router *gin.Engine) {
 			return gin.H{"range": rng, "data": rows}, nil
 		})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			log.Printf("error fetching gas history: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
 		c.JSON(http.StatusOK, v)
