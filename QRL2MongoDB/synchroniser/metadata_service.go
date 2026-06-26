@@ -575,6 +575,19 @@ type tokenMetadataDocument struct {
 	Attributes  []models.TokenAttribute
 }
 
+// safeExternalURL returns the trimmed value only when it carries an http(s)
+// scheme. Anything else (javascript:, data:, relative paths, etc.) is dropped
+// to an empty string so an attacker-controlled contractURI/tokenURI cannot
+// persist a hostile external_url. Defense-in-depth alongside frontend escaping.
+func safeExternalURL(s string) string {
+	t := strings.TrimSpace(s)
+	lower := strings.ToLower(t)
+	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
+		return t
+	}
+	return ""
+}
+
 // parseMetadataJSON does a defensive JSON parse: unmarshal into a generic
 // map, then pull out the string fields we care about, ignoring any non-
 // string variants. This lets a malformed `description: ["foo", "bar"]`
@@ -613,7 +626,7 @@ func parseMetadataJSON(body []byte) (metadataDocument, error) {
 		Name:        stringField("name"),
 		Description: stringField("description"),
 		Image:       stringField("image"),
-		ExternalURL: stringField("external_url"),
+		ExternalURL: safeExternalURL(stringField("external_url")),
 	}
 	return doc, nil
 }
@@ -653,7 +666,7 @@ func parseTokenMetadataJSON(body []byte) (tokenMetadataDocument, error) {
 		Name:        stringField("name"),
 		Description: stringField("description"),
 		Image:       stringField("image"),
-		ExternalURL: stringField("external_url"),
+		ExternalURL: safeExternalURL(stringField("external_url")),
 	}
 
 	// attributes: []{trait_type, value, display_type?}

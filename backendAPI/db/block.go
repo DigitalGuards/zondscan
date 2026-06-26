@@ -12,6 +12,16 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+// PingDatabase verifies the MongoDB connection is reachable, using the
+// supplied context for the deadline. Used by the /health readiness probe so
+// route handlers don't reach into the configs package directly.
+func PingDatabase(ctx context.Context) error {
+	if configs.DB == nil {
+		return fmt.Errorf("database not initialized")
+	}
+	return configs.DB.Ping(ctx, nil)
+}
+
 func ReturnSingleBlock(block uint64) (models.ZondUint64Version, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
