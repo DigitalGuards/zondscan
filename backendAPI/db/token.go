@@ -126,9 +126,11 @@ func GetTokenBalancesByAddress(address string, standardFilter *string) ([]models
 	return results, nil
 }
 
-// normalizeAddress converts any address format to the canonical Q-prefix
+// NormalizeAddress converts any address format to the canonical Q-prefix
 // form that the syncer stores in MongoDB (uppercase Q + lowercase hex).
-func normalizeAddress(address string) string {
+// Exported so route handlers can reuse the exact same canonicalisation
+// when computing map keys instead of duplicating the logic.
+func NormalizeAddress(address string) string {
 	if strings.HasPrefix(address, "0x") || strings.HasPrefix(address, "0X") {
 		return "Q" + strings.ToLower(address[2:])
 	}
@@ -136,6 +138,12 @@ func normalizeAddress(address string) string {
 		return "Q" + strings.ToLower(address[1:])
 	}
 	return "Q" + strings.ToLower(address)
+}
+
+// normalizeAddress is the package-private alias kept so existing db callers
+// (and tests) read unchanged.
+func normalizeAddress(address string) string {
+	return NormalizeAddress(address)
 }
 
 // normalizeAddressBoth returns the canonical Q-prefix address as a slice.

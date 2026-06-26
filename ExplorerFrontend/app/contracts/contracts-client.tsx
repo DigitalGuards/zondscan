@@ -88,7 +88,9 @@ function TabButton({
   return (
     <button
       role="tab"
+      id={`contracts-tab-${tab}`}
       aria-selected={active}
+      aria-controls="contracts-tabpanel"
       onClick={() => onSelect(tab)}
       className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
         active ? 'bg-[#ffa729] text-black' : 'bg-[#2d2d2d] text-gray-300 hover:bg-[#3d3d3d]'
@@ -320,7 +322,12 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
       </div>
 
       {/* Content */}
-      <div role="tabpanel" className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] overflow-hidden">
+      <div
+        role="tabpanel"
+        id="contracts-tabpanel"
+        aria-labelledby={`contracts-tab-${activeTab}`}
+        className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] overflow-hidden"
+      >
         {loading ? (
           <div className="p-4 space-y-4">
             {[...Array(5)].map((_, i) => (
