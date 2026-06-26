@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import TransactionView from './transaction-view';
 import type { TransactionDetails } from '@/app/types';
 import { sharedMetadata } from '@/app/lib/seo/metaData';
+import { isTxHash } from '@/app/lib/helpers';
 import config from '../../../config';
 
 interface PageProps {
@@ -70,8 +71,7 @@ function isEmptyTransaction(txData: MaybeTxRecord): boolean {
 
 async function getTransaction(txHash: string): Promise<TransactionDetails> {
   // Validate transaction hash format
-  const hashRegex = /^0x[0-9a-fA-F]{64}$/;
-  if (!hashRegex.test(txHash)) {
+  if (!isTxHash(txHash)) {
     throw new Error('Invalid transaction hash format');
   }
 
@@ -152,8 +152,7 @@ export default async function TransactionPage({ params }: PageProps): Promise<JS
   const resolvedParams = await params;
   const txHash = resolvedParams.query;
 
-  const hashRegex = /^0x[0-9a-fA-F]{64}$/;
-  if (!hashRegex.test(txHash)) {
+  if (!isTxHash(txHash)) {
     return (
       <div className="container mx-auto px-4">
         <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg mt-6">
