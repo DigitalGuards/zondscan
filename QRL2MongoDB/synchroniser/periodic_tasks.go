@@ -25,15 +25,15 @@ func runPeriodicTask(task func(), interval time.Duration, taskName string, stopC
 				configs.Logger.Error("Recovered from panic in periodic task",
 					zap.String("task", taskName),
 					zap.Any("error", r))
-				// Do not restart if we are shutting down.
+				// Restart the task after a short delay, but exit promptly if a
+				// shutdown signal arrives during the wait instead of blocking
+				// the whole delay on time.Sleep.
 				select {
 				case <-stopCh:
 					return
-				default:
+				case <-time.After(5 * time.Second):
+					runPeriodicTask(task, interval, taskName, stopCh)
 				}
-				// Restart the task after a short delay
-				time.Sleep(5 * time.Second)
-				runPeriodicTask(task, interval, taskName, stopCh)
 			}
 		}()
 
