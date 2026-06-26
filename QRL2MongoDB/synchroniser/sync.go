@@ -92,8 +92,10 @@ func getRPCDelay(bulkSync bool) time.Duration {
 	return time.Duration(delay) * time.Millisecond
 }
 
-// Sync starts the synchronization process
-func Sync() {
+// Sync starts the synchronization process. stopCh is closed by main.go on a
+// termination signal; it is threaded into every background ticker goroutine
+// started here so they stop accepting new work during graceful shutdown.
+func Sync(stopCh <-chan struct{}) {
 	var err error
 	var nextBlock string
 	var maxHex string
@@ -231,11 +233,11 @@ func Sync() {
 	go func() {
 		// Start wallet count sync
 		configs.Logger.Info("Starting wallet count sync service...")
-		db.StartWalletCountSync()
+		db.StartWalletCountSync(stopCh)
 
 		// Start contract reprocessing job
 		configs.Logger.Info("Starting contract reprocessing service...")
-		db.StartContractReprocessingJob()
+		db.StartContractReprocessingJob(stopCh)
 	}()
 
 	// Signal that initial sync is done so mempool polling can begin
@@ -243,7 +245,7 @@ func Sync() {
 	configs.Logger.Info("Initial sync flag set, mempool polling enabled")
 
 	configs.Logger.Info("Starting continuous block monitoring...")
-	singleBlockInsertion()
+	singleBlockInsertion(stopCh)
 }
 
 // findHighestProcessedBlock finds the highest block number that exists in the database
