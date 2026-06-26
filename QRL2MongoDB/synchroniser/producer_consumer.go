@@ -97,10 +97,15 @@ func consumer(ch <-chan (<-chan Data)) {
 					// idempotency guard in sync.go and gap_detection.go.
 					// ProcessTransactions has no unique index on txHash, so
 					// re-running it on an already-synced block duplicates
-					// transfer + transactionByAddress rows.
-					alreadyExists := make([]bool, len(blocks))
+					// transfer + transactionByAddress rows. One $in query keeps
+					// this to a single round-trip instead of N per batch.
+					blockNumbers := make([]string, len(blocks))
 					for x := 0; x < len(blocks); x++ {
-						alreadyExists[x] = db.BlockExists(blocks[x].Result.Number)
+						blockNumbers[x] = blocks[x].Result.Number
+					}
+					alreadyExists, err := db.BlocksExist(blockNumbers)
+					if err != nil {
+						configs.Logger.Error("Failed to check existing blocks in batch", zap.Error(err))
 					}
 
 					db.InsertManyBlockDocuments(data.blockData)
@@ -108,7 +113,7 @@ func consumer(ch <-chan (<-chan Data)) {
 						zap.Int("count", len(data.blockData)))
 
 					for x := 0; x < len(blocks); x++ {
-						if alreadyExists[x] {
+						if alreadyExists[blocks[x].Result.Number] {
 							configs.Logger.Info("Batch block already processed, skipping transaction processing",
 								zap.String("block", blocks[x].Result.Number))
 							continue
