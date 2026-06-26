@@ -7,6 +7,6 @@ import (
 type Address struct {
 	ObjectId primitive.ObjectID `bson:"_id"`
 	ID       string             `json:"id"` // Store as hex string
-	Balance  float32            `json:"balance"`
+	Balance  float64            `json:"balance"`
 	Nonce    uint64             `json:"nonce"`
 }
