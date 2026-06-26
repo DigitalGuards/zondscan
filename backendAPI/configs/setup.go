@@ -51,9 +51,37 @@ func ConnectDB() *mongo.Client {
 
 		// Set the global DB variable
 		DB = client
+
+		// Bind the package-level collection handles now that the client is
+		// confirmed live. Doing this here (rather than at package-var
+		// declaration time) removes the nil-client window: every reader runs
+		// inside an HTTP handler, which only executes after this point.
+		bindCollections(client)
 	})
 
 	return DB
+}
+
+// bindCollections wires the package-level *mongo.Collection handles to the
+// live client. Called once from ConnectDB after the ping succeeds.
+func bindCollections(client *mongo.Client) {
+	db := client.Database("qrldata-z")
+	TransferCollections = db.Collection("transfer")
+	TransactionByAddressCollection = db.Collection("transactionByAddress")
+	InternalTransactionByAddressCollection = db.Collection("internalTransactionByAddress")
+	AddressesCollections = db.Collection("addresses")
+	BlocksCollection = db.Collection("blocks")
+	ValidatorsCollections = db.Collection("validators")
+	ContractInfoCollection = db.Collection("contractCode")
+	ContractVerificationsCollection = db.Collection("contractVerifications")
+	BlockSizesCollection = db.Collection("averageBlockSize")
+	TotalCirculatingSupplyCollection = db.Collection("totalCirculatingSupply")
+	CoinGeckoCollection = db.Collection("coingecko")
+	WalletCountCollections = db.Collection("walletCount")
+	DailyTransactionsVolumeCollection = db.Collection("dailyTransactionsVolume")
+	EpochInfoCollection = db.Collection("epoch_info")
+	ValidatorHistoryCollection = db.Collection("validator_history")
+	PriceHistoryCollection = db.Collection("priceHistory")
 }
 
 func createIndexes(db *mongo.Database) {
@@ -114,7 +142,12 @@ func createIndexes(db *mongo.Database) {
 		},
 	}
 
-	// internalTransactionByAddress collection indexes
+	// internalTransactionByAddress collection indexes.
+	// The compound (from|to, blockTimestamp desc) pair backs the $or+sort in
+	// ReturnAllInternalTransactionsByAddress; the hash index backs the
+	// per-tx lookups in GetInternalTransactionsByTxHash and
+	// CountInternalTxsByTxHashes. The legacy single-field from/to indexes
+	// are kept so existing query plans don't regress.
 	internalTransactionsIndexes := []mongo.IndexModel{
 		{
 			Keys:    bson.D{{Key: "from", Value: 1}},
@@ -123,6 +156,24 @@ func createIndexes(db *mongo.Database) {
 		{
 			Keys:    bson.D{{Key: "to", Value: 1}},
 			Options: options.Index().SetName("internal_to"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "from", Value: 1},
+				{Key: "blockTimestamp", Value: -1},
+			},
+			Options: options.Index().SetName("internal_from_blocktimestamp_desc"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "to", Value: 1},
+				{Key: "blockTimestamp", Value: -1},
+			},
+			Options: options.Index().SetName("internal_to_blocktimestamp_desc"),
+		},
+		{
+			Keys:    bson.D{{Key: "hash", Value: 1}},
+			Options: options.Index().SetName("internal_hash"),
 		},
 	}
 

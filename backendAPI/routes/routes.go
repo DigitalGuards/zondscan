@@ -10,6 +10,7 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,6 +19,64 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/mongo"
 )
+
+// Path-param format guards. These reject malformed input at the route
+// boundary (HTTP 400) before it reaches the db layer, instead of letting
+// a junk string fan out into Mongo filters / RPC calls. The accepted
+// shapes mirror what the frontend search resolver emits (see
+// ExplorerFrontend/app/lib/searchResolver.ts).
+var (
+	// txHashRe matches a "0x"-prefixed 32-byte hash (the only tx/block
+	// hash form the explorer surfaces).
+	txHashRe = regexp.MustCompile(`^0x[0-9a-fA-F]{64}$`)
+	// addrParamRe matches both address forms the frontend forwards: the
+	// canonical "Q" + 40 hex (case-insensitive Q) and the "0x" + 40 hex
+	// contract form. db.normalizeAddress canonicalises both downstream.
+	addrParamRe = regexp.MustCompile(`^([Qq]|0x|0X)[0-9a-fA-F]{40}$`)
+	// validatorPubkeyRe matches a hex public-key lookup key (optional 0x
+	// prefix). Even-length and an upper bound are enforced in
+	// isValidValidatorID rather than the pattern, because Go's regexp
+	// rejects the nested-repeat form that would express "even, bounded"
+	// inline. The decimal-index form is handled separately so plain
+	// integers still resolve.
+	validatorPubkeyRe = regexp.MustCompile(`^(0x|0X)?[0-9a-fA-F]+$`)
+)
+
+// isValidTxHash reports whether s is a "0x"-prefixed 32-byte hash.
+func isValidTxHash(s string) bool {
+	return txHashRe.MatchString(s)
+}
+
+// isValidAddressParam reports whether s is one of the address forms a
+// route path param legitimately carries (Q + 40 hex or 0x + 40 hex).
+// Use this for :address / :query route guards; the stricter Q-only
+// isValidAddress stays reserved for the contract-write endpoints whose
+// inputs are never 0x-form.
+func isValidAddressParam(s string) bool {
+	return addrParamRe.MatchString(s)
+}
+
+// isValidValidatorID reports whether s is a decimal validator index or a
+// hex public-key key. GetValidatorByID looks up by _id (decimal index)
+// then falls back to publicKeyHex, so both shapes are legitimate.
+func isValidValidatorID(s string) bool {
+	if s == "" {
+		return false
+	}
+	if _, err := strconv.ParseUint(s, 10, 64); err == nil {
+		return true
+	}
+	if !validatorPubkeyRe.MatchString(s) {
+		return false
+	}
+	// Strip an optional 0x prefix, then require an even-length hex body of
+	// a sane size (1..2000 hex chars covers any real pubkey scheme).
+	body := s
+	if len(body) >= 2 && (body[:2] == "0x" || body[:2] == "0X") {
+		body = body[2:]
+	}
+	return len(body) > 0 && len(body)%2 == 0 && len(body) <= 2000
+}
 
 // normalizeContractAddr maps any input address form (0x-hex, q-lower, bare
 // hex, Q-canonical) to the canonical "Q" + lowercase hex shape the syncer
@@ -254,6 +313,10 @@ func UserRoute(router *gin.Engine) {
 	// Add endpoint for fetching a specific pending transaction
 	router.GET("/pending-transaction/:hash", func(c *gin.Context) {
 		hash := c.Param("hash")
+		if !isValidTxHash(hash) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid transaction hash; expected 0x + 64 hex chars"})
+			return
+		}
 		transaction, err := db.GetPendingTransactionByHash(hash)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -495,6 +558,10 @@ func UserRoute(router *gin.Engine) {
 
 	router.GET("/address/aggregate/:query", func(c *gin.Context) {
 		param := c.Param("query")
+		if !isValidAddressParam(param) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid address; expected Q or 0x followed by 40 hex chars"})
+			return
+		}
 		// db functions normalize the address to canonical q-prefix internally.
 
 		// Pagination for the tx-list aggregations. Defaults match the old
@@ -589,6 +656,10 @@ func UserRoute(router *gin.Engine) {
 
 	router.GET("/tx/:query", func(c *gin.Context) {
 		value := c.Param("query")
+		if !isValidTxHash(value) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid transaction hash; expected 0x + 64 hex chars"})
+			return
+		}
 		query, err := db.ReturnSingleTransfer(value)
 		if err != nil {
 			log.Printf("error fetching transfer %s: %v", value, err)
@@ -840,6 +911,10 @@ func UserRoute(router *gin.Engine) {
 
 	router.GET("/coinbase/:query", func(c *gin.Context) {
 		value := c.Param("query")
+		if !isValidTxHash(value) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid transaction hash; expected 0x + 64 hex chars"})
+			return
+		}
 		query, err := db.ReturnSingleTransfer(value)
 		// A missing tx is not a server fault: keep the historical 200-with-empty
 		// behavior for not-found. Any other DB error becomes a 500 instead of a
@@ -1054,6 +1129,10 @@ func UserRoute(router *gin.Engine) {
 	// Get individual validator details
 	router.GET("/validator/:id", func(c *gin.Context) {
 		id := c.Param("id")
+		if !isValidValidatorID(id) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid validator id; expected a decimal index or hex public key"})
+			return
+		}
 		validator, err := db.GetValidatorByID(id)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{
@@ -1230,6 +1309,10 @@ func UserRoute(router *gin.Engine) {
 	// Add a new endpoint to get limited non-zero transactions for an address
 	router.GET("/address/:address/transactions", func(c *gin.Context) {
 		address := c.Param("address")
+		if !isValidAddressParam(address) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid address; expected Q or 0x followed by 40 hex chars"})
+			return
+		}
 		page, limit := getPaginationParams(c, 1, 5)
 
 		transactions, err := db.ReturnNonZeroTransactions(address, page, limit)
@@ -1268,6 +1351,10 @@ func UserRoute(router *gin.Engine) {
 	// by contract not by holder. Paginated like /address/:addr/transactions.
 	router.GET("/address/:address/token-transfers", func(c *gin.Context) {
 		address := c.Param("address")
+		if !isValidAddressParam(address) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid address; expected Q or 0x followed by 40 hex chars"})
+			return
+		}
 		// Match the address-page Transactions table's 5-rows-per-page default
 		// (paginated server-side, page-1-indexed). Cap matches the DB layer.
 		page, limit := getPaginationParams(c, 1, 5)
@@ -1304,6 +1391,10 @@ func UserRoute(router *gin.Engine) {
 	// fungibles.
 	router.GET("/address/:address/tokens", func(c *gin.Context) {
 		address := c.Param("address")
+		if !isValidAddressParam(address) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid address; expected Q or 0x followed by 40 hex chars"})
+			return
+		}
 
 		var standardFilter *string
 		if s := c.Query("standard"); s != "" {
@@ -1343,6 +1434,10 @@ func UserRoute(router *gin.Engine) {
 	// on the sibling /tokens?standard=ERC-20.
 	router.GET("/address/:address/nfts", func(c *gin.Context) {
 		address := c.Param("address")
+		if !isValidAddressParam(address) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid address; expected Q or 0x followed by 40 hex chars"})
+			return
+		}
 
 		var standardFilter *string
 		if s := c.Query("standard"); s != "" {
@@ -1376,6 +1471,10 @@ func UserRoute(router *gin.Engine) {
 	// Get token info (summary stats for a token contract)
 	router.GET("/token/:address/info", func(c *gin.Context) {
 		address := c.Param("address")
+		if !isValidAddressParam(address) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid address; expected Q or 0x followed by 40 hex chars"})
+			return
+		}
 
 		info, err := db.GetTokenInfo(address)
 		if err != nil {
@@ -1395,6 +1494,10 @@ func UserRoute(router *gin.Engine) {
 	// holder, balance is the cross-id total). ERC-20 behaviour unchanged.
 	router.GET("/token/:address/holders", func(c *gin.Context) {
 		address := c.Param("address")
+		if !isValidAddressParam(address) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid address; expected Q or 0x followed by 40 hex chars"})
+			return
+		}
 		tokenID := c.Query("tokenID")
 		page, limit := getPaginationParams(c, 0, 25)
 
@@ -1423,6 +1526,10 @@ func UserRoute(router *gin.Engine) {
 	// when off-chain metadata has been fetched.
 	router.GET("/token/:address/tokens", func(c *gin.Context) {
 		address := c.Param("address")
+		if !isValidAddressParam(address) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid address; expected Q or 0x followed by 40 hex chars"})
+			return
+		}
 		page, limit := getPaginationParams(c, 0, 25)
 
 		tokens, totalCount, err := db.GetTokenIDs(address, page, limit)
@@ -1454,6 +1561,11 @@ func UserRoute(router *gin.Engine) {
 		address := c.Param("address")
 		tokenID := c.Param("id")
 
+		if !isValidAddressParam(address) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid address; expected Q or 0x followed by 40 hex chars"})
+			return
+		}
+
 		if _, ok := new(big.Int).SetString(tokenID, 10); !ok {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "tokenID must be a decimal integer"})
 			return
@@ -1475,6 +1587,10 @@ func UserRoute(router *gin.Engine) {
 	// Get token transfers with pagination
 	router.GET("/token/:address/transfers", func(c *gin.Context) {
 		address := c.Param("address")
+		if !isValidAddressParam(address) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid address; expected Q or 0x followed by 40 hex chars"})
+			return
+		}
 		page, limit := getPaginationParams(c, 0, 25)
 
 		transfers, totalCount, err := db.GetTokenTransfers(address, page, limit)
@@ -1503,6 +1619,10 @@ func UserRoute(router *gin.Engine) {
 	// db/gas.go; the route just plumbs it together.
 	router.GET("/pending-tx-eta/:hash", func(c *gin.Context) {
 		hash := c.Param("hash")
+		if !isValidTxHash(hash) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid transaction hash; expected 0x + 64 hex chars"})
+			return
+		}
 		v, err := routeCache.GetOrCompute("eta:"+hash, 5*time.Second, func() (interface{}, error) {
 			tx, err := db.GetPendingTransactionByHash(hash)
 			if err != nil {

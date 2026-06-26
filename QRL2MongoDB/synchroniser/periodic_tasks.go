@@ -202,13 +202,31 @@ func processBlockPeriodically() {
 				continue
 			}
 
+			// processSubsequentBlocks returns the next block to process. On a
+			// clean success that is currentBlock+1. On a reorg or a
+			// missing-parent it returns an EARLIER block (the parent), having
+			// rolled back the stale data, so the loop must resume from there
+			// instead of blindly advancing +1. Detect the forward-success case
+			// by comparing the returned value to currentBlock+1.
+			expectedNext := utils.AddHexNumbers(currentBlock, "0x1")
+			if result != expectedNext {
+				// Rollback / re-sync requested: jump to the returned block. Do
+				// NOT run token processing or clear failure tracking for the
+				// current block; it was not advanced past.
+				configs.Logger.Warn("Re-sync point returned (rollback or missing parent), resuming from earlier block",
+					zap.String("from_block", currentBlock),
+					zap.String("resume_block", result))
+				currentBlock = result
+				continue
+			}
+
 			// Clear any previous failure tracking on success
 			clearFailedBlock(currentBlock)
 
 			ProcessTokenTransfersForBlock(currentBlock)
 
-			// Move to next block
-			currentBlock = utils.AddHexNumbers(currentBlock, "0x1")
+			// Move to next block (== result on the success path)
+			currentBlock = result
 		}
 
 		// Attempt to fill any failed blocks from this run
