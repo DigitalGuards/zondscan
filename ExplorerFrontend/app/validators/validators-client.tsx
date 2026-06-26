@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import config from '../../config';
+import type { EpochInfo } from '../types';
 import EpochInfoPanel from './components/EpochInfoPanel';
 import ValidatorStatsCards from './components/ValidatorStatsCards';
 import ValidatorStatusChart from './components/ValidatorStatusChart';
@@ -16,18 +17,6 @@ interface Validator {
   age: number;
   stakedAmount: string;
   isActive: boolean;
-}
-
-interface EpochInfo {
-  headEpoch: string;
-  headSlot: string;
-  finalizedEpoch: string;
-  justifiedEpoch: string;
-  slotsPerEpoch: number;
-  secondsPerSlot: number;
-  slotInEpoch: number;
-  timeToNextEpoch: number;
-  updatedAt: number;
 }
 
 interface ValidatorStats {

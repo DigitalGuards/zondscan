@@ -11,6 +11,15 @@ function keccakHex(sig: string): string {
   return bytesToHex(keccak_256(utf8ToBytes(sig)));
 }
 
+// Canonical transaction-hash shape: "0x" + exactly 64 hex chars. Shared so
+// the tx page, pending-tx page, and search resolver all validate identically.
+export const TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
+
+/** True when `value` is a well-formed "0x"-prefixed 32-byte transaction hash. */
+export function isTxHash(value: string | undefined | null): boolean {
+  return !!value && TX_HASH_RE.test(value);
+}
+
 export function timeAgo(unixSeconds: number): string {
   const now = Math.floor(Date.now() / 1000);
   const diff = now - unixSeconds;

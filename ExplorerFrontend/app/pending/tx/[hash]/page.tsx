@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import config from '../../../../config';
 import type { PendingTransaction } from '@/app/types';
 import { sharedMetadata } from '@/app/lib/seo/metaData';
+import { isTxHash } from '@/app/lib/helpers';
 import PendingTransactionView from './pending-transaction-view';
 
 interface PageProps {
@@ -49,8 +50,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 function validateTransactionHash(hash: string): boolean {
-  const hashRegex = /^0x[0-9a-fA-F]{64}$/;
-  return hashRegex.test(hash);
+  return isTxHash(hash);
 }
 
 async function getTransactionStatus(hash: string): Promise<{
@@ -77,11 +77,11 @@ async function getTransactionStatus(hash: string): Promise<{
       blockNumber: tx.blockNumber,
       targetContract: response.data.targetContract,
     };
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error fetching transaction status:', error);
-    
+
     // If we got a 404, check if it exists in regular transactions
-    if (error.response?.status === 404) {
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
       try {
         const txResponse = await axios.get(`${config.handlerUrl}/tx/${hash}`);
         if (txResponse.data?.response) {

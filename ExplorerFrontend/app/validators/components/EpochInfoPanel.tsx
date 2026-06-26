@@ -1,18 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-
-interface EpochInfo {
-  headEpoch: string;
-  headSlot: string;
-  finalizedEpoch: string;
-  justifiedEpoch: string;
-  slotsPerEpoch: number;
-  secondsPerSlot: number;
-  slotInEpoch: number;
-  timeToNextEpoch: number;
-  updatedAt: number;
-}
+import type { EpochInfo } from '../../types';
 
 interface EpochInfoPanelProps {
   epochInfo: EpochInfo | null;

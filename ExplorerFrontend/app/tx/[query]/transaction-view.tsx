@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import { type TransactionDetails, getConfirmations, getTransactionStatus } from '@/app/types';
 import { formatAmount, formatTokenAmount, decodeEventLog, decodeTokenTransferInput, decodeContractCall } from '../../lib/helpers';
+import { useIsMobile } from '../../lib/hooks';
 import config from '../../../config';
 import CopyButton from '../../components/CopyButton';
 import Breadcrumbs from '../../components/Breadcrumbs';
@@ -84,16 +85,7 @@ interface TransactionViewProps {
 }
 
 export default function TransactionView({ transaction }: TransactionViewProps): JSX.Element {
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkScreenSize = (): void => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    checkScreenSize();
-    window.addEventListener('resize', checkScreenSize);
-    return () => window.removeEventListener('resize', checkScreenSize);
-  }, []);
+  const isMobile = useIsMobile();
 
   // Poll /latestblock so the confirmation count ticks up live; stops
   // once we cross the terminal-confirmations threshold to bound load
