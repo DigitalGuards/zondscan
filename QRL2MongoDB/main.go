@@ -17,18 +17,13 @@ import (
 	"go.uber.org/zap"
 )
 
-// validateEnv fails fast if the env vars the syncer cannot run without are
-// missing. Without this, an empty NODE_URLS/NODE_URL only logs a warning in
+// validateEnv fails fast if the node endpoint env vars are missing. Without
+// this, an empty NODE_URLS/NODE_URL only logs a warning in
 // rpc.newEndpointSelectorFromEnv and the first RPC call returns "no node
 // endpoints configured", so Sync exits silently with no obvious cause.
-// MONGOURI is also required (ConnectDB would already fail without it, but
-// naming the variable here gives an actionable message before any work starts).
-// .env has already been loaded by configs.ConnectDB (via EnvMongoURI) during
-// package init, so os.Getenv here sees any values from the .env file.
+// MONGOURI is validated in configs.ConnectDB, which runs at package init
+// (before main), so it is not rechecked here: a check here would be dead code.
 func validateEnv() {
-	if os.Getenv("MONGOURI") == "" {
-		log.Fatal("Required environment variable MONGOURI is not set")
-	}
 	if os.Getenv("NODE_URLS") == "" && os.Getenv("NODE_URL") == "" {
 		log.Fatal("Required environment variable NODE_URLS (or legacy NODE_URL) is not set")
 	}
