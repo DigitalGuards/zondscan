@@ -8,13 +8,58 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
+	"unicode"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
 )
+
+// maxTokenStringRunes caps the stored length of on-chain token name/symbol
+// strings. On-chain name()/symbol() are attacker-controlled, an unbounded
+// string is both a storage-bloat and a downstream-rendering hazard.
+const maxTokenStringRunes = 128
+
+// sanitizeTokenString cleans an on-chain token name/symbol before it is
+// persisted. It is the single ingestion-time chokepoint for these
+// attacker-controlled strings: every StoreContract write passes through it,
+// so all downstream readers (API JSON, future CSV export, server-rendered
+// templates) receive an already-cleaned value rather than relying on a
+// specific sink to escape it.
+//
+// Behavior:
+//   - strips ASCII/Unicode control characters (C0/C1, DEL, etc.) that have no
+//     legitimate place in a display name and could break a non-JSX sink;
+//   - preserves all legitimate Unicode letters/marks/symbols/punctuation;
+//   - trims leading/trailing whitespace;
+//   - caps the result at maxTokenStringRunes runes (rune-safe, never splits a
+//     multibyte codepoint).
+func sanitizeTokenString(s string) string {
+	if s == "" {
+		return s
+	}
+
+	// Drop control characters; keep everything else (letters, marks, digits,
+	// punctuation, symbols, spaces) intact so legitimate unicode is preserved.
+	cleaned := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
+
+	cleaned = strings.TrimSpace(cleaned)
+
+	// Rune-safe length cap.
+	if runes := []rune(cleaned); len(runes) > maxTokenStringRunes {
+		cleaned = string(runes[:maxTokenStringRunes])
+	}
+
+	return cleaned
+}
 
 // StoreContract stores or merges contract information in the database.
 //
@@ -40,6 +85,12 @@ func StoreContract(contract models.ContractInfo) error {
 	// Normalize addresses to canonical Q-prefix form
 	contract.Address = validation.ConvertToQAddress(contract.Address)
 	contract.CreatorAddress = validation.ConvertToQAddress(contract.CreatorAddress)
+
+	// Sanitize attacker-controlled on-chain token strings at the single
+	// storage chokepoint so every write path (creation tx, reprocess,
+	// classifier) persists a control-char-free, length-capped value.
+	contract.Name = sanitizeTokenString(contract.Name)
+	contract.Symbol = sanitizeTokenString(contract.Symbol)
 
 	collection := configs.GetContractsCollection()
 	filter := bson.M{"address": contract.Address}
@@ -818,9 +869,15 @@ func findCreationTransaction(contractAddress string) *creationTxInfo {
 	}
 }
 
-// StartContractReprocessingJob starts a background job to periodically reprocess incomplete contracts
-func StartContractReprocessingJob() {
+// StartContractReprocessingJob starts a background job to periodically reprocess
+// incomplete contracts. The goroutine returns once stopCh is closed so a
+// graceful shutdown does not start a new reprocess pass while in-flight work
+// is draining.
+func StartContractReprocessingJob(stopCh <-chan struct{}) {
 	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+
 		for {
 			configs.Logger.Info("Starting contract reprocessing job")
 
@@ -829,8 +886,13 @@ func StartContractReprocessingJob() {
 				configs.Logger.Error("Contract reprocessing job failed", zap.Error(err))
 			}
 
-			// Wait for 1 hour before next run
-			time.Sleep(1 * time.Hour)
+			// Wait for 1 hour before next run, or exit early on shutdown.
+			select {
+			case <-ticker.C:
+			case <-stopCh:
+				configs.Logger.Info("Stopping contract reprocessing job on shutdown signal")
+				return
+			}
 		}
 	}()
 }
