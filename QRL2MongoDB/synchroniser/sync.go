@@ -418,6 +418,13 @@ func processSubsequentBlocks(currentBlock string) string {
 				zap.String("rollback_target", rollbackTarget),
 				zap.String("stale_block", parentBlockNum),
 				zap.Error(err))
+			// Rollback did not delete the stale block. Returning parentBlockNum
+			// here would let the BlockExists guard skip the still-present N-1,
+			// advance to N, re-detect the mismatch, and ping-pong forever
+			// without ever repairing the data. Return currentBlock instead so
+			// the next tick retries this same block (and the rollback) until it
+			// succeeds.
+			return currentBlock
 		}
 		// Resume from the rolled-back point: re-sync the stale block (N-1)
 		// first so its parent linkage is rebuilt before N.

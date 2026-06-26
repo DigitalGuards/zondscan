@@ -630,21 +630,23 @@ func Rollback(blockNumber string) error {
 			return nil, err
 		}
 
-		// Delete companion rows for the removed blocks so a rolled-back block
-		// leaves no orphans. All three of these collections key blockNumber as
-		// the raw hex string, so the exact-match $in filter is correct.
+		// Delete the append-only companion rows for the removed blocks so a
+		// rolled-back block leaves no orphan event records. These collections
+		// key blockNumber as the raw hex string, so the exact-match $in filter
+		// is correct (a numeric range would lex-sort hex strings wrong).
 		//
-		// NOT cleaned here (intentional, see report):
-		//   - internalTransactionByAddress stores no block-number field at all
-		//     (only blockTimestamp), so there is nothing to filter on. We do not
-		//     fabricate one. Orphan internal-tx rows may linger after a reorg;
-		//     flagged for manual review.
+		// NOT cleaned here (intentional):
 		//   - tokenBalances is a last-write-wins snapshot keyed on
-		//     (contractAddress, holderAddress), not a per-block append. We delete
-		//     only the snapshots whose last update happened in a rolled-back
-		//     block (blockNumber $in badBlockNumbers); those values are stale and
-		//     get re-derived from RPC when the block is reprocessed. Snapshots
-		//     last touched by an older block are left intact.
+		//     (contractAddress, holderAddress), NOT a per-block append. Deleting
+		//     a holder's snapshot just because its last update landed in a
+		//     rolled-back block would permanently drop a balance the new chain
+		//     may never re-touch (it would read as 0). The syncer re-derives
+		//     balances from RPC whenever a contract is next processed, so a
+		//     left-in-place snapshot self-heals; a deleted one does not. Leave
+		//     it untouched.
+		//   - internalTransactionByAddress stores no block-number field (only
+		//     blockTimestamp), so there is nothing to filter on. Orphan
+		//     internal-tx rows may linger after a reorg; flagged for follow-up.
 		if len(badBlockNumbers) > 0 {
 			companionFilter := bson.M{"blockNumber": bson.M{"$in": badBlockNumbers}}
 
@@ -658,11 +660,6 @@ func Rollback(blockNumber string) error {
 			tokenTransfers := configs.GetTokenTransfersCollection()
 			if _, err := tokenTransfers.DeleteMany(sessCtx, companionFilter); err != nil {
 				return nil, fmt.Errorf("rollback: failed to delete tokenTransfers rows: %w", err)
-			}
-
-			tokenBalances := configs.GetTokenBalancesCollection()
-			if _, err := tokenBalances.DeleteMany(sessCtx, companionFilter); err != nil {
-				return nil, fmt.Errorf("rollback: failed to delete tokenBalances rows: %w", err)
 			}
 		}
 
