@@ -187,10 +187,16 @@ func GetValidatorHistory(limit int) (*models.ValidatorHistoryResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	findOpts := options.Find().SetSort(bson.D{{Key: "epoch", Value: -1}})
-	if limit > 0 {
-		findOpts.SetLimit(int64(limit))
+	// Cap an unbounded request so a limit=0 (or negative) caller can't force a
+	// full-collection scan of validator_history. Explicit small limits are
+	// honoured unchanged.
+	if limit <= 0 {
+		limit = 1000
 	}
+
+	findOpts := options.Find().
+		SetSort(bson.D{{Key: "epoch", Value: -1}}).
+		SetLimit(int64(limit))
 
 	cursor, err := configs.ValidatorHistoryCollection.Find(ctx, bson.M{}, findOpts)
 	if err != nil {

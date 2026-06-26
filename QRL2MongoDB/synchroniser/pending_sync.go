@@ -19,6 +19,11 @@ const (
 	CLEANUP_INTERVAL        = 1 * time.Hour
 	VERIFY_PENDING_INTERVAL = 5 * time.Minute
 	MAX_PENDING_AGE         = 24 * time.Hour
+	// MAX_MINED_TOMBSTONE_AGE is the shorter cutoff for "mined" tombstone
+	// rows. A mined tombstone only needs to outlive the stale-mempool re-insert
+	// race (bounded by MEMPOOL_SYNC_INTERVAL); 1h is a generous margin and
+	// stops mined rows from lingering for the full MAX_PENDING_AGE.
+	MAX_MINED_TOMBSTONE_AGE = 1 * time.Hour
 )
 
 // StartPendingTransactionSync starts the periodic mempool monitoring. The
@@ -34,7 +39,7 @@ func StartPendingTransactionSync(stopCh <-chan struct{}) {
 
 	// Start cleanup of old transactions
 	runPeriodicTask(func() {
-		if err := db.CleanupOldPendingTransactions(MAX_PENDING_AGE); err != nil {
+		if err := db.CleanupOldPendingTransactions(MAX_PENDING_AGE, MAX_MINED_TOMBSTONE_AGE); err != nil {
 			configs.Logger.Error("Failed to cleanup old pending transactions", zap.Error(err))
 		}
 	}, CLEANUP_INTERVAL, "pending cleanup", stopCh)

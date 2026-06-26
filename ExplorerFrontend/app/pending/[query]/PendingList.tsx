@@ -54,6 +54,7 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
     queryFn: () => fetchPendingTransactions(currentPage),
     initialData,
     refetchInterval: 5000,
+    refetchIntervalInBackground: false,
   });
 
   const handleRefresh = async (): Promise<void> => {

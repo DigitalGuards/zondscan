@@ -2,9 +2,17 @@
 
 import React, { useEffect, useRef } from 'react';
 
+interface TradingViewWidgetConstructor {
+  new (config: Record<string, unknown>): unknown;
+}
+
+interface TradingViewNamespace {
+  widget: TradingViewWidgetConstructor;
+}
+
 declare global {
   interface Window {
-    TradingView: any;
+    TradingView?: TradingViewNamespace;
   }
 }
 
