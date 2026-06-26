@@ -57,8 +57,13 @@ type receiptLog struct {
 // field is empty for every historical row, so we resolve it from
 // the live receipt here. Same RPC call that already fetches logs.
 type receiptSummary struct {
-	Status string       `json:"status"`
-	Logs   []receiptLog `json:"logs"`
+	Status string `json:"status"`
+	// GasUsed is the actual gas consumed (hex), distinct from the tx's gas
+	// limit. ReturnSingleTransfer fills Transfer.GasUsed from the block's
+	// `gas` field (the LIMIT) because the block doc has no receipt data; the
+	// /tx route overrides it with this value when the receipt fetch succeeds.
+	GasUsed string       `json:"gasUsed"`
+	Logs    []receiptLog `json:"logs"`
 }
 
 // fetchReceipt pulls a tx's receipt over JSON-RPC and returns the
@@ -133,21 +138,21 @@ func fetchTxInput(ctx context.Context, txHash string) string {
 // picked against those clocks. Anything tagged (*) carries a known
 // staleness trade-off worth being aware of when reasoning about a bug.
 //
-//   key                       TTL  endpoint                  notes
-//   ────────────────────────  ───  ────────────────────────  ─────────────
-//   contracts:counts          30s  /contracts/counts         one $group aggregation; counts shift block-paced
-//   pending-tx:<page>:<lim>    5s  /pending-transactions     mempool turnover ~5s, matches
-//   overview                  10s  /overview                 8 mongo round trips fused; values change slowly
-//   txs:<page>:<lim>          10s  /transactions             (*) embeds latestBlock; lagged confirmation counts up to 10s
-//   addr:<addr>:<page>:<lim>  10s  /address/aggregate/:addr  (*) embeds latestBlock; same trade-off as /transactions
-//   latestblock                5s  /latestblock              hot poller endpoint; 5s = 3x ratio under block time
-//   richlist                  30s  /richlist                 wallet ranking shifts on timescale of minutes
-//   blocks:<page>:<lim>       10s  /blocks                   new block ~15s, list refresh tolerates lag
-//   blocksizes                30s  /blocksizes               precomputed time series; updated by syncer hourly
-//   latest-txs                 5s  /transactions (legacy)    home-page feed, hot path
-//   eta:<hash>                 5s  /pending-tx-eta/:hash     per-tx pending ETA, valid for one block window
-//   gas:summary                5s  /gas/summary              live gas snapshot
-//   gas-history:<range>       30s  /gas-history              precomputed time series; 30s is fine
+//	key                       TTL  endpoint                  notes
+//	────────────────────────  ───  ────────────────────────  ─────────────
+//	contracts:counts          30s  /contracts/counts         one $group aggregation; counts shift block-paced
+//	pending-tx:<page>:<lim>    5s  /pending-transactions     mempool turnover ~5s, matches
+//	overview                  10s  /overview                 8 mongo round trips fused; values change slowly
+//	txs:<page>:<lim>          10s  /transactions             (*) embeds latestBlock; lagged confirmation counts up to 10s
+//	addr:<addr>:<page>:<lim>  10s  /address/aggregate/:addr  (*) embeds latestBlock; same trade-off as /transactions
+//	latestblock                5s  /latestblock              hot poller endpoint; 5s = 3x ratio under block time
+//	richlist                  30s  /richlist                 wallet ranking shifts on timescale of minutes
+//	blocks:<page>:<lim>       10s  /blocks                   new block ~15s, list refresh tolerates lag
+//	blocksizes                30s  /blocksizes               precomputed time series; updated by syncer hourly
+//	latest-txs                 5s  /transactions (legacy)    home-page feed, hot path
+//	eta:<hash>                 5s  /pending-tx-eta/:hash     per-tx pending ETA, valid for one block window
+//	gas:summary                5s  /gas/summary              live gas snapshot
+//	gas-history:<range>       30s  /gas-history              precomputed time series; 30s is fine
 //
 // Staleness contract:
 //   - Endpoints embedding `latestBlock` carry the cache window as their
@@ -193,8 +198,16 @@ func getPaginationParams(c *gin.Context, defaultPage, defaultLimit int) (int, in
 }
 
 func UserRoute(router *gin.Engine) {
-	// Health check endpoint for Kubernetes probes
+	// Health check endpoint for Kubernetes probes. Readiness probe: pings
+	// MongoDB with a short budget so an orchestrator pulls the pod from
+	// rotation when the DB is unreachable. Returns 503 on ping failure.
 	router.GET("/health", func(c *gin.Context) {
+		pingCtx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+		defer cancel()
+		if err := db.PingDatabase(pingCtx); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "error", "error": "database unreachable"})
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
@@ -427,15 +440,7 @@ func UserRoute(router *gin.Engine) {
 	})
 
 	router.GET("/txs", func(c *gin.Context) {
-		pageStr := c.Query("page")
-		page, err := strconv.Atoi(pageStr)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": fmt.Sprintf("Invalid page number: %v", err),
-			})
-			return
-		}
-		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+		page, limit := getPaginationParams(c, 1, 10)
 
 		key := fmt.Sprintf("txs:%d:%d", page, limit)
 		v, err := routeCache.GetOrCompute(key, 10*time.Second, func() (interface{}, error) {
@@ -476,10 +481,14 @@ func UserRoute(router *gin.Engine) {
 		wallets, err := strconv.ParseUint(value, 10, 64)
 		if err != nil {
 			log.Printf("error parsing wallet distribution query: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid count: %v", err)})
+			return
 		}
 		query, err := db.ReturnWalletDistribution(wallets)
 		if err != nil {
 			log.Printf("error fetching wallet distribution: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch wallet distribution"})
+			return
 		}
 		c.JSON(http.StatusOK, gin.H{"response": query})
 	})
@@ -515,9 +524,34 @@ func UserRoute(router *gin.Engine) {
 				log.Printf("error getting transactions: %v", err)
 			}
 
-			internalTransactionsByAddress, err := db.ReturnAllInternalTransactionsByAddress(param, page, limit)
+			internalTxs, err := db.ReturnAllInternalTransactionsByAddress(param, page, limit)
 			if err != nil {
 				log.Printf("error getting internal transactions: %v", err)
+			}
+			// Map the BSON-string internal-tx rows onto the capitalized JSON
+			// keys the frontend's InternalTransaction type consumes. The
+			// previous code returned models.TraceResult ([]byte fields), which
+			// the driver silently dropped to null because the syncer persists
+			// these as strings. Sourcing from models.InternalTx keeps the data
+			// non-null while preserving the existing response field names.
+			internalTransactionsByAddress := make([]gin.H, 0, len(internalTxs))
+			for _, t := range internalTxs {
+				internalTransactionsByAddress = append(internalTransactionsByAddress, gin.H{
+					"Type":                      t.Type,
+					"CallType":                  t.CallType,
+					"Hash":                      t.Hash,
+					"From":                      t.From,
+					"To":                        t.To,
+					"Input":                     t.Input,
+					"Output":                    t.Output,
+					"Value":                     t.Value,
+					"Gas":                       t.Gas,
+					"GasUsed":                   t.GasUsed,
+					"AddressFunctionIdentifier": t.AddressFunctionIdentifier,
+					"AmountFunctionIdentifier":  t.AmountFunctionIdentifier,
+					"BlockTimestamp":            t.BlockTimestamp,
+					"TraceAddress":              t.TraceAddress,
+				})
 			}
 
 			contractCodeData, err := db.ReturnContractCode(param)
@@ -621,6 +655,15 @@ func UserRoute(router *gin.Engine) {
 		}()
 		rpcWG.Wait()
 		logs := receipt.Logs
+
+		// ReturnSingleTransfer fills query.GasUsed from the block's gas LIMIT
+		// (the block doc carries no receipt). Override it with the actual gas
+		// consumed from the receipt when present so the tx page shows the real
+		// figure. For a plain transfer this equals the limit (21000), so the
+		// simple-transfer case is unaffected.
+		if receipt.GasUsed != "" {
+			query.GasUsed = receipt.GasUsed
+		}
 
 		// Attach per-log + per-target contract metadata so the frontend
 		// can decode unknown event signatures + method selectors when the
@@ -784,8 +827,8 @@ func UserRoute(router *gin.Engine) {
 				return nil, fmt.Errorf("invalid block number format in sync state: %w", err)
 			}
 			return gin.H{
-				"blockNumber":  num,
-				"qrlUsdPrice":  db.GetCurrentPrice(),
+				"blockNumber": num,
+				"qrlUsdPrice": db.GetCurrentPrice(),
 			}, nil
 		})
 		if err != nil {
@@ -798,8 +841,13 @@ func UserRoute(router *gin.Engine) {
 	router.GET("/coinbase/:query", func(c *gin.Context) {
 		value := c.Param("query")
 		query, err := db.ReturnSingleTransfer(value)
-		if err != nil {
+		// A missing tx is not a server fault: keep the historical 200-with-empty
+		// behavior for not-found. Any other DB error becomes a 500 instead of a
+		// misleading 200.
+		if err != nil && err != mongo.ErrNoDocuments {
 			log.Printf("error fetching coinbase transfer %s: %v", value, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch transfer"})
+			return
 		}
 		c.JSON(http.StatusOK, gin.H{"response": query})
 	})
@@ -1099,43 +1147,6 @@ func UserRoute(router *gin.Engine) {
 		c.JSON(http.StatusOK, gin.H{
 			"response": query,
 			"total":    total,
-		})
-	})
-
-	// NOTE: /debug/blocks exposes internal sync state. In production this endpoint
-	// MUST be placed behind authentication middleware or removed entirely to prevent
-	// information disclosure to unauthenticated callers.
-	router.GET("/debug/blocks", func(c *gin.Context) {
-		count, err := db.CountBlocksNetwork()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to count blocks: %v", err),
-				"step":  "count_blocks",
-			})
-			return
-		}
-
-		latestBlockNumber, err := db.GetLatestBlockFromSyncState()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":       fmt.Sprintf("Failed to get latest block: %v", err),
-				"step":        "get_latest",
-				"block_count": count,
-			})
-			return
-		}
-
-		latestBlockNum, err := parseHexBlockNumber(latestBlockNumber)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to parse block number: %v", err),
-			})
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"total_blocks": count,
-			"latest_block": latestBlockNum,
 		})
 	})
 
@@ -1593,15 +1604,15 @@ func UserRoute(router *gin.Engine) {
 			}
 
 			return gin.H{
-				"avgGasPriceHex":             headlineHex,
-				"recentTxMedianHex":          "0x" + recentTxMedian.Text(16),
-				"recentTxSampleSize":         len(recentTxPrices),
-				"recentMedianGasPriceHex":    "0x" + blockStats.MedianTxGasPrice.Text(16),
-				"mempoolMedianGasPriceHex":   "0x" + mp.MedianGasPrice.Text(16),
-				"recentTxCount":              blockStats.TxCount,
+				"avgGasPriceHex":           headlineHex,
+				"recentTxMedianHex":        "0x" + recentTxMedian.Text(16),
+				"recentTxSampleSize":       len(recentTxPrices),
+				"recentMedianGasPriceHex":  "0x" + blockStats.MedianTxGasPrice.Text(16),
+				"mempoolMedianGasPriceHex": "0x" + mp.MedianGasPrice.Text(16),
+				"recentTxCount":            blockStats.TxCount,
 				// QRL/USD spot price (last coingecko sample). Used by the
 				// frontend to convert gas prices into USD transfer costs.
-				"qrlUsdPrice":                db.GetCurrentPrice(),
+				"qrlUsdPrice":        db.GetCurrentPrice(),
 				"avgGasUsedHex":      "0x" + blockStats.AvgGasUsed.Text(16),
 				"avgGasLimitHex":     "0x" + blockStats.AvgGasLimit.Text(16),
 				"avgBlockTimeSec":    blockStats.AvgBlockTimeSec,

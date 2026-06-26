@@ -135,6 +135,12 @@ const formatTokenAmount = (amount: string, decimals: number): string => {
     return parts.join('.');
 };
 
+// Only render contract-supplied metadata URLs that use an http(s) scheme.
+// metadataExternalURL is attacker-controlled (it comes from the on-chain
+// contractURI JSON), so blocking javascript:/data: and other schemes here
+// prevents the anchor from becoming an XSS vector.
+const isHttpUrl = (u?: string): boolean => !!u && /^https?:\/\//i.test(u);
+
 const formatTimestamp = (timestamp: string): string => {
     if (!timestamp) return 'Unknown';
 
@@ -375,7 +381,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                             {rawSymbol}
                                         </span>
                                     )}
-                                    {metaExternalURL && (
+                                    {isHttpUrl(metaExternalURL) && (
                                         <a
                                             href={metaExternalURL}
                                             target="_blank"

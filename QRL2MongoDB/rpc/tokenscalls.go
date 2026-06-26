@@ -183,8 +183,8 @@ func DetectContractType(addr string) (ContractDetectionResult, error) {
 		return ContractDetectionResult{}, fmt.Errorf("supportsInterface(ERC-1155): %w", err)
 	}
 	if supports {
-		name, _ := GetTokenName(addr)     // best-effort; many ERC-1155s omit name()
-		symbol, _ := GetTokenSymbol(addr) // best-effort; many ERC-1155s omit symbol()
+		name, _ := GetTokenName(addr)      // best-effort; many ERC-1155s omit name()
+		symbol, _ := GetTokenSymbol(addr)  // best-effort; many ERC-1155s omit symbol()
 		metaURI, _ := GetContractURI(addr) // best-effort; many collections omit contractURI()
 		return ContractDetectionResult{
 			Standard:    StandardERC1155,
@@ -624,23 +624,24 @@ func TrimLeftZeros(hex string) string {
 // ParseTransferEvent parses a transfer event log.
 // Addresses are returned in canonical Q-prefix form.
 func ParseTransferEvent(log models.Log) (string, string, *big.Int, error) {
-	// Extract addresses from topics (32-byte padded, take last 40 hex chars)
-	from := "Q" + strings.ToLower(log.Topics[1][26:])
-	to := "Q" + strings.ToLower(log.Topics[2][26:])
-
-	// Validate addresses
-	if !validation.IsValidAddress(from) {
-		return "", "", nil, fmt.Errorf("invalid from address: %s", from)
+	// Extract addresses from topics via the length-validating helper.
+	if len(log.Topics) < 3 {
+		return "", "", nil, fmt.Errorf("transfer event requires 3 topics, got %d", len(log.Topics))
+	}
+	from, err := addressFromTopic(log.Topics[1])
+	if err != nil {
+		return "", "", nil, fmt.Errorf("from: %w", err)
+	}
+	to, err := addressFromTopic(log.Topics[2])
+	if err != nil {
+		return "", "", nil, fmt.Errorf("to: %w", err)
 	}
 
-	if !validation.IsValidAddress(to) {
-		return "", "", nil, fmt.Errorf("invalid to address: %s", to)
-	}
-
-	// Parse amount from data field
+	// Parse amount from data field. big.Int.SetString rejects the "0x"
+	// prefix at base 16, so strip it first or amount silently stays 0.
 	amount := new(big.Int)
 	if len(log.Data) > 2 {
-		data := log.Data
+		data := strings.TrimPrefix(log.Data, "0x")
 		if _, success := amount.SetString(data, 16); !success {
 			return "", "", nil, fmt.Errorf("failed to parse amount from data: %s", log.Data)
 		}
