@@ -1060,7 +1060,15 @@ func UserRoute(router *gin.Engine) {
 
 	router.GET("/validators", func(c *gin.Context) {
 		pageToken := c.Query("page_token")
-		validatorResponse, err := db.ReturnValidators(pageToken)
+		// ReturnValidators fetches the full validator set (one doc per
+		// validator) and sums TotalStaked, an expensive unsegmented read.
+		// The set only shifts at epoch boundaries (~minutes), so a 30s TTL
+		// caches the full-collection fetch instead of running it per request.
+		// Keyed by page_token so future server-side pagination stays correct.
+		key := "validators:" + pageToken
+		v, err := routeCache.GetOrCompute(key, 30*time.Second, func() (interface{}, error) {
+			return db.ReturnValidators(pageToken)
+		})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": fmt.Sprintf("Failed to fetch validators: %v", err),
@@ -1068,7 +1076,7 @@ func UserRoute(router *gin.Engine) {
 			return
 		}
 
-		c.JSON(http.StatusOK, validatorResponse)
+		c.JSON(http.StatusOK, v)
 	})
 
 	// Get epoch detail by ID
