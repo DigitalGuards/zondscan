@@ -21,6 +21,11 @@ export {
   type BlocksResponse,
 } from './block';
 
+// Epoch types
+export {
+  type EpochInfo,
+} from './epoch';
+
 // Address types
 export {
   type ContractData,

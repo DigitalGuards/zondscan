@@ -4,8 +4,13 @@ import React from "react";
 import Link from "next/link";
 import { toFixed } from "../lib/helpers";
 
+interface RichlistEntry {
+  id: string;
+  balance: string | number;
+}
+
 interface RichlistProps {
-  richlist: any[];
+  richlist: RichlistEntry[];
 }
 
 export default function RichlistClient({ richlist }: RichlistProps): JSX.Element {
@@ -24,7 +29,7 @@ export default function RichlistClient({ richlist }: RichlistProps): JSX.Element
 
   const renderMobileView = (): JSX.Element => (
     <div className="space-y-4">
-      {safeRichlist.map((item: any, index: number) => (
+      {safeRichlist.map((item, index) => (
         <div
           key={item.id}
           className="p-4 rounded-lg border border-[#3d3d3d] bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]"
@@ -89,7 +94,7 @@ export default function RichlistClient({ richlist }: RichlistProps): JSX.Element
           </tr>
         </thead>
         <tbody className="divide-y divide-[#3d3d3d]">
-          {safeRichlist.map((item: any, index: number) => (
+          {safeRichlist.map((item, index) => (
             <tr
               key={item.id}
               className="border-b border-[#3d3d3d] hover:bg-[rgba(255,167,41,0.05)] transition-colors"

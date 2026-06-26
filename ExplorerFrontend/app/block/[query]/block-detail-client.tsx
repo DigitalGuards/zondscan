@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import config from '../../../config';
 import Link from 'next/link';
-import { formatAmount, truncateHash, timeAgo, formatPlanckAdaptive } from '../../lib/helpers';
+import { formatAmount, truncateHash, timeAgo, formatPlanckAdaptive, formatNumberWithCommas, hexToNumber } from '../../lib/helpers';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import DetailRow from '../../components/DetailRow';
 import CopyButton from '../../components/CopyButton';
@@ -66,15 +66,6 @@ type Block = {
 interface BlockDetailClientProps {
   blockNumber: string;
 }
-
-const formatHexValue = (hex: string | null | undefined): string => {
-  if (!hex) return '0';
-  const num = typeof hex === 'string' && hex.startsWith('0x')
-    ? parseInt(hex, 16)
-    : parseInt(hex);
-  if (isNaN(num)) return '0';
-  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-};
 
 const formatTimestampUTC = (timestamp: string | null | undefined): string => {
   if (!timestamp) return 'N/A';
@@ -266,7 +257,7 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
             </svg>
-            <h1 id="block-heading" className="text-xl sm:text-2xl font-bold text-[#ffa729]">Block #{formatHexValue(blockData.number)}</h1>
+            <h1 id="block-heading" className="text-xl sm:text-2xl font-bold text-[#ffa729]">Block #{formatNumberWithCommas(hexToNumber(blockData.number).toString())}</h1>
             {/* Live depth: surfaces how settled this block is. "Latest"
                 when we're looking at the head, otherwise "N
                 confirmations". Hidden until the first /latestblock
@@ -320,8 +311,8 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
           <DetailRow label="Transactions">
             {blockData.transactions?.length ?? 0}
           </DetailRow>
-          <DetailRow label="Gas Used">{formatHexValue(blockData.gasUsed)}</DetailRow>
-          <DetailRow label="Gas Limit">{formatHexValue(blockData.gasLimit)}</DetailRow>
+          <DetailRow label="Gas Used">{formatNumberWithCommas(hexToNumber(blockData.gasUsed).toString())}</DetailRow>
+          <DetailRow label="Gas Limit">{formatNumberWithCommas(hexToNumber(blockData.gasLimit).toString())}</DetailRow>
           <DetailRow label="Base Fee">
             {(() => {
               const [val, unit] = formatPlanckAdaptive(blockData.baseFeePerGas);
