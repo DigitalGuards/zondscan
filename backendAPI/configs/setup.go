@@ -260,6 +260,30 @@ func createIndexes(db *mongo.Database) {
 		},
 	}
 
+	// tokenBalances collection indexes.
+	// holderAddress backs the per-wallet balance reads (GetTokenBalancesByAddress,
+	// GetNFTBalancesByAddress) and the by-holder $group in GetTokenHolders.
+	// contractAddress backs the per-contract reads (GetTokenHolders /
+	// GetTokenInfo holder count). The (contractAddress, tokenID) compound backs
+	// the tokenID-scoped holders path and the GetTokenIDs distinct-id aggregation.
+	tokenBalancesIndexes := []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "holderAddress", Value: 1}},
+			Options: options.Index().SetName("token_balances_holder"),
+		},
+		{
+			Keys:    bson.D{{Key: "contractAddress", Value: 1}},
+			Options: options.Index().SetName("token_balances_contract"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "contractAddress", Value: 1},
+				{Key: "tokenID", Value: 1},
+			},
+			Options: options.Index().SetName("token_balances_contract_tokenid"),
+		},
+	}
+
 	// validators collection indexes (per-document model)
 	validatorsIndexes := []mongo.IndexModel{
 		{
@@ -286,6 +310,7 @@ func createIndexes(db *mongo.Database) {
 		"transfer":                     transferIndexes,
 		"validators":                   validatorsIndexes,
 		"tokenTransfers":               tokenTransfersIndexes,
+		"tokenBalances":                tokenBalancesIndexes,
 	}
 
 	for collName, indexes := range collections {

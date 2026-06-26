@@ -399,8 +399,13 @@ func UserRoute(router *gin.Engine) {
 		// per request. Cache the assembled payload for 10 s so N concurrent
 		// pageviews fan into 1 backend computation.
 		v, err := routeCache.GetOrCompute("overview", 10*time.Second, func() (interface{}, error) {
-			marketCap := db.GetMarketCap()
-			currentPrice := db.GetCurrentPrice()
+			// GetMarketCap / GetCurrentPrice / GetCurrentVolume each issue their
+			// own FindOne against the single coingecko document. Fetch the
+			// snapshot once and reuse it so /overview makes one read instead of
+			// three for the same row.
+			market := db.GetMarketSnapshot()
+			marketCap := market.MarketCapUSD
+			currentPrice := market.PriceUSD
 			walletCount := db.GetWalletCount()
 
 			circulating := db.ReturnTotalCirculatingSupply()
@@ -420,7 +425,7 @@ func UserRoute(router *gin.Engine) {
 				contractCount = 0
 			}
 
-			tradingVolume := db.GetCurrentVolume()
+			tradingVolume := market.VolumeUSD
 
 			return gin.H{
 				"marketcap":      marketCap,

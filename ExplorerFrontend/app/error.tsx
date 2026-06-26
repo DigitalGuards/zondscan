@@ -19,7 +19,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
         <h2 className="text-xl font-semibold text-white mb-2">Something went wrong</h2>
         <p className="text-gray-400 mb-6">An unexpected error occurred while loading this page.</p>
         <div className="flex gap-3 justify-center">
-          <button onClick={reset} className="px-4 py-2 text-sm font-medium rounded-lg bg-[#ffa729] text-black hover:bg-[#ffb952] transition-colors">
+          <button type="button" onClick={reset} className="px-4 py-2 text-sm font-medium rounded-lg bg-[#ffa729] text-black hover:bg-[#ffb952] transition-colors">
             Try again
           </button>
           <Link href="/" className="px-4 py-2 text-sm font-medium rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] hover:text-white transition-colors">

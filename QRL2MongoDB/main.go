@@ -91,28 +91,13 @@ func main() {
 	// now (not just that the process is alive).
 	go func() {
 		http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+			// Probe synchronously under the request context with a 5s cap.
+			// ProbeChainHeadCtx honours ctx for the in-flight HTTP request, so
+			// a client disconnect cancels the probe instead of leaking a
+			// detached goroutine that outlives the handler.
 			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 			defer cancel()
-			done := make(chan struct {
-				height uint64
-				err    error
-			}, 1)
-			go func() {
-				h, e := rpc.ProbeChainHead()
-				done <- struct {
-					height uint64
-					err    error
-				}{h, e}
-			}()
-			var height uint64
-			var probeErr error
-			select {
-			case <-ctx.Done():
-				probeErr = ctx.Err()
-			case res := <-done:
-				height = res.height
-				probeErr = res.err
-			}
+			height, probeErr := rpc.ProbeChainHeadCtx(ctx)
 
 			w.Header().Set("Content-Type", "application/json")
 			payload := map[string]interface{}{
