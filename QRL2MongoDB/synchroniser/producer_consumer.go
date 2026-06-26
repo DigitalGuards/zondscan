@@ -87,11 +87,37 @@ func consumer(ch <-chan (<-chan Data)) {
 						continue
 					}
 
+					// Snapshot which blocks already exist BEFORE the InsertMany.
+					// After InsertManyBlockDocuments runs, every block in the
+					// batch is present, so checking existence afterward would
+					// also skip ProcessTransactions for legitimately new blocks.
+					// Capturing it up front lets us skip ProcessTransactions only
+					// for blocks that were already synced (crash/restart during
+					// catch-up, overlapping ranges), matching the BlockExists
+					// idempotency guard in sync.go and gap_detection.go.
+					// ProcessTransactions has no unique index on txHash, so
+					// re-running it on an already-synced block duplicates
+					// transfer + transactionByAddress rows. One $in query keeps
+					// this to a single round-trip instead of N per batch.
+					blockNumbers := make([]string, len(blocks))
+					for x := 0; x < len(blocks); x++ {
+						blockNumbers[x] = blocks[x].Result.Number
+					}
+					alreadyExists, err := db.BlocksExist(blockNumbers)
+					if err != nil {
+						configs.Logger.Error("Failed to check existing blocks in batch", zap.Error(err))
+					}
+
 					db.InsertManyBlockDocuments(data.blockData)
 					configs.Logger.Info("Inserted block batch",
 						zap.Int("count", len(data.blockData)))
 
 					for x := 0; x < len(blocks); x++ {
+						if alreadyExists[blocks[x].Result.Number] {
+							configs.Logger.Info("Batch block already processed, skipping transaction processing",
+								zap.String("block", blocks[x].Result.Number))
+							continue
+						}
 						db.ProcessTransactions(blocks[x])
 						// Tombstone any pending rows whose hashes are in this
 						// block. The single-block path (sync.go) calls this
