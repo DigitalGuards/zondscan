@@ -3,6 +3,7 @@ package routes
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -113,7 +114,8 @@ func RegisterVerificationRoutes(router *gin.Engine) {
 			},
 		}
 		if err := db.CreateVerificationJob(job); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "create job: " + err.Error()})
+			log.Printf("create verification job %s: %v", jobID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
 
@@ -130,7 +132,8 @@ func RegisterVerificationRoutes(router *gin.Engine) {
 		jobID := c.Param("jobId")
 		job, err := db.GetVerificationJob(jobID)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "lookup: " + err.Error()})
+			log.Printf("lookup verification job %s: %v", jobID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
 		if job == nil {

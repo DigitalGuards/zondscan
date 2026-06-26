@@ -95,7 +95,7 @@ func GetPriceHistory(interval string) ([]models.PriceHistory, error) {
 		limit = 1440 // ~30 min intervals for 30 days
 	case "all":
 		since = time.Time{} // Beginning of time
-		limit = 0           // No limit
+		limit = 5000        // Hard cap so an unbounded scan can't grow without limit
 	default:
 		// Default to 24h
 		since = now.Add(-24 * time.Hour)

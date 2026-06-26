@@ -94,7 +94,7 @@ async function getTransactionStatus(hash: string): Promise<{
               blockNumber: tx.blockNumber?.toString(),
               accessList: [],
               blockHash: null,
-              chainId: '0x7e7e', // Zond chainId
+              chainId: '0x539', // QRL testnet v2 chainId (1337)
               from: tx.from || '',
               gas: tx.gas || '0x0',
               gasPrice: tx.gasPrice || '0x0',

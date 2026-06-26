@@ -103,10 +103,20 @@ func CountValidators() (int64, error) {
 }
 
 // HexToInt converts a hex string (with or without 0x prefix) to int64.
+// Parses as unsigned first: ParseInt returns 0 for any value with the high
+// bit set (block numbers near 2^63), which would silently zero the epoch
+// math downstream. Values that overflow int64 are clamped to math.MaxInt64
+// so the result stays usable for the /128 epoch division callers perform.
 func HexToInt(hexStr string) int64 {
 	hexStr = strings.TrimPrefix(hexStr, "0x")
-	num, _ := strconv.ParseInt(hexStr, 16, 64)
-	return num
+	num, err := strconv.ParseUint(hexStr, 16, 64)
+	if err != nil {
+		return 0
+	}
+	if num > math.MaxInt64 {
+		return math.MaxInt64
+	}
+	return int64(num)
 }
 
 // FAR_FUTURE_EPOCH represents a validator that hasn't exited.
@@ -386,7 +396,7 @@ func GetEpochDetail(epochId string) (*models.EpochDetailResponse, error) {
 	blockMap := make(map[int64]models.EpochDetailBlock)
 	for cursor.Next(ctx) {
 		var doc struct {
-			BlockNumberInt int64        `bson:"blockNumberInt"`
+			BlockNumberInt int64         `bson:"blockNumberInt"`
 			Result         models.Result `bson:"result"`
 		}
 		if err := cursor.Decode(&doc); err != nil {
@@ -481,8 +491,8 @@ func GetValidatorStats() (*models.ValidatorStatsResponse, error) {
 					"branches": []bson.M{
 						{
 							// slashed
-							"case":  bson.M{"$eq": []interface{}{"$slashed", true}},
-							"then":  "slashed",
+							"case": bson.M{"$eq": []interface{}{"$slashed", true}},
+							"then": "slashed",
 						},
 						{
 							// pending: activationEpoch > currentEpoch
@@ -503,8 +513,8 @@ func GetValidatorStats() (*models.ValidatorStatsResponse, error) {
 			},
 		}}},
 		bson.D{{Key: "$group", Value: bson.M{
-			"_id":          "$_computedStatus",
-			"count":        bson.M{"$sum": 1},
+			"_id":   "$_computedStatus",
+			"count": bson.M{"$sum": 1},
 			// We sum effective balance as strings; MongoDB can't do numeric sum on
 			// decimal-string fields, so we fall back to a cursor scan for totalStaked.
 		}}},
@@ -545,7 +555,7 @@ func GetValidatorStats() (*models.ValidatorStatsResponse, error) {
 	// so we convert with $toLong inside the pipeline.
 	sumPipeline := mongo.Pipeline{
 		bson.D{{Key: "$group", Value: bson.M{
-			"_id": nil,
+			"_id":         nil,
 			"totalStaked": bson.M{"$sum": bson.M{"$toLong": "$effectiveBalance"}},
 		}}},
 	}

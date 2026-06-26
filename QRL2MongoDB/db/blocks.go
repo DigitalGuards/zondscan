@@ -609,7 +609,8 @@ func Rollback(blockNumber string) error {
 		return fmt.Errorf("rollback: block number cannot be negative: %d", rollbackTo)
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 
 	filter := bson.M{
 		"blockNumberInt": bson.M{
