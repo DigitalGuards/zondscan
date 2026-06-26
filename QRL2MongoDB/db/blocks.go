@@ -351,6 +351,45 @@ func StoreInitialSyncStartBlock(blockNumber string) error {
 }
 
 // BlockExists checks if a block with the given number already exists in the database
+// BlocksExist returns the set of the given block numbers that already exist in
+// the blocks collection, as a map[blockNumber]bool. It runs a single $in query
+// rather than one round-trip per block, so the batch consumer can check a whole
+// batch (128/256 blocks) at once. A block absent from the returned map is not
+// present in the DB. On query error it returns a nil map (callers treat every
+// block as new, i.e. reprocess, which is the safe direction).
+func BlocksExist(blockNumbers []string) (map[string]bool, error) {
+	if len(blockNumbers) == 0 {
+		return map[string]bool{}, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	filter := bson.M{"result.number": bson.M{"$in": blockNumbers}}
+	projection := options.Find().SetProjection(bson.M{"result.number": 1, "_id": 0})
+
+	cursor, err := configs.BlocksCollections.Find(ctx, filter, projection)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var results []struct {
+		Result struct {
+			Number string `bson:"number"`
+		} `bson:"result"`
+	}
+	if err := cursor.All(ctx, &results); err != nil {
+		return nil, err
+	}
+
+	existsMap := make(map[string]bool, len(results))
+	for _, r := range results {
+		existsMap[r.Result.Number] = true
+	}
+	return existsMap, nil
+}
+
 func BlockExists(blockNumber string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -595,8 +634,20 @@ func Rollback(blockNumber string) error {
 		return err
 	}
 
-	// Log blocks being removed
+	// Collect the exact hex block-number strings of the blocks being removed.
+	// The companion collections (transfer, transactionByAddress,
+	// tokenTransfers, tokenBalances) store blockNumber as the raw hex string
+	// (e.g. "0x1a2b"), NOT an int, so a numeric $gt range filter like the one
+	// used on the blocks collection would be unsafe here (hex strings lex-sort
+	// wrong, "0xa" > "0x100"). Matching the exact set of removed block numbers
+	// with $in is precise: it deletes rows for the rolled-back blocks and
+	// nothing else.
+	badBlockNumbers := make([]string, 0, len(blocks))
 	for _, block := range blocks {
+		if block.Result.Number != "" {
+			badBlockNumbers = append(badBlockNumbers, block.Result.Number)
+		}
+		// Log blocks being removed
 		configs.Logger.Info("Rolling back block",
 			zap.String("number", block.Result.Number),
 			zap.String("hash", block.Result.Hash))
@@ -616,6 +667,44 @@ func Rollback(blockNumber string) error {
 		_, err := configs.BlocksCollections.DeleteMany(sessCtx, filter)
 		if err != nil {
 			return nil, err
+		}
+
+		// Delete the append-only companion rows for the removed blocks so a
+		// rolled-back block leaves no orphan event records. These collections
+		// key blockNumber as the raw hex string, so the exact-match $in filter
+		// is correct (a numeric range would lex-sort hex strings wrong).
+		//
+		// NOT cleaned here (intentional):
+		//   - tokenBalances is a last-write-wins snapshot keyed on
+		//     (contractAddress, holderAddress), NOT a per-block append. Deleting
+		//     a holder's snapshot just because its last update landed in a
+		//     rolled-back block would permanently drop a balance the new chain
+		//     may never re-touch (it would read as 0). The syncer re-derives
+		//     balances from RPC whenever a contract is next processed, so a
+		//     left-in-place snapshot self-heals; a deleted one does not. Leave
+		//     it untouched.
+		//
+		// internalTransactionByAddress now stores blockNumber (raw hex string),
+		// so it is cleaned here too. Rows written by an older syncer before that
+		// field existed lack blockNumber and will not match the $in filter, so
+		// pre-existing orphans cannot be cleaned retroactively; that is expected.
+		if len(badBlockNumbers) > 0 {
+			companionFilter := bson.M{"blockNumber": bson.M{"$in": badBlockNumbers}}
+
+			if _, err := configs.TransferCollections.DeleteMany(sessCtx, companionFilter); err != nil {
+				return nil, fmt.Errorf("rollback: failed to delete transfer rows: %w", err)
+			}
+			if _, err := configs.TransactionByAddressCollections.DeleteMany(sessCtx, companionFilter); err != nil {
+				return nil, fmt.Errorf("rollback: failed to delete transactionByAddress rows: %w", err)
+			}
+			if _, err := configs.InternalTransactionByAddressCollections.DeleteMany(sessCtx, companionFilter); err != nil {
+				return nil, fmt.Errorf("rollback: failed to delete internalTransactionByAddress rows: %w", err)
+			}
+
+			tokenTransfers := configs.GetTokenTransfersCollection()
+			if _, err := tokenTransfers.DeleteMany(sessCtx, companionFilter); err != nil {
+				return nil, fmt.Errorf("rollback: failed to delete tokenTransfers rows: %w", err)
+			}
 		}
 
 		// Update sync state

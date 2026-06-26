@@ -837,6 +837,11 @@ func GetNFTBalancesByAddress(address string, standardFilter *string) ([]models.N
 			{Key: "tokenIDLen", Value: 1},
 			{Key: "tokenID", Value: 1},
 		}},
+		// Bound the materialized result set. Without a cap a wallet holding
+		// thousands of NFT rows forces Mongo to sort + stream every row on
+		// each request. 500 covers any realistic single-wallet picker view;
+		// the route is not paginated so this is a hard ceiling, not a page.
+		{"$limit": 500},
 		{"$project": bson.M{"tokenIDLen": 0}},
 	}
 

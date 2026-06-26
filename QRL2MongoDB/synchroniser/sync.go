@@ -246,7 +246,6 @@ func Sync() {
 	singleBlockInsertion()
 }
 
-
 // findHighestProcessedBlock finds the highest block number that exists in the database
 func findHighestProcessedBlock() string {
 	// First try to get the last synced block from the database
@@ -405,14 +404,52 @@ func processSubsequentBlocks(currentBlock string) string {
 			zap.String("expected_parent", dbParentHash),
 			zap.String("actual_parent", blockData.Result.ParentHash))
 
-		// Roll back one block and try again
-		err = db.Rollback(currentBlock)
+		// Reorg: block N (currentBlock) does not build on the stored block N-1
+		// (parentBlockNum), so the stored N-1 is stale and must be removed.
+		// Rollback deletes blocks with blockNumberInt > arg (strict $gt), so to
+		// include N-1 in the deletion set we pass N-2 (parentBlockNum - 0x1).
+		// Rollback then deletes every block >= N-1 (i.e. the stale N-1 and any
+		// stragglers above it) and resets the sync state to N-2, so the
+		// continuous loop re-syncs starting at N-1.
+		rollbackTarget := utils.SubtractHexNumbers(parentBlockNum, "0x1")
+		err = db.Rollback(rollbackTarget)
 		if err != nil {
 			configs.Logger.Error("Failed to rollback block",
-				zap.String("block", currentBlock),
+				zap.String("rollback_target", rollbackTarget),
+				zap.String("stale_block", parentBlockNum),
 				zap.Error(err))
+			// Rollback did not delete the stale block. Returning parentBlockNum
+			// here would let the BlockExists guard skip the still-present N-1,
+			// advance to N, re-detect the mismatch, and ping-pong forever
+			// without ever repairing the data. Return currentBlock instead so
+			// the next tick retries this same block (and the rollback) until it
+			// succeeds.
+			return currentBlock
 		}
+		// Resume from the rolled-back point: re-sync the stale block (N-1)
+		// first so its parent linkage is rebuilt before N.
 		return parentBlockNum
+	}
+
+	// Idempotency guard: if this block is already stored, skip BOTH the block
+	// insert and ProcessTransactions together. InsertBlockDocument already
+	// no-ops on an existing block, but ProcessTransactions used to run
+	// unconditionally right after, duplicating transfer + transactionByAddress
+	// rows (which have no unique index on txHash) on any re-process: retry
+	// after a partial failure, node restart, or gap-fill overlap. Guarding both
+	// with one BlockExists check keeps them consistent.
+	//
+	// This does NOT block the reorg re-sync path above: Rollback deletes the
+	// stale block first, so BlockExists returns false on the subsequent
+	// reprocess and the block is re-inserted correctly.
+	if db.BlockExists(currentBlock) {
+		configs.Logger.Info("Block already processed, skipping insert and transaction processing",
+			zap.String("block", currentBlock),
+			zap.String("hash", blockData.Result.Hash))
+		// Still advance the sync state and return the next block so the caller
+		// continues forward rather than re-checking the same block.
+		db.StoreLastKnownBlockNumber(currentBlock)
+		return utils.AddHexNumbers(currentBlock, "0x1")
 	}
 
 	// Process the block
@@ -437,4 +474,3 @@ func processSubsequentBlocks(currentBlock string) string {
 	// Return next block number
 	return utils.AddHexNumbers(currentBlock, "0x1")
 }
-
