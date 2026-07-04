@@ -37,7 +37,7 @@ resolve() {
 # --- Reboot detection ---
 # btime in /proc/stat is the boot epoch. Persist outside /tmp so reboots
 # (which wipe /tmp) are detectable on the next monitor tick.
-BOOT_FILE="/home/ops/.monitor-last-boot"
+BOOT_FILE="$HOME/.monitor-last-boot"
 CUR_BTIME=$(awk '/^btime / {print $2}' /proc/stat)
 if [ -n "$CUR_BTIME" ]; then
     PREV_BTIME=$(cat "$BOOT_FILE" 2>/dev/null || echo "")
@@ -116,18 +116,25 @@ else
     fi
 
     # --- One-shot sync completion: notify + deploy zondscan ---
-    SYNC_DONE_FLAG="/tmp/monitor-sync-complete"
+    # Persist outside /tmp: a reboot wipes /tmp, and the node is already synced
+    # post-reboot, so a /tmp-based flag would re-trigger the DB wipe every time.
+    SYNC_DONE_FLAG="$HOME/.monitor-sync-complete"
     if [ ! -f "$SYNC_DONE_FLAG" ]; then
         # Node is synced (qrl_syncing returns false) and has enough blocks
         if [ "$SYNC_RESULT" = "False" ] && [ "$NODE_BLOCK" -gt 100 ]; then
             touch "$SYNC_DONE_FLAG"
             # Wipe old data and start zondscan
-            mongosh --quiet --eval "db.getSiblingDB('qrldata-z').dropDatabase()" >/dev/null 2>&1
-            pm2 restart synchroniser handler frontend >/dev/null 2>&1
-            pm2 save >/dev/null 2>&1
-            curl -s -H "Content-Type: application/json" \
-                -d "{\"content\":\"🎉 **Sync Complete** ($(hostname))\\nNode fully synced on chain ID 1337 (block $NODE_BLOCK).\\nZondscan deployed, syncer, handler, frontend started. MongoDB wiped for clean re-index.\"}" \
-                "$WEBHOOK" >/dev/null
+            if mongosh --quiet --eval "db.getSiblingDB('qrldata-z').dropDatabase()" >/dev/null 2>&1; then
+                pm2 restart synchroniser handler frontend >/dev/null 2>&1
+                pm2 save >/dev/null 2>&1
+                curl -s -H "Content-Type: application/json" \
+                    -d "{\"content\":\"🎉 **Sync Complete** ($(hostname))\\nNode fully synced on chain ID 1337 (block $NODE_BLOCK).\\nZondscan deployed, syncer, handler, frontend started. MongoDB wiped for clean re-index.\"}" \
+                    "$WEBHOOK" >/dev/null
+            else
+                curl -s -H "Content-Type: application/json" \
+                    -d "{\"content\":\"⚠️ **Sync Complete (wipe failed)** ($(hostname))\\nNode fully synced (block $NODE_BLOCK), but MongoDB dropDatabase failed. Services NOT restarted.\"}" \
+                    "$WEBHOOK" >/dev/null
+            fi
         fi
     fi
 fi
