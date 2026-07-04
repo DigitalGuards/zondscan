@@ -34,8 +34,27 @@ resolve() {
     fi
 }
 
+# --- Reboot detection ---
+# btime in /proc/stat is the boot epoch. Persist outside /tmp so reboots
+# (which wipe /tmp) are detectable on the next monitor tick.
+BOOT_FILE="/home/ops/.monitor-last-boot"
+CUR_BTIME=$(awk '/^btime / {print $2}' /proc/stat)
+if [ -n "$CUR_BTIME" ]; then
+    PREV_BTIME=$(cat "$BOOT_FILE" 2>/dev/null || echo "")
+    if [ -z "$PREV_BTIME" ]; then
+        echo "$CUR_BTIME" > "$BOOT_FILE"
+    elif [ "$CUR_BTIME" != "$PREV_BTIME" ]; then
+        BOOT_TS=$(date -d "@$CUR_BTIME" '+%Y-%m-%d %H:%M:%S %Z')
+        UPTIME=$(uptime -p)
+        curl -s -H "Content-Type: application/json" \
+            -d "{\"content\":\"🔄 **Reboot detected** ($(hostname))\\nBoot time: $BOOT_TS\\n$UPTIME\"}" \
+            "$WEBHOOK" >/dev/null
+        echo "$CUR_BTIME" > "$BOOT_FILE"
+    fi
+fi
+
 # --- PM2 Process Checks ---
-for proc in qrl-gqrl qrl-beacon syncer handler frontend; do
+for proc in synchroniser handler frontend; do
     status=$(pm2 jlist 2>/dev/null | python3 -c "
 import sys,json
 procs = json.load(sys.stdin)
@@ -94,6 +113,40 @@ else
         else
             resolve "syncer-behind" "Syncer caught up (block $SYNCER_BLOCK)"
         fi
+    fi
+
+    # --- One-shot sync completion: notify + deploy zondscan ---
+    SYNC_DONE_FLAG="/tmp/monitor-sync-complete"
+    if [ ! -f "$SYNC_DONE_FLAG" ]; then
+        # Node is synced (qrl_syncing returns false) and has enough blocks
+        if [ "$SYNC_RESULT" = "False" ] && [ "$NODE_BLOCK" -gt 100 ]; then
+            touch "$SYNC_DONE_FLAG"
+            # Wipe old data and start zondscan
+            mongosh --quiet --eval "db.getSiblingDB('qrldata-z').dropDatabase()" >/dev/null 2>&1
+            pm2 restart synchroniser handler frontend >/dev/null 2>&1
+            pm2 save >/dev/null 2>&1
+            curl -s -H "Content-Type: application/json" \
+                -d "{\"content\":\"🎉 **Sync Complete** ($(hostname))\\nNode fully synced on chain ID 1337 (block $NODE_BLOCK).\\nZondscan deployed, syncer, handler, frontend started. MongoDB wiped for clean re-index.\"}" \
+                "$WEBHOOK" >/dev/null
+        fi
+    fi
+fi
+
+# --- Remote beacon API responsive ---
+# qrysm's /eth/v1/* paths return 404; /qrl/v1alpha1/beacon/chainhead is the canonical liveness probe.
+# Beacon is flaky under sync load, debounce: only alert after threshold consecutive failures.
+BEACON_FAIL_FILE="/tmp/monitor-beacon-fail-count"
+BEACON_FAIL_THRESHOLD=10
+HTTP_CODE=$(curl -sf --max-time 10 -o /dev/null -w "%{http_code}" http://127.0.0.1:3500/qrl/v1alpha1/beacon/chainhead)
+if [ "$HTTP_CODE" = "200" ]; then
+    rm -f "$BEACON_FAIL_FILE"
+    resolve "beacon-down" "Beacon API is responding again"
+else
+    BEACON_FAIL_COUNT=$(cat "$BEACON_FAIL_FILE" 2>/dev/null || echo 0)
+    BEACON_FAIL_COUNT=$((BEACON_FAIL_COUNT + 1))
+    echo "$BEACON_FAIL_COUNT" > "$BEACON_FAIL_FILE"
+    if [ "$BEACON_FAIL_COUNT" -ge "$BEACON_FAIL_THRESHOLD" ]; then
+        alert "beacon-down" "**Beacon API** (127.0.0.1:3500) not responding (HTTP $HTTP_CODE, ${BEACON_FAIL_COUNT}min consecutive)"
     fi
 fi
 
