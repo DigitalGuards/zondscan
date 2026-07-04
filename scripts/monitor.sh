@@ -37,7 +37,7 @@ resolve() {
 # Debounced check: requires $threshold consecutive failing ticks before
 # alerting, so a single transient blip (a deploy restart, a GC pause) doesn't
 # page anyone. Passes reset the streak and resolve immediately.
-FAIL_COUNT_DIR="/tmp/monitor-fail-counts"
+FAIL_COUNT_DIR="/tmp/monitor-fail-counts-$(id -u)"
 mkdir -p "$FAIL_COUNT_DIR"
 
 check_debounced() {
