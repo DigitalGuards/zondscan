@@ -34,6 +34,32 @@ resolve() {
     fi
 }
 
+# Debounced check: requires $threshold consecutive failing ticks before
+# alerting, so a single transient blip (a deploy restart, a GC pause) doesn't
+# page anyone. Passes reset the streak and resolve immediately.
+FAIL_COUNT_DIR="/tmp/monitor-fail-counts"
+mkdir -p "$FAIL_COUNT_DIR"
+
+check_debounced() {
+    local key="$1"
+    local threshold="$2"
+    local passed="$3"    # "pass" or "fail"
+    local alert_msg="$4"
+    local resolve_msg="$5"
+    local fail_file="$FAIL_COUNT_DIR/$key"
+
+    if [ "$passed" = "pass" ]; then
+        rm -f "$fail_file"
+        resolve "$key" "$resolve_msg"
+    else
+        local count=$(( $(cat "$fail_file" 2>/dev/null || echo 0) + 1 ))
+        echo "$count" > "$fail_file"
+        if [ "$count" -ge "$threshold" ]; then
+            alert "$key" "$alert_msg"
+        fi
+    fi
+}
+
 # --- Reboot detection ---
 # btime in /proc/stat is the boot epoch. Persist outside /tmp so reboots
 # (which wipe /tmp) are detectable on the next monitor tick.
@@ -67,9 +93,9 @@ else:
 " 2>/dev/null || echo "error")
 
     if [ "$status" = "online" ]; then
-        resolve "pm2-$proc" "$proc is back online"
+        check_debounced "pm2-$proc" 2 "pass" "" "$proc is back online"
     else
-        alert "pm2-$proc" "**$proc** is $status"
+        check_debounced "pm2-$proc" 2 "fail" "**$proc** is $status" ""
     fi
 done
 
@@ -79,9 +105,9 @@ BLOCK_HEX=$(curl -sf --max-time 5 -X POST -H "Content-Type: application/json" \
     http://127.0.0.1:8545 | python3 -c "import sys,json; print(json.load(sys.stdin)['result'])" 2>/dev/null)
 
 if [ -z "$BLOCK_HEX" ]; then
-    alert "rpc-down" "**gqrl RPC** not responding on :8545"
+    check_debounced "rpc-down" 2 "fail" "**gqrl RPC** not responding on :8545" ""
 else
-    resolve "rpc-down" "gqrl RPC is responding again"
+    check_debounced "rpc-down" 2 "pass" "" "gqrl RPC is responding again"
     NODE_BLOCK=$((16#${BLOCK_HEX#0x}))
 
     # --- Sync check: is node behind network? ---
@@ -137,41 +163,34 @@ fi
 
 # --- Remote beacon API responsive ---
 # qrysm's /eth/v1/* paths return 404; /qrl/v1alpha1/beacon/chainhead is the canonical liveness probe.
-# Beacon is flaky under sync load, debounce: only alert after threshold consecutive failures.
-BEACON_FAIL_FILE="/tmp/monitor-beacon-fail-count"
+# Beacon is flaky under sync load, so it gets a longer debounce than the other checks.
 BEACON_FAIL_THRESHOLD=10
 HTTP_CODE=$(curl -sf --max-time 10 -o /dev/null -w "%{http_code}" http://127.0.0.1:3500/qrl/v1alpha1/beacon/chainhead)
 if [ "$HTTP_CODE" = "200" ]; then
-    rm -f "$BEACON_FAIL_FILE"
-    resolve "beacon-down" "Beacon API is responding again"
+    check_debounced "beacon-down" "$BEACON_FAIL_THRESHOLD" "pass" "" "Beacon API is responding again"
 else
-    BEACON_FAIL_COUNT=$(cat "$BEACON_FAIL_FILE" 2>/dev/null || echo 0)
-    BEACON_FAIL_COUNT=$((BEACON_FAIL_COUNT + 1))
-    echo "$BEACON_FAIL_COUNT" > "$BEACON_FAIL_FILE"
-    if [ "$BEACON_FAIL_COUNT" -ge "$BEACON_FAIL_THRESHOLD" ]; then
-        alert "beacon-down" "**Beacon API** (127.0.0.1:3500) not responding (HTTP $HTTP_CODE, ${BEACON_FAIL_COUNT}min consecutive)"
-    fi
+    check_debounced "beacon-down" "$BEACON_FAIL_THRESHOLD" "fail" "**Beacon API** (127.0.0.1:3500) not responding (HTTP $HTTP_CODE, ${BEACON_FAIL_THRESHOLD}min consecutive)" ""
 fi
 
 # --- Frontend responding ---
 HTTP_CODE=$(curl -sf --max-time 5 -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/)
 if [ "$HTTP_CODE" = "200" ]; then
-    resolve "frontend-http" "Frontend is responding again"
+    check_debounced "frontend-http" 2 "pass" "" "Frontend is responding again"
 else
-    alert "frontend-http" "**Frontend** not responding (HTTP $HTTP_CODE)"
+    check_debounced "frontend-http" 2 "fail" "**Frontend** not responding (HTTP $HTTP_CODE)" ""
 fi
 
 # --- Backend API responding ---
 HTTP_CODE=$(curl -sf --max-time 5 -o /dev/null -w "%{http_code}" http://127.0.0.1:8082/health)
 if [ "$HTTP_CODE" = "200" ]; then
-    resolve "backend-http" "Backend API is responding again"
+    check_debounced "backend-http" 2 "pass" "" "Backend API is responding again"
 else
-    alert "backend-http" "**Backend API** not responding on :8082 (HTTP $HTTP_CODE)"
+    check_debounced "backend-http" 2 "fail" "**Backend API** not responding on :8082 (HTTP $HTTP_CODE)" ""
 fi
 
 # --- MongoDB ---
 if mongosh --quiet --eval 'db.runCommand({ping:1}).ok' qrldata-z 2>/dev/null | grep -q 1; then
-    resolve "mongodb" "MongoDB is responding again"
+    check_debounced "mongodb" 2 "pass" "" "MongoDB is responding again"
 else
-    alert "mongodb" "**MongoDB** not responding"
+    check_debounced "mongodb" 2 "fail" "**MongoDB** not responding" ""
 fi
