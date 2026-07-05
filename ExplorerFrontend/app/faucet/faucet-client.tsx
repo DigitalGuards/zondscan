@@ -251,13 +251,18 @@ export default function FaucetClient(): JSX.Element {
 
               {result && (
                 <div role="status" className="w-full p-4 bg-background rounded-lg border border-green-500/40">
-                  <div className="text-sm text-gray-400">Sent {result.amount} QRL</div>
+                  <div className="text-sm text-gray-400">
+                    {result.amount} QRL broadcast to your address
+                  </div>
                   <Link
                     href={result.explorerUrl}
                     className="text-accent font-semibold break-all hover:underline"
                   >
                     {result.txHash}
                   </Link>
+                  <div className="mt-1 text-xs text-yellow-300/80">
+                    Transaction is pending: it should confirm within a minute.
+                  </div>
                 </div>
               )}
 
