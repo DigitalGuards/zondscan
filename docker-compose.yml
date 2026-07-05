@@ -3,6 +3,13 @@ services:
     image: mongo:7
     container_name: zond-mongodb
     restart: unless-stopped
+    environment:
+      # mongod 8.x segfaults (exit 139, no backtrace, ~30s after start) on
+      # kernels 6.19+/7.0 with CET user shadow stack on Zen 4+/recent Intel:
+      # its coroutine stack-pivot trips the hardware ROP protection
+      # (SERVER-120238). Harmless on mongo:7; keeps any future image bump to
+      # 8.x from resurrecting the July 2026 prod crash-loop.
+      - GLIBC_TUNABLES=glibc.cpu.hwcaps=-SHSTK
     ports:
       - "27018:27017"  # Use 27018 externally to avoid conflict with local MongoDB
     volumes:

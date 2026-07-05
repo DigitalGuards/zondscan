@@ -28,6 +28,12 @@ spec:
       containers:
         - name: mongodb
           image: mongo:7
+          env:
+            # mongod 8.x segfaults on kernels 6.19+/7.0 with CET user shadow
+            # stack (SERVER-120238); disabling SHSTK per-process is harmless on
+            # mongo:7 and protects any future bump to 8.x. See docker-compose.yml.
+            - name: GLIBC_TUNABLES
+              value: glibc.cpu.hwcaps=-SHSTK
           ports:
             - containerPort: 27017
               name: mongodb
