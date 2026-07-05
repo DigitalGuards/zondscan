@@ -45,6 +45,7 @@ export default function Footer(): JSX.Element {
             <ul className="space-y-2 text-sm">
               <li><Link href="https://docs.theqrl.org" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition">QRL Docs</Link></li>
               <li><Link href="https://github.com/theQRL" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition">GitHub</Link></li>
+              <li><Link href="https://myqrlwallet.com" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition">MyQRLWallet Ecosystem</Link></li>
             </ul>
           </div>
         </nav>
