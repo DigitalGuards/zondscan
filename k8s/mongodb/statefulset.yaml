@@ -20,18 +20,20 @@ spec:
         app.kubernetes.io/component: database
         app.kubernetes.io/part-of: zond-explorer
     spec:
-      # Security context - MongoDB 7 image runs as user 999 (mongodb)
+      # Security context - the official mongo image runs as user 999 (mongodb)
       securityContext:
         runAsNonRoot: true
         runAsUser: 999
         fsGroup: 999
       containers:
         - name: mongodb
-          image: mongo:7
+          # 8.2 matches prod. Existing PVCs created by mongo:7 need an FCV
+          # step-up (via mongo:8.0) or a wipe + re-sync; see docker-compose.yml.
+          image: mongo:8.2
           env:
-            # mongod 8.x segfaults on kernels 6.19+/7.0 with CET user shadow
-            # stack (SERVER-120238); disabling SHSTK per-process is harmless on
-            # mongo:7 and protects any future bump to 8.x. See docker-compose.yml.
+            # REQUIRED on kernels 6.19+/7.0 with CET user shadow stack: mongod
+            # 8.x segfaults ~30s after start with no backtrace (SERVER-120238).
+            # Keep as a single token. See docker-compose.yml for the full story.
             - name: GLIBC_TUNABLES
               value: glibc.cpu.hwcaps=-SHSTK
           ports:
