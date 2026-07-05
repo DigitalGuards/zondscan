@@ -12,8 +12,14 @@ services:
       # Intel): mongod 8.x's coroutine stack-pivot trips the hardware ROP
       # protection and segfaults ~30s after start with no backtrace
       # (SERVER-120238, took down the prod faucet/explorer for a week in July
-      # 2026). Must stay a single token; extra tunables in the same var can
-      # make glibc discard it entirely.
+      # 2026).
+      # Side effect (deliberate): this override wipes the image's baked-in
+      # GLIBC_TUNABLES=glibc.pthread.rseq=0, so glibc keeps rseq and TCMalloc's
+      # per-CPU caches stay off. That costs some throughput but also dodges the
+      # separate TCMalloc/rseq crash on kernels 6.19+ (SERVER-121912):
+      # restoring rseq=0 alongside -SHSTK was tested on the prod box and mongod
+      # kept segfaulting. Once upstream ships a fixed TCMalloc, restore perf
+      # with GLIBC_TUNABLES=glibc.cpu.hwcaps=-SHSTK:glibc.pthread.rseq=0.
       - GLIBC_TUNABLES=glibc.cpu.hwcaps=-SHSTK
     ports:
       - "27018:27017"  # Use 27018 externally to avoid conflict with local MongoDB
