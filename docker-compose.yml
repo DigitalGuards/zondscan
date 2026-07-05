@@ -1,14 +1,19 @@
 services:
   mongodb:
-    image: mongo:7
+    # 8.2 matches prod (the explorer box runs 8.2 with data at FCV 8.2).
+    # NOTE: an existing local volume created by mongo:7 will not start under
+    # 8.2 (FCV too old); wipe it (docker volume rm zond-mongodb-data) and let
+    # the syncer re-sync, or step through mongo:8.0 + setFeatureCompatibilityVersion.
+    image: mongo:8.2
     container_name: zond-mongodb
     restart: unless-stopped
     environment:
-      # mongod 8.x segfaults (exit 139, no backtrace, ~30s after start) on
-      # kernels 6.19+/7.0 with CET user shadow stack on Zen 4+/recent Intel:
-      # its coroutine stack-pivot trips the hardware ROP protection
-      # (SERVER-120238). Harmless on mongo:7; keeps any future image bump to
-      # 8.x from resurrecting the July 2026 prod crash-loop.
+      # REQUIRED on kernels 6.19+/7.0 with CET user shadow stack (Zen 4+/recent
+      # Intel): mongod 8.x's coroutine stack-pivot trips the hardware ROP
+      # protection and segfaults ~30s after start with no backtrace
+      # (SERVER-120238, took down the prod faucet/explorer for a week in July
+      # 2026). Must stay a single token; extra tunables in the same var can
+      # make glibc discard it entirely.
       - GLIBC_TUNABLES=glibc.cpu.hwcaps=-SHSTK
     ports:
       - "27018:27017"  # Use 27018 externally to avoid conflict with local MongoDB
