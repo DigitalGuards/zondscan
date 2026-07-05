@@ -260,7 +260,7 @@ export default function FaucetClient(): JSX.Element {
                   >
                     {result.txHash}
                   </Link>
-                  <div className="mt-1 text-xs text-yellow-300/80">
+                  <div className="mt-1 text-xs text-gray-400">
                     Transaction is pending: it should confirm within a minute.
                   </div>
                 </div>
