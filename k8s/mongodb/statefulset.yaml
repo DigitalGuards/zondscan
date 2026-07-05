@@ -33,7 +33,9 @@ spec:
           env:
             # REQUIRED on kernels 6.19+/7.0 with CET user shadow stack: mongod
             # 8.x segfaults ~30s after start with no backtrace (SERVER-120238).
-            # Keep as a single token. See docker-compose.yml for the full story.
+            # Deliberately wipes the image's baked-in glibc.pthread.rseq=0
+            # (TCMalloc per-CPU caches off), which also dodges the TCMalloc/rseq
+            # crash on the same kernels (SERVER-121912). See docker-compose.yml.
             - name: GLIBC_TUNABLES
               value: glibc.cpu.hwcaps=-SHSTK
           ports:
