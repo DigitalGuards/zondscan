@@ -12,23 +12,25 @@ interface QRCodeModalProps {
 export default function QRCodeModal({ address, isOpen, onClose }: QRCodeModalProps): JSX.Element | null {
   if (!isOpen) return null;
 
-  // Generate the full zondscan URL
-  const zondscanUrl = `https://zondscan.com/address/${address.toLowerCase()}`;
+  // The QR encodes the bare address (explorer convention, wallet-scannable),
+  // not the page URL: wallets validate the payload as an address. Normalize
+  // the prefix to a capital Q since the route segment may be lowercased.
+  const qrAddress = address.replace(/^q/, 'Q');
 
   // Format address for display (first 6 and last 4 chars)
   const displayAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
 
-  return <ModalContent address={address} displayAddress={displayAddress} zondscanUrl={zondscanUrl} onClose={onClose} />;
+  return <ModalContent address={address} displayAddress={displayAddress} qrAddress={qrAddress} onClose={onClose} />;
 }
 
 interface ModalContentProps {
   address: string;
   displayAddress: string;
-  zondscanUrl: string;
+  qrAddress: string;
   onClose: () => void;
 }
 
-function ModalContent({ address, displayAddress, zondscanUrl, onClose }: ModalContentProps): JSX.Element {
+function ModalContent({ address, displayAddress, qrAddress, onClose }: ModalContentProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -124,7 +126,7 @@ function ModalContent({ address, displayAddress, zondscanUrl, onClose }: ModalCo
           <h3 id="qrcode-modal-title" className="text-lg font-medium text-accent mb-4">Scan Address</h3>
           <div className="bg-white p-4 rounded-lg inline-block mb-4">
             <QRCodeSVG
-              value={zondscanUrl}
+              value={qrAddress}
               size={240}
               level="H"
               includeMargin={true}
@@ -143,7 +145,7 @@ function ModalContent({ address, displayAddress, zondscanUrl, onClose }: ModalCo
               </svg>
             </button>
           </div>
-          <p className="text-xs text-gray-400">Scan to view on ZondScan</p>
+          <p className="text-xs text-gray-400">Scan with a wallet to use this address</p>
         </div>
       </div>
     </div>
