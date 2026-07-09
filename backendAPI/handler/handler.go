@@ -103,7 +103,25 @@ func RequestHandler() {
 		}
 	}
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     allowOrigins,
+		AllowOrigins: allowOrigins,
+		// Browser extensions send Origin: chrome-extension://<install-id>;
+		// the id is per-install so it cannot be allowlisted by value. A
+		// scheme-level allowance adds no exposure beyond what a no-Origin
+		// client (curl) already gets: AllowCredentials stays false and the
+		// abuse-sensitive POST endpoints have their own rate limits.
+		AllowOriginFunc: func(origin string) bool {
+			lower := strings.ToLower(origin)
+			for _, scheme := range []string{
+				"chrome-extension://",
+				"moz-extension://",
+				"safari-web-extension://",
+			} {
+				if strings.HasPrefix(lower, scheme) {
+					return true
+				}
+			}
+			return false
+		},
 		AllowMethods:     []string{"GET", "POST"},
 		AllowHeaders:     []string{"Origin", "Content-Length", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
