@@ -11,7 +11,7 @@ export default function Footer(): JSX.Element {
           <h2 className="font-display text-xl font-semibold text-text-primary mb-1">
             Zond<span className="text-accent">Scan</span>
           </h2>
-          <p className="eyebrow mb-4">QRL v2 Explorer</p>
+          <p className="eyebrow mb-4">QRL 2.0 Explorer</p>
           <p className="text-sm leading-relaxed text-text-secondary max-w-sm">
             ZondScan is your gateway to the QRL 2.0 network. Explore blocks, transactions, smart contracts, and more.
           </p>

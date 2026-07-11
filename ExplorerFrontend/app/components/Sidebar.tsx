@@ -264,7 +264,7 @@ export default function Sidebar(): JSX.Element {
                                group-hover:text-accent transition-colors">
                 ZondScan
               </span>
-              <span className="eyebrow">QRL v2 Explorer</span>
+              <span className="eyebrow">QRL 2.0 Explorer</span>
             </div>
           </Link>
 
