@@ -1,13 +1,13 @@
 // lib/seo/metaData.ts
 import { Metadata } from 'next';
 
-// Shared social preview image. 1200x800 PNG in public/, well above the
-// summary_large_image minimum (300x157) and close to the recommended
-// ~1.91:1 aspect. metadataBase resolves the relative URL to zondscan.com.
+// Shared social preview image. Purpose-made 1200x630 brand card in public/,
+// matching the recommended 1.91:1 aspect for summary_large_image.
+// metadataBase resolves the relative URL to zondscan.com.
 const OG_IMAGE = {
-  url: '/ZondScan_Logo.png',
+  url: '/og-image.png',
   width: 1200,
-  height: 800,
+  height: 630,
   alt: 'ZondScan, the QRL 2.0 blockchain explorer',
 };
 
