@@ -12,6 +12,7 @@ import EmptyState from '../../components/EmptyState';
 import { extent, max, bisector } from 'd3-array';
 import { useTooltip, TooltipWithBounds, defaultStyles } from '@visx/tooltip';
 import { localPoint } from '@visx/event';
+import { palette, chartTheme } from '../../lib/theme';
 
 interface HistoryRecord {
   epoch: string;
@@ -29,17 +30,13 @@ interface ValidatorHistoryChartProps {
 }
 
 const margin = { top: 20, right: 20, bottom: 40, left: 60 };
-const axisColor = '#6b7280';
-const accentColor = '#ffa729';
-const gridColor = '#3d3d3d';
+const axisColor = chartTheme.axis;
+const accentColor = palette.accent;
+const gridColor = chartTheme.grid;
 
 const tooltipStyles = {
   ...defaultStyles,
-  background: '#1f1f1f',
-  border: '1px solid #3d3d3d',
-  color: '#fff',
-  padding: '8px 12px',
-  borderRadius: '8px',
+  ...chartTheme.tooltip,
 };
 
 // Accessors
@@ -154,7 +151,6 @@ export default function ValidatorHistoryChart({
             scale={yScale}
             width={innerWidth}
             stroke={gridColor}
-            strokeOpacity={0.5}
             numTicks={5}
           />
           <AreaClosed
@@ -180,8 +176,9 @@ export default function ValidatorHistoryChart({
             stroke={axisColor}
             tickStroke={axisColor}
             tickLabelProps={{
-              fill: axisColor,
+              fill: chartTheme.tickLabel,
               fontSize: 11,
+              fontFamily: chartTheme.fontFamily,
               textAnchor: 'middle',
             }}
           />
@@ -192,8 +189,9 @@ export default function ValidatorHistoryChart({
             tickStroke={axisColor}
             tickFormat={(v) => formatYAxis(v as number)}
             tickLabelProps={{
-              fill: axisColor,
+              fill: chartTheme.tickLabel,
               fontSize: 11,
+              fontFamily: chartTheme.fontFamily,
               textAnchor: 'end',
               dx: '-0.25em',
               dy: '0.25em',
@@ -216,7 +214,7 @@ export default function ValidatorHistoryChart({
               cy={yScale(getValue(tooltipData))}
               r={6}
               fill={accentColor}
-              stroke="#fff"
+              stroke={palette.textPrimary}
               strokeWidth={2}
               pointerEvents="none"
             />
@@ -230,13 +228,13 @@ export default function ValidatorHistoryChart({
           style={tooltipStyles}
         >
           <div className="text-sm">
-            <div className="text-gray-400">
+            <div className="text-text-secondary">
               Epoch {tooltipData.epoch}
             </div>
-            <div className="text-white font-semibold">
+            <div className="text-text-primary font-semibold">
               {formatTooltipValue(tooltipData)}
             </div>
-            <div className="text-gray-400 text-xs">
+            <div className="text-text-secondary text-xs">
               {new Date(tooltipData.timestamp * 1000).toLocaleDateString()}
             </div>
           </div>

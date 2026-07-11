@@ -97,10 +97,10 @@ export default function AiExplainCard({ contractData }: AiExplainCardProps): JSX
     <div className="rounded-lg border border-border bg-card-gradient p-3 md:p-4 space-y-3">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <div className="text-sm md:text-base font-medium text-gray-200 flex items-center gap-2">
+          <div className="text-sm md:text-base font-medium text-text-primary flex items-center gap-2">
             <span aria-hidden="true">✨</span> AI explanation
           </div>
-          <div className="text-xs text-gray-400 mt-0.5">
+          <div className="text-xs text-text-secondary mt-0.5">
             {explanation
               ? `Generated ${formatStamp(generatedAt)}${cached ? ' (cached)' : ''}${model ? ` · ${model}` : ''}`
               : 'Have Claude summarise what this verified contract does. Costs a one-time generate per contract.'}
@@ -112,7 +112,7 @@ export default function AiExplainCard({ contractData }: AiExplainCardProps): JSX
               type="button"
               onClick={() => call(false)}
               disabled={loading}
-              className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-accent text-black text-xs font-medium hover:bg-accent-hover transition-colors disabled:opacity-50"
+              className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-accent text-background text-xs font-medium hover:bg-accent-hover transition-colors disabled:opacity-50"
             >
               {loading ? 'Analysing…' : 'Explain with AI'}
             </button>
@@ -122,14 +122,14 @@ export default function AiExplainCard({ contractData }: AiExplainCardProps): JSX
               type="button"
               onClick={() => call(true)}
               disabled={loading}
-              className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-card-gradient border border-border hover:border-accent text-xs text-gray-300 hover:text-accent transition-colors disabled:opacity-50"
+              className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-card-gradient border border-border hover:border-accent text-xs text-text-secondary hover:text-accent transition-colors disabled:opacity-50"
               title="Regenerate (limited to 5 per 7-day window)"
             >
               {loading ? 'Analysing…' : 'Regenerate'}
             </button>
           )}
           {explanation && !isOwner && (
-            <span className="text-[10px] text-gray-500 self-center">
+            <span className="text-[10px] text-text-muted self-center">
               Only the contract creator can regenerate.
             </span>
           )}
@@ -144,10 +144,10 @@ export default function AiExplainCard({ contractData }: AiExplainCardProps): JSX
 
       {explanation && (
         <>
-          <div className="rounded-md bg-black/40 border border-border p-3 text-xs md:text-sm text-gray-200 font-sans whitespace-pre-wrap break-words leading-relaxed">
+          <div className="rounded-md bg-black/40 border border-border p-3 text-xs md:text-sm text-text-primary font-sans whitespace-pre-wrap break-words leading-relaxed">
             {explanation}
           </div>
-          <div className="text-[10px] text-gray-500">
+          <div className="text-[10px] text-text-muted">
             AI-generated summary. May contain inaccuracies. Not financial advice, verify the
             source code yourself before interacting with this contract.
           </div>

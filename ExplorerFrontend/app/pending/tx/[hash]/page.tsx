@@ -124,7 +124,7 @@ function ErrorCard({ title, children }: { title: string; children: React.ReactNo
     <div className="container mx-auto px-4">
       <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg mt-6">
         <h2 className="text-red-500 font-semibold mb-2">{title}</h2>
-        <p className="text-gray-300">{children}</p>
+        <p className="text-text-secondary">{children}</p>
       </div>
     </div>
   );

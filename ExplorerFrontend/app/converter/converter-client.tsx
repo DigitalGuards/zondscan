@@ -43,14 +43,14 @@ function Converter(): JSX.Element {
   };
 
   return (
-    <div className="max-w-[1200px] mx-auto p-8">
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
       <div className="flex flex-col items-center justify-center">
-        <h2 className="text-2xl font-bold mb-8 text-[#ffa729]">Unit Converter</h2>
-        <div className="w-full max-w-md bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] p-8 rounded-lg border border-[#3d3d3d] shadow-xl">
+        <h2 className="section-title mb-8">Unit Converter</h2>
+        <div className="w-full max-w-md card p-8">
           <div className="space-y-6">
             {/* Quanta Input */}
             <div>
-              <label htmlFor="quanta-input" className="block text-sm font-medium text-gray-300 mb-2">Quanta (QRL)</label>
+              <label htmlFor="quanta-input" className="block text-sm font-medium text-text-secondary mb-2">Quanta (QRL)</label>
               <div className="relative">
                 <input
                   id="quanta-input"
@@ -58,24 +58,24 @@ function Converter(): JSX.Element {
                   value={quanta}
                   onChange={handleChangeQuanta}
                   placeholder="Enter amount in Quanta"
-                  className="w-full px-4 py-3 bg-[#1a1a1a] text-white rounded-lg border border-[#3d3d3d] focus:outline-none focus:border-[#ffa729] transition-all duration-300"
+                  className="w-full px-4 py-3 bg-background text-text-primary rounded-lg border border-border focus:outline-none focus:border-accent transition-all duration-300"
                 />
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <span className="text-gray-400">QRL</span>
+                  <span className="text-text-secondary">QRL</span>
                 </div>
               </div>
             </div>
 
             {/* Conversion Arrow */}
             <div className="flex justify-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
               </svg>
             </div>
 
             {/* Shor Input */}
             <div>
-              <label htmlFor="shor-input" className="block text-sm font-medium text-gray-300 mb-2">Shor</label>
+              <label htmlFor="shor-input" className="block text-sm font-medium text-text-secondary mb-2">Shor</label>
               <div className="relative">
                 <input
                   id="shor-input"
@@ -83,18 +83,18 @@ function Converter(): JSX.Element {
                   value={shor}
                   onChange={handleChangeShors}
                   placeholder="Enter amount in Shor"
-                  className="w-full px-4 py-3 bg-[#1a1a1a] text-white rounded-lg border border-[#3d3d3d] focus:outline-none focus:border-[#ffa729] transition-all duration-300"
+                  className="w-full px-4 py-3 bg-background text-text-primary rounded-lg border border-border focus:outline-none focus:border-accent transition-all duration-300"
                 />
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <span className="text-gray-400">Shor</span>
+                  <span className="text-text-secondary">Shor</span>
                 </div>
               </div>
             </div>
 
             {/* Error Message */}
             {error && (
-              <div className="p-4 bg-[#1a1a1a] rounded-lg border border-red-500/50">
-                <div className="flex items-center text-red-400">
+              <div className="p-4 bg-background rounded-lg border border-red-500/50">
+                <div className="flex items-center text-error">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
@@ -104,8 +104,8 @@ function Converter(): JSX.Element {
             )}
 
             {/* Info Box */}
-            <div className="mt-6 p-4 bg-[#1a1a1a] rounded-lg border border-[#3d3d3d]">
-              <p className="text-sm text-gray-400">
+            <div className="mt-6 p-4 bg-background rounded-lg border border-border">
+              <p className="text-sm text-text-secondary">
                 1 QRL = 1,000,000,000,000,000,000 Shor (10^18)
               </p>
             </div>

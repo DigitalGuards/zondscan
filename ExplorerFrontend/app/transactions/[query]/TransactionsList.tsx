@@ -51,8 +51,8 @@ export default function TransactionsList({
   };
 
   return (
-    <div className="p-4 sm:p-8 max-w-6xl mx-auto">
-      <h1 className="text-xl sm:text-2xl font-bold mb-4 text-[#ffa729]">Transactions</h1>
+    <div className="py-4 sm:py-6 lg:py-8">
+      <h1 className="section-title mb-4">Transactions</h1>
 
       <div className="mb-6">
         <SearchBar />
@@ -67,18 +67,18 @@ export default function TransactionsList({
         />
       ) : (
         <>
-          <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden mb-6">
+          <div className="card-simple overflow-hidden mb-6">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-[#2a2a2a]">
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Hash</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden sm:table-cell">Type</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden lg:table-cell">From</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden lg:table-cell">To</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden md:table-cell">Block</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Amount</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Time</th>
+                  <tr className="border-b border-border">
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Hash</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">Type</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden lg:table-cell">From</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden lg:table-cell">To</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:table-cell">Block</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Amount</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Time</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -105,13 +105,13 @@ export default function TransactionsList({
                     return (
                       <tr
                         key={tx.TxHash}
-                        className="border-b border-[#2a2a2a] last:border-b-0 hover:bg-[#252525] transition-colors"
+                        className="border-b border-border last:border-b-0 hover:bg-surface transition-colors"
                       >
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1.5">
                             <Link
                               href={`/tx/${tx.TxHash}?from=transactions&page=${currentPage}`}
-                              className="text-[#ffa729] hover:text-[#ffb954] hover:underline font-mono text-xs"
+                              className="text-accent hover:text-accent-hover hover:underline font-mono text-xs"
                               title={tx.TxHash}
                             >
                               {truncateHash(tx.TxHash, 10, 6)}
@@ -130,45 +130,45 @@ export default function TransactionsList({
                           {fromAddr ? (
                             <Link
                               href={`/address/${fromAddr}`}
-                              className="text-gray-400 hover:text-[#ffa729] font-mono text-xs transition-colors"
+                              className="text-text-secondary hover:text-accent font-mono text-xs transition-colors"
                               title={fromAddr}
                             >
                               {truncateHash(fromAddr, 8, 6)}
                             </Link>
                           ) : (
-                            <span className="text-gray-600 text-xs">-</span>
+                            <span className="text-text-muted text-xs">-</span>
                           )}
                         </td>
                         <td className="px-4 py-3 hidden lg:table-cell">
                           {toAddr ? (
                             <Link
                               href={`/address/${toAddr}`}
-                              className="text-gray-400 hover:text-[#ffa729] font-mono text-xs transition-colors"
+                              className="text-text-secondary hover:text-accent font-mono text-xs transition-colors"
                               title={toAddr}
                             >
                               {truncateHash(toAddr, 8, 6)}
                             </Link>
                           ) : (
-                            <span className="text-gray-600 text-xs">-</span>
+                            <span className="text-text-muted text-xs">-</span>
                           )}
                         </td>
                         <td className="px-4 py-3 hidden md:table-cell">
                           {blockNum !== null ? (
                             <Link
                               href={`/block/${blockNum}`}
-                              className="text-[#ffa729] hover:text-[#ffb954] hover:underline tabular-nums text-xs"
+                              className="text-accent hover:text-accent-hover hover:underline tabular-nums text-xs"
                             >
                               {blockNum.toLocaleString()}
                             </Link>
                           ) : (
-                            <span className="text-gray-600 text-xs">-</span>
+                            <span className="text-text-muted text-xs">-</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-gray-300 tabular-nums whitespace-nowrap">
+                        <td className="px-4 py-3 text-text-secondary tabular-nums whitespace-nowrap">
                           {formattedAmount}
-                          <span className="text-gray-500 text-xs ml-1">{unit}</span>
+                          <span className="text-text-muted text-xs ml-1">{unit}</span>
                         </td>
-                        <td className="px-4 py-3 text-gray-400 tabular-nums">
+                        <td className="px-4 py-3 text-text-secondary tabular-nums">
                           {timeAgo(tx.TimeStamp)}
                         </td>
                       </tr>

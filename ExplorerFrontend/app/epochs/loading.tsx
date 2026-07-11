@@ -8,35 +8,35 @@
  */
 export default function Loading(): JSX.Element {
   return (
-    <div role="status" aria-label="Loading epochs" className="p-4 sm:p-8 max-w-6xl mx-auto">
-      <h1 className="text-xl sm:text-2xl font-bold mb-4 text-[#ffa729]">Epochs</h1>
+    <div role="status" aria-label="Loading epochs" className="page-content py-4 sm:py-6 lg:py-8">
+      <h1 className="section-title mb-4">Epochs</h1>
 
       <div className="mb-6">
-        <div className="h-11 w-full bg-[#1e1e1e] border border-[#2a2a2a] rounded-lg animate-pulse" />
+        <div className="h-11 w-full bg-surface border border-border rounded-lg animate-pulse" />
       </div>
 
-      <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden mb-6">
+      <div className="card-simple overflow-hidden mb-6">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-[#2a2a2a]">
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Epoch</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Time</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Status</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden sm:table-cell">Validators</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden sm:table-cell">Active</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden md:table-cell">Total Staked</th>
+              <tr className="border-b border-border">
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Epoch</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Time</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Status</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">Validators</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">Active</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:table-cell">Total Staked</th>
               </tr>
             </thead>
             <tbody>
               {Array.from({ length: 15 }).map((_, i) => (
-                <tr key={i} className="border-b border-[#2a2a2a] last:border-b-0">
-                  <td className="px-4 py-3"><div className="h-4 w-12 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                  <td className="px-4 py-3"><div className="h-4 w-16 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                  <td className="px-4 py-3"><div className="h-4 w-16 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                  <td className="px-4 py-3 hidden sm:table-cell"><div className="h-4 w-10 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                  <td className="px-4 py-3 hidden sm:table-cell"><div className="h-4 w-10 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                  <td className="px-4 py-3 hidden md:table-cell"><div className="h-4 w-24 bg-[#2a2a2a] rounded animate-pulse" /></td>
+                <tr key={i} className="border-b border-border last:border-b-0">
+                  <td className="px-4 py-3"><div className="h-4 w-12 skeleton" /></td>
+                  <td className="px-4 py-3"><div className="h-4 w-16 skeleton" /></td>
+                  <td className="px-4 py-3"><div className="h-4 w-16 skeleton" /></td>
+                  <td className="px-4 py-3 hidden sm:table-cell"><div className="h-4 w-10 skeleton" /></td>
+                  <td className="px-4 py-3 hidden sm:table-cell"><div className="h-4 w-10 skeleton" /></td>
+                  <td className="px-4 py-3 hidden md:table-cell"><div className="h-4 w-24 skeleton" /></td>
                 </tr>
               ))}
             </tbody>

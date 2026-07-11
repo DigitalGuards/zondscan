@@ -32,11 +32,11 @@ const faqs = [
   },
   {
     question: "Who created Zondscan?",
-    answer: "Zondscan was created by DigitalGuards, a company based in the Netherlands. The explorer is completely open-source and its code is available on GitHub at <a href='https://github.com/DigitalGuards/zondscan' target='_blank' rel='noopener noreferrer' style='color: #ffa729; border-bottom: 1px solid #ffa729; text-decoration: none;'>github.com/DigitalGuards/zondscan</a>. You can learn more about DigitalGuards at <a href='https://digitalguards.nl/' target='_blank' rel='noopener noreferrer' style='color: #ffa729; border-bottom: 1px solid #ffa729; text-decoration: none;'>digitalguards.nl</a>."
+    answer: "Zondscan was created by DigitalGuards, a company based in the Netherlands. The explorer is completely open-source and its code is available on GitHub at <a href='https://github.com/DigitalGuards/zondscan' target='_blank' rel='noopener noreferrer' class='text-accent hover:text-accent-hover underline decoration-accent/40 underline-offset-2 transition-colors'>github.com/DigitalGuards/zondscan</a>. You can learn more about DigitalGuards at <a href='https://digitalguards.nl/' target='_blank' rel='noopener noreferrer' class='text-accent hover:text-accent-hover underline decoration-accent/40 underline-offset-2 transition-colors'>digitalguards.nl</a>."
   },
   {
     question: "How can I contact support?",
-    answer: "For support or inquiries, you can reach out to us via email:\n\n• Technical support and explorer issues: <a href='mailto:info@digitalguards.nl' style='color: #ffa729; border-bottom: 1px solid #ffa729; text-decoration: none;'>info@digitalguards.nl</a>\n• Wallet and general inquiries: <a href='mailto:info@qrlwallet.com' style='color: #ffa729; border-bottom: 1px solid #ffa729; text-decoration: none;'>info@qrlwallet.com</a>\n\nJoin the QRL community on <a href='https://discord.com/invite/XxJtvMuy6m' target='_blank' rel='noopener noreferrer' style='color: #ffa729; border-bottom: 1px solid #ffa729; text-decoration: none;'>Discord</a> for real-time discussions and support."
+    answer: "For support or inquiries, you can reach out to us via email:\n\n• Technical support and explorer issues: <a href='mailto:info@digitalguards.nl' class='text-accent hover:text-accent-hover underline decoration-accent/40 underline-offset-2 transition-colors'>info@digitalguards.nl</a>\n• Wallet and general inquiries: <a href='mailto:info@qrlwallet.com' class='text-accent hover:text-accent-hover underline decoration-accent/40 underline-offset-2 transition-colors'>info@qrlwallet.com</a>\n\nJoin the QRL community on <a href='https://discord.com/invite/XxJtvMuy6m' target='_blank' rel='noopener noreferrer' class='text-accent hover:text-accent-hover underline decoration-accent/40 underline-offset-2 transition-colors'>Discord</a> for real-time discussions and support."
   }
 ]
 
@@ -46,27 +46,27 @@ function classNames(...classes: string[]): string {
 
 export default function FAQClient(): JSX.Element {
   return (
-    <div className="min-h-screen bg-[#1a1a1a] text-gray-300 p-4 md:p-8">
+    <div className="min-h-screen text-text-secondary px-4 sm:px-6 py-4 md:py-8">
       <div className="max-w-3xl mx-auto">
-        <h1 className="text-2xl md:text-3xl font-bold mb-8 text-[#ffa729]">
+        <h1 className="section-title mb-8">
           Frequently Asked Questions
         </h1>
         
         <div className="space-y-4">
           {faqs.map((faq, index) => (
-            <Disclosure as="div" key={index} className="bg-[#2d2d2d] rounded-lg overflow-hidden">
+            <Disclosure as="div" key={index} className="card-simple overflow-hidden">
               {({ open }) => (
                 <>
                   <Disclosure.Button className="flex w-full items-center justify-between px-4 py-3 text-left">
-                    <span className="text-sm md:text-base font-medium text-[#ffa729]">{faq.question}</span>
+                    <span className="text-sm md:text-base font-medium text-text-primary">{faq.question}</span>
                     <ChevronDownIcon
                       className={classNames(
                         open ? 'rotate-180' : '',
-                        'h-5 w-5 text-[#ffa729] transition-transform duration-200'
+                        'h-5 w-5 text-accent transition-transform duration-200'
                       )}
                     />
                   </Disclosure.Button>
-                  <Disclosure.Panel className="px-4 py-3 text-sm bg-[#262626] border-t border-[#3d3d3d]" dangerouslySetInnerHTML={{ __html: faq.answer.replace(/className='text-\[#ffa729\] hover:underline'/g, "className='text-[#ffa729] underline decoration-[#ffa729] hover:opacity-80'") }} />
+                  <Disclosure.Panel className="px-4 py-3 text-sm text-text-secondary bg-background-tertiary/50 border-t border-border whitespace-pre-line" dangerouslySetInnerHTML={{ __html: faq.answer }} />
                 </>
               )}
             </Disclosure>

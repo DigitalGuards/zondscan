@@ -4,17 +4,14 @@ import React from "react"
 import Image from "next/image"
 
 /**
- * ZondScan logo with a lightweight video animation.
+ * ZondScan logo mark.
  *
- * Replaces the old 5.1 MB animated GIF (1200x800, 255 frames) that was
- * eagerly preloaded on every page. The animation is now a ~170 KB VP9
- * webm (~190 KB H.264 mp4 fallback) composited over the sidebar color
- * (#1a1a1a), because H.264 cannot carry an alpha channel.
- *
- * A 12 KB transparent webp renders immediately as the base layer; the
- * video fades in only once it is actually playing, so browsers that
- * block autoplay (e.g. iOS Low Power Mode) gracefully keep the static
- * logo with no black box or play-button overlay.
+ * The old video animation (webm/mp4) was composited over the legacy
+ * #1a1a1a sidebar color because H.264 cannot carry an alpha channel;
+ * on the current deep blue-black canvas it would render as a visible
+ * gray box. We keep the 12 KB transparent webp and express motion with
+ * a CSS amber glow that breathes behind the mark instead, which also
+ * drops ~360 KB of media from every first paint.
  */
 export default function AnimatedLogo({
   className = "",
@@ -24,42 +21,26 @@ export default function AnimatedLogo({
   /** Accessible name. Leave empty (decorative) when the surrounding link already has visible text. */
   alt?: string
 }) {
-  const [playing, setPlaying] = React.useState(false)
-
-  // React renders the muted attribute but does not reliably set the DOM
-  // property before the autoplay check in all browsers (React has no
-  // defaultMuted prop), so set it imperatively on mount.
-  const videoRef = React.useCallback((el: HTMLVideoElement | null) => {
-    if (el) el.muted = true
-  }, [])
-
   return (
     <div className={`relative h-full w-full ${className}`}>
+      {/* Breathing glow field behind the mark */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-[12%] rounded-full bg-accent/25 blur-2xl
+                   animate-pulse [animation-duration:4s]
+                   motion-reduce:animate-none"
+      />
       <Image
         src="/ZondScan_Logo_static.webp"
         alt={alt}
         fill
         priority
         sizes="(max-width: 768px) 50vw, 200px"
-        className="object-contain"
+        className="object-contain relative
+                   drop-shadow-[0_0_14px_rgba(255,167,41,0.25)]
+                   transition-[filter] duration-300
+                   group-hover:drop-shadow-[0_0_22px_rgba(255,167,41,0.45)]"
       />
-      <video
-        ref={videoRef}
-        muted
-        autoPlay
-        loop
-        playsInline
-        preload="metadata"
-        aria-hidden="true"
-        tabIndex={-1}
-        onPlaying={() => setPlaying(true)}
-        className={`absolute inset-0 h-full w-full object-contain transition-opacity duration-300 ${
-          playing ? "opacity-100" : "opacity-0"
-        }`}
-      >
-        <source src="/ZondScan_Logo_anim.webm" type="video/webm" />
-        <source src="/ZondScan_Logo_anim.mp4" type="video/mp4" />
-      </video>
     </div>
   )
 }

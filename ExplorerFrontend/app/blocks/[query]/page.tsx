@@ -86,7 +86,7 @@ export default async function BlocksPage({ params }: PageProps): Promise<JSX.Ele
         <div className="container mx-auto px-4">
           <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg mt-6">
             <h2 className="text-red-500 font-semibold mb-2">Failed to Load Blocks</h2>
-            <p className="text-gray-300">
+            <p className="text-text-secondary">
               The blocks list could not be loaded right now. This is usually a
               temporary issue reaching the backend. Please try again in a moment.
             </p>

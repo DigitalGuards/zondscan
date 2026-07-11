@@ -49,14 +49,14 @@ export default function ReadContract({ contractData }: ReadContractProps): JSX.E
 
   if (!contractData.verified) {
     return (
-      <div className="rounded-lg border border-border bg-card-gradient p-4 text-sm text-gray-300">
+      <div className="rounded-lg border border-border bg-card-gradient p-4 text-sm text-text-secondary">
         Verify this contract first to enable Read interactions.
       </div>
     );
   }
   if (readFns.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-card-gradient p-4 text-sm text-gray-300">
+      <div className="rounded-lg border border-border bg-card-gradient p-4 text-sm text-text-secondary">
         This contract has no view/pure functions to read.
       </div>
     );
@@ -135,16 +135,16 @@ function ReadFunctionCard({ fn, address }: { fn: AbiFunction; address: string })
         aria-expanded={open}
         className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left"
       >
-        <span className="font-mono text-xs md:text-sm text-gray-200 break-all">{sig}</span>
-        <span className="text-xs text-gray-500">{open ? '–' : '+'}</span>
+        <span className="font-mono text-xs md:text-sm text-text-primary break-all">{sig}</span>
+        <span className="text-xs text-text-muted">{open ? '–' : '+'}</span>
       </button>
       {open && (
         <div className="border-t border-border p-3 space-y-3">
           {fn.inputs.map((input, i) => (
             <div key={i}>
-              <div className="text-xs text-gray-400 mb-1">
+              <div className="text-xs text-text-secondary mb-1">
                 {input.name ? `${input.name} ` : ''}
-                <span className="font-mono text-gray-500">({input.type})</span>
+                <span className="font-mono text-text-muted">({input.type})</span>
               </div>
               <input
                 value={values[i] ?? ''}
@@ -158,7 +158,7 @@ function ReadFunctionCard({ fn, address }: { fn: AbiFunction; address: string })
             type="button"
             onClick={onCall}
             disabled={loading}
-            className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-accent text-black text-xs font-medium hover:bg-accent-hover transition-colors disabled:opacity-50"
+            className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-accent text-background text-xs font-medium hover:bg-accent-hover transition-colors disabled:opacity-50"
           >
             {loading ? 'Calling…' : 'Call'}
           </button>
@@ -174,7 +174,7 @@ function ReadFunctionCard({ fn, address }: { fn: AbiFunction; address: string })
           )}
 
           {result !== null && !error && (
-            <pre className="rounded-md bg-black/40 border border-border p-3 font-mono text-xs text-gray-300 whitespace-pre-wrap break-words">
+            <pre className="rounded-md bg-black/40 border border-border p-3 font-mono text-xs text-text-secondary whitespace-pre-wrap break-words">
               {result}
             </pre>
           )}
