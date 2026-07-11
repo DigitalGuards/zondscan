@@ -302,37 +302,36 @@ func syncerOwnedSet(c models.ContractInfo) bson.M {
 	return m
 }
 
-// UpdateContractMetadata writes the resolved off-chain collection metadata
-// for one contract. The fetcher service is the only caller; the classifier
-// path (StoreContract) deliberately doesn't touch these fields. This
+// UpdateContractMetadata writes the result of a SUCCESSFUL collection-level
+// metadata fetch. The fetcher service is the only caller; the classifier
+// path (StoreContract) deliberately doesn't touch the resolved fields. This
 // separation lets a transient classification blip retain the resolved
 // metadata while still allowing the fetcher to record a new fetch attempt's
-// outcome (success or error) without racing the classifier.
+// outcome without racing the classifier.
 //
-// Empty `name` / `description` / `image` / `externalURL` arguments PRESERVE
-// the existing database values (last-good state). Only `fetchedAt` and
-// `fetchError` are always written, so an operator can see the latest probe
-// result without blowing away previously-fetched content. The expected
-// pattern is:
-//
-//   - Success: pass the parsed values + FetchedAt = now, FetchError = "".
-//   - Failure: pass empty for the four content fields, FetchedAt = "",
-//     FetchError = the reason. Existing content fields are preserved
-//     because the merge sentinel below skips empty content writes.
+// Empty `uri` / `name` / `description` / `image` / `externalURL` arguments
+// PRESERVE the existing database values (last-good state). `uri` is written
+// when the fetcher re-probed contractURI() on a TTL refresh and got a fresh
+// value, so an on-chain setContractURI propagates. `metadataFetchedAt` is
+// stamped, `metadataFetchError` is cleared, and the retry-scheduling fields
+// are removed so the row leaves the retry track.
 //
 // The caller-supplied ctx scopes both timeout and cancellation. The fetcher
 // passes the shutdown-aware ctx so a pm2 stop interrupts an in-flight write
 // instead of leaking a 10s context.Background goroutine.
-func UpdateContractMetadata(ctx context.Context, address, name, description, image, externalURL, fetchedAt, fetchError string) error {
+func UpdateContractMetadata(ctx context.Context, address, uri, name, description, image, externalURL, fetchedAt string) error {
 	address = validation.ConvertToQAddress(address)
 
 	set := bson.M{
 		"metadataFetchedAt":  fetchedAt,
-		"metadataFetchError": fetchError,
+		"metadataFetchError": "",
+		"updatedAt":          time.Now().UTC().Format(time.RFC3339),
 	}
-	// Only overwrite content fields when we have new content. On failure
-	// the four content args are "" and we skip the writes, preserving the
-	// last-good state.
+	// Only overwrite content fields when we have new content, preserving
+	// the last-good state.
+	if uri != "" {
+		set["metadataURI"] = uri
+	}
 	if name != "" {
 		set["metadataName"] = name
 	}
@@ -352,7 +351,10 @@ func UpdateContractMetadata(ctx context.Context, address, name, description, ima
 	_, err := configs.GetContractsCollection().UpdateOne(
 		ctx,
 		bson.M{"address": address},
-		bson.M{"$set": set},
+		bson.M{
+			"$set":   set,
+			"$unset": bson.M{"metadataRetryCount": "", "metadataNextRetryAt": ""},
+		},
 	)
 	if err != nil {
 		configs.Logger.Error("Failed to update contract metadata",
@@ -363,53 +365,93 @@ func UpdateContractMetadata(ctx context.Context, address, name, description, ima
 	return nil
 }
 
-// GetContractsAwaitingMetadata returns up to `limit` NFT contracts that have
-// a populated MetadataURI but have not yet been fetched successfully
-// (FetchedAt is empty AND FetchError is empty/missing). The metadata
-// fetcher service uses this as its work queue and passes its shutdown-aware
-// ctx so a pm2 stop cancels an in-flight read promptly.
-//
-// Filter notes:
-//   - MetadataURI must EXIST and be non-empty. The naked `$ne: ""` form
-//     matches docs where the field is missing entirely (Mongo treats
-//     missing fields as null and null != ""), which would pull in every
-//     unclassified NFT and trigger an "empty URI" loop.
-//   - We do NOT retry rows that already have a metadataFetchError set,
-//     transient gateway errors get retried on a manual operator action
-//     (admin endpoint in Phase 4); the auto-loop would re-attempt every
-//     30s with the same outcome and clog the work queue. The next
-//     classifier pass naturally clears the error by overwriting it.
-func GetContractsAwaitingMetadata(ctx context.Context, limit int) ([]models.ContractInfo, error) {
+// MarkContractMetadataFetchFailed records a failed collection-level fetch:
+// the error reason plus the retry-scheduling fields computed by the caller.
+// Content fields and metadataFetchedAt are untouched (preserve last-good).
+func MarkContractMetadataFetchFailed(ctx context.Context, address, reason string, retryCount int, nextRetryAt string) error {
+	address = validation.ConvertToQAddress(address)
+
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	filter := bson.M{
+	_, err := configs.GetContractsCollection().UpdateOne(
+		ctx,
+		bson.M{"address": address},
+		bson.M{"$set": bson.M{
+			"metadataFetchError":  reason,
+			"metadataRetryCount":  retryCount,
+			"metadataNextRetryAt": nextRetryAt,
+			"updatedAt":           time.Now().UTC().Format(time.RFC3339),
+		}},
+	)
+	if err != nil {
+		configs.Logger.Error("Failed to record contract metadata fetch failure",
+			zap.String("address", address),
+			zap.Error(err))
+		return err
+	}
+	return nil
+}
+
+// GetContractsAwaitingMetadata returns up to `limit` NFT contracts that have
+// a populated MetadataURI and are due for a collection-level metadata fetch,
+// drawn from the same three tracks as GetTokensAwaitingMetadata and composed
+// with the same guaranteed per-track shares (composeBatch):
+//
+//  1. fresh rows that have never been attempted,
+//  2. errored rows whose exponential-backoff deadline passed,
+//  3. previously successful rows older than refreshTTL (skipped when
+//     refreshTTL <= 0).
+//
+// Filter note: MetadataURI must EXIST and be non-empty. The naked `$ne: ""`
+// form matches docs where the field is missing entirely (Mongo treats
+// missing fields as null and null != ""), which would pull in every
+// unclassified NFT and trigger an "empty URI" loop.
+func GetContractsAwaitingMetadata(ctx context.Context, limit int, now time.Time, refreshTTL time.Duration) ([]models.ContractInfo, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	collection := configs.GetContractsCollection()
+	nowStr := now.UTC().Format(time.RFC3339)
+	base := bson.M{
 		"metadataURI":   bson.M{"$exists": true, "$ne": ""},
 		"tokenStandard": bson.M{"$in": []string{"ERC-721", "ERC-1155"}},
-		"$and": []bson.M{
-			{"$or": []bson.M{
-				{"metadataFetchedAt": bson.M{"$exists": false}},
-				{"metadataFetchedAt": ""},
-			}},
-			{"$or": []bson.M{
-				{"metadataFetchError": bson.M{"$exists": false}},
-				{"metadataFetchError": ""},
-			}},
-		},
 	}
-	opts := options.Find().SetLimit(int64(limit))
+	withBase := func(extra ...bson.M) bson.M {
+		f := bson.M{"$and": extra}
+		for k, v := range base {
+			f[k] = v
+		}
+		return f
+	}
 
-	cur, err := configs.GetContractsCollection().Find(ctx, filter, opts)
+	fresh, err := findLimited[models.ContractInfo](ctx, collection, withBase(
+		missingOrEmpty("metadataFetchedAt"),
+		missingOrEmpty("metadataFetchError"),
+	), limit)
 	if err != nil {
 		return nil, err
 	}
-	defer cur.Close(ctx)
 
-	var out []models.ContractInfo
-	if err := cur.All(ctx, &out); err != nil {
+	retryable, err := findLimited[models.ContractInfo](ctx, collection,
+		withBase(dueForRetry("metadataFetchError", "metadataNextRetryAt", nowStr)), limit)
+	if err != nil {
 		return nil, err
 	}
-	return out, nil
+
+	var stale []models.ContractInfo
+	if refreshTTL > 0 {
+		cutoff := now.UTC().Add(-refreshTTL).Format(time.RFC3339)
+		stale, err = findLimited[models.ContractInfo](ctx, collection, withBase(
+			bson.M{"metadataFetchedAt": bson.M{"$gt": "", "$lte": cutoff}},
+			missingOrEmpty("metadataFetchError"),
+		), limit)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return composeBatch(limit, fresh, retryable, stale), nil
 }
 
 // standardRank orders TokenStandard values for promote-only merging.

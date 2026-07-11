@@ -5,6 +5,7 @@ import (
 	"net"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestResolveMetadataURI(t *testing.T) {
@@ -107,13 +108,13 @@ func TestResolveMetadataURI(t *testing.T) {
 
 func TestParseMetadataJSON(t *testing.T) {
 	tests := []struct {
-		name        string
-		body        string
-		wantName    string
-		wantDesc    string
-		wantImage   string
-		wantExtURL  string
-		wantErr     bool
+		name       string
+		body       string
+		wantName   string
+		wantDesc   string
+		wantImage  string
+		wantExtURL string
+		wantErr    bool
 	}{
 		{
 			name:       "OpenSea-style happy path",
@@ -124,9 +125,9 @@ func TestParseMetadataJSON(t *testing.T) {
 			wantExtURL: "https://example.com",
 		},
 		{
-			name:     "extra fields ignored",
-			body:     `{"name":"Foo","attributes":[{"trait_type":"x","value":"y"}],"image":"ipfs://Q"}`,
-			wantName: "Foo",
+			name:      "extra fields ignored",
+			body:      `{"name":"Foo","attributes":[{"trait_type":"x","value":"y"}],"image":"ipfs://Q"}`,
+			wantName:  "Foo",
 			wantImage: "ipfs://Q",
 		},
 		{
@@ -348,8 +349,8 @@ func TestIsForbiddenIP(t *testing.T) {
 		// Public, allowed
 		{"8.8.8.8", false},
 		{"1.1.1.1", false},
-		{"209.250.255.226", false}, // QRL Foundation public RPC
-		{"REDACTED", false},   // Our testnet node
+		{"209.250.255.226", false},      // QRL Foundation public RPC
+		{"REDACTED", false},        // Our testnet node
 		{"2606:4700:4700::1111", false}, // Cloudflare DNS over IPv6
 
 		// Loopback
@@ -409,16 +410,69 @@ func TestForbiddenIPRejectsNil(t *testing.T) {
 
 func TestLooksLikeCID(t *testing.T) {
 	cases := map[string]bool{
-		"QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG":             true,
+		"QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG":              true,
 		"bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi": true,
-		"definitely-not-a-cid":                                       false,
-		"Qm-too-short":                                               false,
-		"":                                                           false,
+		"definitely-not-a-cid":                                        false,
+		"Qm-too-short":                                                false,
+		"":                                                            false,
 		strings.Repeat("X", 60):                                       false,
 	}
 	for in, want := range cases {
 		if got := looksLikeCID(in); got != want {
 			t.Errorf("looksLikeCID(%q) = %v, want %v", in, got, want)
+		}
+	}
+}
+
+// TestNextRetryDelay covers the exponential-backoff schedule: base for the
+// first failure, doubling per subsequent failure, hard-capped at max, and
+// defensive against nonsense inputs (zero base, max < base, huge counts).
+func TestNextRetryDelay(t *testing.T) {
+	base := time.Minute
+	max := 6 * time.Hour
+	cases := []struct {
+		name       string
+		base, max  time.Duration
+		retryCount int
+		want       time.Duration
+	}{
+		{"first failure waits base", base, max, 0, time.Minute},
+		{"second failure doubles", base, max, 1, 2 * time.Minute},
+		{"third failure doubles again", base, max, 2, 4 * time.Minute},
+		{"eighth failure", base, max, 7, 128 * time.Minute},
+		{"capped at max", base, max, 9, 6 * time.Hour},
+		{"huge count stays at max (no overflow)", base, max, 1_000_000, 6 * time.Hour},
+		{"negative count treated as first", base, max, -1, time.Minute},
+		{"zero base falls back to a minute", 0, max, 0, time.Minute},
+		{"max below base is raised to base", base, time.Second, 3, time.Minute},
+	}
+	for _, tc := range cases {
+		if got := nextRetryDelay(tc.base, tc.max, tc.retryCount); got != tc.want {
+			t.Errorf("%s: nextRetryDelay(%v, %v, %d) = %v, want %v",
+				tc.name, tc.base, tc.max, tc.retryCount, got, tc.want)
+		}
+	}
+}
+
+// TestIsImmutableURI documents which URIs the TTL-refresh fast path may
+// skip re-fetching: content-addressed ipfs:// and bare-CID forms only.
+// Mutable http(s) URIs must always re-fetch.
+func TestIsImmutableURI(t *testing.T) {
+	cases := map[string]bool{
+		"ipfs://QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG":              true,
+		"ipfs://QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG/1.json":       true,
+		"  ipfs://QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG":            true,
+		"QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG":                     true,
+		"QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG/42":                  true,
+		"bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi/x.json": true,
+		"https://example.com/api/meta/1":                                     false,
+		"http://example.com/1.json":                                          false,
+		"ar://abc123":                                                        false,
+		"":                                                                   false,
+	}
+	for in, want := range cases {
+		if got := isImmutableURI(in); got != want {
+			t.Errorf("isImmutableURI(%q) = %v, want %v", in, got, want)
 		}
 	}
 }

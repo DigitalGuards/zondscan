@@ -30,6 +30,13 @@ type TokenMetadata struct {
 	FetchedAt  string `bson:"fetchedAt,omitempty" json:"fetchedAt,omitempty"`
 	FetchError string `bson:"fetchError,omitempty" json:"fetchError,omitempty"`
 	UpdatedAt  string `bson:"updatedAt" json:"updatedAt"`
+
+	// Retry scheduling, internal to the metadata fetcher. `RetryCount` is
+	// the number of consecutive failed fetch attempts; `NextRetryAt` is the
+	// RFC3339 timestamp before which the fetcher must not retry (exponential
+	// backoff). Both are cleared on a successful fetch.
+	RetryCount  int    `bson:"retryCount,omitempty" json:"-"`
+	NextRetryAt string `bson:"nextRetryAt,omitempty" json:"-"`
 }
 
 // TokenAttribute is one OpenSea-style trait. The spec is loose about the
