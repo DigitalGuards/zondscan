@@ -209,12 +209,12 @@ func Match(compiledHex, onChainHex string, immRefs map[string][]ImmutableRange) 
 //   - len(b) < 2                    no length bytes
 //   - cborLen <= 0                  garbage / no trailer claimed
 //   - cborLen+2 >= len(b)           would strip the entire code body ,
-//                                   two such inputs would compare equal
-//                                   even when their code bodies differ
+//     two such inputs would compare equal
+//     even when their code bodies differ
 //   - cborLen > 1024                real metadata is well under 100 B; a
-//                                   length larger than this is almost
-//                                   certainly the wrong interpretation of
-//                                   two random tail bytes
+//     length larger than this is almost
+//     certainly the wrong interpretation of
+//     two random tail bytes
 //
 // Either condition leaves the bytes alone so the existing length+masked
 // equal compare still catches real differences.

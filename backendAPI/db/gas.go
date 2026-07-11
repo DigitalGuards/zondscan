@@ -98,12 +98,12 @@ func GetRecentBlockSamples(n int) ([]BlockGasSample, error) {
 // and the ETA computation. All "avg" values are simple arithmetic means over
 // the provided window.
 type BlockStats struct {
-	AvgBlockTimeSec    float64
-	AvgGasUsed         *big.Int
-	AvgGasLimit        *big.Int
-	LastNumberHex      string
-	LastGasUsedHex     string
-	LastGasLimitHex    string
+	AvgBlockTimeSec float64
+	AvgGasUsed      *big.Int
+	AvgGasLimit     *big.Int
+	LastNumberHex   string
+	LastGasUsedHex  string
+	LastGasLimitHex string
 	// MedianTxGasPrice is the median of every `gasprice` across every tx in
 	// the sample window. Zero when no block in the window contained txs.
 	MedianTxGasPrice *big.Int
@@ -273,10 +273,10 @@ func MedianBigHex(hexes []string) *big.Int {
 
 // MempoolStats summarizes a mempool snapshot relative to a single tx.
 type MempoolStats struct {
-	Count           int
-	MedianGasPrice  *big.Int
-	GasAhead        *big.Int // sum of `gas` for txs with strictly higher gasPrice than the target
-	YourGasPrice    *big.Int
+	Count          int
+	MedianGasPrice *big.Int
+	GasAhead       *big.Int // sum of `gas` for txs with strictly higher gasPrice than the target
+	YourGasPrice   *big.Int
 }
 
 // ComputeMempoolStatsFor walks the snapshot once, computing the median

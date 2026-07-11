@@ -366,4 +366,3 @@ func BackfillValidatorHistory(currentEpoch int64) error {
 		zap.Int64("currentEpoch", currentEpoch))
 	return nil
 }
-

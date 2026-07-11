@@ -106,9 +106,9 @@ func RegisterContractCallRoute(router *gin.Engine) {
 			// Surface the upstream error verbatim, "execution reverted"
 			// is the most common case and clients (Read tab) display it.
 			c.JSON(http.StatusOK, gin.H{
-				"error":   rpcErr.Message,
-				"code":    rpcErr.Code,
-				"data":    rpcErr.Data,
+				"error":    rpcErr.Message,
+				"code":     rpcErr.Code,
+				"data":     rpcErr.Data,
 				"reverted": true,
 			})
 			return

@@ -92,4 +92,3 @@ func GetDailyTransactionVolume() {
 			zap.String("timestamp", currentBlockTimestamp))
 	}
 }
-
