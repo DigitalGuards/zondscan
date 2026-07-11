@@ -17,7 +17,7 @@ export default function ContractsWrapper({ initialData, totalContracts }: Contra
     <Suspense fallback={
       <div role="status" aria-label="Loading contracts" className="p-4 space-y-4">
         {[...Array(5)].map((_, i) => (
-          <div key={i} className="h-16 bg-gray-700/30 rounded animate-pulse" />
+          <div key={i} className="h-16 skeleton" />
         ))}
       </div>
     }>

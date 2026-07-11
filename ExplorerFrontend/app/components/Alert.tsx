@@ -12,19 +12,19 @@ interface AlertProps {
 const VARIANT_STYLES = {
   info: {
     container: 'bg-blue-900/20 border-blue-500/30 text-blue-300',
-    icon: 'text-blue-400',
+    icon: 'text-info',
   },
   success: {
     container: 'bg-green-900/20 border-green-500/30 text-green-300',
-    icon: 'text-green-400',
+    icon: 'text-success',
   },
   warning: {
     container: 'bg-yellow-900/20 border-yellow-500/30 text-yellow-300',
-    icon: 'text-yellow-400',
+    icon: 'text-warning',
   },
   error: {
     container: 'bg-red-900/20 border-red-500/30 text-red-300',
-    icon: 'text-red-400',
+    icon: 'text-error',
   },
 } as const
 

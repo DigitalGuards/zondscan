@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import config from '../../config';
 import Badge from '../components/Badge';
 import { formatGasPrice, hexToBigInt, hexToNumber, formatBigGas } from '../lib/helpers';
+import { palette, chartTheme } from '../lib/theme';
 
 interface GasSummary {
   avgGasPriceHex: string;
@@ -48,7 +49,7 @@ function gasCostUsd(gasPriceHex: string | undefined, gasUnits: number, qrlUsd: n
 }
 
 function formatUsdCost(usd: number | null): string {
-  if (usd === null) return ',';
+  if (usd === null) return '…';
   if (usd === 0) return '$0';
   if (usd < 0.000001) return `$${usd.toExponential(2)}`;
   if (usd < 0.01) return `$${usd.toFixed(8).replace(/0+$/, '').replace(/\.$/, '')}`;
@@ -57,10 +58,10 @@ function formatUsdCost(usd: number | null): string {
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }): JSX.Element {
   return (
-    <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-lg p-4">
-      <p className="text-xs uppercase tracking-wider text-gray-400 mb-1">{label}</p>
-      <p className="text-xl font-semibold text-[#ffa729] truncate">{value}</p>
-      {sub && <p className="text-xs text-gray-500 mt-1">{sub}</p>}
+    <div className="card p-4">
+      <p className="text-xs uppercase tracking-wider text-text-secondary mb-1">{label}</p>
+      <p className="font-display text-xl font-semibold text-text-primary truncate">{value}</p>
+      {sub && <p className="text-xs text-text-muted mt-1">{sub}</p>}
     </div>
   );
 }
@@ -84,7 +85,7 @@ function GasUsedChart({ rows, range }: { rows: GasHistoryRow[]; range: '24h' | '
 
   if (points.length < 2) {
     return (
-      <div className="text-center text-gray-500 text-sm py-12">
+      <div className="text-center text-text-muted text-sm py-12">
         Not enough gas history yet, check back after the syncer has run its periodic task.
       </div>
     );
@@ -117,25 +118,25 @@ function GasUsedChart({ rows, range }: { rows: GasHistoryRow[]; range: '24h' | '
       <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-auto" preserveAspectRatio="xMidYMid meet">
         <defs>
           <linearGradient id="gasGradient" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#ffa729" stopOpacity="0.7" />
-            <stop offset="100%" stopColor="#ffa729" stopOpacity="0.05" />
+            <stop offset="0%" stopColor={palette.accent} stopOpacity="0.55" />
+            <stop offset="100%" stopColor={palette.accent} stopOpacity="0.03" />
           </linearGradient>
         </defs>
         {/* Grid */}
         {yTicks.map((t, i) => (
-          <line key={i} x1={pad.l} x2={w - pad.r} y1={sy(t)} y2={sy(t)} stroke="#3d3d3d" strokeWidth="0.5" />
+          <line key={i} x1={pad.l} x2={w - pad.r} y1={sy(t)} y2={sy(t)} stroke={chartTheme.grid} strokeWidth="1" />
         ))}
         <path d={areaPath} fill="url(#gasGradient)" />
-        <path d={linePath} fill="none" stroke="#ffa729" strokeWidth="1.5" />
+        <path d={linePath} fill="none" stroke={palette.accent} strokeWidth="1.5" />
         {/* Y labels */}
         {yTicks.map((t, i) => (
-          <text key={i} x={pad.l - 6} y={sy(t)} dy="0.32em" textAnchor="end" fontSize="10" fill="#9ca3af">
+          <text key={i} x={pad.l - 6} y={sy(t)} dy="0.32em" textAnchor="end" fontSize="10" fill={chartTheme.tickLabel} fontFamily={chartTheme.fontFamily}>
             {Math.round(t).toLocaleString()}
           </text>
         ))}
         {/* X labels */}
         {xTicks.map((t, i) => (
-          <text key={i} x={sx(t)} y={h - 8} textAnchor="middle" fontSize="10" fill="#9ca3af">
+          <text key={i} x={sx(t)} y={h - 8} textAnchor="middle" fontSize="10" fill={chartTheme.tickLabel} fontFamily={chartTheme.fontFamily}>
             {formatAxisTick(t, range)}
           </text>
         ))}
@@ -146,7 +147,7 @@ function GasUsedChart({ rows, range }: { rows: GasHistoryRow[]; range: '24h' | '
 
 function HistogramChart({ buckets }: { buckets: GasSummary['gasPriceHistogram'] }): JSX.Element {
   if (!buckets || buckets.length === 0) {
-    return <div className="text-center text-gray-500 text-sm py-12">Mempool is empty.</div>;
+    return <div className="text-center text-text-muted text-sm py-12">Mempool is empty.</div>;
   }
   const w = 800;
   const h = 220;
@@ -164,25 +165,26 @@ function HistogramChart({ buckets }: { buckets: GasSummary['gasPriceHistogram'] 
           const y = pad.t + innerH - barH;
           return (
             <g key={i}>
-              <rect x={x} y={y} width={barW - 4} height={barH} fill="#ffa729" opacity="0.8" />
+              <rect x={x} y={y} width={barW - 4} height={barH} rx={2} fill={palette.accent} opacity="0.8" />
               <text
                 x={x + (barW - 4) / 2}
                 y={h - 18}
                 fontSize="9"
-                fill="#9ca3af"
+                fill={chartTheme.tickLabel}
+                fontFamily={chartTheme.fontFamily}
                 textAnchor="middle"
               >
                 {b.shorLow === b.shorHigh ? b.shorLow.toFixed(0) : `${b.shorLow.toFixed(0)}–${b.shorHigh.toFixed(0)}`}
               </text>
               {b.count > 0 && (
-                <text x={x + (barW - 4) / 2} y={y - 3} fontSize="9" fill="#d1d5db" textAnchor="middle">
+                <text x={x + (barW - 4) / 2} y={y - 3} fontSize="9" fill={palette.textPrimary} fontFamily={chartTheme.fontFamily} textAnchor="middle">
                   {b.count}
                 </text>
               )}
             </g>
           );
         })}
-        <text x={w / 2} y={h - 4} fontSize="10" fill="#6b7280" textAnchor="middle">
+        <text x={w / 2} y={h - 4} fontSize="10" fill={chartTheme.axis} fontFamily={chartTheme.fontFamily} textAnchor="middle">
           gas price (Shor)
         </text>
       </svg>
@@ -231,11 +233,11 @@ export default function GasClient(): JSX.Element {
   }, [summary]);
 
   return (
-    <div className="p-4 sm:p-8 max-w-6xl mx-auto">
+    <div className="page-content py-4 sm:py-6 lg:py-8">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-[#ffa729]">Network Gas</h2>
-          <p className="text-sm text-gray-400 mt-1">
+          <h2 className="section-title">Network Gas</h2>
+          <p className="text-sm text-text-secondary mt-1">
             Live mempool + block stats from the QRL 2.0 network. Updated every 10s.
           </p>
         </div>
@@ -244,10 +246,10 @@ export default function GasClient(): JSX.Element {
             <button
               key={r}
               onClick={() => setRange(r)}
-              className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+              className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${
                 range === r
-                  ? 'bg-[#ffa729]/20 text-[#ffa729] border-[#ffa729]/40'
-                  : 'bg-[#1f1f1f] text-gray-400 border-[#3d3d3d] hover:text-gray-200'
+                  ? 'bg-accent text-background border-accent font-semibold'
+                  : 'bg-surface-2 text-text-secondary border-border hover:text-text-primary'
               }`}
             >
               {r}
@@ -257,53 +259,53 @@ export default function GasClient(): JSX.Element {
       </div>
 
       {err && (
-        <div className="bg-red-900/20 border border-red-500/40 rounded-lg p-3 mb-4 text-sm text-red-400">{err}</div>
+        <div className="bg-red-900/20 border border-red-500/40 rounded-lg p-3 mb-4 text-sm text-error">{err}</div>
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
         <StatCard
           label="Avg Gas Price"
-          value={summary ? `${formatGasPrice(summary.avgGasPriceHex)} Shor` : ','}
+          value={summary ? `${formatGasPrice(summary.avgGasPriceHex)} Shor` : '…'}
           sub={summary ? `≈ ${formatUsdCost(gasCostUsd(summary.avgGasPriceHex, 21000, summary.qrlUsdPrice))} per transfer` : 'median of last 20 transactions'}
         />
         <StatCard
           label="Avg Block Time"
-          value={summary ? `${summary.avgBlockTimeSec.toFixed(1)}s` : ','}
+          value={summary ? `${summary.avgBlockTimeSec.toFixed(1)}s` : '…'}
           sub="last 30 blocks"
         />
         <StatCard
           label="Mempool Size"
-          value={summary ? summary.pendingCount.toString() : ','}
+          value={summary ? summary.pendingCount.toString() : '…'}
           sub="pending transactions"
         />
         <StatCard
           label="Avg Gas Used"
-          value={summary ? formatBigGas(summary.avgGasUsedHex) : ','}
+          value={summary ? formatBigGas(summary.avgGasUsedHex) : '…'}
           sub="per block, last 30"
         />
         <StatCard
           label="Last Block"
-          value={summary ? hexToNumber(summary.lastBlockNumberHex).toLocaleString() : ','}
+          value={summary ? hexToNumber(summary.lastBlockNumberHex).toLocaleString() : '…'}
           sub={summary ? `${formatBigGas(summary.lastGasUsedHex)} / ${formatBigGas(summary.lastGasLimitHex)} gas` : ''}
         />
         <StatCard
           label="Gas Limit Utilization"
-          value={utilization !== null ? `${utilization.toFixed(1)}%` : ','}
+          value={utilization !== null ? `${utilization.toFixed(1)}%` : '…'}
           sub="last block"
         />
       </div>
 
-      <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-lg p-4 sm:p-6 mb-6">
+      <div className="card p-4 sm:p-6 mb-6">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-[#ffa729]">Gas Used per Block</h3>
+          <h3 className="text-sm font-display font-semibold text-text-primary">Gas Used per Block</h3>
           <Badge variant="neutral">{range}</Badge>
         </div>
         <GasUsedChart rows={history} range={range} />
       </div>
 
-      <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-lg p-4 sm:p-6">
+      <div className="card p-4 sm:p-6">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-[#ffa729]">Mempool Gas Price Distribution</h3>
+          <h3 className="text-sm font-display font-semibold text-text-primary">Mempool Gas Price Distribution</h3>
           {summary && <Badge variant="neutral">{summary.pendingCount} tx</Badge>}
         </div>
         {summary && <HistogramChart buckets={summary.gasPriceHistogram} />}

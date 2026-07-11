@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { resolveSearchPath } from '../lib/searchResolver';
 
 export default function SearchBar(): JSX.Element {
@@ -43,48 +44,64 @@ export default function SearchBar(): JSX.Element {
 
   return (
     <div className="relative w-full">
-      <div className="relative bg-card-gradient rounded-2xl p-3 sm:p-6
-                    shadow-xl border border-border hover:border-border-hover transition-colors">
-        <form
-          onSubmit={(e: FormEvent<HTMLFormElement>) => {
-            e.preventDefault();
-            navigateHandler();
-          }}
-          className="flex flex-col sm:flex-row gap-3 sm:gap-6">
-          <input
-            ref={inputRef}
-            type="text"
-            aria-label="Search by address, transaction hash, or block number"
-            placeholder="Search by Address (Qxx) / Txn Hash / Block.."
-            className="flex-1 py-3 sm:py-4 px-4 sm:px-6 text-sm sm:text-base text-gray-300
-                     bg-background rounded-xl
-                     border border-border
-                     outline-none shadow-lg
-                     focus:ring-2 focus:ring-accent focus:border-transparent
-                     placeholder-gray-500 transition-all duration-300
-                     hover:border-border-hover"
-            value={searchValue}
-            onChange={handleInputChange}
-          />
-          <button
-            type="submit"
-            className="px-8 sm:px-10 py-3 sm:py-4 bg-accent text-white text-sm sm:text-base
-                     rounded-xl shadow-lg font-medium whitespace-nowrap
-                     hover:bg-accent-dark hover:shadow-2xl hover:scale-105
-                     active:scale-95 transition-all duration-300
-                     sm:w-auto w-full"
-          >
-            Search
-          </button>
-        </form>
-        {error && (
-          <div className="mt-3 sm:mt-4">
-            <div className="p-3 sm:p-4 mb-3 sm:mb-4 text-xs sm:text-sm text-red-400 rounded-xl bg-card-gradient border border-red-400 shadow-lg" role="alert">
-              <span className="font-medium">{error}</span>
-            </div>
-          </div>
-        )}
-      </div>
+      {/* One integrated pill: icon, input, kbd hint, action. The glow on
+          focus-within is the page's primary "you are here" moment. */}
+      <form
+        onSubmit={(e: FormEvent<HTMLFormElement>) => {
+          e.preventDefault();
+          navigateHandler();
+        }}
+        className="group relative flex items-center gap-2 rounded-2xl
+                   bg-background-secondary/80 backdrop-blur-sm
+                   border border-border
+                   shadow-card
+                   transition-all duration-300
+                   hover:border-border-hover
+                   focus-within:border-accent/60
+                   focus-within:shadow-[0_0_0_1px_rgba(255,167,41,0.25),0_0_40px_-8px_rgba(255,167,41,0.25)]
+                   p-2 pl-4"
+      >
+        <MagnifyingGlassIcon
+          className="w-5 h-5 flex-shrink-0 text-text-muted transition-colors
+                     group-focus-within:text-accent"
+          aria-hidden="true"
+        />
+        <input
+          ref={inputRef}
+          type="text"
+          aria-label="Search by address, transaction hash, or block number"
+          placeholder="Search by address / txn hash / block number"
+          className="flex-1 min-w-0 bg-transparent py-2.5 text-sm sm:text-base
+                     text-text-primary placeholder-text-muted
+                     outline-none border-none focus:ring-0"
+          value={searchValue}
+          onChange={handleInputChange}
+        />
+        <kbd
+          className="hidden md:inline-flex items-center gap-1 px-2 py-1 rounded-md
+                     bg-surface-2 border border-border text-[11px] font-mono
+                     text-text-muted select-none"
+          aria-hidden="true"
+        >
+          Ctrl K
+        </kbd>
+        <button
+          type="submit"
+          className="btn-primary px-5 sm:px-7 py-2.5 text-sm sm:text-base rounded-xl
+                     whitespace-nowrap"
+        >
+          Search
+        </button>
+      </form>
+      {error && (
+        <div
+          className="mt-3 px-4 py-3 text-xs sm:text-sm text-error rounded-xl
+                     bg-error/10 border border-error/25"
+          role="alert"
+        >
+          <span className="font-medium">{error}</span>
+        </div>
+      )}
     </div>
   );
 }

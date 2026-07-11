@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { Group } from '@visx/group';
 import { Pie } from '@visx/shape';
 import { scaleOrdinal } from '@visx/scale';
+import { palette } from '../../lib/theme';
 
 interface StatusData {
   label: string;
@@ -34,10 +35,10 @@ export default function ValidatorStatusChart({
 
   const data: StatusData[] = useMemo(() => {
     const items = [
-      { label: 'Active', value: activeCount, color: '#22c55e' },
-      { label: 'Pending', value: pendingCount, color: '#eab308' },
-      { label: 'Exited', value: exitedCount, color: '#6b7280' },
-      { label: 'Slashed', value: slashedCount, color: '#ef4444' },
+      { label: 'Active', value: activeCount, color: palette.success },
+      { label: 'Pending', value: pendingCount, color: palette.warning },
+      { label: 'Exited', value: exitedCount, color: palette.textMuted },
+      { label: 'Slashed', value: slashedCount, color: palette.error },
     ];
     return items.filter(item => item.value > 0);
   }, [activeCount, pendingCount, exitedCount, slashedCount]);
@@ -58,7 +59,7 @@ export default function ValidatorStatusChart({
 
   if (total === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-400">
+      <div className="flex items-center justify-center h-full text-text-secondary">
         No validator data available
       </div>
     );
@@ -107,7 +108,6 @@ export default function ValidatorStatusChart({
                         transition: 'opacity 0.2s',
                         transform: isActive ? 'scale(1.02)' : 'scale(1)',
                         transformOrigin: 'center',
-                        outline: 'none',
                       }}
                     />
                     {hasSpaceForLabel && (
@@ -131,7 +131,7 @@ export default function ValidatorStatusChart({
           {/* Center text */}
           <text
             textAnchor="middle"
-            fill="#ffa729"
+            fill={palette.accent}
             fontSize={24}
             fontWeight="bold"
             dy="-0.2em"
@@ -140,7 +140,7 @@ export default function ValidatorStatusChart({
           </text>
           <text
             textAnchor="middle"
-            fill="#9ca3af"
+            fill={palette.textSecondary}
             fontSize={12}
             dy="1.2em"
           >
@@ -150,7 +150,7 @@ export default function ValidatorStatusChart({
       </svg>
 
       {/* Legend */}
-      <div className="flex flex-wrap justify-center gap-4 mt-4">
+      <div role="list" className="flex flex-wrap justify-center gap-4 mt-4">
         {data.map((item) => (
           <div
             key={item.label}
@@ -169,7 +169,7 @@ export default function ValidatorStatusChart({
               className="w-3 h-3 rounded-full"
               style={{ backgroundColor: item.color }}
             />
-            <span className="text-sm text-gray-300">
+            <span className="text-sm text-text-secondary">
               {item.label}: {item.value.toLocaleString()}
             </span>
           </div>
@@ -178,18 +178,18 @@ export default function ValidatorStatusChart({
 
       {/* Tooltip */}
       {active && (
-        <div className="absolute top-4 right-4 bg-[#1f1f1f] border border-[#3d3d3d] rounded-lg p-3 shadow-lg">
+        <div className="absolute top-4 right-4 bg-surface-2 border border-border rounded-lg p-3 shadow-lg">
           <div className="flex items-center gap-2">
             <div
               className="w-3 h-3 rounded-full"
               style={{ backgroundColor: active.color }}
             />
-            <span className="text-gray-300 font-medium">{active.label}</span>
+            <span className="text-text-secondary font-medium">{active.label}</span>
           </div>
-          <div className="text-xl font-semibold text-white mt-1">
+          <div className="text-xl font-semibold text-text-primary mt-1">
             {active.value.toLocaleString()}
           </div>
-          <div className="text-sm text-gray-400">
+          <div className="text-sm text-text-secondary">
             {((active.value / total) * 100).toFixed(1)}% of total
           </div>
         </div>

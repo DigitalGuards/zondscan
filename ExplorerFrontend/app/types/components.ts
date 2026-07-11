@@ -33,13 +33,6 @@ export interface TransactionsListProps {
 }
 
 /**
- * Props for transaction card component
- */
-export interface TransactionCardProps {
-  transaction: Transaction;
-}
-
-/**
  * Props for pagination component
  */
 export interface PaginationProps {

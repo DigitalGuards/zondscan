@@ -103,7 +103,7 @@ export default async function Page({ params }: PageProps): Promise<JSX.Element> 
     if (!addressData) {
         return (
             <main>
-                <div className="text-center p-8 text-red-400">Failed to load address data</div>
+                <div className="text-center p-8 text-error">Failed to load address data</div>
             </main>
         );
     }

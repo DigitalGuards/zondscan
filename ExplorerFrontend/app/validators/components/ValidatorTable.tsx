@@ -44,10 +44,10 @@ const statusOrder: Record<string, number> = {
 
 function SortIcon({ field, sortField, sortDirection }: { field: SortField; sortField: SortField; sortDirection: SortDirection }) {
   if (sortField !== field) {
-    return <span className="text-gray-600 ml-1">↕</span>;
+    return <span className="text-text-muted ml-1">↕</span>;
   }
   return (
-    <span className="text-[#ffa729] ml-1">
+    <span className="text-accent ml-1">
       {sortDirection === 'asc' ? '↑' : '↓'}
     </span>
   );
@@ -137,10 +137,10 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
 
   if (loading) {
     return (
-      <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] overflow-hidden">
+      <div className="card overflow-hidden">
         <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
           {[...Array(10)].map((_, i) => (
-            <div key={i} className="h-10 sm:h-12 bg-gray-700/30 rounded animate-pulse" />
+            <div key={i} className="h-10 sm:h-12 skeleton" />
           ))}
         </div>
       </div>
@@ -148,9 +148,9 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
   }
 
   return (
-    <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] overflow-hidden">
+    <div className="card overflow-hidden">
       {/* Search and Controls */}
-      <div className="p-3 sm:p-4 border-b border-[#3d3d3d]">
+      <div className="p-3 sm:p-4 border-b border-border">
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
           <input
             type="text"
@@ -161,9 +161,9 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
               setSearchQuery(e.target.value);
               setCurrentPage(1);
             }}
-            className="flex-1 p-2 text-sm sm:text-base bg-[#1f1f1f] border border-[#3d3d3d] rounded-lg text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#ffa729] focus:border-transparent"
+            className="flex-1 p-2 text-sm sm:text-base bg-surface-2 border border-border rounded-lg text-text-secondary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
           />
-          <div className="text-xs sm:text-sm text-gray-400 flex items-center">
+          <div className="text-xs sm:text-sm text-text-secondary flex items-center">
             {filteredAndSortedValidators.length} validators
           </div>
         </div>
@@ -171,32 +171,32 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table aria-label="Validators list" className="min-w-full divide-y divide-[#3d3d3d]">
-          <thead className="bg-[#2d2d2d]/50">
+        <table aria-label="Validators list" className="min-w-full divide-y divide-border">
+          <thead className="border-b border-border">
             <tr>
               <th
                 scope="col"
                 aria-sort={sortField === 'index' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
-                className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider"
+                className="px-4 py-3 text-left text-[11px] font-medium text-text-muted uppercase tracking-[0.12em]"
               >
                 <button
                   onClick={() => handleSort('index')}
-                  className="flex items-center hover:text-gray-200 focus:outline-none focus:underline"
+                  className="flex items-center hover:text-text-primary focus:outline-none focus:underline"
                 >
                   Index <SortIcon field="index" sortField={sortField} sortDirection={sortDirection} />
                 </button>
               </th>
-              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              <th scope="col" className="px-4 py-3 text-left text-[11px] font-medium text-text-muted uppercase tracking-[0.12em]">
                 Address
               </th>
               <th
                 scope="col"
                 aria-sort={sortField === 'status' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
-                className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider"
+                className="px-4 py-3 text-left text-[11px] font-medium text-text-muted uppercase tracking-[0.12em]"
               >
                 <button
                   onClick={() => handleSort('status')}
-                  className="flex items-center hover:text-gray-200 focus:outline-none focus:underline"
+                  className="flex items-center hover:text-text-primary focus:outline-none focus:underline"
                 >
                   Status <SortIcon field="status" sortField={sortField} sortDirection={sortDirection} />
                 </button>
@@ -204,11 +204,11 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
               <th
                 scope="col"
                 aria-sort={sortField === 'age' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
-                className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider"
+                className="hidden sm:table-cell px-4 py-3 text-left text-[11px] font-medium text-text-muted uppercase tracking-[0.12em]"
               >
                 <button
                   onClick={() => handleSort('age')}
-                  className="flex items-center hover:text-gray-200 focus:outline-none focus:underline"
+                  className="flex items-center hover:text-text-primary focus:outline-none focus:underline"
                 >
                   Age <SortIcon field="age" sortField={sortField} sortDirection={sortDirection} />
                 </button>
@@ -216,29 +216,29 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
               <th
                 scope="col"
                 aria-sort={sortField === 'stakedAmount' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
-                className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider"
+                className="px-4 py-3 text-left text-[11px] font-medium text-text-muted uppercase tracking-[0.12em]"
               >
                 <button
                   onClick={() => handleSort('stakedAmount')}
-                  className="flex items-center hover:text-gray-200 focus:outline-none focus:underline"
+                  className="flex items-center hover:text-text-primary focus:outline-none focus:underline"
                 >
                   Stake <SortIcon field="stakedAmount" sortField={sortField} sortDirection={sortDirection} />
                 </button>
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#3d3d3d]">
+          <tbody className="divide-y divide-border">
             {currentValidators.map((validator) => {
               const [stakeValue, stakeUnit] = formatValidatorStake(validator.stakedAmount);
               return (
               <tr
                 key={validator.index}
-                className="hover:bg-[#2d2d2d]/30 cursor-pointer"
+                className="hover:bg-surface-2/30 cursor-pointer"
               >
                 <td className="px-4 py-3 whitespace-nowrap text-sm">
                   <Link
                     href={`/validators/${validator.index}`}
-                    className="text-[#ffa729] hover:underline font-mono"
+                    className="text-accent hover:underline font-mono"
                   >
                     #{validator.index}
                   </Link>
@@ -246,7 +246,7 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
                 <td className="px-4 py-3 whitespace-nowrap text-sm">
                   <Link
                     href={`/validators/${validator.index}`}
-                    className="text-gray-300 hover:text-[#ffa729] font-mono"
+                    className="text-text-secondary hover:text-accent font-mono"
                   >
                     <span className="hidden md:inline">
                       Q{validator.address.slice(0, 16)}...{validator.address.slice(-8)}
@@ -259,10 +259,10 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
                 <td className="px-4 py-3 whitespace-nowrap text-sm">
                   {getStatusBadge(validator.status)}
                 </td>
-                <td className="hidden sm:table-cell px-4 py-3 whitespace-nowrap text-sm text-gray-300">
+                <td className="hidden sm:table-cell px-4 py-3 whitespace-nowrap text-sm text-text-secondary">
                   {epochsToDays(validator.age).toFixed(1)} days
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-300 font-mono">
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-text-secondary font-mono">
                   {stakeValue} {stakeUnit}
                 </td>
               </tr>
@@ -274,17 +274,17 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="p-3 sm:p-4 border-t border-[#3d3d3d] flex flex-wrap justify-center items-center gap-1 sm:gap-2">
+        <div className="p-3 sm:p-4 border-t border-border flex flex-wrap justify-center items-center gap-1 sm:gap-2">
           <button
             aria-label="Go to previous page"
             onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
             disabled={currentPage === 1}
-            className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-[#1f1f1f] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d] text-xs sm:text-sm"
+            className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-surface-2 text-text-secondary border border-border hover:border-accent disabled:opacity-50 disabled:hover:border-border text-xs sm:text-sm"
           >
             Prev
           </button>
 
-          <span className="text-xs sm:text-sm text-gray-400 mx-1 sm:mx-2">
+          <span className="text-xs sm:text-sm text-text-secondary mx-1 sm:mx-2">
             {currentPage}/{totalPages}
           </span>
 
@@ -309,8 +309,8 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
                   onClick={() => setCurrentPage(pageNum)}
                   className={`w-8 h-8 rounded-lg text-sm ${
                     currentPage === pageNum
-                      ? 'bg-[#ffa729] text-black'
-                      : 'bg-[#1f1f1f] text-gray-300 hover:bg-[#3d3d3d]'
+                      ? 'bg-accent text-background font-semibold'
+                      : 'bg-surface-2 text-text-secondary hover:bg-surface-3'
                   }`}
                 >
                   {pageNum}
@@ -323,7 +323,7 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
             aria-label="Go to next page"
             onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
             disabled={currentPage === totalPages}
-            className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-[#1f1f1f] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d] text-xs sm:text-sm"
+            className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-surface-2 text-text-secondary border border-border hover:border-accent disabled:opacity-50 disabled:hover:border-border text-xs sm:text-sm"
           >
             Next
           </button>

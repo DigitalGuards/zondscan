@@ -92,7 +92,7 @@ export function DownloadBtn({ data = [], fileName, getData }: DownloadBtnProps):
   return (
     <button
       type="button"
-      className="px-4 py-2 text-sm font-medium rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] hover:text-white transition-colors disabled:opacity-60"
+      className="px-4 py-2 text-sm font-medium rounded-lg bg-surface-2 text-text-secondary border border-border hover:border-accent hover:text-text-primary transition-colors disabled:opacity-60"
       onClick={(e) => { void handleDownload(e); }}
       disabled={busy}
     >
@@ -165,7 +165,7 @@ export function DownloadBtnInternal({ data = [], fileName, getData }: DownloadBt
   return (
     <button
       type="button"
-      className="px-4 py-2 text-sm font-medium rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] hover:text-white transition-colors disabled:opacity-60"
+      className="px-4 py-2 text-sm font-medium rounded-lg bg-surface-2 text-text-secondary border border-border hover:border-accent hover:text-text-primary transition-colors disabled:opacity-60"
       onClick={(e) => { void handleDownload(e); }}
       disabled={busy}
     >

@@ -5,6 +5,7 @@ import { AxisLeft, AxisBottom } from '@visx/axis';
 import type { AxisScale } from '@visx/axis';
 import { LinearGradient } from '@visx/gradient';
 import { curveMonotoneX } from '@visx/curve';
+import { chartTheme } from '../lib/theme';
 
 export interface Block {
   result: {
@@ -13,20 +14,20 @@ export interface Block {
   }
 }
 // Initialize some variables
-const axisColor = '#fff';
+const axisColor = chartTheme.axis;
 const axisBottomTickLabelProps = {
   textAnchor: 'middle' as const,
-  fontFamily: 'Arial',
+  fontFamily: chartTheme.fontFamily,
   fontSize: 10,
-  fill: axisColor,
+  fill: chartTheme.tickLabel,
 };
 const axisLeftTickLabelProps = {
   dx: '-0.25em',
   dy: '0.25em',
-  fontFamily: 'Arial',
+  fontFamily: chartTheme.fontFamily,
   fontSize: 10,
   textAnchor: 'end' as const,
-  fill: axisColor,
+  fill: chartTheme.tickLabel,
 };
 
 // accessors

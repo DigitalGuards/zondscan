@@ -93,14 +93,14 @@ function TabButton({
       aria-controls="contracts-tabpanel"
       onClick={() => onSelect(tab)}
       className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-        active ? 'bg-[#ffa729] text-black' : 'bg-[#2d2d2d] text-gray-300 hover:bg-[#3d3d3d]'
+        active ? 'bg-accent text-background border border-accent font-semibold' : 'bg-surface-2 text-text-secondary border border-border hover:bg-surface-3 hover:text-text-primary'
       }`}
     >
       {label}
       {count !== undefined && (
         <span
           className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
-            active ? 'bg-black/20' : 'bg-[#1f1f1f]'
+            active ? 'bg-background/25' : 'bg-surface-3'
           }`}
         >
           {count}
@@ -279,11 +279,11 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
   const totalPages = Math.max(1, Math.ceil(total / ITEMS_PER_PAGE));
 
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+    <div className="py-4 sm:py-6 lg:py-8">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-[#ffa729] mb-2">Smart Contracts</h1>
-        <p className="text-gray-400">Browse deployed tokens and smart contracts on the QRL 2.0 network</p>
+        <h1 className="section-title mb-2">Smart Contracts</h1>
+        <p className="text-text-secondary">Browse deployed tokens and smart contracts on the QRL 2.0 network</p>
       </div>
 
       {/* Tabs, QRC-X is the QRL-branded form of the EIP standards; the
@@ -299,7 +299,7 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
       <div className="mb-6">
         <div className="relative">
           <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-            <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </div>
@@ -309,13 +309,13 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
             placeholder={activeTab === 'contracts' ? 'Search by contract address...' : 'Search by token name or address...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full p-3 pl-10 bg-[#2d2d2d] border border-[#3d3d3d] rounded-lg text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#ffa729] focus:border-transparent"
+            className="w-full p-3 pl-10 bg-surface-2 border border-border rounded-lg text-text-secondary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
           />
         </div>
       </div>
 
       {/* Results Count */}
-      <div className="mb-4 text-sm text-gray-400">
+      <div className="mb-4 text-sm text-text-secondary">
         {loading
           ? 'Loading...'
           : `${total} ${TAB_RESULT_NOUN[activeTab]} found`}
@@ -326,12 +326,12 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
         role="tabpanel"
         id="contracts-tabpanel"
         aria-labelledby={`contracts-tab-${activeTab}`}
-        className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] overflow-hidden"
+        className="card overflow-hidden"
       >
         {loading ? (
           <div className="p-4 space-y-4">
             {[...Array(5)].map((_, i) => (
-              <div key={i} className="h-16 bg-gray-700/30 rounded animate-pulse" />
+              <div key={i} className="h-16 skeleton" />
             ))}
           </div>
         ) : contracts.length === 0 ? (
@@ -351,12 +351,12 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
             aria-label="Go to previous page"
             onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
             disabled={currentPage === 0}
-            className="px-3 py-1.5 rounded-lg bg-[#1f1f1f] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d] text-sm"
+            className="px-3 py-1.5 rounded-lg bg-surface-2 text-text-secondary border border-border hover:border-accent disabled:opacity-50 disabled:hover:border-border text-sm"
           >
             Previous
           </button>
 
-          <span className="text-sm text-gray-400 mx-2">
+          <span className="text-sm text-text-secondary mx-2">
             Page {currentPage + 1} of {totalPages}
           </span>
 
@@ -379,8 +379,8 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
                 onClick={() => setCurrentPage(pageNum)}
                 className={`w-8 h-8 rounded-lg text-sm ${
                   currentPage === pageNum
-                    ? 'bg-[#ffa729] text-black'
-                    : 'bg-[#1f1f1f] text-gray-300 hover:bg-[#3d3d3d]'
+                    ? 'bg-accent text-background font-semibold'
+                    : 'bg-surface-2 text-text-secondary hover:bg-surface-3'
                 }`}
               >
                 {pageNum + 1}
@@ -392,7 +392,7 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
             aria-label="Go to next page"
             onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
             disabled={currentPage >= totalPages - 1}
-            className="px-3 py-1.5 rounded-lg bg-[#1f1f1f] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] disabled:opacity-50 disabled:hover:border-[#3d3d3d] text-sm"
+            className="px-3 py-1.5 rounded-lg bg-surface-2 text-text-secondary border border-border hover:border-accent disabled:opacity-50 disabled:hover:border-border text-sm"
           >
             Next
           </button>
@@ -406,7 +406,7 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
 // table with a different column subset, the original split-into-three
 // approach gave each tab its own visual identity, which read as four
 // different pages stitched together.
-const TH_BASE = 'px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider';
+const TH_BASE = 'px-4 py-3 text-left text-[11px] font-medium text-text-muted uppercase tracking-[0.12em]';
 const TD_BASE = 'px-4 py-4 whitespace-nowrap';
 
 const TAB_TABLE_LABEL: Record<TabType, string> = {
@@ -430,8 +430,8 @@ function ContractRowsTable({
   const showDecimalsAndSupply = variant === 'erc20';
   return (
     <div className="overflow-x-auto">
-      <table aria-label={TAB_TABLE_LABEL[variant]} className="min-w-full divide-y divide-[#3d3d3d]">
-        <thead className="bg-[#2d2d2d]/50">
+      <table aria-label={TAB_TABLE_LABEL[variant]} className="min-w-full divide-y divide-border">
+        <thead className="border-b border-border">
           <tr>
             <th scope="col" className={TH_BASE}>
               {variant === 'contracts' ? 'Contract' : variant === 'erc20' ? 'Token' : 'Collection'}
@@ -448,7 +448,7 @@ function ContractRowsTable({
             <th scope="col" className={`hidden xl:table-cell ${TH_BASE}`}>Created at Block</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-[#3d3d3d]">
+        <tbody className="divide-y divide-border">
           {contracts.map((contract, i) => (
             <ContractRow
               key={contract._id || i}
@@ -481,9 +481,9 @@ function ContractRow({
     : contract.address.replace(/^Q/i, '');
   const avatarChar = (avatarSeed.charAt(0) || '?').toUpperCase();
   const avatarGradient = isToken
-    ? 'from-[#ffa729] to-[#ff8c00]'
-    : 'from-[#5f5f5f] to-[#3d3d3d]';
-  const avatarTextColor = isToken ? 'text-black' : 'text-white';
+    ? 'from-accent to-accent-dark'
+    : 'from-surface-3 to-surface-2';
+  const avatarTextColor = isToken ? 'text-background' : 'text-text-primary';
 
   // Some standards (ERC-1155 in particular) don't expose name()/symbol(),
   // so the syncer stores empty strings. Phase 3a adds an off-chain name
@@ -518,11 +518,11 @@ function ContractRow({
   const metaImage = (contract.metadataImage || '').trim();
 
   return (
-    <tr className="hover:bg-[#2d2d2d]/30">
+    <tr className="hover:bg-surface-2/30">
       <td className={TD_BASE}>
         <div className="flex items-center gap-3">
           {metaImage ? (
-            <div className="relative w-8 h-8 rounded-full overflow-hidden border border-gray-700/50 bg-black/30 shrink-0">
+            <div className="relative w-8 h-8 rounded-full overflow-hidden border border-border bg-black/30 shrink-0">
               <ImageWithFallback
                 src={metaImage}
                 alt={primary}
@@ -546,15 +546,15 @@ function ContractRow({
             </div>
           )}
           <div className="min-w-0">
-            <div className="text-white font-medium truncate">{primary}</div>
-            <div className="text-gray-500 text-sm truncate">{secondary}</div>
+            <div className="text-text-primary font-medium truncate">{primary}</div>
+            <div className="text-text-muted text-sm truncate">{secondary}</div>
           </div>
         </div>
       </td>
       <td className={TD_BASE}>
         <Link
           href={`/address/${contract.address}`}
-          className="text-[#ffa729] hover:underline font-mono text-sm"
+          className="text-accent hover:underline font-mono text-sm"
         >
           <span className="hidden sm:inline">{truncateAddress(contract.address, 10, 8)}</span>
           <span className="sm:hidden">{truncateAddress(contract.address, 6, 4)}</span>
@@ -562,12 +562,12 @@ function ContractRow({
       </td>
       <td className={`hidden sm:table-cell ${TD_BASE}`}>{typeBadge}</td>
       {showDecimalsAndSupply && (
-        <td className={`hidden md:table-cell ${TD_BASE} text-gray-300 text-sm`}>
+        <td className={`hidden md:table-cell ${TD_BASE} text-text-secondary text-sm`}>
           {contract.decimals ?? '-'}
         </td>
       )}
       {showDecimalsAndSupply && (
-        <td className={`hidden lg:table-cell ${TD_BASE} text-gray-300 text-sm font-mono`}>
+        <td className={`hidden lg:table-cell ${TD_BASE} text-text-secondary text-sm font-mono`}>
           {formatTotalSupply(contract.totalSupply, contract.decimals)}
         </td>
       )}
@@ -575,19 +575,19 @@ function ContractRow({
         {contract.creatorAddress ? (
           <Link
             href={`/address/${contract.creatorAddress}`}
-            className="text-gray-400 hover:text-[#ffa729] font-mono text-sm"
+            className="text-text-secondary hover:text-accent font-mono text-sm"
           >
             {truncateAddress(contract.creatorAddress, 6, 4)}
           </Link>
         ) : (
-          <span className="text-gray-500 text-sm">-</span>
+          <span className="text-text-muted text-sm">-</span>
         )}
       </td>
-      <td className={`hidden xl:table-cell ${TD_BASE} text-gray-300 text-sm font-mono`}>
+      <td className={`hidden xl:table-cell ${TD_BASE} text-text-secondary text-sm font-mono`}>
         {contract.creationBlockNumber ? (
           <Link
             href={`/block/${formatBlockNumber(contract.creationBlockNumber).replace(/,/g, '')}`}
-            className="text-gray-400 hover:text-[#ffa729]"
+            className="text-text-secondary hover:text-accent"
           >
             #{formatBlockNumber(contract.creationBlockNumber)}
           </Link>

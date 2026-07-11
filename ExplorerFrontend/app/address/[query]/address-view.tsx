@@ -19,7 +19,7 @@ interface AddressViewProps {
 // display the complete address rather than a truncated form.
 const AddressDisplay = ({ address }: { address: string }): JSX.Element => {
     return (
-        <div className="text-sm lg:text-base font-mono text-gray-300 break-all">
+        <div className="text-sm lg:text-base font-mono text-text-secondary break-all">
             {address}
         </div>
     );
@@ -52,21 +52,21 @@ export default function AddressView({ addressData, addressSegment }: AddressView
     if (contractData && contractData.contractCode) {
         addressType = "Contract";
         addressIcon = (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 md:h-6 md:w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 md:h-6 md:w-6 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
             </svg>
         );
     } else if (addressSegment.startsWith("Q2")) {
         addressType = "Dilithium Address";
         addressIcon = (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 md:h-6 md:w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 md:h-6 md:w-6 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
         );
     } else if (addressSegment.startsWith("Q")) {
         addressType = "QRL Address";
         addressIcon = (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 md:h-6 md:w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 md:h-6 md:w-6 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
             </svg>
         );
@@ -100,19 +100,17 @@ export default function AddressView({ addressData, addressSegment }: AddressView
             ]} />
             <section
                 aria-labelledby={addressHeadingId}
-                className="relative overflow-hidden rounded-xl md:rounded-2xl
-                        bg-card-gradient
-                        border border-border shadow-lg md:shadow-xl mb-4 md:mb-6 lg:mb-8"
+                className="relative overflow-hidden card mb-4 md:mb-6 lg:mb-8"
             >
                 <div className="p-3 md:p-6 lg:p-8">
                     {/* Header */}
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-4 md:mb-6 lg:mb-8 pb-3 md:pb-4 lg:pb-6 border-b border-gray-700">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-4 md:mb-6 lg:mb-8 pb-3 md:pb-4 lg:pb-6 border-b border-border">
                         <div className="flex items-start lg:items-center mb-3 lg:mb-0">
                             <div className="hidden lg:block">{decorativeIcon}</div>
                             <div className="flex-1 lg:ml-4">
                                 <div className="flex items-center">
                                     <div className="block lg:hidden mr-2">{decorativeIcon}</div>
-                                    <div className="text-xs md:text-sm font-medium text-gray-400">{addressType}</div>
+                                    <div className="text-xs md:text-sm font-medium text-text-secondary">{addressType}</div>
                                 </div>
                                 <div className="flex flex-col lg:flex-row lg:items-center mt-1 gap-2">
                                     <AddressDisplay address={addressSegment} />
@@ -125,7 +123,7 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                 </div>
                             </div>
                         </div>
-                        <div className="px-2 md:px-3 lg:px-4 py-1 md:py-1.5 lg:py-2 rounded-lg md:rounded-xl bg-border bg-opacity-20 self-start lg:self-center">
+                        <div className="px-2 md:px-3 lg:px-4 py-1 md:py-1.5 lg:py-2 rounded-lg md:rounded-xl bg-surface-2 self-start lg:self-center">
                             <span className="text-xs md:text-sm font-medium text-accent">Rank #{rank}</span>
                         </div>
                     </div>
@@ -141,7 +139,7 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                         <section aria-labelledby="contract-info-heading" className="mt-4 md:mt-6">
                             <div className="card-simple p-3 md:p-4 lg:p-6 space-y-3 md:space-y-4">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                    <h3 id="contract-info-heading" className="text-base md:text-lg font-semibold text-accent">
+                                    <h3 id="contract-info-heading" className="text-base md:font-display text-lg font-semibold text-text-primary">
                                         {contractData.tokenStandard === 'ERC-721'
                                             ? 'NFT Collection'
                                             : contractData.tokenStandard === 'ERC-1155'
@@ -156,7 +154,7 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                 <div className="space-y-3">
                                     {/* Creator Address */}
                                     <div>
-                                        <div className="text-xs md:text-sm text-gray-400 mb-1">Creator Address</div>
+                                        <div className="text-xs md:text-sm text-text-secondary mb-1">Creator Address</div>
                                         <div className="flex items-center space-x-2">
                                             <AddressDisplay
                                                 address={contractData.creatorAddress || 'Unknown'}
@@ -174,8 +172,8 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                                 (DB value stays ERC-X). */}
                                             {contractData.tokenStandard && (
                                                 <div>
-                                                    <div className="text-xs md:text-sm text-gray-400 mb-1">Token Standard</div>
-                                                    <div className="text-xs md:text-sm text-gray-300">
+                                                    <div className="text-xs md:text-sm text-text-secondary mb-1">Token Standard</div>
+                                                    <div className="text-xs md:text-sm text-text-secondary">
                                                         {contractData.tokenStandard.replace(/^ERC-/, 'QRC-')}
                                                     </div>
                                                 </div>
@@ -183,20 +181,20 @@ export default function AddressView({ addressData, addressSegment }: AddressView
 
                                             {/* Name */}
                                             <div>
-                                                <div className="text-xs md:text-sm text-gray-400 mb-1">
+                                                <div className="text-xs md:text-sm text-text-secondary mb-1">
                                                     {contractData.tokenStandard === 'ERC-20' || !contractData.tokenStandard ? 'Token Name' : 'Collection Name'}
                                                 </div>
-                                                <div className="text-xs md:text-sm text-gray-300">
+                                                <div className="text-xs md:text-sm text-text-secondary">
                                                     {contractData.name || 'Unknown'}
                                                 </div>
                                             </div>
 
                                             {/* Symbol */}
                                             <div>
-                                                <div className="text-xs md:text-sm text-gray-400 mb-1">
+                                                <div className="text-xs md:text-sm text-text-secondary mb-1">
                                                     {contractData.tokenStandard === 'ERC-20' || !contractData.tokenStandard ? 'Token Symbol' : 'Collection Symbol'}
                                                 </div>
-                                                <div className="text-xs md:text-sm text-gray-300">
+                                                <div className="text-xs md:text-sm text-text-secondary">
                                                     {contractData.symbol || 'Unknown'}
                                                 </div>
                                             </div>
@@ -204,8 +202,8 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                             {/* Decimals, ERC-20 only */}
                                             {(contractData.tokenStandard === 'ERC-20' || !contractData.tokenStandard) && (
                                                 <div>
-                                                    <div className="text-xs md:text-sm text-gray-400 mb-1">Token Decimals</div>
-                                                    <div className="text-xs md:text-sm text-gray-300">
+                                                    <div className="text-xs md:text-sm text-text-secondary mb-1">Token Decimals</div>
+                                                    <div className="text-xs md:text-sm text-text-secondary">
                                                         {contractData.decimals || '0'}
                                                     </div>
                                                 </div>
@@ -215,8 +213,8 @@ export default function AddressView({ addressData, addressSegment }: AddressView
 
                                     {/* Contract Size */}
                                     <div>
-                                        <div className="text-xs md:text-sm text-gray-400 mb-1">Contract Size</div>
-                                        <div className="text-xs md:text-sm text-gray-300">
+                                        <div className="text-xs md:text-sm text-text-secondary mb-1">Contract Size</div>
+                                        <div className="text-xs md:text-sm text-text-secondary">
                                             {/* Base64 string is 4/3 the size of the binary data */}
                                             {Math.floor(contractData.contractCode.length * 0.75)} bytes
                                         </div>
@@ -224,7 +222,7 @@ export default function AddressView({ addressData, addressSegment }: AddressView
 
                                     {/* Creation Transaction */}
                                     <div>
-                                        <div className="text-xs md:text-sm text-gray-400 mb-1">Creation Transaction</div>
+                                        <div className="text-xs md:text-sm text-text-secondary mb-1">Creation Transaction</div>
                                         <div className="flex items-center space-x-2 min-w-0">
                                             {contractData.creationTransaction ? (
                                                 <>
@@ -236,15 +234,15 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                                     </div>
                                                 </>
                                             ) : (
-                                                <span className="text-xs md:text-sm text-gray-300">Unknown</span>
+                                                <span className="text-xs md:text-sm text-text-secondary">Unknown</span>
                                             )}
                                         </div>
                                     </div>
 
                                     {/* Contract Status */}
                                     <div>
-                                        <div className="text-xs md:text-sm text-gray-400 mb-1">Status</div>
-                                        <div className="text-xs md:text-sm text-gray-300">
+                                        <div className="text-xs md:text-sm text-text-secondary mb-1">Status</div>
+                                        <div className="text-xs md:text-sm text-text-secondary">
                                             {contractData.status === "0x1" ? "Success" : "Failed"}
                                         </div>
                                     </div>

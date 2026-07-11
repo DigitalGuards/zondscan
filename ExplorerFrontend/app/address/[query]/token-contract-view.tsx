@@ -95,7 +95,7 @@ interface TokenContractViewProps {
 }
 
 const AddressDisplay = ({ address, truncate = false }: { address: string; truncate?: boolean }) => {
-    if (!address) return <span className="text-gray-500">Unknown</span>;
+    if (!address) return <span className="text-text-muted">Unknown</span>;
 
     const display = truncate ? `${address.slice(0, 10)}...${address.slice(-8)}` : address;
     return (
@@ -308,7 +308,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
               : 'QRC-20 Token';
     const badgeClasses = isNFT
         ? 'bg-purple-500/20 text-purple-300'
-        : 'bg-green-500/20 text-green-400';
+        : 'bg-green-500/20 text-success';
 
     const tabs: { id: typeof activeTab; label: string }[] = [
         { id: 'overview', label: 'Overview' },
@@ -343,10 +343,10 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                 { label: `${symbol || address.slice(0, 10) + '...' + address.slice(-6)}` },
             ]} />
             {/* Token Header Card */}
-            <div className="relative overflow-hidden rounded-xl md:rounded-2xl bg-card-gradient border border-border shadow-lg md:shadow-xl mb-4 md:mb-6">
+            <div className="relative overflow-hidden rounded-xl md:card mb-4 md:mb-6">
                 <div className="p-4 md:p-6 lg:p-8">
                     {/* Token Identity */}
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-gray-700">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-border">
                         <div className="flex items-center gap-4">
                             {/* Token Icon. Phase 3a: render the off-chain
                                 metadata image when present, fall back to the
@@ -354,7 +354,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                 the layout doesn't shift while the next/image
                                 loader resolves. */}
                             {metaImage ? (
-                                <div className="relative w-12 h-12 md:w-16 md:h-16 rounded-full overflow-hidden border border-gray-700 bg-black/30">
+                                <div className="relative w-12 h-12 md:w-16 md:h-16 rounded-full overflow-hidden border border-border bg-black/30">
                                     <ImageWithFallback
                                         src={metaImage}
                                         alt={name}
@@ -362,22 +362,22 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                         sizes="64px"
                                         className="object-cover"
                                         fallback={
-                                            <div className="absolute inset-0 bg-gradient-to-br from-[#ffa729] to-[#ff6b00] flex items-center justify-center text-xl md:text-2xl font-bold text-white">
+                                            <div className="absolute inset-0 bg-gradient-to-br from-accent to-accent-dark flex items-center justify-center text-xl md:text-2xl font-bold text-background">
                                                 {symbol.charAt(0)}
                                             </div>
                                         }
                                     />
                                 </div>
                             ) : (
-                                <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-gradient-to-br from-[#ffa729] to-[#ff6b00] flex items-center justify-center text-xl md:text-2xl font-bold text-white">
+                                <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-gradient-to-br from-accent to-accent-dark flex items-center justify-center text-xl md:text-2xl font-bold text-background">
                                     {symbol.charAt(0)}
                                 </div>
                             )}
                             <div className="min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                    <h1 className="text-xl md:text-2xl font-bold text-white">{name}</h1>
+                                    <h1 className="text-xl md:text-2xl font-bold text-text-primary">{name}</h1>
                                     {rawSymbol && (
-                                        <span className="px-2 py-0.5 rounded bg-[#ffa729]/20 text-[#ffa729] text-sm font-medium">
+                                        <span className="px-2 py-0.5 rounded bg-accent/20 text-accent text-sm font-medium">
                                             {rawSymbol}
                                         </span>
                                     )}
@@ -386,7 +386,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                             href={metaExternalURL}
                                             target="_blank"
                                             rel="noreferrer noopener nofollow"
-                                            className="text-xs text-gray-400 hover:text-accent underline"
+                                            className="text-xs text-text-secondary hover:text-accent underline"
                                             title="External URL from contract metadata"
                                         >
                                             site ↗
@@ -394,12 +394,12 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                     )}
                                 </div>
                                 {metaDescription && (
-                                    <p className="text-xs md:text-sm text-gray-300 mt-1 line-clamp-2 max-w-prose">
+                                    <p className="text-xs md:text-sm text-text-secondary mt-1 line-clamp-2 max-w-prose">
                                         {metaDescription}
                                     </p>
                                 )}
                                 <div className="flex items-center gap-2 mt-1 min-w-0">
-                                    <span className="text-xs md:text-sm text-gray-400 font-mono break-all">{address}</span>
+                                    <span className="text-xs md:text-sm text-text-secondary font-mono break-all">{address}</span>
                                     <CopyButton value={address} label="Copy address" />
                                     <QRCodeButton address={address} />
                                 </div>
@@ -417,11 +417,11 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                         endpoint). */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div className="bg-black/20 rounded-lg p-3 md:p-4">
-                            <div className="text-xs md:text-sm text-gray-400 mb-1">
+                            <div className="text-xs md:text-sm text-text-secondary mb-1">
                                 {tokenStandard === 'ERC-721' ? 'Total Items' : 'Total Supply'}
                             </div>
                             <div
-                                className="text-sm md:text-base font-semibold text-white truncate"
+                                className="text-sm md:text-base font-semibold text-text-primary truncate"
                                 title={isNFT ? totalSupply : formatTokenAmount(totalSupply, decimals)}
                             >
                                 {isNFT
@@ -430,22 +430,22 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                             </div>
                         </div>
                         <div className="bg-black/20 rounded-lg p-3 md:p-4">
-                            <div className="text-xs md:text-sm text-gray-400 mb-1">Holders</div>
-                            <div className="text-sm md:text-base font-semibold text-white">
+                            <div className="text-xs md:text-sm text-text-secondary mb-1">Holders</div>
+                            <div className="text-sm md:text-base font-semibold text-text-primary">
                                 {tokenInfo?.holderCount?.toLocaleString() ?? '-'}
                             </div>
                         </div>
                         <div className="bg-black/20 rounded-lg p-3 md:p-4">
-                            <div className="text-xs md:text-sm text-gray-400 mb-1">Transfers</div>
-                            <div className="text-sm md:text-base font-semibold text-white">
+                            <div className="text-xs md:text-sm text-text-secondary mb-1">Transfers</div>
+                            <div className="text-sm md:text-base font-semibold text-text-primary">
                                 {tokenInfo?.transferCount?.toLocaleString() ?? '-'}
                             </div>
                         </div>
                         <div className="bg-black/20 rounded-lg p-3 md:p-4">
-                            <div className="text-xs md:text-sm text-gray-400 mb-1">
+                            <div className="text-xs md:text-sm text-text-secondary mb-1">
                                 {isNFT ? 'Standard' : 'Decimals'}
                             </div>
-                            <div className="text-sm md:text-base font-semibold text-white">
+                            <div className="text-sm md:text-base font-semibold text-text-primary">
                                 {isNFT ? (tokenStandard?.replace(/^ERC-/, 'QRC-') ?? '-') : decimals}
                             </div>
                         </div>
@@ -464,15 +464,15 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
             </div>
 
             {/* Tab Content */}
-            <div className="bg-card-gradient rounded-xl border border-border overflow-hidden">
+            <div className="card overflow-hidden">
                 {/* Overview Tab */}
                 {activeTab === 'overview' && (
                     <div className="p-4 md:p-6 space-y-6">
                         <div>
-                            <h3 className="text-lg font-semibold text-accent mb-4">Contract Details</h3>
+                            <h3 className="font-display text-lg font-semibold text-text-primary mb-4">Contract Details</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <div className="text-xs md:text-sm text-gray-400 mb-1">Creator</div>
+                                    <div className="text-xs md:text-sm text-text-secondary mb-1">Creator</div>
                                     <div className="flex items-center gap-2">
                                         <AddressDisplay address={creatorAddress} />
                                         {creatorAddress && (
@@ -482,8 +482,8 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                 </div>
 
                                 <div>
-                                    <div className="text-xs md:text-sm text-gray-400 mb-1">Contract Size</div>
-                                    <div className="text-sm text-gray-300">
+                                    <div className="text-xs md:text-sm text-text-secondary mb-1">Contract Size</div>
+                                    <div className="text-sm text-text-secondary">
                                         {contractData.contractCode
                                             ? `${Math.floor(contractData.contractCode.length * 0.75).toLocaleString()} bytes`
                                             : '-'
@@ -499,7 +499,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                         {contractData.contractCode && (
                             <div>
                                 <div className="flex items-center gap-2 flex-wrap mb-4">
-                                    <h3 className="text-lg font-semibold text-accent">Contract</h3>
+                                    <h3 className="font-display text-lg font-semibold text-text-primary">Contract</h3>
                                     {contractData.verified && <VerifiedBadge />}
                                 </div>
                                 <ContractTabs
@@ -528,10 +528,10 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
 
                         {/* Creation Transaction Details */}
                         <div>
-                            <h3 className="text-lg font-semibold text-accent mb-4">Creation Transaction</h3>
+                            <h3 className="font-display text-lg font-semibold text-text-primary mb-4">Creation Transaction</h3>
                             <div className="bg-black/20 rounded-lg p-4 space-y-3">
                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
-                                    <div className="text-xs md:text-sm text-gray-400">Transaction Hash</div>
+                                    <div className="text-xs md:text-sm text-text-secondary">Transaction Hash</div>
                                     <div className="flex items-center gap-2 min-w-0">
                                         <Link
                                             href={`/tx/${creationTxHash}`}
@@ -545,11 +545,11 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                     </div>
                                 </div>
 
-                                <div className="border-t border-gray-700/50" />
+                                <div className="border-t border-border" />
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div className="flex justify-between md:flex-col">
-                                        <div className="text-xs md:text-sm text-gray-400">Block</div>
+                                        <div className="text-xs md:text-sm text-text-secondary">Block</div>
                                         <Link
                                             href={`/block/${creationTx?.BlockNumber || tokenInfo?.creationBlock || ''}`}
                                             className="text-accent hover:text-accent-hover text-sm"
@@ -563,8 +563,8 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                     </div>
 
                                     <div className="flex justify-between md:flex-col">
-                                        <div className="text-xs md:text-sm text-gray-400">Timestamp</div>
-                                        <div className="text-sm text-gray-300">
+                                        <div className="text-xs md:text-sm text-text-secondary">Timestamp</div>
+                                        <div className="text-sm text-text-secondary">
                                             {creationTx?.BlockTimestamp
                                                 ? formatTimestamp(creationTx.BlockTimestamp)
                                                 : '-'}
@@ -572,8 +572,8 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                     </div>
 
                                     <div className="flex justify-between md:flex-col">
-                                        <div className="text-xs md:text-sm text-gray-400">Gas Used</div>
-                                        <div className="text-sm text-gray-300">
+                                        <div className="text-xs md:text-sm text-text-secondary">Gas Used</div>
+                                        <div className="text-sm text-text-secondary">
                                             {creationTx?.GasUsed
                                                 ? parseInt(creationTx.GasUsed, 16).toLocaleString()
                                                 : '-'}
@@ -581,8 +581,8 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                     </div>
 
                                     <div className="flex justify-between md:flex-col">
-                                        <div className="text-xs md:text-sm text-gray-400">Gas Price</div>
-                                        <div className="text-sm text-gray-300">
+                                        <div className="text-xs md:text-sm text-text-secondary">Gas Price</div>
+                                        <div className="text-sm text-text-secondary">
                                             {creationTx?.GasPrice
                                                 ? `${(parseInt(creationTx.GasPrice, 16) / 1e9).toFixed(2)} Shor`
                                                 : '-'}
@@ -590,8 +590,8 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                     </div>
 
                                     <div className="flex justify-between md:flex-col">
-                                        <div className="text-xs md:text-sm text-gray-400">Transaction Fee</div>
-                                        <div className="text-sm text-gray-300">
+                                        <div className="text-xs md:text-sm text-text-secondary">Transaction Fee</div>
+                                        <div className="text-sm text-text-secondary">
                                             {(() => {
                                                 if (!creationTx?.GasUsed || !creationTx?.GasPrice) return '-';
                                                 const [formattedFee] = formatAmount(`0x${(BigInt(creationTx.GasUsed) * BigInt(creationTx.GasPrice)).toString(16)}`);
@@ -601,8 +601,8 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                     </div>
 
                                     <div className="flex justify-between md:flex-col">
-                                        <div className="text-xs md:text-sm text-gray-400">Value</div>
-                                        <div className="text-sm text-gray-300">
+                                        <div className="text-xs md:text-sm text-text-secondary">Value</div>
+                                        <div className="text-sm text-text-secondary">
                                             {(() => {
                                                 if (!creationTx?.Value) return '0 QRL';
                                                 const [formattedValue] = formatAmount(creationTx.Value);
@@ -623,8 +623,8 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                             debounces locally and only sets the actual filter on submit,
                             so each keystroke doesn't trigger a network request. */}
                         {isNFT && (
-                            <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-gray-700 bg-black/20">
-                                <label htmlFor="tokenIDFilter" className="text-xs text-gray-400">
+                            <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-border bg-black/20">
+                                <label htmlFor="tokenIDFilter" className="text-xs text-text-secondary">
                                     Filter by tokenID:
                                 </label>
                                 <input
@@ -640,14 +640,14 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                             setHolderTokenIDFilter(holderTokenIDInput.trim());
                                         }
                                     }}
-                                    className="px-2 py-1 rounded bg-black/40 border border-gray-700 text-sm text-white font-mono w-32"
+                                    className="px-2 py-1 rounded bg-black/40 border border-border text-sm text-text-primary font-mono w-32"
                                 />
                                 <button
                                     onClick={() => {
                                         setHoldersPage(0);
                                         setHolderTokenIDFilter(holderTokenIDInput.trim());
                                     }}
-                                    className="px-3 py-1 rounded bg-[#ffa729]/20 text-[#ffa729] text-sm hover:bg-[#ffa729]/30"
+                                    className="px-3 py-1 rounded bg-accent/20 text-accent text-sm hover:bg-accent/30"
                                 >
                                     Apply
                                 </button>
@@ -658,46 +658,46 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                             setHolderTokenIDFilter('');
                                             setHoldersPage(0);
                                         }}
-                                        className="px-3 py-1 rounded bg-gray-700 text-sm hover:bg-gray-600"
+                                        className="px-3 py-1 rounded bg-surface-2 text-sm hover:bg-surface-3"
                                     >
                                         Clear
                                     </button>
                                 )}
                                 {holderTokenIDFilter && (
-                                    <span className="text-xs text-gray-400">
-                                        Showing holders of tokenID <span className="font-mono text-white">{holderTokenIDFilter}</span>
+                                    <span className="text-xs text-text-secondary">
+                                        Showing holders of tokenID <span className="font-mono text-text-primary">{holderTokenIDFilter}</span>
                                     </span>
                                 )}
                             </div>
                         )}
 
                         {loading ? (
-                            <div className="p-8 text-center text-gray-400">Loading holders...</div>
+                            <div className="p-8 text-center text-text-secondary">Loading holders...</div>
                         ) : holders.length === 0 ? (
-                            <div className="p-8 text-center text-gray-400">No holders found</div>
+                            <div className="p-8 text-center text-text-secondary">No holders found</div>
                         ) : (
                             <>
                                 <div className="overflow-x-auto">
                                     <table aria-label="Token holders" className="w-full">
                                         <thead className="bg-black/30">
                                             <tr>
-                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">#</th>
-                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Address</th>
+                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase">#</th>
+                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase">Address</th>
                                                 {isNFT && holderTokenIDFilter === '' && (
-                                                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase hidden md:table-cell">
+                                                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase hidden md:table-cell">
                                                         {tokenStandard === 'ERC-721' ? 'NFTs owned' : 'Total quantity'}
                                                     </th>
                                                 )}
                                                 {isNFT && holderTokenIDFilter !== '' && (
-                                                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Token ID</th>
+                                                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase">Token ID</th>
                                                 )}
-                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Balance</th>
+                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-text-secondary uppercase">Balance</th>
                                                 {!isNFT && (
-                                                    <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase hidden md:table-cell">Share</th>
+                                                    <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-text-secondary uppercase hidden md:table-cell">Share</th>
                                                 )}
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-gray-700/50">
+                                        <tbody className="divide-y divide-border">
                                             {holders.map((holder, idx) => {
                                                 const totalSupplyBigInt = totalSupply ? BigInt(totalSupply) : BigInt(0);
                                                 let sharePercent = 0;
@@ -723,27 +723,27 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
 
                                                 return (
                                                     <tr key={rowKey} className="hover:bg-white/5">
-                                                        <td className="px-4 py-3 text-sm text-gray-400">
+                                                        <td className="px-4 py-3 text-sm text-text-secondary">
                                                             {holdersPage * limit + idx + 1}
                                                         </td>
                                                         <td className="px-4 py-3">
                                                             <AddressDisplay address={holder.holderAddress} truncate />
                                                         </td>
                                                         {isNFT && holderTokenIDFilter === '' && (
-                                                            <td className="px-4 py-3 text-left text-sm text-gray-300 font-mono hidden md:table-cell">
+                                                            <td className="px-4 py-3 text-left text-sm text-text-secondary font-mono hidden md:table-cell">
                                                                 {holder.balance}
                                                             </td>
                                                         )}
                                                         {isNFT && holderTokenIDFilter !== '' && (
-                                                            <td className="px-4 py-3 text-left text-sm text-white font-mono">
+                                                            <td className="px-4 py-3 text-left text-sm text-text-primary font-mono">
                                                                 #{holder.tokenID ?? holderTokenIDFilter}
                                                             </td>
                                                         )}
-                                                        <td className="px-4 py-3 text-right text-sm text-white font-mono">
+                                                        <td className="px-4 py-3 text-right text-sm text-text-primary font-mono">
                                                             {balanceCell}
                                                         </td>
                                                         {!isNFT && (
-                                                            <td className="px-4 py-3 text-right text-sm text-gray-400 hidden md:table-cell">
+                                                            <td className="px-4 py-3 text-right text-sm text-text-secondary hidden md:table-cell">
                                                                 {sharePercent.toFixed(2)}%
                                                             </td>
                                                         )}
@@ -756,8 +756,8 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
 
                                 {/* Pagination */}
                                 {holdersTotal > limit && (
-                                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-700">
-                                        <div className="text-sm text-gray-400">
+                                    <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+                                        <div className="text-sm text-text-secondary">
                                             Showing {holdersPage * limit + 1} - {Math.min((holdersPage + 1) * limit, holdersTotal)} of {holdersTotal}
                                         </div>
                                         <div className="flex gap-2">
@@ -765,7 +765,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                 aria-label="Go to previous page"
                                                 onClick={() => setHoldersPage(p => Math.max(0, p - 1))}
                                                 disabled={holdersPage === 0}
-                                                className="px-3 py-1 rounded bg-gray-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600"
+                                                className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
                                             >
                                                 Previous
                                             </button>
@@ -773,7 +773,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                 aria-label="Go to next page"
                                                 onClick={() => setHoldersPage(p => p + 1)}
                                                 disabled={(holdersPage + 1) * limit >= holdersTotal}
-                                                className="px-3 py-1 rounded bg-gray-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600"
+                                                className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
                                             >
                                                 Next
                                             </button>
@@ -791,22 +791,22 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                 {activeTab === 'tokens' && (
                     <div>
                         {loading ? (
-                            <div className="p-8 text-center text-gray-400">Loading tokens...</div>
+                            <div className="p-8 text-center text-text-secondary">Loading tokens...</div>
                         ) : tokensList.length === 0 ? (
-                            <div className="p-8 text-center text-gray-400">No tokens have been minted yet</div>
+                            <div className="p-8 text-center text-text-secondary">No tokens have been minted yet</div>
                         ) : (
                             <>
                                 <div className="overflow-x-auto">
                                     <table aria-label="Token IDs" className="w-full">
                                         <thead className="bg-black/30">
                                             <tr>
-                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase w-16"></th>
-                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Token</th>
-                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Holders</th>
-                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase hidden md:table-cell">Standard</th>
+                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase w-16"></th>
+                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase">Token</th>
+                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-text-secondary uppercase">Holders</th>
+                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-text-secondary uppercase hidden md:table-cell">Standard</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-gray-700/50">
+                                        <tbody className="divide-y divide-border">
                                             {tokensList.map((t) => {
                                                 // Phase 3b: render the off-chain image if the fetcher has
                                                 // populated it; fall back to a #N monogram tile. The "Token"
@@ -827,7 +827,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                     >
                                                         <td className="px-4 py-3">
                                                             {t.image ? (
-                                                                <div className="relative w-10 h-10 rounded-md overflow-hidden border border-gray-700/60 bg-black/30">
+                                                                <div className="relative w-10 h-10 rounded-md overflow-hidden border border-border bg-black/30">
                                                                     <ImageWithFallback
                                                                         src={t.image}
                                                                         alt={tokenLabel}
@@ -835,7 +835,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                                         sizes="40px"
                                                                         className="object-cover"
                                                                         fallback={
-                                                                            <div className="absolute inset-0 bg-gradient-to-br from-[#3a3a3a] to-[#1f1f1f] flex items-center justify-center text-xs font-mono text-gray-300">
+                                                                            <div className="absolute inset-0 bg-surface-3 flex items-center justify-center text-xs font-mono text-text-secondary">
                                                                                 {compactTokenIDLabel(t.tokenID)}
                                                                             </div>
                                                                         }
@@ -843,7 +843,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                                 </div>
                                                             ) : (
                                                                 <div
-                                                                    className="w-10 h-10 rounded-md bg-gradient-to-br from-[#3a3a3a] to-[#1f1f1f] flex items-center justify-center text-xs font-mono text-gray-300"
+                                                                    className="w-10 h-10 rounded-md bg-surface-3 flex items-center justify-center text-xs font-mono text-text-secondary"
                                                                     title={`#${t.tokenID}`}
                                                                 >
                                                                     #{compactTokenIDLabel(t.tokenID)}
@@ -851,11 +851,11 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                             )}
                                                         </td>
                                                         <td className="px-4 py-3 text-sm">
-                                                            <div className="text-white">{tokenLabel}</div>
-                                                            {subLabel && <div className="text-xs text-gray-500 font-mono">{subLabel}</div>}
+                                                            <div className="text-text-primary">{tokenLabel}</div>
+                                                            {subLabel && <div className="text-xs text-text-muted font-mono">{subLabel}</div>}
                                                         </td>
-                                                        <td className="px-4 py-3 text-right text-sm text-white">{t.holderCount}</td>
-                                                        <td className="px-4 py-3 text-right text-xs text-gray-400 hidden md:table-cell">
+                                                        <td className="px-4 py-3 text-right text-sm text-text-primary">{t.holderCount}</td>
+                                                        <td className="px-4 py-3 text-right text-xs text-text-secondary hidden md:table-cell">
                                                             {t.tokenStandard ? t.tokenStandard.replace(/^ERC-/, 'QRC-') : '-'}
                                                         </td>
                                                     </tr>
@@ -867,8 +867,8 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
 
                                 {/* Pagination */}
                                 {tokensTotal > limit && (
-                                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-700">
-                                        <div className="text-sm text-gray-400">
+                                    <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+                                        <div className="text-sm text-text-secondary">
                                             Showing {tokensPage * limit + 1} - {Math.min((tokensPage + 1) * limit, tokensTotal)} of {tokensTotal}
                                         </div>
                                         <div className="flex gap-2">
@@ -876,7 +876,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                 aria-label="Go to previous page"
                                                 onClick={() => setTokensPage(p => Math.max(0, p - 1))}
                                                 disabled={tokensPage === 0}
-                                                className="px-3 py-1 rounded bg-gray-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600"
+                                                className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
                                             >
                                                 Previous
                                             </button>
@@ -884,7 +884,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                 aria-label="Go to next page"
                                                 onClick={() => setTokensPage(p => p + 1)}
                                                 disabled={(tokensPage + 1) * limit >= tokensTotal}
-                                                className="px-3 py-1 rounded bg-gray-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600"
+                                                className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
                                             >
                                                 Next
                                             </button>
@@ -900,23 +900,23 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                 {activeTab === 'transfers' && (
                     <div>
                         {loading ? (
-                            <div className="p-8 text-center text-gray-400">Loading transfers...</div>
+                            <div className="p-8 text-center text-text-secondary">Loading transfers...</div>
                         ) : transfers.length === 0 ? (
-                            <div className="p-8 text-center text-gray-400">No transfers found</div>
+                            <div className="p-8 text-center text-text-secondary">No transfers found</div>
                         ) : (
                             <>
                                 <div className="overflow-x-auto">
                                     <table aria-label="Token transfers" className="w-full">
                                         <thead className="bg-black/30">
                                             <tr>
-                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Tx Hash</th>
-                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">From</th>
-                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">To</th>
-                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Amount</th>
-                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase hidden md:table-cell">Time</th>
+                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase">Tx Hash</th>
+                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase">From</th>
+                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase">To</th>
+                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-text-secondary uppercase">Amount</th>
+                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-text-secondary uppercase hidden md:table-cell">Time</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-gray-700/50">
+                                        <tbody className="divide-y divide-border">
                                             {transfers.map((transfer) => (
                                                 <tr key={`${transfer.txHash}-${transfer.from}-${transfer.to}`} className="hover:bg-white/5">
                                                     <td className="px-4 py-3">
@@ -933,10 +933,10 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                     <td className="px-4 py-3">
                                                         <AddressDisplay address={transfer.to} truncate />
                                                     </td>
-                                                    <td className="px-4 py-3 text-right text-sm text-white font-mono">
+                                                    <td className="px-4 py-3 text-right text-sm text-text-primary font-mono">
                                                         {formatTokenAmount(transfer.amount, transfer.tokenDecimals || decimals)}{rawSymbol ? ' ' + rawSymbol : ''}
                                                     </td>
-                                                    <td className="px-4 py-3 text-right text-xs text-gray-400 hidden md:table-cell">
+                                                    <td className="px-4 py-3 text-right text-xs text-text-secondary hidden md:table-cell">
                                                         {formatTimestamp(transfer.timestamp)}
                                                     </td>
                                                 </tr>
@@ -947,8 +947,8 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
 
                                 {/* Pagination */}
                                 {transfersTotal > limit && (
-                                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-700">
-                                        <div className="text-sm text-gray-400">
+                                    <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+                                        <div className="text-sm text-text-secondary">
                                             Showing {transfersPage * limit + 1} - {Math.min((transfersPage + 1) * limit, transfersTotal)} of {transfersTotal}
                                         </div>
                                         <div className="flex gap-2">
@@ -956,7 +956,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                 aria-label="Go to previous page"
                                                 onClick={() => setTransfersPage(p => Math.max(0, p - 1))}
                                                 disabled={transfersPage === 0}
-                                                className="px-3 py-1 rounded bg-gray-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600"
+                                                className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
                                             >
                                                 Previous
                                             </button>
@@ -964,7 +964,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                 aria-label="Go to next page"
                                                 onClick={() => setTransfersPage(p => p + 1)}
                                                 disabled={(transfersPage + 1) * limit >= transfersTotal}
-                                                className="px-3 py-1 rounded bg-gray-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600"
+                                                className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
                                             >
                                                 Next
                                             </button>
