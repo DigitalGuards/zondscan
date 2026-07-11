@@ -16,7 +16,7 @@ export const palette = {
 
   textPrimary: '#e9ecf2',
   textSecondary: '#9aa3b2',
-  textMuted: '#667085',
+  textMuted: '#79839b',
 
   success: '#34d399',
   warning: '#fbbf24',
