@@ -11,6 +11,11 @@ import { resolveSearchPath } from '../lib/searchResolver';
  * also makes bookmarkable search URLs work. Unresolvable queries fall
  * back to the homepage.
  */
+// Behind the nginx proxy request.nextUrl.origin is the internal
+// localhost:3000, so anchor redirects to the canonical public origin
+// (same hardcode as metadataBase in lib/seo/metaData.ts).
+const CANONICAL_ORIGIN = 'https://zondscan.com';
+
 export function GET(request: NextRequest): NextResponse {
   try {
     const query = request.nextUrl.searchParams.get('q') ?? '';
@@ -20,8 +25,8 @@ export function GET(request: NextRequest): NextResponse {
     if (!destination.startsWith('/') || destination.startsWith('//')) {
       destination = '/';
     }
-    return NextResponse.redirect(new URL(destination, request.nextUrl.origin), 302);
+    return NextResponse.redirect(new URL(destination, CANONICAL_ORIGIN), 302);
   } catch {
-    return NextResponse.redirect(new URL('/', request.nextUrl.origin), 302);
+    return NextResponse.redirect(new URL('/', CANONICAL_ORIGIN), 302);
   }
 }
