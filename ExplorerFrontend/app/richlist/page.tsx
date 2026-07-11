@@ -6,7 +6,7 @@ import { sharedMetadata } from '../lib/seo/metaData';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'Rich List | QRL 2.0 Explorer',
+  title: 'Rich List | ZondScan',
   description:
     'Explore the top wallets by balance on the Quantum Resistant Ledger Proof-of-Stake network. Discover which addresses hold the most value in our rich list.',
   alternates: {
@@ -15,14 +15,14 @@ export const metadata: Metadata = {
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'Rich List | QRL 2.0 Explorer',
+    title: 'Rich List | ZondScan',
     description:
       'Explore the top wallets by balance on the Quantum Resistant Ledger Proof-of-Stake network. Discover which addresses hold the most value in our rich list.',
     url: 'https://zondscan.com/richlist',
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'Rich List | QRL 2.0 Explorer',
+    title: 'Rich List | ZondScan',
     description:
       'Explore the top wallets by balance on the Quantum Resistant Ledger Proof-of-Stake network. Discover which addresses hold the most value in our rich list.',
   },

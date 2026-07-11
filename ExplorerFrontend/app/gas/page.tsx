@@ -5,17 +5,21 @@ import GasClient from './gas-client';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'Gas | QRL Explorer',
+  title: 'Gas Tracker | ZondScan',
   description: 'Network gas metrics, average gas price, gas usage, mempool size, and recent block gas history on the QRL 2.0 network',
+  alternates: {
+    ...sharedMetadata.alternates,
+    canonical: 'https://zondscan.com/gas',
+  },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'Gas | QRL Explorer',
+    title: 'Gas Tracker | ZondScan',
     description: 'Network gas metrics for the QRL 2.0 network',
     url: 'https://zondscan.com/gas',
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'Gas | QRL Explorer',
+    title: 'Gas Tracker | ZondScan',
     description: 'Network gas metrics for the QRL 2.0 network',
   },
 };

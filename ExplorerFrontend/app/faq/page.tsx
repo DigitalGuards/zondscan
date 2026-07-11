@@ -4,7 +4,7 @@ import FAQClient from './faq-client';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'FAQ | QRL Explorer',
+  title: 'FAQ | ZondScan',
   description: 'Find answers to frequently asked questions about QRL, blockchain, smart contracts, and more.',
   alternates: {
     ...sharedMetadata.alternates,
@@ -12,13 +12,13 @@ export const metadata: Metadata = {
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'FAQ | QRL Explorer',
+    title: 'FAQ | ZondScan',
     description: 'Find answers to frequently asked questions about QRL, blockchain, smart contracts, and more.',
     url: 'https://zondscan.com/faq',
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'FAQ | QRL Explorer',
+    title: 'FAQ | ZondScan',
     description: 'Find answers to frequently asked questions about QRL, blockchain, smart contracts, and more.',
   },
 };

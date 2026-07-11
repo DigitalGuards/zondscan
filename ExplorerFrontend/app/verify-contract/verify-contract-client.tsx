@@ -228,7 +228,7 @@ export default function VerifyContractClient(): JSX.Element {
         {compilerBuilds.length > 0 && (
           <Field
             label="Compiler"
-            hint="Pick the Hyperion build your contract was compiled with — the byte-match only succeeds against that exact build."
+            hint="Pick the Hyperion build your contract was compiled with - the byte-match only succeeds against that exact build."
           >
             {compilerBuilds.length === 1 ? (
               <div className="form-input font-mono text-xs break-all bg-transparent">

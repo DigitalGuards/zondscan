@@ -86,7 +86,7 @@ export default function FaucetClient(): JSX.Element {
   // Render the widget when every prerequisite is in place. We gate on
   // `window.turnstile` existing rather than a "script loaded" state flag: that
   // way the render is driven purely by external readiness and can be retried
-  // safely from both the status effect and the script's onLoad — including the
+  // safely from both the status effect and the script's onLoad - including the
   // client-side-nav case where the script is already cached and onLoad never
   // refires. Idempotent: the widgetIdRef guard prevents a double render.
   const renderTurnstile = useCallback(() => {
