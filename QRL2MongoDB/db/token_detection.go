@@ -107,16 +107,3 @@ func EnsureContractClassified(contractAddress string, blockNumber string, txHash
 
 	return &contractInfo, detection.Standard
 }
-
-// GetTokenFromDatabase retrieves token info from database and verifies it's a token.
-// Returns nil if not found or not a token.
-func GetTokenFromDatabase(contractAddress string) *models.ContractInfo {
-	contract, err := GetContract(contractAddress)
-	if err != nil {
-		return nil
-	}
-	if !contract.IsToken {
-		return nil
-	}
-	return contract
-}

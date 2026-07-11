@@ -7,13 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
 	"strings"
-	"time"
 
-	"backendAPI/models"
+	"backendAPI/db"
 )
 
 // MatchOutcome is the result of comparing fresh-compile bytecode against
@@ -31,68 +27,29 @@ type MatchOutcome struct {
 	ImmutablesCount int
 }
 
-// nodeHTTPClient is a process-wide HTTP client reused for every
-// qrl_getCode call. Reusing the same client (and thus the same connection
-// pool / DNS cache) is materially cheaper than `&http.Client{}` per call,
-// which would force a fresh TCP+TLS handshake every time the verifier
-// queries the node.
-var nodeHTTPClient = &http.Client{Timeout: 10 * time.Second}
-
 // FetchOnChainCode pulls the authoritative runtime code via qrl_getCode.
 // Never trust the syncer's base64-encoded contractCode field for matching:
 // the syncer source might lag, and any byte-shape difference between
 // "what's actually deployed" and "what the indexer captured" would silently
 // invalidate verification.
+//
+// Transport is delegated to db.NodeRPC so the verifier shares the
+// process-wide RPC client (connection pool, timeout policy) and the
+// single NODE_URL resolution with every other node caller.
 func FetchOnChainCode(ctx context.Context, address string) (string, error) {
-	nodeURL := os.Getenv("NODE_URL")
-	if nodeURL == "" {
-		nodeURL = "http://127.0.0.1:8545"
-	}
-
-	body, err := json.Marshal(models.JsonRPC{
-		Jsonrpc: "2.0",
-		Method:  "qrl_getCode",
-		Params:  []interface{}{address, "latest"},
-		ID:      1,
-	})
+	raw, rpcErr, err := db.NodeRPC(ctx, "qrl_getCode", []interface{}{address, "latest"})
 	if err != nil {
 		return "", err
 	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, nodeURL, bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := nodeHTTPClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("node RPC: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("node RPC returned %d", resp.StatusCode)
+	if rpcErr != nil {
+		return "", fmt.Errorf("node RPC error %d: %s", rpcErr.Code, rpcErr.Message)
 	}
 
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	var parsed struct {
-		Result string `json:"result"`
-		Error  *struct {
-			Code    int    `json:"code"`
-			Message string `json:"message"`
-		} `json:"error,omitempty"`
-	}
-	if err := json.Unmarshal(raw, &parsed); err != nil {
+	var code string
+	if err := json.Unmarshal(raw, &code); err != nil {
 		return "", fmt.Errorf("node RPC body: %w", err)
 	}
-	if parsed.Error != nil {
-		return "", fmt.Errorf("node RPC error %d: %s", parsed.Error.Code, parsed.Error.Message)
-	}
-	return parsed.Result, nil
+	return code, nil
 }
 
 // Match compares freshly-compiled deployedBytecode against authoritative
@@ -209,12 +166,12 @@ func Match(compiledHex, onChainHex string, immRefs map[string][]ImmutableRange) 
 //   - len(b) < 2                    no length bytes
 //   - cborLen <= 0                  garbage / no trailer claimed
 //   - cborLen+2 >= len(b)           would strip the entire code body ,
-//                                   two such inputs would compare equal
-//                                   even when their code bodies differ
+//     two such inputs would compare equal
+//     even when their code bodies differ
 //   - cborLen > 1024                real metadata is well under 100 B; a
-//                                   length larger than this is almost
-//                                   certainly the wrong interpretation of
-//                                   two random tail bytes
+//     length larger than this is almost
+//     certainly the wrong interpretation of
+//     two random tail bytes
 //
 // Either condition leaves the bytes alone so the existing length+masked
 // equal compare still catches real differences.

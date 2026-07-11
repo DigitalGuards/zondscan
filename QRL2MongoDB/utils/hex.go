@@ -2,6 +2,7 @@ package utils
 
 import (
 	"math/big"
+	"strconv"
 	"strings"
 )
 
@@ -57,3 +58,17 @@ func IntToHex(n int) string {
 	return "0x" + new(big.Int).SetInt64(int64(n)).Text(16)
 }
 
+// HexToInt64 parses a hex block number string (e.g. "0x1a2b") to int64.
+// Returns 0 on any parse error: callers (rollback paths included) depend on
+// the 0 sentinel, do not change this to return an error.
+func HexToInt64(hex string) int64 {
+	s := strings.TrimPrefix(hex, "0x")
+	if s == "" {
+		return 0
+	}
+	n, err := strconv.ParseInt(s, 16, 64)
+	if err != nil {
+		return 0
+	}
+	return n
+}

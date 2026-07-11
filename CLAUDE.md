@@ -160,11 +160,11 @@ Analytics:
 ## Sync Constants (QRL2MongoDB)
 
 ```go
-DefaultBatchSize       = 64    // Normal batch size
-LargeBatchSize         = 128   // When >1000 blocks behind
+DefaultBatchSize       = 128   // Normal batch size
+LargeBatchSize         = 256   // When >1000 blocks behind
 BatchSyncThreshold     = 64    // Triggers batch mode
-MaxProducerConcurrency = 8     // Parallel block fetchers
-MEMPOOL_SYNC_INTERVAL  = 5s    // Pending tx polling
+MaxProducerConcurrency = 16    // Parallel block fetchers
+MEMPOOL_SYNC_INTERVAL  = 1s    // Pending tx polling
 MAX_PENDING_AGE        = 24h   // Pending tx cleanup threshold
 ```
 

@@ -5,7 +5,6 @@ go 1.24.0
 toolchain go1.24.11
 
 require (
-	github.com/golang/mock v1.6.0
 	github.com/joho/godotenv v1.5.1
 	go.mongodb.org/mongo-driver v1.13.1
 	go.uber.org/zap v1.26.0

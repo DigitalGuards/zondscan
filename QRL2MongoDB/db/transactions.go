@@ -4,6 +4,7 @@ import (
 	"QRL2MongoDB/configs"
 	"QRL2MongoDB/models"
 	"QRL2MongoDB/rpc"
+	"QRL2MongoDB/utils"
 	"QRL2MongoDB/validation"
 	"context"
 	"errors"
@@ -178,70 +179,11 @@ func processTokenContract(targetAddress string, txHash string, blockNumber strin
 		zap.String("name", contract.Name),
 		zap.String("symbol", contract.Symbol))
 
-	// Get transaction details
-	txDetails, err := rpc.GetTxDetailsByHash(txHash)
-	if err != nil {
-		configs.Logger.Error("Failed to get transaction details",
-			zap.String("txHash", txHash),
-			zap.Error(err))
-		return
-	}
+	// The former "direct transfer call" calldata-decode branch was deleted:
+	// its decoder could never produce a sender address, so the branch was
+	// unreachable dead code. Transfer detection relies on receipt logs.
 
-	// First check direct transfer calls
-	from, recipient, amount := rpc.DecodeTransferEvent(txDetails.Input)
-	if from != "" && recipient != "" && amount != "" {
-		configs.Logger.Info("Found direct token transfer",
-			zap.String("contract", targetAddress),
-			zap.String("from", from),
-			zap.String("to", recipient),
-			zap.String("amount", amount))
-
-		// Idempotent: the direct-calldata path uses logIndex="" (there's
-		// no originating log) and tokenID="" (ERC-20 only). The unique
-		// tuple for replay-detection is (txHash, contractAddress, "", "").
-		exists, err := TokenTransferExists(txHash, targetAddress, "", "")
-		if err == nil && exists {
-			configs.Logger.Debug("Skipping duplicate direct token transfer",
-				zap.String("txHash", txHash),
-				zap.String("contract", targetAddress))
-		} else {
-			// Store token transfer
-			transfer := models.TokenTransfer{
-				ContractAddress: targetAddress,
-				From:            from,
-				To:              recipient,
-				Amount:          amount,
-				BlockNumber:     blockNumber,
-				TxHash:          txHash,
-				Timestamp:       blockTimestamp,
-				TokenSymbol:     contract.Symbol,
-				TokenDecimals:   contract.Decimals,
-				TokenName:       contract.Name,
-				TransferType:    "direct",
-			}
-			if err := StoreTokenTransfer(transfer); err != nil {
-				configs.Logger.Error("Failed to store token transfer",
-					zap.String("txHash", txHash),
-					zap.Error(err))
-			}
-
-			// Update token balances
-			if err := StoreTokenBalance(targetAddress, from, amount, blockNumber); err != nil {
-				configs.Logger.Error("Failed to store token balance for sender",
-					zap.String("contract", targetAddress),
-					zap.String("holder", from),
-					zap.Error(err))
-			}
-			if err := StoreTokenBalance(targetAddress, recipient, amount, blockNumber); err != nil {
-				configs.Logger.Error("Failed to store token balance for recipient",
-					zap.String("contract", targetAddress),
-					zap.String("holder", recipient),
-					zap.Error(err))
-			}
-		}
-	}
-
-	// Then check transfer events in logs
+	// Check transfer events in logs
 	receipt, err := rpc.GetTransactionReceipt(txHash)
 	if err != nil {
 		configs.Logger.Error("Failed to get transaction receipt",
@@ -334,7 +276,7 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 			value.SetInt64(0)
 		}
 	}
-	divisor := new(big.Float).SetFloat64(float64(configs.QUANTA))
+	divisor := new(big.Float).SetFloat64(float64(utils.QUANTA))
 	bigIntAsFloat := new(big.Float).SetInt(value)
 	resultBigFloat := new(big.Float).Quo(bigIntAsFloat, divisor)
 	valueFloat64, _ := resultBigFloat.Float64()
@@ -357,7 +299,7 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 				continue
 			}
 
-			divisor := new(big.Float).SetFloat64(float64(configs.QUANTA))
+			divisor := new(big.Float).SetFloat64(float64(utils.QUANTA))
 			bigIntAsFloat := new(big.Float).SetInt(getBalanceResult)
 			resultBigFloat := new(big.Float).Quo(bigIntAsFloat, divisor)
 			resultFloat64, _ := resultBigFloat.Float64()
@@ -429,7 +371,7 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 	// Legacy float fields, kept for backward-compatible numeric queries (e.g.
 	// amount $gt 0). The exact, drift-free value travels alongside them as the
 	// amountWei / paidFeesWei base-10 integer strings (value and feesBig).
-	divisor = new(big.Float).SetFloat64(float64(configs.QUANTA))
+	divisor = new(big.Float).SetFloat64(float64(utils.QUANTA))
 	feesFloat := new(big.Float).SetInt(feesBig)
 	feesResult := new(big.Float).Quo(feesFloat, divisor)
 	fees, _ := feesResult.Float64()
@@ -676,43 +618,4 @@ func GetContractByAddress(address string) *models.ContractInfo {
 		return nil
 	}
 	return &contract
-}
-
-// InitializePendingTokenContractsCollection ensures the pending token contracts collection is set up with proper indexes.
-// Uses CreateMany which is a no-op for indexes that already exist, avoiding destructive DropAll.
-func InitializePendingTokenContractsCollection() error {
-	collection := configs.GetCollection(configs.DB, "pending_token_contracts")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	configs.Logger.Info("Initializing pending_token_contracts collection and indexes")
-
-	// Create indexes for pending token contracts collection.
-	// CreateMany is a no-op if the index already exists, so this is safe to call on restart.
-	indexes := []mongo.IndexModel{
-		{
-			Keys: bson.D{
-				{Key: "contractAddress", Value: 1},
-				{Key: "txHash", Value: 1},
-			},
-			Options: options.Index().SetName("contract_tx_idx").SetUnique(true),
-		},
-		{
-			Keys: bson.D{
-				{Key: "processed", Value: 1},
-			},
-			Options: options.Index().SetName("processed_idx"),
-		},
-	}
-
-	_, err := collection.Indexes().CreateMany(ctx, indexes)
-	if err != nil {
-		configs.Logger.Error("Failed to create indexes for pending token contracts",
-			zap.Error(err))
-		return err
-	}
-
-	configs.Logger.Info("Successfully initialized pending_token_contracts collection and indexes")
-	return nil
 }

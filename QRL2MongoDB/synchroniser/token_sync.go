@@ -70,8 +70,8 @@ func getBlocksWithTransactions(fromBlock, toBlock string, timeoutSec int) ([]str
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 
-	fromInt := db.HexToInt64(fromBlock)
-	toInt := db.HexToInt64(toBlock)
+	fromInt := utils.HexToInt64(fromBlock)
+	toInt := utils.HexToInt64(toBlock)
 
 	filter := bson.M{
 		"result.transactions.0": bson.M{"$exists": true},

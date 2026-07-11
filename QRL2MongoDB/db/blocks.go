@@ -16,20 +16,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// HexToInt64 parses a hex block number string (e.g. "0x1a2b") to int64.
-// Returns 0 on any parse error.
-func HexToInt64(hex string) int64 {
-	s := strings.TrimPrefix(hex, "0x")
-	if s == "" {
-		return 0
-	}
-	n, err := strconv.ParseInt(s, 16, 64)
-	if err != nil {
-		return 0
-	}
-	return n
-}
-
 // Collection name constants for consistency
 const (
 	// SyncStateCollection is the collection for tracking sync state
@@ -168,19 +154,6 @@ func GetLastKnownBlockNumber() string {
 	return result.BlockNumber
 }
 
-// GetLastSyncedBlock retrieves the last synced block as a ZondDatabaseBlock object
-// This is a wrapper around GetLastKnownBlockNumber that returns a block object
-func GetLastSyncedBlock() (*models.ZondDatabaseBlock, error) {
-	blockNumber := GetLastKnownBlockNumber()
-
-	// Create a block object with the retrieved block number
-	return &models.ZondDatabaseBlock{
-		Result: models.Result{
-			Number: blockNumber,
-		},
-	}, nil
-}
-
 // StoreLastKnownBlockNumber updates the sync state with the given block number
 // Only updates if the new block number is higher than the existing one
 func StoreLastKnownBlockNumber(blockNumber string) error {
@@ -196,7 +169,7 @@ func StoreLastKnownBlockNumber(blockNumber string) error {
 
 	err := syncColl.FindOne(ctx, bson.M{"_id": LastSyncedBlockID}).Decode(&existingDoc)
 
-	blockNumberIntVal := HexToInt64(blockNumber)
+	blockNumberIntVal := utils.HexToInt64(blockNumber)
 
 	if err == mongo.ErrNoDocuments {
 		// Document doesn't exist, create it
@@ -448,7 +421,7 @@ func InsertBlockDocument(block models.ZondDatabaseBlock) {
 		Jsonrpc:        block.Jsonrpc,
 		ID:             block.ID,
 		Result:         block.Result,
-		BlockNumberInt: HexToInt64(block.Result.Number),
+		BlockNumberInt: utils.HexToInt64(block.Result.Number),
 	}
 
 	result, err := configs.BlocksCollections.InsertOne(ctx, doc)
@@ -548,7 +521,7 @@ func InsertManyBlockDocuments(blocks []interface{}) {
 			Jsonrpc:        c.block.Jsonrpc,
 			ID:             c.block.ID,
 			Result:         c.block.Result,
-			BlockNumberInt: HexToInt64(c.number),
+			BlockNumberInt: utils.HexToInt64(c.number),
 		}
 		uniqueBlocks = append(uniqueBlocks, doc)
 	}

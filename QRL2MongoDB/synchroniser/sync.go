@@ -233,11 +233,11 @@ func Sync(stopCh <-chan struct{}) {
 	go func() {
 		// Start wallet count sync
 		configs.Logger.Info("Starting wallet count sync service...")
-		db.StartWalletCountSync(stopCh)
+		StartWalletCountSync(stopCh)
 
 		// Start contract reprocessing job
 		configs.Logger.Info("Starting contract reprocessing service...")
-		db.StartContractReprocessingJob(stopCh)
+		StartContractReprocessingJob(stopCh)
 	}()
 
 	// Signal that initial sync is done so mempool polling can begin
@@ -248,25 +248,15 @@ func Sync(stopCh <-chan struct{}) {
 	singleBlockInsertion(stopCh)
 }
 
-// findHighestProcessedBlock finds the highest block number that exists in the database
+// findHighestProcessedBlock returns the sync-state block number.
+// db.GetLastKnownBlockNumber never fails (it returns "0x0" when the sync
+// state is missing), so the historical fallbacks to GetLatestBlockFromDB
+// and a second sync-state read were unreachable and have been removed.
 func findHighestProcessedBlock() string {
-	// First try to get the last synced block from the database
-	lastSyncedBlock, err := db.GetLastSyncedBlock()
-	if err == nil && lastSyncedBlock != nil && lastSyncedBlock.Result.Number != "" {
-		configs.Logger.Info("Using last synced block from sync state",
-			zap.String("block", lastSyncedBlock.Result.Number))
-		return lastSyncedBlock.Result.Number
-	}
-
-	// Fallback to the old method if the above fails
-	// Get the latest block from the database
-	latestBlock := db.GetLatestBlockFromDB()
-	if latestBlock != nil && latestBlock.Result.Number != "" {
-		return latestBlock.Result.Number
-	}
-
-	// Fallback to the last known block number
-	return db.GetLastKnownBlockNumber()
+	block := db.GetLastKnownBlockNumber()
+	configs.Logger.Info("Using last synced block from sync state",
+		zap.String("block", block))
+	return block
 }
 
 // forceUpdateSyncState directly updates the sync state without conditions
@@ -285,7 +275,7 @@ func forceUpdateSyncState(blockNumber string) {
 		bson.M{"_id": db.LastSyncedBlockID},
 		bson.M{"$set": bson.M{
 			"block_number":     blockNumber,
-			"block_number_int": db.HexToInt64(blockNumber),
+			"block_number_int": utils.HexToInt64(blockNumber),
 		}},
 		options.Update().SetUpsert(true),
 	)

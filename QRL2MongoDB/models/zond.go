@@ -1,21 +1,11 @@
 package models
 
-import (
-	"math/big"
-
-	"go.mongodb.org/mongo-driver/bson/primitive"
-)
+import ()
 
 type RPC struct {
 	Jsonrpc string `json:"jsonrpc"`
 	ID      int    `json:"id"`
 	Result  string `json:"result"`
-}
-
-type Zond struct {
-	Jsonrpc   string    `json:"jsonrpc"`
-	ID        int       `json:"id"`
-	PreResult PreResult `json:"result"`
 }
 
 type ZondDatabaseBlock struct {
@@ -60,27 +50,6 @@ type Transaction struct {
 	Status           string `json:"status"`
 }
 
-type PreResult struct {
-	BaseFeePerGas    string        `json:"baseFeePerGas"`
-	GasLimit         string        `json:"gasLimit"`
-	GasUsed          string        `json:"gasUsed"`
-	Hash             string        `json:"hash"`
-	Number           string        `json:"number"`
-	ParentHash       string        `json:"parentHash"`
-	ReceiptsRoot     string        `json:"receiptsRoot"`
-	StateRoot        string        `json:"stateRoot"`
-	Timestamp        string        `json:"timestamp"`
-	Transactions     []Transaction `json:"transactions"`
-	TransactionsRoot string        `json:"transactionsRoot"`
-	ExtraData        string        `json:"extraData"`
-	LogsBloom        string        `json:"logsBloom"`
-	Miner            string        `json:"miner"`
-	Size             string        `json:"size"`
-	PrevRandao       string        `json:"prevRandao"`
-	Withdrawals      []Withdrawal  `json:"withdrawals"`
-	WithdrawalsRoot  string        `json:"withdrawalsRoot"`
-}
-
 type Result struct {
 	BaseFeePerGas    string        `json:"baseFeePerGas"`
 	GasLimit         string        `json:"gasLimit"`
@@ -109,12 +78,6 @@ type JsonRPC struct {
 	ID      int           `json:"id"`
 }
 
-type GetBalance struct {
-	JsonRPC string `json:"jsonrpc"`
-	ID      int64  `json:"id"`
-	Result  string `json:"result"`
-}
-
 type GetCode struct {
 	JsonRPC string `json:"jsonrpc"`
 	ID      int64  `json:"id"`
@@ -127,10 +90,4 @@ type ZondLogsResponse struct {
 	Id      int    `json:"id"`
 	Jsonrpc string `json:"jsonrpc"`
 	Result  []Log  `json:"result"`
-}
-
-type Vote struct {
-	ID     primitive.ObjectID `bson:"_id,omitempty"`
-	Option string             `bson:"option"`
-	Count  *big.Int           `bson:"count"`
 }

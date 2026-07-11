@@ -106,9 +106,9 @@ func RegisterContractCallRoute(router *gin.Engine) {
 			// Surface the upstream error verbatim, "execution reverted"
 			// is the most common case and clients (Read tab) display it.
 			c.JSON(http.StatusOK, gin.H{
-				"error":   rpcErr.Message,
-				"code":    rpcErr.Code,
-				"data":    rpcErr.Data,
+				"error":    rpcErr.Message,
+				"code":     rpcErr.Code,
+				"data":     rpcErr.Data,
 				"reverted": true,
 			})
 			return
@@ -121,25 +121,6 @@ func RegisterContractCallRoute(router *gin.Engine) {
 		}
 		c.JSON(http.StatusOK, gin.H{"result": result})
 	})
-}
-
-// isValidHex returns true for "0x"-prefixed even-length strings of hex
-// digits. Empty payloads (0x by itself) are allowed since some view
-// functions take no arguments and call data is just the 4-byte selector.
-func isValidHex(s string) bool {
-	if !strings.HasPrefix(s, "0x") {
-		return false
-	}
-	hex := s[2:]
-	if len(hex)%2 != 0 {
-		return false
-	}
-	for _, r := range hex {
-		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
-			return false
-		}
-	}
-	return true
 }
 
 // uintToHex formats a uint64 as an 0x-prefixed hex string (no leading

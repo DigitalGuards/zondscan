@@ -57,9 +57,9 @@ type CompilerBuild struct {
 // runner. Mirrors the Solidity standard-JSON layout, see
 // theQRL/hyperion docs for details.
 type StandardJSONInput struct {
-	Language string                              `json:"language"`
-	Sources  map[string]StandardJSONSource       `json:"sources"`
-	Settings StandardJSONSettings                `json:"settings"`
+	Language string                        `json:"language"`
+	Sources  map[string]StandardJSONSource `json:"sources"`
+	Settings StandardJSONSettings          `json:"settings"`
 }
 
 type StandardJSONSource struct {
@@ -67,10 +67,10 @@ type StandardJSONSource struct {
 }
 
 type StandardJSONSettings struct {
-	Optimizer       *Optimizer                              `json:"optimizer,omitempty"`
-	EVMVersion      string                                  `json:"evmVersion,omitempty"`
-	Libraries       map[string]map[string]string            `json:"libraries,omitempty"`
-	OutputSelection map[string]map[string][]string          `json:"outputSelection"`
+	Optimizer       *Optimizer                     `json:"optimizer,omitempty"`
+	EVMVersion      string                         `json:"evmVersion,omitempty"`
+	Libraries       map[string]map[string]string   `json:"libraries,omitempty"`
+	OutputSelection map[string]map[string][]string `json:"outputSelection"`
 }
 
 type Optimizer struct {
@@ -80,8 +80,8 @@ type Optimizer struct {
 
 // StandardJSONOutput is the runner's JSON output shape.
 type StandardJSONOutput struct {
-	Errors    []CompilerError                            `json:"errors,omitempty"`
-	Contracts map[string]map[string]CompiledContract     `json:"contracts,omitempty"`
+	Errors    []CompilerError                        `json:"errors,omitempty"`
+	Contracts map[string]map[string]CompiledContract `json:"contracts,omitempty"`
 }
 
 type CompilerError struct {
@@ -95,8 +95,8 @@ type CompilerError struct {
 // for a given source unit. The bytecode is published under different
 // top-level keys depending on the hypc version:
 //
-//   hypc 0.0.2  → `zvm`  (the legacy Zond VM naming)
-//   hypc 0.2.x+ → `qrvm` (post-fork QRL VM rename)
+//	hypc 0.0.2  → `zvm`  (the legacy Zond VM naming)
+//	hypc 0.2.x+ → `qrvm` (post-fork QRL VM rename)
 //
 // Both shapes are parsed; the verifier picks whichever is populated via
 // `CompiledContract.DeployedBytecode()` so downstream code doesn't have

@@ -40,7 +40,7 @@ var weiPerQuanta = big.NewInt(1_000_000_000_000_000_000)
 // quantaFromWei converts a raw wei amount, given as a base-10 integer string,
 // into an exact QRL decimal string with 18 fractional digits. Because the
 // math is done with big.Int/big.Rat, 3300000000000000000 wei renders as
-// "3.300000000000000000" — never "3.2999999999999998xx" — and arbitrarily
+// "3.300000000000000000", never "3.2999999999999998xx", and arbitrarily
 // large values keep every digit. Returns ("", false) when s is not a valid
 // integer (including the empty string) so callers can fall back.
 func quantaFromWei(s string) (string, bool) {
