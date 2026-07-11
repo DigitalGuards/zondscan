@@ -233,11 +233,11 @@ func Sync(stopCh <-chan struct{}) {
 	go func() {
 		// Start wallet count sync
 		configs.Logger.Info("Starting wallet count sync service...")
-		db.StartWalletCountSync(stopCh)
+		StartWalletCountSync(stopCh)
 
 		// Start contract reprocessing job
 		configs.Logger.Info("Starting contract reprocessing service...")
-		db.StartContractReprocessingJob(stopCh)
+		StartContractReprocessingJob(stopCh)
 	}()
 
 	// Signal that initial sync is done so mempool polling can begin

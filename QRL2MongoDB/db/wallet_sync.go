@@ -11,39 +11,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// StartWalletCountSync starts a goroutine that syncs wallet count every 4 hours.
-// The goroutine returns once stopCh is closed so a graceful shutdown does not
-// start a new count while in-flight work is draining.
-func StartWalletCountSync(stopCh <-chan struct{}) {
-	configs.Logger.Info("Initializing wallet count sync service")
-	go func() {
-		ticker := time.NewTicker(4 * time.Hour)
-		defer ticker.Stop()
-
-		// Do an initial count immediately
-		configs.Logger.Info("Performing initial wallet count sync")
-		if err := syncWalletCount(); err != nil {
-			configs.Logger.Error("Failed initial wallet count sync", zap.Error(err))
-		}
-
-		// Then sync every 4 hours
-		configs.Logger.Info("Starting periodic wallet count sync (every 4 hours)")
-		for {
-			select {
-			case <-ticker.C:
-				if err := syncWalletCount(); err != nil {
-					configs.Logger.Error("Failed wallet count sync", zap.Error(err))
-				}
-			case <-stopCh:
-				configs.Logger.Info("Stopping wallet count sync on shutdown signal")
-				return
-			}
-		}
-	}()
-}
-
-// syncWalletCount performs the actual wallet count sync
-func syncWalletCount() error {
+// SyncWalletCount performs the actual wallet count sync. The periodic
+// scheduler that drives it lives in synchroniser/periodic_tasks.go
+// (StartWalletCountSync); this file keeps only the db work function.
+func SyncWalletCount() error {
 	configs.Logger.Info("Starting wallet count sync")
 
 	// Get the current count

@@ -98,6 +98,73 @@ func runTaskWithRetry(task func(), taskName string) {
 	}
 }
 
+// StartContractReprocessingJob starts a background job to periodically reprocess
+// incomplete contracts. The goroutine returns once stopCh is closed so a
+// graceful shutdown does not start a new reprocess pass while in-flight work
+// is draining.
+//
+// Scheduler owned by the synchroniser; the work function is
+// db.ReprocessIncompleteContracts. Semantics: run immediately, then every
+// hour, exiting on stopCh.
+func StartContractReprocessingJob(stopCh <-chan struct{}) {
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+
+		for {
+			configs.Logger.Info("Starting contract reprocessing job")
+
+			err := db.ReprocessIncompleteContracts()
+			if err != nil {
+				configs.Logger.Error("Contract reprocessing job failed", zap.Error(err))
+			}
+
+			// Wait for 1 hour before next run, or exit early on shutdown.
+			select {
+			case <-ticker.C:
+			case <-stopCh:
+				configs.Logger.Info("Stopping contract reprocessing job on shutdown signal")
+				return
+			}
+		}
+	}()
+}
+
+// StartWalletCountSync starts a goroutine that syncs wallet count every 4 hours.
+// The goroutine returns once stopCh is closed so a graceful shutdown does not
+// start a new count while in-flight work is draining.
+//
+// Scheduler owned by the synchroniser; the work function is
+// db.SyncWalletCount. Semantics: run immediately, then every 4 hours,
+// exiting on stopCh.
+func StartWalletCountSync(stopCh <-chan struct{}) {
+	configs.Logger.Info("Initializing wallet count sync service")
+	go func() {
+		ticker := time.NewTicker(4 * time.Hour)
+		defer ticker.Stop()
+
+		// Do an initial count immediately
+		configs.Logger.Info("Performing initial wallet count sync")
+		if err := db.SyncWalletCount(); err != nil {
+			configs.Logger.Error("Failed initial wallet count sync", zap.Error(err))
+		}
+
+		// Then sync every 4 hours
+		configs.Logger.Info("Starting periodic wallet count sync (every 4 hours)")
+		for {
+			select {
+			case <-ticker.C:
+				if err := db.SyncWalletCount(); err != nil {
+					configs.Logger.Error("Failed wallet count sync", zap.Error(err))
+				}
+			case <-stopCh:
+				configs.Logger.Info("Stopping wallet count sync on shutdown signal")
+				return
+			}
+		}
+	}()
+}
+
 // processBlockPeriodically checks for new blocks and processes them
 func processBlockPeriodically() {
 	configs.Logger.Info("Starting block processing check")

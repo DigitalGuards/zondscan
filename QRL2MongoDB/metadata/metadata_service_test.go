@@ -1,4 +1,4 @@
-package synchroniser
+package metadata
 
 import (
 	"encoding/json"

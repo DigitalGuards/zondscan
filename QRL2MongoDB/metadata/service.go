@@ -1,7 +1,6 @@
-// Package services / metadata_service.go
-//
-// Background fetcher for off-chain NFT metadata: collection-level
-// (Phase 3a, `contractCode`) and per-token (Phase 3b, `tokenMetadata`).
+// Package metadata implements the background fetcher for off-chain NFT
+// metadata: collection-level (Phase 3a, `contractCode`) and per-token
+// (Phase 3b, `tokenMetadata`).
 //
 // Polls the two work queues, resolves each row's URI through the
 // configured IPFS gateway, parses the JSON, and persists the off-chain
@@ -34,35 +33,29 @@
 //     trip entirely: IPFS content is content-addressed, so an identical
 //     URI implies identical metadata and only the freshness stamp is
 //     bumped.
-package synchroniser
+package metadata
 
 import (
 	"QRL2MongoDB/configs"
 	"QRL2MongoDB/db"
 	"QRL2MongoDB/models"
 	"QRL2MongoDB/rpc"
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math/big"
-	"net"
 	"net/http"
-	"net/url"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
-	"syscall"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
 )
 
-// MetadataService is the background fetcher; one instance per syncer process.
-type MetadataService struct {
+// Service is the background fetcher; one instance per syncer process.
+type Service struct {
 	gatewayURL   string
 	httpClient   *http.Client
 	pollInterval time.Duration
@@ -72,7 +65,8 @@ type MetadataService struct {
 	retryMax     time.Duration
 	refreshTTL   time.Duration
 
-	stopCh chan struct{}
+	stopOnce sync.Once
+	stopCh   chan struct{}
 }
 
 // metadataServiceConfig holds the tunables sourced from the environment.
@@ -136,14 +130,14 @@ func loadMetadataServiceConfig() metadataServiceConfig {
 	return cfg
 }
 
-// NewMetadataService constructs (but does not start) a metadata fetcher.
-func NewMetadataService() *MetadataService {
+// NewService constructs (but does not start) a metadata fetcher.
+func NewService() *Service {
 	cfg := loadMetadataServiceConfig()
 	if !cfg.enabled {
 		configs.Logger.Warn("Metadata fetcher service disabled by env (METADATA_FETCHER_ENABLED=false)")
 		return nil
 	}
-	return &MetadataService{
+	return &Service{
 		gatewayURL:   cfg.gatewayURL,
 		httpClient:   newSafeHTTPClient(cfg.fetchTimeout),
 		pollInterval: cfg.pollInterval,
@@ -178,118 +172,11 @@ func nextRetryDelay(base, max time.Duration, retryCount int) time.Duration {
 	return d
 }
 
-// isImmutableURI reports whether a metadata URI is content-addressed
-// (`ipfs://` or a bare CID), meaning identical URI implies identical
-// content and a TTL refresh can skip the gateway round trip. http(s)
-// URIs are mutable and always re-fetch.
-func isImmutableURI(uri string) bool {
-	uri = strings.TrimSpace(uri)
-	if strings.HasPrefix(uri, "ipfs://") {
-		return true
-	}
-	return looksLikeCID(strings.SplitN(uri, "/", 2)[0])
-}
-
-// newSafeHTTPClient builds an http.Client whose Transport refuses to connect
-// to private / loopback / link-local / multicast / unspecified IPs. The
-// Dialer's Control hook fires after DNS resolution and before the socket
-// connects, so it also catches DNS-rebinding attacks where a hostname
-// resolves to a public IP at validation time but a private one when the
-// dial actually runs.
-//
-// This is the SSRF perimeter for the metadata fetcher: any URL whose host
-// resolves to a forbidden range gets a connection error from net.Dial,
-// surfaced as a normal HTTP error to fetchBody. We never reach the
-// dangerous endpoint.
-func newSafeHTTPClient(timeout time.Duration) *http.Client {
-	dialer := &net.Dialer{
-		Timeout:   timeout,
-		KeepAlive: 30 * time.Second,
-		Control: func(network, address string, _ syscall.RawConn) error {
-			host, _, err := net.SplitHostPort(address)
-			if err != nil {
-				return err
-			}
-			ip := net.ParseIP(host)
-			if ip == nil {
-				return fmt.Errorf("ssrf-guard: unresolvable host %q", host)
-			}
-			if isForbiddenIP(ip) {
-				return fmt.Errorf("ssrf-guard: refusing to connect to %s", ip.String())
-			}
-			return nil
-		},
-	}
-	return &http.Client{
-		Timeout: timeout,
-		Transport: &http.Transport{
-			DialContext:         dialer.DialContext,
-			TLSHandshakeTimeout: timeout,
-			// Disable connection reuse so a previously-allowed IP can't be
-			// re-targeted by a later DNS rebind for the same hostname.
-			DisableKeepAlives: true,
-		},
-	}
-}
-
-// extraBlockedCIDRs lists ranges Go's net.IP.IsPrivate / IsLoopback /
-// IsLinkLocal* don't cover but that we still don't want a server-side
-// fetcher hitting. Kept as a package var so tests can extend it.
-var extraBlockedCIDRs = mustParseCIDRs(
-	"100.64.0.0/10",   // CGNAT
-	"192.0.0.0/24",    // IETF Protocol Assignments
-	"198.18.0.0/15",   // Network interconnect device benchmark
-	"192.0.2.0/24",    // TEST-NET-1
-	"198.51.100.0/24", // TEST-NET-2
-	"203.0.113.0/24",  // TEST-NET-3
-	"240.0.0.0/4",     // Reserved
-	"fc00::/7",        // IPv6 ULA
-	"fe80::/10",       // IPv6 link-local
-	"100::/64",        // IPv6 discard prefix
-	"2001:db8::/32",   // IPv6 docs prefix
-)
-
-func mustParseCIDRs(s ...string) []*net.IPNet {
-	nets := make([]*net.IPNet, 0, len(s))
-	for _, c := range s {
-		_, n, err := net.ParseCIDR(c)
-		if err != nil {
-			panic(fmt.Sprintf("invalid extra-blocked CIDR %q: %v", c, err))
-		}
-		nets = append(nets, n)
-	}
-	return nets
-}
-
-// isForbiddenIP returns true if `ip` is in a range the metadata fetcher must
-// never connect to. Combines Go's stdlib helpers with explicit additional
-// CIDRs (CGNAT, IETF reserved, IPv6 ULA, etc) that the stdlib doesn't flag.
-func isForbiddenIP(ip net.IP) bool {
-	if ip == nil {
-		return true
-	}
-	if ip.IsLoopback() ||
-		ip.IsPrivate() ||
-		ip.IsLinkLocalUnicast() ||
-		ip.IsLinkLocalMulticast() ||
-		ip.IsMulticast() ||
-		ip.IsUnspecified() ||
-		ip.IsInterfaceLocalMulticast() {
-		return true
-	}
-	for _, n := range extraBlockedCIDRs {
-		if n.Contains(ip) {
-			return true
-		}
-	}
-	return false
-}
-
 // Start launches the polling goroutine. Idempotent in the sense that
 // calling Start twice will spawn two pollers; callers should construct one
 // service per process. The caller-passed context cancels the loop in
 // addition to Stop().
-func (s *MetadataService) Start(ctx context.Context) {
+func (s *Service) Start(ctx context.Context) {
 	if s == nil {
 		return
 	}
@@ -321,17 +208,17 @@ func (s *MetadataService) Start(ctx context.Context) {
 	}()
 }
 
-// Stop signals the polling goroutine to exit. Safe to call multiple times.
-func (s *MetadataService) Stop() {
+// Stop signals the polling goroutine to exit. Safe to call multiple times,
+// including concurrently: sync.Once guarantees the stop channel is closed
+// exactly once (the previous check-then-act select could double-close under
+// a concurrent-Stop race).
+func (s *Service) Stop() {
 	if s == nil {
 		return
 	}
-	select {
-	case <-s.stopCh:
-		// already closed
-	default:
+	s.stopOnce.Do(func() {
 		close(s.stopCh)
-	}
+	})
 }
 
 // tick runs one batch of metadata fetches. Errors per row are logged and
@@ -344,7 +231,7 @@ func (s *MetadataService) Stop() {
 // per-token progress and vice versa. The exception is a gateway 429: it
 // aborts the whole tick (both batches), because the rate limit is shared
 // and hammering on regardless would stamp spurious failures.
-func (s *MetadataService) tick(ctx context.Context) {
+func (s *Service) tick(ctx context.Context) {
 	if rateLimited := s.tickContracts(ctx); rateLimited {
 		configs.Logger.Warn("metadata fetcher: skipping token batch this tick (gateway rate limited)")
 		return
@@ -354,7 +241,7 @@ func (s *MetadataService) tick(ctx context.Context) {
 
 // tickContracts processes one contract batch. Returns true when the batch
 // was aborted because the gateway rate-limited us.
-func (s *MetadataService) tickContracts(ctx context.Context) bool {
+func (s *Service) tickContracts(ctx context.Context) bool {
 	rows, err := db.GetContractsAwaitingMetadata(ctx, s.batchSize, time.Now(), s.refreshTTL)
 	if err != nil {
 		configs.Logger.Warn("metadata fetcher: failed to read contract work queue", zap.Error(err))
@@ -388,7 +275,7 @@ func (s *MetadataService) tickContracts(ctx context.Context) bool {
 // recorded standard, resolves the resulting URI through the gateway, parses
 // the JSON, and writes the result. Same "preserve last-good" semantics as
 // the contract path.
-func (s *MetadataService) tickTokens(ctx context.Context) {
+func (s *Service) tickTokens(ctx context.Context) {
 	rows, err := db.GetTokensAwaitingMetadata(ctx, s.batchSize, time.Now(), s.refreshTTL)
 	if err != nil {
 		configs.Logger.Warn("metadata fetcher: failed to read token work queue", zap.Error(err))
@@ -426,7 +313,7 @@ func (s *MetadataService) tickTokens(ctx context.Context) {
 //
 // Returns errGatewayRateLimited when the gateway 429'd (row state
 // preserved; the caller aborts the batch), nil otherwise.
-func (s *MetadataService) fetchOneToken(ctx context.Context, stub models.TokenMetadata) error {
+func (s *Service) fetchOneToken(ctx context.Context, stub models.TokenMetadata) error {
 	id, ok := new(big.Int).SetString(stub.TokenID, 10)
 	if !ok {
 		s.recordTokenFailure(ctx, stub, "parse tokenID: not a decimal integer")
@@ -549,7 +436,7 @@ func (s *MetadataService) fetchOneToken(ctx context.Context, stub models.TokenMe
 // The stored retryCount is the count of failures so far; the delay for the
 // deadline is derived from the PREVIOUS count so the first failure waits
 // exactly retryBase.
-func (s *MetadataService) recordTokenFailure(ctx context.Context, stub models.TokenMetadata, reason string) {
+func (s *Service) recordTokenFailure(ctx context.Context, stub models.TokenMetadata, reason string) {
 	delay := nextRetryDelay(s.retryBase, s.retryMax, stub.RetryCount)
 	nextRetryAt := time.Now().UTC().Add(delay).Format(time.RFC3339)
 	if err := db.MarkTokenMetadataFetchFailed(ctx, stub.ContractAddress, stub.TokenID,
@@ -585,7 +472,7 @@ func (s *MetadataService) recordTokenFailure(ctx context.Context, stub models.To
 //
 // Returns errGatewayRateLimited when the gateway 429'd (row state
 // preserved; the caller aborts the batch), nil otherwise.
-func (s *MetadataService) fetchOne(ctx context.Context, c models.ContractInfo) error {
+func (s *Service) fetchOne(ctx context.Context, c models.ContractInfo) error {
 	uri := c.MetadataURI
 	if fresh, err := rpc.GetContractURI(c.Address); err == nil && fresh != "" {
 		uri = fresh
@@ -671,7 +558,7 @@ func (s *MetadataService) fetchOne(ctx context.Context, c models.ContractInfo) e
 // recordFailure persists a failed contract-level attempt with its backoff
 // schedule. Existing content fields and metadataFetchedAt survive so the
 // explorer keeps serving last-good data.
-func (s *MetadataService) recordFailure(ctx context.Context, c models.ContractInfo, reason string) {
+func (s *Service) recordFailure(ctx context.Context, c models.ContractInfo, reason string) {
 	delay := nextRetryDelay(s.retryBase, s.retryMax, c.MetadataRetryCount)
 	nextRetryAt := time.Now().UTC().Add(delay).Format(time.RFC3339)
 	if err := db.MarkContractMetadataFetchFailed(ctx, c.Address, reason, c.MetadataRetryCount+1, nextRetryAt); err != nil {
@@ -686,309 +573,4 @@ func (s *MetadataService) recordFailure(ctx context.Context, c models.ContractIn
 		zap.String("reason", reason),
 		zap.Int("retryCount", c.MetadataRetryCount+1),
 		zap.String("nextRetryAt", nextRetryAt))
-}
-
-// errGatewayRateLimited is returned by fetchBody on HTTP 429. It is NOT a
-// row failure: the row's state is preserved (no fetchError, no backoff
-// bump) and the tick aborts its remaining batch, because once the gateway
-// has rate-limited us every subsequent request this window will fail the
-// same way and would pointlessly stamp failure churn onto healthy rows.
-// The default gateway (the wallet backend's IPFS proxy) allows
-// 60 req/min/IP, below this fetcher's worst-case budget of two 25-row
-// batches per 30s tick, so 429s are expected during backlog drains.
-var errGatewayRateLimited = errors.New("gateway rate limited (HTTP 429)")
-
-// fetchBody issues an HTTP GET with the configured timeout and size cap.
-func (s *MetadataService) fetchBody(ctx context.Context, resolvedURL string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, resolvedURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/json,text/plain,*/*")
-	req.Header.Set("User-Agent", "zondscan-metadata-fetcher/3a")
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusTooManyRequests {
-		return nil, errGatewayRateLimited
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-
-	limited := io.LimitReader(resp.Body, s.maxBodyBytes+1)
-	body, err := io.ReadAll(limited)
-	if err != nil {
-		return nil, err
-	}
-	if int64(len(body)) > s.maxBodyBytes {
-		return nil, fmt.Errorf("body exceeds %d bytes", s.maxBodyBytes)
-	}
-	return body, nil
-}
-
-// metadataDocument is the minimal subset of the NFT metadata schema we
-// care about for Phase 3a (collection level). Unknown fields are ignored.
-// Each field is optional; the parser coerces wrong-typed fields to the
-// empty string so one bad entry can't fail the whole record.
-type metadataDocument struct {
-	Name        string `json:"-"`
-	Description string `json:"-"`
-	Image       string `json:"-"`
-	ExternalURL string `json:"-"`
-}
-
-// tokenMetadataDocument extends metadataDocument with the per-token
-// `attributes` array (Phase 3b). Values are coerced to strings for
-// storage uniformity since the OpenSea spec allows mixed types
-// (numeric, string, object) and downstream consumers can re-parse.
-type tokenMetadataDocument struct {
-	Name        string
-	Description string
-	Image       string
-	ExternalURL string
-	Attributes  []models.TokenAttribute
-}
-
-// safeExternalURL returns the trimmed value only when it carries an http(s)
-// scheme. Anything else (javascript:, data:, relative paths, etc.) is dropped
-// to an empty string so an attacker-controlled contractURI/tokenURI cannot
-// persist a hostile external_url. Defense-in-depth alongside frontend escaping.
-func safeExternalURL(s string) string {
-	t := strings.TrimSpace(s)
-	lower := strings.ToLower(t)
-	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
-		return t
-	}
-	return ""
-}
-
-// parseMetadataJSON does a defensive JSON parse: unmarshal into a generic
-// map, then pull out the string fields we care about, ignoring any non-
-// string variants. This lets a malformed `description: ["foo", "bar"]`
-// reduce to an empty description rather than failing the entire record.
-//
-// Two sentinel cases for which we still return an empty doc + nil error
-// rather than a JSON-shape error:
-//
-//   - the JSON literal `null`, which unmarshals into a nil map; reading
-//     `raw[key]` from a nil map is safe in Go but the explicit check keeps
-//     the intent obvious and silences static analysis warnings;
-//   - top-level scalars or arrays, where Unmarshal fails with a type
-//     mismatch error - those still fail loudly.
-func parseMetadataJSON(body []byte) (metadataDocument, error) {
-	var raw map[string]interface{}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return metadataDocument{}, err
-	}
-	stringField := func(key string) string {
-		// Reading from a nil map is safe in Go, but the explicit branch
-		// avoids any ambiguity for future readers.
-		if raw == nil {
-			return ""
-		}
-		v, ok := raw[key]
-		if !ok || v == nil {
-			return ""
-		}
-		s, ok := v.(string)
-		if !ok {
-			return ""
-		}
-		return strings.TrimSpace(s)
-	}
-	doc := metadataDocument{
-		Name:        stringField("name"),
-		Description: stringField("description"),
-		Image:       stringField("image"),
-		ExternalURL: safeExternalURL(stringField("external_url")),
-	}
-	return doc, nil
-}
-
-// parseTokenMetadataJSON is the Phase 3b variant that also extracts the
-// `attributes` array (OpenSea convention: each entry has `trait_type`,
-// `value`, optionally `display_type`). Anything that isn't a clean array
-// of objects is dropped silently, one bad NFT shouldn't fail the rest.
-//
-// Uses json.Decoder.UseNumber() rather than vanilla json.Unmarshal so
-// trait values that are large integers (e.g. token IDs as attribute
-// values, common in game NFT schemas) keep their full precision instead
-// of being rounded through float64 at 2^53.
-func parseTokenMetadataJSON(body []byte) (tokenMetadataDocument, error) {
-	dec := json.NewDecoder(bytes.NewReader(body))
-	dec.UseNumber()
-	var raw map[string]interface{}
-	if err := dec.Decode(&raw); err != nil {
-		return tokenMetadataDocument{}, err
-	}
-	stringField := func(key string) string {
-		if raw == nil {
-			return ""
-		}
-		v, ok := raw[key]
-		if !ok || v == nil {
-			return ""
-		}
-		s, ok := v.(string)
-		if !ok {
-			return ""
-		}
-		return strings.TrimSpace(s)
-	}
-
-	out := tokenMetadataDocument{
-		Name:        stringField("name"),
-		Description: stringField("description"),
-		Image:       stringField("image"),
-		ExternalURL: safeExternalURL(stringField("external_url")),
-	}
-
-	// attributes: []{trait_type, value, display_type?}
-	if raw != nil {
-		if attrsAny, ok := raw["attributes"]; ok {
-			if attrs, isArr := attrsAny.([]interface{}); isArr {
-				const maxAttrs = 64 // defensive: stop a malicious doc from blowing memory
-				for i, a := range attrs {
-					if i >= maxAttrs {
-						break
-					}
-					m, isMap := a.(map[string]interface{})
-					if !isMap {
-						continue
-					}
-					attr := models.TokenAttribute{
-						TraitType:   stringifyAttrField(m["trait_type"]),
-						Value:       stringifyAttrField(m["value"]),
-						DisplayType: stringifyAttrField(m["display_type"]),
-					}
-					if attr.TraitType == "" && attr.Value == "" {
-						continue // empty attr, skip
-					}
-					out.Attributes = append(out.Attributes, attr)
-				}
-			}
-		}
-	}
-	return out, nil
-}
-
-// stringifyAttrField coerces an arbitrary JSON value to a string for
-// storage uniformity. Strings pass through trimmed; numbers (preserved as
-// json.Number via Decoder.UseNumber so we keep full precision for big
-// uint256-shaped trait values) pass through verbatim; bools become
-// "true"/"false"; nil and objects collapse to "".
-//
-// Older callers may still feed float64 values when the JSON came from
-// json.Unmarshal instead of json.Decoder.UseNumber; the float64 branch
-// is kept for that compatibility path.
-func stringifyAttrField(v interface{}) string {
-	switch t := v.(type) {
-	case nil:
-		return ""
-	case string:
-		return strings.TrimSpace(t)
-	case bool:
-		if t {
-			return "true"
-		}
-		return "false"
-	case json.Number:
-		// Decoder.UseNumber path: keep the original textual form, no
-		// float64 round-trip. Covers ints past 2^53.
-		return t.String()
-	case float64:
-		// Vanilla Unmarshal fallback; preserve integer-ness when possible.
-		if t == float64(int64(t)) {
-			return strconv.FormatInt(int64(t), 10)
-		}
-		return strconv.FormatFloat(t, 'f', -1, 64)
-	default:
-		return ""
-	}
-}
-
-// CID validation mirrors the wallet backend's IPFS proxy so callers fail
-// fast on malformed CIDs instead of round-tripping to the gateway.
-var (
-	cidV0Re = regexp.MustCompile(`^Qm[1-9A-HJ-NP-Za-km-z]{44}$`)
-	cidV1Re = regexp.MustCompile(`^b[A-Za-z2-7]{58,}$`)
-)
-
-func looksLikeCID(s string) bool {
-	return cidV0Re.MatchString(s) || cidV1Re.MatchString(s)
-}
-
-// resolveMetadataURI normalises a metadata URI into a fetchable HTTPS URL.
-//
-// Supported schemes:
-//
-//   - https://...           returned as-is.
-//   - http://...            returned as-is (legacy support; the syncer is
-//     server-side so plain HTTP is acceptable).
-//   - ipfs://CID[/path]     -> gatewayURL + CID + "/" + path
-//   - <bare CID>[/path]     -> gatewayURL + CID + "/" + path  (some
-//     contracts emit the bare CID without scheme).
-//
-// Anything else (ar://, ipns://, data:, file:, javascript:) returns an
-// error. The wallet backend's IPFS proxy already validates CID + path
-// shape, so we reuse the same regexes here to fail fast.
-func resolveMetadataURI(uri, gatewayURL string) (string, error) {
-	uri = strings.TrimSpace(uri)
-	if uri == "" {
-		return "", fmt.Errorf("empty URI")
-	}
-
-	// https / http: return as-is. We don't fetch via the IPFS gateway in
-	// this case, that's intentional, the gateway only knows how to
-	// resolve CIDs.
-	if strings.HasPrefix(uri, "https://") || strings.HasPrefix(uri, "http://") {
-		// Validate it's parseable so we don't pass garbage to http.NewRequest.
-		if _, err := url.Parse(uri); err != nil {
-			return "", fmt.Errorf("malformed http(s) URI: %w", err)
-		}
-		return uri, nil
-	}
-
-	// ipfs://CID[/path]
-	if strings.HasPrefix(uri, "ipfs://") {
-		rest := strings.TrimPrefix(uri, "ipfs://")
-		// Some contracts emit `ipfs://ipfs/CID`; collapse it.
-		rest = strings.TrimPrefix(rest, "ipfs/")
-		return joinGateway(gatewayURL, rest)
-	}
-
-	// Bare CID with optional path.
-	first := strings.SplitN(uri, "/", 2)[0]
-	if looksLikeCID(first) {
-		return joinGateway(gatewayURL, uri)
-	}
-
-	return "", fmt.Errorf("unsupported URI scheme: %s", truncate(uri, 80))
-}
-
-// joinGateway pastes the path onto the gateway URL. The gateway is
-// guaranteed (by loadMetadataServiceConfig) to end in "/", so a clean
-// concatenation is correct.
-func joinGateway(gateway, path string) (string, error) {
-	if path == "" {
-		return "", fmt.Errorf("empty CID/path")
-	}
-	// Sanity: the CID portion must validate.
-	first := strings.SplitN(path, "/", 2)[0]
-	if !looksLikeCID(first) {
-		return "", fmt.Errorf("invalid CID: %s", truncate(first, 80))
-	}
-	return gateway + path, nil
-}
-
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "..."
 }
