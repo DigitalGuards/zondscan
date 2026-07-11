@@ -30,19 +30,19 @@ const monoFont = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'ZondScan - QRL v2 Explorer',
+  title: 'ZondScan | QRL 2.0 Explorer',
   description:
     'Blockchain explorer for QRL 2.0, an EVM-compatible blockchain secured with post-quantum cryptography. Track transactions, smart contracts, blocks, and validators.',
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'ZondScan - QRL v2 Explorer',
+    title: 'ZondScan | QRL 2.0 Explorer',
     description:
       'Blockchain explorer for QRL 2.0. Track smart contracts, blocks, and transactions on a quantum-resistant EVM-compatible chain.',
     url: 'https://zondscan.com',
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'ZondScan - QRL v2 Explorer',
+    title: 'ZondScan | QRL 2.0 Explorer',
     description:
       'Blockchain explorer for QRL 2.0. Track transactions, blocks, smart contracts, and validators on a post-quantum EVM chain.',
   },
