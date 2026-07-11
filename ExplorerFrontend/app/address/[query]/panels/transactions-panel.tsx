@@ -6,7 +6,6 @@ import {
   createColumnHelper,
   getCoreRowModel,
   getFilteredRowModel,
-  getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
 import type { ColumnDef, Row } from '@tanstack/react-table';
@@ -28,10 +27,28 @@ import {
   truncateMiddle,
   useIsMobile,
 } from './_table-utils';
+import {
+  PAGE_LIMIT,
+  fetchAllAggregateRows,
+  useAggregatePage,
+} from './use-aggregate-page';
 
 /**
- * Native transactions panel. Renders the rows the parent address-view
- * already received from `/address/aggregate/:addr` (no fetch here).
+ * Native transactions panel with server-side pagination.
+ *
+ * The parent address-view seeds page 1 from `/address/aggregate/:addr`
+ * (kept live by the AddressTabs 15s poll); pages > 1 are fetched on demand
+ * through useAggregatePage. The old TanStack client pagination only ever
+ * paged the single server page it was handed, so any address with more
+ * than one page of history rendered as "Page 1 of 1" with its 10 newest
+ * rows and no way to reach the rest.
+ *
+ * Consequences of paging server-side:
+ *   - The search box filters the page on screen, not the whole history.
+ *   - Download exports the full history (fetchAllAggregateRows), not just
+ *     the loaded rows.
+ *   - The Number column counts down from the true total, so row numbers
+ *     stay stable across pages.
  *
  * Notable departures from the pre-refactor TanStackTable Transactions tab:
  *   - "Transaction Type" column dropped. The syncer writes TxType as a hex
@@ -39,12 +56,9 @@ import {
  *     expected, so the cell rendered empty for every row. Removed rather
  *     than translated because the value adds no information the In/Out
  *     column doesn't already convey.
- *   - "Paid Fees" now renders in Shor (10^-9 QRL / "Quanta") with a
- *     thousands-separator. The wire value is a decimal-Quanta string like
- *     "0.000078750000357000"; the old calculateFees only accepted a
- *     numeric type and fell back to 0 when handed the string, which is
- *     why the column showed "0.00 QRL" for every native tx. Multiplied
- *     by 1e9 to land in the Shor / Gwei range users actually read.
+ *   - "Paid Fees" renders in QRL with up to 8 decimals; the wire value is
+ *     a decimal-Quanta string like "0.000078750000357000" the old
+ *     calculateFees treated as 0.
  */
 
 const IN_OUT_MAP = ['Out', 'In'] as const;
@@ -55,18 +69,38 @@ const columnHelper = createColumnHelper<
 
 
 interface TransactionsPanelProps {
+  address: string;
+  /** Page-1 rows from the parent's live aggregate poll. */
   transactions: Transaction[];
+  /** True total from transactions_count, drives the page count. */
+  total: number;
 }
 
 export default function TransactionsPanel({
+  address,
   transactions,
+  total,
 }: TransactionsPanelProps): JSX.Element {
   const [filter, setFilter] = useState('');
+  const [page, setPage] = useState(1);
   const isMobile = useIsMobile();
+
+  const pageQuery = useAggregatePage(address, page);
+  const pageRows = pageQuery.data?.transactions_by_address;
+  const rows = useMemo(
+    () => (page === 1 ? transactions : pageRows ?? []),
+    [page, transactions, pageRows],
+  );
+
+  // Guard against a zero/absent total (e.g. count query failed server-side)
+  // so the Number column and page count still make sense for the rows we
+  // actually have.
+  const effectiveTotal = total > 0 ? total : rows.length;
+  const pageCount = Math.max(1, Math.ceil(effectiveTotal / PAGE_LIMIT));
 
   const data = useMemo(
     () =>
-      transactions.map((tx) => {
+      rows.map((tx) => {
         const [amount, amountUnit] = formatAmount(tx.Amount);
         // PaidFees comes off the wire as a decimal-Quanta string
         // ("0.0000787..."). Render in QRL with up to 8 decimals,
@@ -88,7 +122,7 @@ export default function TransactionsPanel({
           formattedFees,
         };
       }),
-    [transactions],
+    [rows],
   );
 
   const columns = useMemo(
@@ -96,7 +130,12 @@ export default function TransactionsPanel({
       columnHelper.accessor(() => '', {
         id: 'Number',
         header: 'Number',
-        cell: (info) => <span>{transactions.length - info.row.index}</span>,
+        // Descending position within the full history, newest = total.
+        // row.index is the position in this page's data array, stable
+        // under the in-page search filter.
+        cell: (info) => (
+          <span>{effectiveTotal - ((page - 1) * PAGE_LIMIT + info.row.index)}</span>
+        ),
       }),
       columnHelper.accessor('InOut', {
         header: 'In/Out',
@@ -162,7 +201,7 @@ export default function TransactionsPanel({
         cell: (info) => <span>{info.getValue()}</span>,
       }),
     ],
-    [transactions.length],
+    [effectiveTotal, page],
   );
 
   const table = useReactTable({
@@ -173,10 +212,9 @@ export default function TransactionsPanel({
     onGlobalFilterChange: setFilter,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
   });
 
-  if (transactions.length === 0) {
+  if (effectiveTotal === 0 && page === 1) {
     return (
       <EmptyState
         title="No transactions yet"
@@ -267,22 +305,51 @@ export default function TransactionsPanel({
       <div className="p-4 border-b border-[#3d3d3d]">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="text-sm text-gray-400">
-            {transactions.length} transaction{transactions.length === 1 ? '' : 's'} loaded
+            {effectiveTotal.toLocaleString('en-US')} transaction
+            {effectiveTotal === 1 ? '' : 's'}
           </div>
           <div className="flex items-center space-x-4">
             <DebouncedInput
               value={filter}
               onChange={(v) => setFilter(String(v))}
               className="px-4 py-2 text-sm bg-[#1a1a1a] border border-[#3d3d3d] rounded-lg focus:outline-none focus:border-[#ffa729] text-white w-full md:w-auto"
-              placeholder="Search transactions..."
+              placeholder="Search this page..."
             />
-            <DownloadBtn data={transactions} />
+            <DownloadBtn
+              data={rows}
+              fileName={`transactions-${address}`}
+              getData={() =>
+                fetchAllAggregateRows(address, (p) => p.transactions_by_address)
+              }
+            />
           </div>
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        {isMobile ? (
+      {pageQuery.isError && page > 1 && (
+        <div className="p-4 text-sm text-red-400 border-b border-[#3d3d3d]">
+          Failed to load page {page}.{' '}
+          <button
+            type="button"
+            className="underline hover:text-red-300"
+            onClick={() => { void pageQuery.refetch(); }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      <div
+        className={`overflow-x-auto${
+          pageQuery.isFetching && page > 1 ? ' opacity-60' : ''
+        }`}
+      >
+        {rows.length === 0 && pageQuery.isFetching ? (
+          // First visit to a page > 1 has no previous query data to hold
+          // on screen (page 1 lives in the parent poll), so show an
+          // explicit loading state instead of an empty table.
+          <div className="p-8 text-center text-gray-400">Loading transactions...</div>
+        ) : isMobile ? (
           <div className="overflow-hidden">
             {table.getRowModel().rows.map((row) => renderCard(row))}
           </div>
@@ -295,14 +362,14 @@ export default function TransactionsPanel({
       </div>
 
       <Paginator
-        pageIndex={table.getState().pagination.pageIndex}
-        pageCount={table.getPageCount()}
-        canPrev={table.getCanPreviousPage()}
-        canNext={table.getCanNextPage()}
-        goFirst={() => table.setPageIndex(0)}
-        goPrev={() => table.previousPage()}
-        goNext={() => table.nextPage()}
-        goLast={() => table.setPageIndex(table.getPageCount() - 1)}
+        pageIndex={page - 1}
+        pageCount={pageCount}
+        canPrev={page > 1}
+        canNext={page < pageCount}
+        goFirst={() => setPage(1)}
+        goPrev={() => setPage((p) => Math.max(1, p - 1))}
+        goNext={() => setPage((p) => Math.min(pageCount, p + 1))}
+        goLast={() => setPage(pageCount)}
       />
     </div>
   );

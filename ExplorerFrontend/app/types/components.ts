@@ -6,6 +6,9 @@ import type { Transaction, InternalTransaction } from './transaction';
 export interface DownloadBtnProps {
   data: Transaction[];
   fileName?: string;
+  /** When set, the button resolves the full row set through this instead
+   *  of exporting `data` (which may be just the currently loaded page). */
+  getData?: () => Promise<Transaction[]>;
 }
 
 /**
@@ -14,6 +17,8 @@ export interface DownloadBtnProps {
 export interface DownloadBtnInternalProps {
   data: InternalTransaction[];
   fileName?: string;
+  /** Same contract as DownloadBtnProps.getData. */
+  getData?: () => Promise<InternalTransaction[]>;
 }
 
 /**

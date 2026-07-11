@@ -74,6 +74,15 @@ export interface AddressData {
   // aggregate inlined into transactions_by_address (capped at limit=50).
   // Used by the address-page tab badge so the count is honest.
   transactions_count?: number;
+  // True total for the internal-transactions list, same contract as
+  // transactions_count. Optional: absent on handlers predating it.
+  internal_transactions_count?: number;
+  // Unix seconds of the oldest/newest native tx involving the address,
+  // computed server-side across the whole history. 0 = no activity.
+  // Optional: absent on handlers predating it, in which case the view
+  // falls back to deriving the range from the loaded page.
+  first_seen?: number;
+  last_seen?: number;
   transactions_by_address: Transaction[];
   internal_transactions_by_address: InternalTransaction[];
   contract_code: ContractData | null;
