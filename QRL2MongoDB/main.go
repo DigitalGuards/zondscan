@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -21,8 +22,7 @@ import (
 // this, an empty NODE_URLS/NODE_URL only logs a warning in
 // rpc.newEndpointSelectorFromEnv and the first RPC call returns "no node
 // endpoints configured", so Sync exits silently with no obvious cause.
-// MONGOURI is validated in configs.ConnectDB, which runs at package init
-// (before main), so it is not rechecked here: a check here would be dead code.
+// MONGOURI is validated inside configs.ConnectDB, called explicitly below.
 func validateEnv() {
 	if os.Getenv("NODE_URLS") == "" && os.Getenv("NODE_URL") == "" {
 		log.Fatal("Required environment variable NODE_URLS (or legacy NODE_URL) is not set")
@@ -33,12 +33,23 @@ func main() {
 	// Ensure logger resources are properly released
 	defer configs.Logger.Sync()
 
+	// Route the zap global logger (zap.L()) to our file logger. The rpc
+	// package logs failover events through zap.L(); without this call those
+	// go to zap's default no-op logger and are silently discarded.
+	zap.ReplaceGlobals(configs.Logger)
+
 	configs.Logger.Info("Initializing QRL to MongoDB synchronizer...")
 
 	// Fail fast before any sync work if required env vars are missing.
 	validateEnv()
 
 	configs.Logger.Info("Connecting to MongoDB and RPC node...")
+
+	// Connect explicitly: nothing connects at import time anymore, and a
+	// missing/unreachable MONGOURI must be fatal for the syncer.
+	if err := configs.ConnectDB(); err != nil {
+		configs.Logger.Fatal("Failed to connect to MongoDB", zap.Error(err))
+	}
 
 	// stopCh is closed when a termination signal is received. Sync() and other
 	// long-running loops should watch this channel so they can finish their current
@@ -82,7 +93,10 @@ func main() {
 	}()
 
 	configs.Logger.Info("Starting blockchain synchronization process...")
-	configs.Logger.Info("MongoDB URL: " + os.Getenv("MONGOURI"))
+	// Log only the host: MONGOURI may embed credentials.
+	if u, err := url.Parse(os.Getenv("MONGOURI")); err == nil && u.Host != "" {
+		configs.Logger.Info("MongoDB host: " + u.Host)
+	}
 	configs.Logger.Info("Node URLs: " + strings.Join(rpc.Endpoints().AllURLs(), ", "))
 
 	// Start health check server for Kubernetes probes. The handler probes the

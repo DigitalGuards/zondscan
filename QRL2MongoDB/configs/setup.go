@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -13,33 +14,52 @@ import (
 	"go.uber.org/zap"
 )
 
-func ConnectDB() *mongo.Client {
+// DB is the shared MongoDB client. It is nil until ConnectDB succeeds;
+// nothing in this package connects at import time, so tests can import
+// configs (directly or transitively) without a live MongoDB.
+var DB *mongo.Client
+
+var (
+	connectOnce sync.Once
+	connectErr  error
+)
+
+// ConnectDB connects to MongoDB, runs the collection/index bootstrap, and
+// binds the package-level collection handles in const.go. Idempotent: only
+// the first call connects, later calls return the first result. Every
+// entrypoint (main, cmd/ tools, integration tests) must call it before any
+// db work; the caller decides whether a failure is fatal.
+func ConnectDB() error {
+	connectOnce.Do(func() {
+		connectErr = connect()
+	})
+	return connectErr
+}
+
+func connect() error {
 	uri := EnvMongoURI()
 	if uri == "" {
-		// Runs at package init (DB is an eager package-level var), so this is
-		// the real fail-fast point for a missing MONGOURI: a clear, actionable
+		// The one fail-fast point for a missing MONGOURI: a clear, actionable
 		// message instead of an opaque driver error.
-		log.Fatal("Required environment variable MONGOURI is not set")
-	}
-	client, err := mongo.NewClient(options.Client().ApplyURI(uri))
-	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("required environment variable MONGOURI is not set")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	err = client.Connect(ctx)
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	//ping the database
-	err = client.Ping(ctx, nil)
-	if err != nil {
-		log.Fatal(err)
+	if err := client.Ping(ctx, nil); err != nil {
+		return err
 	}
-	fmt.Println("Connected to MongoDB")
+	Logger.Info("Connected to MongoDB")
+
+	DB = client
+	bindCollections(client)
 
 	// Initialize collections with validators
 	db := client.Database("qrldata-z")
@@ -198,9 +218,13 @@ func ConnectDB() *mongo.Client {
 	// Initialize collections
 	initializeCollections(db)
 
-	// Initialize sync state collection
+	// Initialize sync state collection. Uses its own bounded context: the
+	// 10s connect context above may be nearly exhausted by the time the
+	// bootstrap reaches this write.
+	seedCtx, seedCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer seedCancel()
 	_, err = db.Collection("sync_state").UpdateOne(
-		ctx,
+		seedCtx,
 		bson.M{"_id": "last_synced_block"},
 		bson.M{"$setOnInsert": bson.M{"block_number": "0x0"}},
 		options.Update().SetUpsert(true),
@@ -209,7 +233,7 @@ func ConnectDB() *mongo.Client {
 		Logger.Error("Failed to initialize sync state collection", zap.Error(err))
 	}
 
-	return client
+	return nil
 }
 
 func ensureCollection(db *mongo.Database, name string, validator bson.M) {
@@ -303,7 +327,7 @@ func initializeCollections(db *mongo.Database) {
 	// (called from synchroniser.InitializeTokenCollections at startup). Creating
 	// a duplicate, auto-named set here causes IndexOptionsConflict against the
 	// named set declared in db/tokentransfers.go, which aborts the entire
-	// CreateMany in the proper init — including the (txHash, contract, logIndex,
+	// CreateMany in the proper init, including the (txHash, contract, logIndex,
 	// tokenID) unique that ERC-1155 TransferBatch + ERC-721 batch mint depend on
 	// to land more than one row per tx. Leaving that single source of truth in
 	// place here keeps the indexes aligned with the model that the writer code
@@ -453,9 +477,6 @@ func initializeCollections(db *mongo.Database) {
 
 	Logger.Info("All collections initialized successfully")
 }
-
-// Client instance
-var DB *mongo.Client = ConnectDB()
 
 // Getting database collections
 func GetCollection(client *mongo.Client, collectionName string) *mongo.Collection {

@@ -454,11 +454,18 @@ func syncValidators() error {
 		}
 	}
 
-	// Get validators from beacon chain
-	err = rpc.GetValidators()
+	// Get validators from beacon chain and persist each page. Storage lives
+	// here rather than in rpc so the rpc package stays transport-only.
+	pages, err := rpc.GetValidators()
 	if err != nil {
 		configs.Logger.Error("Failed to get validators", zap.Error(err))
 		return err
+	}
+	for _, page := range pages {
+		if err := services.StoreValidators(page, currentEpoch); err != nil {
+			configs.Logger.Error("Failed to store validators", zap.Error(err))
+			return err
+		}
 	}
 
 	// Backfill any missing epoch history records
