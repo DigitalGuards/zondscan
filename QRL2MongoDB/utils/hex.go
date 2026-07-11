@@ -56,4 +56,3 @@ func IntToHex(n int) string {
 	}
 	return "0x" + new(big.Int).SetInt64(int64(n)).Text(16)
 }
-

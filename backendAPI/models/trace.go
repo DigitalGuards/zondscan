@@ -44,14 +44,14 @@ type Call struct {
 // surfaced in the tx page so users can see what the contract actually
 // did beyond top-level Transfer events.
 type InternalTx struct {
-	Type                      string `json:"type" bson:"type"`
-	CallType                  string `json:"callType" bson:"callType"`
-	Hash                      string `json:"hash" bson:"hash"`
-	From                      string `json:"from" bson:"from"`
-	To                        string `json:"to" bson:"to"`
-	Input                     string `json:"input" bson:"input"`
-	Output                    string `json:"output" bson:"output"`
-	TraceAddress              []int  `json:"traceAddress" bson:"traceAddress"`
+	Type         string `json:"type" bson:"type"`
+	CallType     string `json:"callType" bson:"callType"`
+	Hash         string `json:"hash" bson:"hash"`
+	From         string `json:"from" bson:"from"`
+	To           string `json:"to" bson:"to"`
+	Input        string `json:"input" bson:"input"`
+	Output       string `json:"output" bson:"output"`
+	TraceAddress []int  `json:"traceAddress" bson:"traceAddress"`
 	// Value lives as float64 in mongo (legacy schema choice). For the API
 	// we re-stringify in the route handler so the frontend can format it
 	// consistently with everything else.

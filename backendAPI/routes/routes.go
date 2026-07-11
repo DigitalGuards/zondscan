@@ -205,7 +205,7 @@ func fetchTxInput(ctx context.Context, txHash string) string {
 //	latest-txs                 5s  /transactions (legacy)    home-page feed, hot path
 //	eta:<hash>                 5s  /pending-tx-eta/:hash     per-tx pending ETA, valid for one block window
 //	gas:summary                5s  /gas/summary              live gas snapshot
-//	gas-history:<range>       30s  /gas-history              precomputed time series; 30s is fine
+//	gas:history:<range>       30s  /gas/history              precomputed time series; 30s is fine
 //
 // Staleness contract:
 //   - Endpoints embedding `latestBlock` carry the cache window as their
@@ -568,8 +568,8 @@ func UserRoute(router *gin.Engine) {
 		// db functions normalize the address to canonical q-prefix internally.
 
 		// Pagination for the tx-list aggregations. Defaults match the old
-		// implicit page-1 view; cap at 50 (the same cap the DB layer
-		// enforces) so a hostile caller can't push limit=10000.
+		// implicit page-1 view; getPaginationParams caps limit at 100 so a
+		// hostile caller can't push limit=10000.
 		page, limit := getPaginationParams(c, 1, 10)
 
 		key := fmt.Sprintf("addr:%s:%d:%d", strings.ToLower(param), page, limit)

@@ -66,3 +66,4 @@ QRL2MongoDB/synchroniser/logs/zond_sync.log
 # Runtime log directories created wherever the syncer/tests run
 QRL2MongoDB/**/logs/
 QRL2MongoDB/logs/
+backendAPI/syncer

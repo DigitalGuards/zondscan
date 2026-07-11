@@ -40,15 +40,15 @@ func Base64ToHex(b64 string) string {
 
 // EpochInfo represents the current epoch state from beacon chain
 type EpochInfo struct {
-	ID              string `bson:"_id" json:"_id"`                           // Always "current"
-	HeadEpoch       string `bson:"headEpoch" json:"headEpoch"`               // Current head epoch
-	HeadSlot        string `bson:"headSlot" json:"headSlot"`                 // Current head slot
-	FinalizedEpoch  string `bson:"finalizedEpoch" json:"finalizedEpoch"`     // Last finalized epoch
-	JustifiedEpoch  string `bson:"justifiedEpoch" json:"justifiedEpoch"`     // Last justified epoch
-	FinalizedSlot   string `bson:"finalizedSlot" json:"finalizedSlot"`       // Last finalized slot
-	JustifiedSlot   string `bson:"justifiedSlot" json:"justifiedSlot"`       // Last justified slot
-	GenesisTime     string `bson:"genesisTime" json:"genesisTime"`           // Genesis timestamp
-	UpdatedAt       int64  `bson:"updatedAt" json:"updatedAt"`               // Last update timestamp
+	ID             string `bson:"_id" json:"_id"`                       // Always "current"
+	HeadEpoch      string `bson:"headEpoch" json:"headEpoch"`           // Current head epoch
+	HeadSlot       string `bson:"headSlot" json:"headSlot"`             // Current head slot
+	FinalizedEpoch string `bson:"finalizedEpoch" json:"finalizedEpoch"` // Last finalized epoch
+	JustifiedEpoch string `bson:"justifiedEpoch" json:"justifiedEpoch"` // Last justified epoch
+	FinalizedSlot  string `bson:"finalizedSlot" json:"finalizedSlot"`   // Last finalized slot
+	JustifiedSlot  string `bson:"justifiedSlot" json:"justifiedSlot"`   // Last justified slot
+	GenesisTime    string `bson:"genesisTime" json:"genesisTime"`       // Genesis timestamp
+	UpdatedAt      int64  `bson:"updatedAt" json:"updatedAt"`           // Last update timestamp
 }
 
 // BeaconChainHeadResponse represents the response from beacon chain head endpoint
