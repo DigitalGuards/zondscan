@@ -63,6 +63,17 @@ jobs:
       - name: Build
         run: go build -o backendAPI .
 
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+
+      - name: Vet
+        run: go vet ./...
+
+      # Hermetic by contract: no MONGOURI, no .env, no network. Integration
+      # tests stay behind the //go:build integration tag and do not run here.
+      - name: Test
+        run: go test ./...
+
   syncer:
     name: Syncer Build
     runs-on: ubuntu-latest
@@ -84,3 +95,14 @@ jobs:
 
       - name: Build
         run: go build -o synchroniser .
+
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+
+      - name: Vet
+        run: go vet ./...
+
+      # Hermetic by contract: no MONGOURI, no .env, no network. Integration
+      # tests stay behind the //go:build integration tag and do not run here.
+      - name: Test
+        run: go test ./...
