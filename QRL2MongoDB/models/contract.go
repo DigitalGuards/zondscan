@@ -96,6 +96,11 @@ type ContractInfo struct {
 	MetadataFetchedAt   string `bson:"metadataFetchedAt,omitempty" json:"metadataFetchedAt,omitempty"`
 	MetadataFetchError  string `bson:"metadataFetchError,omitempty" json:"metadataFetchError,omitempty"`
 
+	// Retry scheduling for the metadata fetcher, mirrors the per-token
+	// fields on TokenMetadata. Cleared on a successful fetch.
+	MetadataRetryCount  int    `bson:"metadataRetryCount,omitempty" json:"-"`
+	MetadataNextRetryAt string `bson:"metadataNextRetryAt,omitempty" json:"-"`
+
 	// Source-verification fields, mirror backendAPI/models/contract.go.
 	// Written exclusively by the backend verify endpoint; the syncer
 	// holds them only for round-trip preservation.
