@@ -51,22 +51,22 @@ async function getContracts(page: number = 0, limit: number = 15, isToken: boole
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'Smart Contracts | QRL Explorer',
-  description: 'View all smart contracts deployed on the QRL network',
+  title: 'Smart Contracts | ZondScan',
+  description: 'View all smart contracts deployed on the QRL 2.0 network',
   alternates: {
     ...sharedMetadata.alternates,
     canonical: 'https://zondscan.com/contracts',
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'Smart Contracts | QRL Explorer',
-    description: 'View all smart contracts deployed on the QRL network',
+    title: 'Smart Contracts | ZondScan',
+    description: 'View all smart contracts deployed on the QRL 2.0 network',
     url: 'https://zondscan.com/contracts',
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'Smart Contracts | QRL Explorer',
-    description: 'View all smart contracts deployed on the QRL network',
+    title: 'Smart Contracts | ZondScan',
+    description: 'View all smart contracts deployed on the QRL 2.0 network',
   },
 };
 

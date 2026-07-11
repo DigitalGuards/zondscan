@@ -4,7 +4,7 @@ import ApiExplorerClient from './api-explorer-client';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'API Explorer | QRL Explorer',
+  title: 'API Explorer | ZondScan',
   description: 'Explore the free Zondscan REST API. Access blockchain data, transactions, blocks, addresses, validators, and token information for the QRL 2.0 network.',
   alternates: {
     ...sharedMetadata.alternates,
@@ -12,13 +12,13 @@ export const metadata: Metadata = {
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'API Explorer | QRL Explorer',
+    title: 'API Explorer | ZondScan',
     description: 'Explore the free Zondscan REST API. Access blockchain data, transactions, blocks, addresses, validators, and token information for the QRL 2.0 network.',
     url: 'https://zondscan.com/api-explorer',
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'API Explorer | QRL Explorer',
+    title: 'API Explorer | ZondScan',
     description: 'Explore the free Zondscan REST API. Access blockchain data, transactions, blocks, addresses, validators, and token information for the QRL 2.0 network.',
   },
 };

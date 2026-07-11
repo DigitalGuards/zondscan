@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic';
  *
  * `NextRequest.ip` was removed in Next 15, so we read headers. We prefer
  * `CF-Connecting-IP`, which Cloudflare sets to the true client and overwrites
- * on every request — clients can't forge it through the CF edge. We fall back
+ * on every request - clients can't forge it through the CF edge. We fall back
  * to `X-Real-IP`, then to the first hop of `X-Forwarded-For` only as a last
  * resort (spoofable when not fronted by a trusted proxy that rewrites it). All
  * deployments here sit behind Cloudflare, so the first branch is the live path;
@@ -37,7 +37,7 @@ function clientIp(req: NextRequest): string | null {
   return null;
 }
 
-/** GET /faucet/claim — public status so the page can render config/disabled state. */
+/** GET /faucet/claim - public status so the page can render config/disabled state. */
 export function GET(): NextResponse {
   const cfg = getFaucetConfig();
   return NextResponse.json({
@@ -48,7 +48,7 @@ export function GET(): NextResponse {
   });
 }
 
-/** POST /faucet/claim — verify captcha + cooldown, then sign and broadcast a drip. */
+/** POST /faucet/claim - verify captcha + cooldown, then sign and broadcast a drip. */
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const cfg = getFaucetConfig();
   if (!cfg.configured) {
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // Refuse to serve an unprotected faucet in production. Without a captcha the
-  // only gate is the cooldown, which address rotation defeats — so a misconfigured
+  // only gate is the cooldown, which address rotation defeats - so a misconfigured
   // (seed set, Turnstile missing) production deploy is disabled rather than
   // openly drainable. `FAUCET_ALLOW_NO_CAPTCHA=true` is the explicit opt-out.
   if (!cfg.captchaEnabled && !cfg.allowNoCaptcha) {
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     payload = await req.json();
     // A literal `null`/non-object body is valid JSON but would throw on the
-    // property access below, outside any try/catch — guard it here.
+    // property access below, outside any try/catch - guard it here.
     if (!payload || typeof payload !== 'object') throw new Error('non-object body');
   } catch {
     return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
@@ -134,7 +134,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       explorerUrl: `/tx/${result.txHash}`,
     });
   } catch (err) {
-    // Drip failed — release the reservation so the user isn't stuck on cooldown.
+    // Drip failed - release the reservation so the user isn't stuck on cooldown.
     await deletePendingClaim(slot.claimId);
     if (err instanceof FaucetError) {
       const status =

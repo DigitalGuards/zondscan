@@ -49,12 +49,14 @@ interface PageProps {
 export async function generateMetadata({ params }: { params: Promise<{ query: string }> }): Promise<Metadata> {
   const resolvedParams = await params;
   const pageNumber = resolvedParams.query || '1';
-  const canonicalUrl = `https://zondscan.com/blocks`;
-  
+  // Self-referencing canonical: there is no /blocks index route (only
+  // /blocks/<page>), so each paginated page canonicalizes to itself.
+  const canonicalUrl = `https://zondscan.com/blocks/${pageNumber}`;
+
   return {
     ...sharedMetadata,
     title: `Latest Synced Blocks - Page ${pageNumber} | ZondScan`,
-    description: `View the most recently synced blocks on the QRL blockchain network. Page ${pageNumber} of the blocks list.`,
+    description: `View the most recently synced blocks on the QRL 2.0 blockchain network. Page ${pageNumber} of the blocks list.`,
     alternates: {
       ...sharedMetadata.alternates,
       canonical: canonicalUrl,
@@ -62,7 +64,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     openGraph: {
       ...sharedMetadata.openGraph,
       title: `Latest Synced Blocks - Page ${pageNumber} | ZondScan`,
-      description: `View the most recently synced blocks on the QRL blockchain network. Page ${pageNumber} of the blocks list.`,
+      description: `View the most recently synced blocks on the QRL 2.0 blockchain network. Page ${pageNumber} of the blocks list.`,
       url: `https://zondscan.com/blocks/${pageNumber}`,
       siteName: 'ZondScan',
       type: 'website',
@@ -70,7 +72,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     twitter: {
       ...sharedMetadata.twitter,
       title: `Latest Synced Blocks - Page ${pageNumber} | ZondScan`,
-      description: `View the most recently synced blocks on the QRL blockchain network. Page ${pageNumber} of the blocks list.`,
+      description: `View the most recently synced blocks on the QRL 2.0 blockchain network. Page ${pageNumber} of the blocks list.`,
     },
   };
 }

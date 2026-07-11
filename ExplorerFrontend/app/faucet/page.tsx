@@ -4,23 +4,23 @@ import { sharedMetadata } from '../lib/seo/metaData';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'Testnet Faucet | QRL 2.0 Explorer',
+  title: 'QRL 2.0 Testnet Faucet | ZondScan',
   description:
-    'Claim free QRL 2.0 testnet funds to experiment with the Quantum Resistant Ledger network — send transactions, deploy contracts, and explore Zond.',
+    'Claim free QRL 2.0 testnet funds to experiment with the Quantum Resistant Ledger network: send transactions, deploy contracts, and explore the post-quantum chain.',
   alternates: {
     ...sharedMetadata.alternates,
     canonical: 'https://zondscan.com/faucet',
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'Testnet Faucet | QRL 2.0 Explorer',
+    title: 'QRL 2.0 Testnet Faucet | ZondScan',
     description:
       'Claim free QRL 2.0 testnet funds to experiment with the Quantum Resistant Ledger network.',
     url: 'https://zondscan.com/faucet',
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'Testnet Faucet | QRL 2.0 Explorer',
+    title: 'QRL 2.0 Testnet Faucet | ZondScan',
     description:
       'Claim free QRL 2.0 testnet funds to experiment with the Quantum Resistant Ledger network.',
   },

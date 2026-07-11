@@ -4,7 +4,7 @@ import ConverterClient from './converter-client';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'Quanta to Shor Converter | QRL Explorer',
+  title: 'Quanta to Shor Converter | ZondScan',
   description:
     'Convert Quanta to Shor quickly and accurately using our conversion tool. Get real-time conversion rates and insights on the QRL network.',
   alternates: {
@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'Quanta to Shor Converter | QRL Explorer',
+    title: 'Quanta to Shor Converter | ZondScan',
     description:
       'Convert Quanta to Shor quickly and accurately using our conversion tool. Get real-time conversion rates and insights on the QRL network.',
     url: 'https://zondscan.com/converter',
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'Quanta to Shor Converter | QRL Explorer',
+    title: 'Quanta to Shor Converter | ZondScan',
     description:
       'Convert Quanta to Shor quickly and accurately using our conversion tool. Get real-time conversion rates and insights on the QRL network.',
   },

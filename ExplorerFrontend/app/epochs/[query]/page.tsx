@@ -46,7 +46,9 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     description: `View epochs on the QRL 2.0 beacon chain. Page ${pageNumber} of the epochs list.`,
     alternates: {
       ...sharedMetadata.alternates,
-      canonical: 'https://zondscan.com/epochs',
+      // Self-referencing canonical: there is no /epochs index route (only
+      // /epochs/<page>), so each paginated page canonicalizes to itself.
+      canonical: `https://zondscan.com/epochs/${pageNumber}`,
     },
     openGraph: {
       ...sharedMetadata.openGraph,

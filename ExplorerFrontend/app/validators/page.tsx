@@ -6,21 +6,25 @@ import { sharedMetadata } from '../lib/seo/metaData';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'Validators | QRL Explorer',
+  title: 'Validators | ZondScan',
   description:
-    'View active validators, their ages, uptime, and staking information on the QRL network',
+    'View active validators, their ages, uptime, and staking information on the QRL 2.0 network',
+  alternates: {
+    ...sharedMetadata.alternates,
+    canonical: 'https://zondscan.com/validators',
+  },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'Validators | QRL Explorer',
+    title: 'Validators | ZondScan',
     description:
-      'View active validators, their ages, uptime, and staking information on the QRL network',
+      'View active validators, their ages, uptime, and staking information on the QRL 2.0 network',
     url: 'https://zondscan.com/validators',
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'Validators | QRL Explorer',
+    title: 'Validators | ZondScan',
     description:
-      'View active validators, their ages, uptime, and staking information on the QRL network',
+      'View active validators, their ages, uptime, and staking information on the QRL 2.0 network',
   },
 };
 

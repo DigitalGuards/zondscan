@@ -5,7 +5,7 @@ import { sharedMetadata } from '../lib/seo/metaData';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'Balance Checker | QRL 2.0 Explorer',
+  title: 'Balance Checker | ZondScan',
   description:
     'Check wallet balances on the Quantum Resistant Ledger network with our intuitive balance checker tool. Verify holdings quickly and accurately.',
   alternates: {
@@ -14,14 +14,14 @@ export const metadata: Metadata = {
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'Balance Checker | QRL 2.0 Explorer',
+    title: 'Balance Checker | ZondScan',
     description:
       'Check wallet balances on the Quantum Resistant Ledger network with our intuitive balance checker tool. Verify holdings quickly and accurately.',
     url: 'https://zondscan.com/checker',
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'Balance Checker | QRL 2.0 Explorer',
+    title: 'Balance Checker | ZondScan',
     description:
       'Check wallet balances on the Quantum Resistant Ledger network with our intuitive balance checker tool. Verify holdings quickly and accurately.',
   },
