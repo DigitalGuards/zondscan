@@ -12,8 +12,16 @@ import { resolveSearchPath } from '../lib/searchResolver';
  * back to the homepage.
  */
 export function GET(request: NextRequest): NextResponse {
-  const query = request.nextUrl.searchParams.get('q') ?? '';
-  const result = resolveSearchPath(query);
-  const destination = 'path' in result ? result.path : '/';
-  return NextResponse.redirect(new URL(destination, request.nextUrl.origin), 302);
+  try {
+    const query = request.nextUrl.searchParams.get('q') ?? '';
+    const result = resolveSearchPath(query);
+    let destination = 'path' in result ? result.path : '/';
+    // Only allow same-origin relative paths; '//host' would redirect off-site.
+    if (!destination.startsWith('/') || destination.startsWith('//')) {
+      destination = '/';
+    }
+    return NextResponse.redirect(new URL(destination, request.nextUrl.origin), 302);
+  } catch {
+    return NextResponse.redirect(new URL('/', request.nextUrl.origin), 302);
+  }
 }
