@@ -68,13 +68,24 @@ func InitializeTokenMetadataCollection() error {
 				SetBackground(true),
 		},
 		{
-			// Drives the fetcher's work-queue scan (rows missing FetchedAt
-			// and FetchError). Partial-index hint isn't needed at the
-			// volume we're dealing with; the scan is bounded by batchSize.
+			// Drives the fresh + stale work-queue scans. Partial-index
+			// hint isn't needed at the volume we're dealing with; the
+			// scan is bounded by batchSize.
 			Keys: bson.D{
 				{Key: "fetchedAt", Value: 1},
 			},
 			Options: options.Index().SetName("fetchedAt_idx").SetBackground(true),
+		},
+		{
+			// Drives the retryable work-queue scan (fetchError set,
+			// nextRetryAt due). tokenMetadata grows one row per minted
+			// token, so the 30s poll must not collection-scan at steady
+			// state. contractCode (one row per contract) stays unindexed
+			// on purpose; its cardinality is trivially small.
+			Keys: bson.D{
+				{Key: "nextRetryAt", Value: 1},
+			},
+			Options: options.Index().SetName("nextRetryAt_idx").SetBackground(true),
 		},
 		{
 			// Per-collection enumeration for /token/:addr/tokens enrichment.
@@ -280,38 +291,78 @@ func dueForRetry(errField, retryField, now string) bson.M {
 	}
 }
 
-// findLimited runs one work-queue Find with a limit and appends the decoded
-// rows to `out`. A non-positive limit is a no-op so callers can pass the
-// remaining batch budget without guarding.
-func findLimited[T any](ctx context.Context, collection *mongo.Collection, filter bson.M, limit int, out *[]T) error {
+// findLimited runs one work-queue Find with a limit and returns the decoded
+// rows. A non-positive limit short-circuits to nil.
+func findLimited[T any](ctx context.Context, collection *mongo.Collection, filter bson.M, limit int) ([]T, error) {
 	if limit <= 0 {
-		return nil
+		return nil, nil
 	}
 	cur, err := collection.Find(ctx, filter, options.Find().SetLimit(int64(limit)))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer cur.Close(ctx)
 
 	var rows []T
 	if err := cur.All(ctx, &rows); err != nil {
-		return err
+		return nil, err
 	}
-	*out = append(*out, rows...)
-	return nil
+	return rows, nil
+}
+
+// composeBatch assembles one work batch from the three eligibility tracks
+// with guaranteed minimum shares: roughly 1/2 fresh, 1/4 retryable, 1/4
+// stale (rounded in that order), with unused share flowing to the other
+// tracks in fresh > retryable > stale priority. The shares are what keep
+// one saturated track from starving the others: without them, a large
+// population of permanently-failing rows cycling through the retry track
+// would occupy every batch and silently disable the TTL-refresh track
+// (and with it, on-chain URI-change propagation).
+func composeBatch[T any](limit int, fresh, retryable, stale []T) []T {
+	if limit <= 0 {
+		return nil
+	}
+	freshQuota := (limit + 1) / 2
+	retryQuota := (limit - freshQuota + 1) / 2
+	staleQuota := limit - freshQuota - retryQuota
+
+	out := make([]T, 0, limit)
+	take := func(rows []T, n int) []T {
+		if n > len(rows) {
+			n = len(rows)
+		}
+		if n <= 0 {
+			return rows
+		}
+		out = append(out, rows[:n]...)
+		return rows[n:]
+	}
+
+	// Guaranteed shares first...
+	fresh = take(fresh, freshQuota)
+	retryable = take(retryable, retryQuota)
+	stale = take(stale, staleQuota)
+	// ...then redistribute whatever budget the short tracks left, in
+	// priority order.
+	fresh = take(fresh, limit-len(out))
+	retryable = take(retryable, limit-len(out))
+	take(stale, limit-len(out))
+	return out
 }
 
 // GetTokensAwaitingMetadata returns up to `limit` token stubs that are due
-// for a metadata fetch, in priority order:
+// for a metadata fetch, drawn from three eligibility tracks:
 //
 //  1. fresh stubs that have never been attempted,
 //  2. errored rows whose exponential-backoff deadline (nextRetryAt) passed,
 //  3. previously successful rows whose fetchedAt is older than refreshTTL
 //     (skipped when refreshTTL <= 0).
 //
-// `now` is injected by the caller so eligibility is computed against a
-// single instant per tick. Timestamps are RFC3339 UTC strings, which
-// compare correctly as plain strings (fixed-width, most-significant-first).
+// The batch is composed with guaranteed per-track shares (composeBatch) so
+// no track can starve the others. `now` is injected by the caller so
+// eligibility is computed against a single instant per tick. Timestamps
+// are RFC3339 UTC strings, which compare correctly as plain strings
+// (fixed-width, most-significant-first).
 func GetTokensAwaitingMetadata(ctx context.Context, limit int, now time.Time, refreshTTL time.Duration) ([]models.TokenMetadata, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -320,43 +371,39 @@ func GetTokensAwaitingMetadata(ctx context.Context, limit int, now time.Time, re
 	nowStr := now.UTC().Format(time.RFC3339)
 	isNFT := bson.M{"$in": []string{"ERC-721", "ERC-1155"}}
 
-	var out []models.TokenMetadata
-
-	// 1. Fresh: never attempted.
-	fresh := bson.M{
+	fresh, err := findLimited[models.TokenMetadata](ctx, collection, bson.M{
 		"tokenStandard": isNFT,
 		"$and": []bson.M{
 			missingOrEmpty("fetchedAt"),
 			missingOrEmpty("fetchError"),
 		},
-	}
-	if err := findLimited(ctx, collection, fresh, limit-len(out), &out); err != nil {
+	}, limit)
+	if err != nil {
 		return nil, err
 	}
 
-	// 2. Retryable: last attempt failed, backoff deadline passed.
-	retryable := bson.M{
+	retryable, err := findLimited[models.TokenMetadata](ctx, collection, bson.M{
 		"tokenStandard": isNFT,
 		"$and":          []bson.M{dueForRetry("fetchError", "nextRetryAt", nowStr)},
-	}
-	if err := findLimited(ctx, collection, retryable, limit-len(out), &out); err != nil {
+	}, limit)
+	if err != nil {
 		return nil, err
 	}
 
-	// 3. Stale: last attempt succeeded longer than refreshTTL ago.
+	var stale []models.TokenMetadata
 	if refreshTTL > 0 {
 		cutoff := now.UTC().Add(-refreshTTL).Format(time.RFC3339)
-		stale := bson.M{
+		stale, err = findLimited[models.TokenMetadata](ctx, collection, bson.M{
 			"tokenStandard": isNFT,
 			"fetchedAt":     bson.M{"$gt": "", "$lte": cutoff},
 			"$and":          []bson.M{missingOrEmpty("fetchError")},
-		}
-		if err := findLimited(ctx, collection, stale, limit-len(out), &out); err != nil {
+		}, limit)
+		if err != nil {
 			return nil, err
 		}
 	}
 
-	return out, nil
+	return composeBatch(limit, fresh, retryable, stale), nil
 }
 
 // GetTokenMetadataByContract returns all per-token metadata rows for one

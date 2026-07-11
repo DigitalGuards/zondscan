@@ -1,0 +1,69 @@
+Jul  11 17:10:48	[INFO]	logger/logger.go:51	Logger initialized	{"file": "logs/zond_sync.log", "level": "info"}
+Jul  11 17:10:48	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "dailyTransactionsVolume", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:48	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "coingecko", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:48	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "priceHistory", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:48	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "walletCount", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:48	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "totalCirculatingSupply", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:48	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "tokenBalances", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:49	[INFO]	configs/setup.go:340	Price history collection initialized with timestamp index
+Jul  11 17:10:49	[INFO]	configs/setup.go:355	Transfer collection initialized with blockTimestamp index
+Jul  11 17:10:49	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "blocks", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:49	[INFO]	configs/setup.go:375	Blocks collection initialized with blockNumberInt index
+Jul  11 17:10:49	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "validators", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:49	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "contractCode", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:49	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "transactionByAddress", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:49	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "internalTransactionByAddress", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:49	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "contracts", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:49	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "addresses", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:49	[INFO]	configs/setup.go:397	Addresses collection initialized with unique id index
+Jul  11 17:10:49	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "walletCount", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:49	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "dailyTransactionsVolume", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:49	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "totalCirculatingSupply", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:49	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "sync_state", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:49	[INFO]	configs/setup.go:454	All collections initialized successfully
+Jul  11 17:10:56	[INFO]	logger/logger.go:51	Logger initialized	{"file": "logs/zond_sync.log", "level": "info"}
+Jul  11 17:10:56	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "dailyTransactionsVolume", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:56	[INFO]	configs/setup.go:242	Updated validator for collection	{"collection": "coingecko"}
+Jul  11 17:10:56	[INFO]	configs/setup.go:242	Updated validator for collection	{"collection": "priceHistory"}
+Jul  11 17:10:56	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "walletCount", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:56	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "totalCirculatingSupply", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:56	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "tokenBalances", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:56	[INFO]	configs/setup.go:340	Price history collection initialized with timestamp index
+Jul  11 17:10:56	[INFO]	configs/setup.go:355	Transfer collection initialized with blockTimestamp index
+Jul  11 17:10:56	[INFO]	configs/setup.go:242	Updated validator for collection	{"collection": "blocks"}
+Jul  11 17:10:56	[INFO]	configs/setup.go:375	Blocks collection initialized with blockNumberInt index
+Jul  11 17:10:56	[INFO]	configs/setup.go:242	Updated validator for collection	{"collection": "validators"}
+Jul  11 17:10:56	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "contractCode", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:56	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "transactionByAddress", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:56	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "internalTransactionByAddress", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:56	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "contracts", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:56	[INFO]	configs/setup.go:242	Updated validator for collection	{"collection": "addresses"}
+Jul  11 17:10:56	[INFO]	configs/setup.go:397	Addresses collection initialized with unique id index
+Jul  11 17:10:56	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "walletCount", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:56	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "dailyTransactionsVolume", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:56	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "totalCirculatingSupply", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 17:10:56	[INFO]	configs/setup.go:242	Updated validator for collection	{"collection": "sync_state"}
+Jul  11 17:10:56	[INFO]	configs/setup.go:454	All collections initialized successfully
+Jul  11 18:12:42	[INFO]	logger/logger.go:51	Logger initialized	{"file": "logs/zond_sync.log", "level": "info"}
+Jul  11 18:12:42	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "dailyTransactionsVolume", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 18:12:42	[INFO]	configs/setup.go:242	Updated validator for collection	{"collection": "coingecko"}
+Jul  11 18:12:42	[INFO]	configs/setup.go:242	Updated validator for collection	{"collection": "priceHistory"}
+Jul  11 18:12:42	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "walletCount", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 18:12:42	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "totalCirculatingSupply", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 18:12:42	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "tokenBalances", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 18:12:42	[INFO]	configs/setup.go:340	Price history collection initialized with timestamp index
+Jul  11 18:12:42	[INFO]	configs/setup.go:355	Transfer collection initialized with blockTimestamp index
+Jul  11 18:12:42	[INFO]	configs/setup.go:242	Updated validator for collection	{"collection": "blocks"}
+Jul  11 18:12:42	[INFO]	configs/setup.go:375	Blocks collection initialized with blockNumberInt index
+Jul  11 18:12:42	[INFO]	configs/setup.go:242	Updated validator for collection	{"collection": "validators"}
+Jul  11 18:12:42	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "contractCode", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 18:12:42	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "transactionByAddress", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 18:12:42	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "internalTransactionByAddress", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 18:12:42	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "contracts", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 18:12:42	[INFO]	configs/setup.go:242	Updated validator for collection	{"collection": "addresses"}
+Jul  11 18:12:42	[INFO]	configs/setup.go:397	Addresses collection initialized with unique id index
+Jul  11 18:12:42	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "walletCount", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 18:12:42	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "dailyTransactionsVolume", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 18:12:42	[WARN]	configs/setup.go:237	Could not set up validator	{"collection": "totalCirculatingSupply", "error": "(NamespaceNotFound) ns does not exist"}
+Jul  11 18:12:42	[INFO]	configs/setup.go:242	Updated validator for collection	{"collection": "sync_state"}
+Jul  11 18:12:42	[INFO]	configs/setup.go:454	All collections initialized successfully
