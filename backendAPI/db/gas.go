@@ -2,10 +2,10 @@ package db
 
 import (
 	"backendAPI/configs"
+	"backendAPI/hexutil"
 	"context"
 	"math/big"
 	"sort"
-	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -24,18 +24,14 @@ var (
 	bigShor = big.NewInt(1_000_000_000)
 )
 
-// hexToBig parses a "0x"-prefixed hex string into a *big.Int. Empty / malformed
+// hexToBig parses a "0x"-prefixed hex string into a *big.Int, delegating
+// to hexutil.ParseBig. The sentinel contract stays here: empty / malformed
 // input yields 0, gas math should never panic on a missing field.
 func hexToBig(s string) *big.Int {
-	b := new(big.Int)
-	if s == "" {
-		return b
+	b, err := hexutil.ParseBig(s)
+	if err != nil {
+		return new(big.Int)
 	}
-	s = strings.TrimPrefix(s, "0x")
-	if s == "" {
-		return b
-	}
-	b.SetString(s, 16)
 	return b
 }
 
@@ -182,7 +178,7 @@ func GetPendingMempoolSnapshot() ([]MempoolSample, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	col := configs.GetCollection(configs.DB, PENDING_COLLECTION)
+	col := configs.PendingTransactionsCollection
 	opts := options.Find().SetProjection(primitive.D{
 		{Key: "gas", Value: 1},
 		{Key: "gasPrice", Value: 1},
@@ -363,11 +359,10 @@ func MempoolGasPriceHistogram(samples []MempoolSample, bins int) []GasPriceBucke
 
 // ---- /gas/history ---------------------------------------------------------
 //
-// The syncer maintains a `gasHistory` collection with one row per block. The
-// API serves it as-is for short ranges (24h ≈ 1440 rows at 60 s slots) and
-// downsamples to one row per hour for the 7d view.
-
-const GAS_HISTORY_COLLECTION = "gasHistory"
+// The syncer maintains a `gasHistory` collection (bound as
+// configs.GasHistoryCollection) with one row per block. The API serves it
+// as-is for short ranges (24h ≈ 1440 rows at 60 s slots) and downsamples
+// to one row per hour for the 7d view.
 
 type GasHistoryRow struct {
 	BlockNumberInt int64  `bson:"blockNumberInt" json:"blockNumber"`
@@ -385,7 +380,7 @@ func GetGasHistory(sinceUnix int64, bucketSec int64) ([]GasHistoryRow, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	col := configs.GetCollection(configs.DB, GAS_HISTORY_COLLECTION)
+	col := configs.GasHistoryCollection
 	opts := options.Find().SetSort(primitive.D{{Key: "timestamp", Value: 1}})
 	cur, err := col.Find(ctx, bson.M{"timestamp": bson.M{"$gte": sinceUnix}}, opts)
 	if err != nil {

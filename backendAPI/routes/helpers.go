@@ -2,22 +2,30 @@ package routes
 
 import (
 	"backendAPI/db"
+	"backendAPI/hexutil"
 	"backendAPI/models"
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
 // parseHexBlockNumber parses a "0x"-prefixed hex string into a uint64.
+// The strict-prefix check and its "invalid hex prefix" message are local
+// (every caller wraps the error into a log line, never a response body);
+// digit parsing delegates to hexutil. Real block numbers fit comfortably
+// in int64, so the int64-range parser is safe here.
 func parseHexBlockNumber(hexStr string) (uint64, error) {
 	if !strings.HasPrefix(hexStr, "0x") {
 		return 0, fmt.Errorf("invalid hex prefix")
 	}
-	return strconv.ParseUint(hexStr[2:], 16, 64)
+	v, err := hexutil.ParseInt64(hexStr)
+	if err != nil {
+		return 0, err
+	}
+	return uint64(v), nil
 }
 
 // respondInternal writes the generic 500 body shared by the read routes.

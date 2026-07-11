@@ -40,8 +40,8 @@ type Registry struct {
 // HYPC_NODE_BIN / HYPC_BIN exactly as the pre-multi-version backend did, so
 // existing deploys keep working untouched.
 //
-// Shared limits — VERIFIER_MAX_CONCURRENCY / VERIFIER_COMPILE_TIMEOUT /
-// VERIFIER_SOURCE_MAX_BYTES — bound ALL builds together (one process-wide
+// Shared limits (VERIFIER_MAX_CONCURRENCY / VERIFIER_COMPILE_TIMEOUT /
+// VERIFIER_SOURCE_MAX_BYTES) bound ALL builds together (one process-wide
 // compile budget) regardless of which build a request selects.
 //
 // A build whose runner can't be invoked, or reports the wrong version, is

@@ -75,22 +75,28 @@ func ConnectDB() *mongo.Client {
 // live client. Called once from ConnectDB after the ping succeeds.
 func bindCollections(client *mongo.Client) {
 	db := client.Database("qrldata-z")
-	TransferCollections = db.Collection("transfer")
-	TransactionByAddressCollection = db.Collection("transactionByAddress")
-	InternalTransactionByAddressCollection = db.Collection("internalTransactionByAddress")
-	AddressesCollections = db.Collection("addresses")
-	BlocksCollection = db.Collection("blocks")
-	ValidatorsCollections = db.Collection("validators")
-	ContractInfoCollection = db.Collection("contractCode")
-	ContractVerificationsCollection = db.Collection("contractVerifications")
-	BlockSizesCollection = db.Collection("averageBlockSize")
-	TotalCirculatingSupplyCollection = db.Collection("totalCirculatingSupply")
-	CoinGeckoCollection = db.Collection("coingecko")
-	WalletCountCollections = db.Collection("walletCount")
-	DailyTransactionsVolumeCollection = db.Collection("dailyTransactionsVolume")
-	EpochInfoCollection = db.Collection("epoch_info")
-	ValidatorHistoryCollection = db.Collection("validator_history")
-	PriceHistoryCollection = db.Collection("priceHistory")
+	TransferCollections = db.Collection(transferCollName)
+	TransactionByAddressCollection = db.Collection(transactionByAddressCollName)
+	InternalTransactionByAddressCollection = db.Collection(internalTransactionByAddressCollName)
+	AddressesCollections = db.Collection(addressesCollName)
+	BlocksCollection = db.Collection(blocksCollName)
+	ValidatorsCollections = db.Collection(validatorsCollName)
+	ContractInfoCollection = db.Collection(contractCodeCollName)
+	ContractVerificationsCollection = db.Collection(contractVerificationsCollName)
+	BlockSizesCollection = db.Collection(blockSizesCollName)
+	TotalCirculatingSupplyCollection = db.Collection(totalCirculatingSupplyCollName)
+	CoinGeckoCollection = db.Collection(coinGeckoCollName)
+	WalletCountCollections = db.Collection(walletCountCollName)
+	DailyTransactionsVolumeCollection = db.Collection(dailyTransactionsVolumeCollName)
+	EpochInfoCollection = db.Collection(epochInfoCollName)
+	ValidatorHistoryCollection = db.Collection(validatorHistoryCollName)
+	PriceHistoryCollection = db.Collection(priceHistoryCollName)
+	TokenTransfersCollection = db.Collection(tokenTransfersCollName)
+	TokenBalancesCollection = db.Collection(tokenBalancesCollName)
+	PendingTransactionsCollection = db.Collection(pendingTransactionsCollName)
+	GasHistoryCollection = db.Collection(gasHistoryCollName)
+	SyncStateCollection = db.Collection(syncStateCollName)
+	TokenMetadataCollection = db.Collection(tokenMetadataCollName)
 }
 
 func createIndexes(db *mongo.Database) {
@@ -302,15 +308,15 @@ func createIndexes(db *mongo.Database) {
 
 	// Map of collection name -> indexes to create
 	collections := map[string][]mongo.IndexModel{
-		"blocks":                       blocksIndexes,
-		"transactionByAddress":         transactionsIndexes,
-		"addresses":                    addressesIndexes,
-		"internalTransactionByAddress": internalTransactionsIndexes,
-		"contractCode":                 contractCodeIndexes,
-		"transfer":                     transferIndexes,
-		"validators":                   validatorsIndexes,
-		"tokenTransfers":               tokenTransfersIndexes,
-		"tokenBalances":                tokenBalancesIndexes,
+		blocksCollName:                       blocksIndexes,
+		transactionByAddressCollName:         transactionsIndexes,
+		addressesCollName:                    addressesIndexes,
+		internalTransactionByAddressCollName: internalTransactionsIndexes,
+		contractCodeCollName:                 contractCodeIndexes,
+		transferCollName:                     transferIndexes,
+		validatorsCollName:                   validatorsIndexes,
+		tokenTransfersCollName:               tokenTransfersIndexes,
+		tokenBalancesCollName:                tokenBalancesIndexes,
 	}
 
 	for collName, indexes := range collections {
@@ -400,7 +406,7 @@ func initializeCollections(db *mongo.Database) {
 	ctx := context.Background()
 
 	// Initialize WalletCount collection with fallback data
-	_, err := db.Collection("walletCount").UpdateOne(
+	_, err := db.Collection(walletCountCollName).UpdateOne(
 		ctx,
 		bson.M{"_id": "current_count"},
 		bson.M{"$setOnInsert": bson.M{"count": int64(0)}},
@@ -411,7 +417,7 @@ func initializeCollections(db *mongo.Database) {
 	}
 
 	// Initialize dailyTransactionsVolume collection with fallback data
-	_, err = db.Collection("dailyTransactionsVolume").UpdateOne(
+	_, err = db.Collection(dailyTransactionsVolumeCollName).UpdateOne(
 		ctx,
 		bson.M{},
 		bson.M{"$setOnInsert": bson.M{"volume": int64(0)}},
@@ -422,7 +428,7 @@ func initializeCollections(db *mongo.Database) {
 	}
 
 	// Initialize totalCirculatingSupply collection with fallback data
-	_, err = db.Collection("totalCirculatingSupply").UpdateOne(
+	_, err = db.Collection(totalCirculatingSupplyCollName).UpdateOne(
 		ctx,
 		bson.M{},
 		bson.M{"$setOnInsert": bson.M{"circulating": "0"}},
@@ -433,7 +439,7 @@ func initializeCollections(db *mongo.Database) {
 	}
 
 	// Initialize CoinGecko collection with fallback data
-	_, err = db.Collection("coingecko").UpdateOne(
+	_, err = db.Collection(coinGeckoCollName).UpdateOne(
 		ctx,
 		bson.M{},
 		bson.M{"$setOnInsert": bson.M{
@@ -446,14 +452,4 @@ func initializeCollections(db *mongo.Database) {
 	if err != nil {
 		log.Printf("Warning: Failed to initialize CoinGecko collection: %v", err)
 	}
-}
-
-// Getting database collections
-func GetCollection(client *mongo.Client, collectionName string) *mongo.Collection {
-	// Ensure DB is initialized
-	if client == nil {
-		client = ConnectDB()
-	}
-	collection := client.Database("qrldata-z").Collection(collectionName)
-	return collection
 }

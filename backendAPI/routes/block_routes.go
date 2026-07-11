@@ -115,6 +115,9 @@ func handleBlock(c *gin.Context) {
 	var blockNum uint64
 	var err error
 
+	// Stays on strconv (not hexutil): the strconv error text below is
+	// appended to the public 400 body, so swapping the parser would
+	// change a client-visible message.
 	if strings.HasPrefix(blockStr, "0x") {
 		// Handle hex format by removing 0x prefix
 		blockNum, err = strconv.ParseUint(blockStr[2:], 16, 64)

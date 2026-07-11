@@ -16,8 +16,8 @@ import (
 // (the WASM-via-Node runner hypc-runner.js, or the native hypc-native.sh
 // wrapper). One Compiler == one build id.
 //
-// The sandboxing budget — per-compile timeout, stdin size cap, and the
-// concurrency semaphore — is supplied by the owning Registry and SHARED
+// The sandboxing budget (per-compile timeout, stdin size cap, and the
+// concurrency semaphore) is supplied by the owning Registry and SHARED
 // across every build, so the total number of in-flight runner processes is
 // bounded regardless of which build a request selects.
 type Compiler struct {
@@ -150,7 +150,7 @@ func (c *Compiler) probeVersion() (string, error) {
 // runnerEnv builds the minimal env passed to this build's runner subprocess.
 // Each build pins its own HYPC_BIN (so two native builds can point at
 // different hypc binaries). When a build doesn't set Bin we fall back to a
-// process-level HYPC_BIN — this preserves the pre-multi-version single-build
+// process-level HYPC_BIN, this preserves the pre-multi-version single-build
 // deploy where HYPC_BIN was exported once in the environment.
 func (c *Compiler) runnerEnv() []string {
 	env := []string{"PATH=" + os.Getenv("PATH")}

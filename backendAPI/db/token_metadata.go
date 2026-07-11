@@ -16,8 +16,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-const tokenMetadataCollection = "tokenMetadata"
-
 // GetTokenMetadata returns the metadata document for a specific
 // (contract, tokenID). Returns nil, nil if no stub exists.
 func GetTokenMetadata(contractAddress, tokenID string) (*models.TokenMetadata, error) {
@@ -30,7 +28,7 @@ func GetTokenMetadata(contractAddress, tokenID string) (*models.TokenMetadata, e
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	collection := configs.GetCollection(configs.DB, tokenMetadataCollection)
+	collection := configs.TokenMetadataCollection
 	var out models.TokenMetadata
 	err := collection.FindOne(ctx, bson.M{
 		"contractAddress": contractAddress,
@@ -57,7 +55,7 @@ func GetTokenMetadataMap(contractAddress string, tokenIDs []string) (map[string]
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	collection := configs.GetCollection(configs.DB, tokenMetadataCollection)
+	collection := configs.TokenMetadataCollection
 	cur, err := collection.Find(ctx, bson.M{
 		"contractAddress": contractAddress,
 		"tokenID":         bson.M{"$in": tokenIDs},
