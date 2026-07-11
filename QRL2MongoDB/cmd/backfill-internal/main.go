@@ -62,9 +62,13 @@ func main() {
 	seenCursor.Close(ctx)
 	log.Printf("%d transactions already have internal rows", len(seen))
 
-	// Only successful transactions can move value; reverted ones paid fees
-	// and did nothing else.
-	filter := bson.D{{Key: "status", Value: "0x1"}}
+	// Skip only explicit failures. The transfer collection stores an empty
+	// status for a subset of transactions (the syncer's receipt-status
+	// fetch is best-effort), so filtering on status == "0x1" silently
+	// drops those. Anything reverted that slips through is still safe: the
+	// tracer marks the root frame with an error and flattenCalls collects
+	// nothing from an errored tree.
+	filter := bson.D{{Key: "status", Value: bson.D{{Key: "$ne", Value: "0x0"}}}}
 	opts := options.Find().SetProjection(bson.D{
 		{Key: "txHash", Value: 1},
 		{Key: "blockNumber", Value: 1},
@@ -75,7 +79,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to count transfer docs: %v", err)
 	}
-	log.Printf("scanning %d successful transactions", total)
+	log.Printf("scanning %d non-failed transactions", total)
 
 	cursor, err := configs.TransferCollections.Find(ctx, filter, opts)
 	if err != nil {
