@@ -38,17 +38,28 @@ func main() {
 	ctx := context.Background()
 
 	// Hashes that already have internal rows: skip them so re-runs are
-	// idempotent and a partial run can resume where it stopped.
-	seenRaw, err := configs.InternalTransactionByAddressCollections.Distinct(ctx, "hash", bson.D{})
+	// idempotent and a partial run can resume where it stopped. Streamed
+	// through a cursor rather than Distinct, which returns one BSON array
+	// and hits the 16MB document cap on large collections.
+	seen := make(map[string]struct{})
+	seenCursor, err := configs.InternalTransactionByAddressCollections.Find(
+		ctx, bson.D{}, options.Find().SetProjection(bson.D{{Key: "hash", Value: 1}}))
 	if err != nil {
 		log.Fatalf("failed to load existing internal tx hashes: %v", err)
 	}
-	seen := make(map[string]struct{}, len(seenRaw))
-	for _, h := range seenRaw {
-		if s, ok := h.(string); ok {
-			seen[s] = struct{}{}
+	for seenCursor.Next(ctx) {
+		var doc struct {
+			Hash string `bson:"hash"`
+		}
+		if err := seenCursor.Decode(&doc); err == nil && doc.Hash != "" {
+			seen[doc.Hash] = struct{}{}
 		}
 	}
+	if err := seenCursor.Err(); err != nil {
+		seenCursor.Close(ctx)
+		log.Fatalf("failed to iterate existing internal tx hashes: %v", err)
+	}
+	seenCursor.Close(ctx)
 	log.Printf("%d transactions already have internal rows", len(seen))
 
 	// Only successful transactions can move value; reverted ones paid fees
@@ -72,7 +83,7 @@ func main() {
 	}
 	defer cursor.Close(ctx)
 
-	var scanned, skipped, traceErrs, txsWithCalls, rowsInserted int
+	var scanned, skipped, traceErrs, insertErrs, txsWithCalls, rowsInserted int
 	for cursor.Next(ctx) {
 		var row transferRow
 		if err := cursor.Decode(&row); err != nil {
@@ -99,7 +110,14 @@ func main() {
 			continue
 		}
 
-		db.StoreInternalCalls(trace.InternalCalls, row.TxHash, row.BlockTimestamp, row.BlockNumber)
+		// A failed insert may leave partial rows for this tx; the re-run
+		// skip is per-hash, so check the logged hashes manually if any
+		// insert errors show up in the summary.
+		if err := db.StoreInternalCalls(trace.InternalCalls, row.TxHash, row.BlockTimestamp, row.BlockNumber); err != nil {
+			insertErrs++
+			log.Printf("failed to store internal calls for %s: %v", row.TxHash, err)
+			continue
+		}
 		txsWithCalls++
 		rowsInserted += len(trace.InternalCalls)
 	}
@@ -107,6 +125,6 @@ func main() {
 		log.Fatalf("cursor error after %d rows: %v", scanned, err)
 	}
 
-	log.Printf("done: %d scanned, %d already indexed, %d trace errors, %d txs produced %d internal rows",
-		scanned, skipped, traceErrs, txsWithCalls, rowsInserted)
+	log.Printf("done: %d scanned, %d already indexed, %d trace errors, %d insert errors, %d txs produced %d internal rows",
+		scanned, skipped, traceErrs, insertErrs, txsWithCalls, rowsInserted)
 }
