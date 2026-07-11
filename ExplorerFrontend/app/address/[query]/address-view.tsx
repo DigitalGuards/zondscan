@@ -29,12 +29,20 @@ export default function AddressView({ addressData, addressSegment }: AddressView
     const { balance } = addressData.address;
     const { rank } = addressData;
 
-    let firstSeen = 0;
-    let lastSeen = 0;
-    if (addressData.transactions_by_address && Array.isArray(addressData.transactions_by_address) && addressData.transactions_by_address.length > 0) {
-        const timestamps = addressData.transactions_by_address.map(tx => tx.TimeStamp);
-        firstSeen = Math.min(...timestamps);
-        lastSeen = Math.max(...timestamps);
+    // Prefer the server-computed activity range: the tx list is paginated,
+    // so deriving the range from the loaded page reports the oldest row of
+    // the newest page as "First Activity". Fall back to the page-derived
+    // range against handlers predating first_seen/last_seen.
+    let firstSeen = addressData.first_seen ?? 0;
+    let lastSeen = addressData.last_seen ?? 0;
+    if (!firstSeen && addressData.transactions_by_address && Array.isArray(addressData.transactions_by_address) && addressData.transactions_by_address.length > 0) {
+        const timestamps = addressData.transactions_by_address
+            .map(tx => Number(tx.TimeStamp))
+            .filter(ts => !Number.isNaN(ts));
+        if (timestamps.length > 0) {
+            firstSeen = Math.min(...timestamps);
+            lastSeen = Math.max(...timestamps);
+        }
     }
 
     let addressType = "";
@@ -270,6 +278,7 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                         : (addressData.transactions_by_address?.length ?? 0)
                 }
                 internalt={addressData.internal_transactions_by_address || []}
+                internalTransactionsCount={addressData.internal_transactions_count}
             />
         </main>
     );

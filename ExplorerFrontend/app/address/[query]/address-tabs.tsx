@@ -74,6 +74,9 @@ interface AddressTabsProps {
    *  on the backend), independent of the paginated array length. */
   transactionsCount: number;
   internalt: InternalTransaction[];
+  /** True total from `addressData.internal_transactions_count`; undefined
+   *  on handlers predating the field. */
+  internalTransactionsCount?: number;
 }
 
 /** Subset of the `/address/aggregate` payload this component consumes. The
@@ -83,6 +86,7 @@ interface AddressAggregateResponse {
   transactions_by_address?: Transaction[];
   transactions_count?: number;
   internal_transactions_by_address?: InternalTransaction[];
+  internal_transactions_count?: number;
 }
 
 export default function AddressTabs({
@@ -90,6 +94,7 @@ export default function AddressTabs({
   transactions: initialTransactions,
   transactionsCount: initialTransactionsCount,
   internalt: initialInternalt,
+  internalTransactionsCount: initialInternalTransactionsCount,
 }: AddressTabsProps): JSX.Element {
   const router = useRouter();
   const pathname = usePathname();
@@ -125,6 +130,7 @@ export default function AddressTabs({
       transactions_by_address: initialTransactions,
       transactions_count: initialTransactionsCount,
       internal_transactions_by_address: initialInternalt,
+      internal_transactions_count: initialInternalTransactionsCount,
     },
     refetchInterval: 15000,
     refetchIntervalInBackground: false,
@@ -147,6 +153,7 @@ export default function AddressTabs({
   );
   const transactionsCount = data?.transactions_count ?? 0;
   const internalt = data?.internal_transactions_by_address ?? [];
+  const internalTransactionsCount = data?.internal_transactions_count;
 
   const activeTab = parseTabKey(searchParams?.get('tab') ?? null);
 
@@ -189,10 +196,11 @@ export default function AddressTabs({
       case 'transactions':
         return transactionsCount.toLocaleString('en-US');
       case 'internal':
-        // Aggregate doesn't return a true count for internal txns and
-        // there's no dedicated endpoint. Leave unbadged rather than show
-        // a clipped .length.
-        return null;
+        // Honest server-side count when the handler provides it; unbadged
+        // (rather than a clipped .length) against older handlers.
+        return typeof internalTransactionsCount === 'number'
+          ? internalTransactionsCount.toLocaleString('en-US')
+          : null;
       case 'token-transfers':
         return tokenTransfersTotal === null
           ? null
@@ -233,7 +241,11 @@ export default function AddressTabs({
             aria-labelledby="tab-transactions"
             hidden={activeTab !== 'transactions'}
           >
-            <TransactionsPanel transactions={transactions} />
+            <TransactionsPanel
+              address={address}
+              transactions={transactions}
+              total={transactionsCount}
+            />
           </div>
         )}
         {isPanelMounted('internal') && (
@@ -243,7 +255,11 @@ export default function AddressTabs({
             aria-labelledby="tab-internal"
             hidden={activeTab !== 'internal'}
           >
-            <InternalPanel internalt={internalt} />
+            <InternalPanel
+              address={address}
+              internalt={internalt}
+              total={internalTransactionsCount}
+            />
           </div>
         )}
         {isPanelMounted('token-transfers') && (

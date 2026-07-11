@@ -584,6 +584,19 @@ func UserRoute(router *gin.Engine) {
 				log.Printf("error counting transactions: %v", err)
 			}
 
+			countInternalTransactions, err := db.CountInternalTransactionsByAddress(param)
+			if err != nil {
+				log.Printf("error counting internal transactions: %v", err)
+			}
+
+			// True activity range across the whole history; the paginated
+			// tx list only covers one page, so deriving first/last seen
+			// from it is wrong for any address with more than one page.
+			firstSeen, lastSeen, err := db.ReturnAddressActivityRange(param)
+			if err != nil {
+				log.Printf("error fetching activity range: %v", err)
+			}
+
 			rank, err := db.ReturnRankAddress(param)
 			if err != nil {
 				log.Printf("error getting rank: %v", err)
@@ -641,6 +654,9 @@ func UserRoute(router *gin.Engine) {
 			return gin.H{
 				"address":                          addressData,
 				"transactions_count":               countTransactions,
+				"internal_transactions_count":      countInternalTransactions,
+				"first_seen":                       firstSeen,
+				"last_seen":                        lastSeen,
 				"rank":                             rank,
 				"transactions_by_address":          transactionsByAddress,
 				"internal_transactions_by_address": internalTransactionsByAddress,

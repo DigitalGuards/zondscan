@@ -6,7 +6,6 @@ import {
   createColumnHelper,
   getCoreRowModel,
   getFilteredRowModel,
-  getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
 import type { ColumnDef, Row } from '@tanstack/react-table';
@@ -29,15 +28,22 @@ import {
   truncateMiddle,
   useIsMobile,
 } from './_table-utils';
+import {
+  PAGE_LIMIT,
+  fetchAllAggregateRows,
+  useAggregatePage,
+} from './use-aggregate-page';
 
 /**
  * Internal-transactions panel. Sub-frame calls emitted by contract
- * interactions (CALL / DELEGATECALL / CREATE). Rows come from the
- * `/address/aggregate/:addr` response that the parent already fetched.
+ * interactions (CALL / DELEGATECALL / CREATE). Server-side paginated the
+ * same way as the Transactions panel: page 1 comes from the parent's live
+ * aggregate poll, pages > 1 through useAggregatePage.
  *
- * No `total` count badge: the aggregate doesn't return one for internal
- * transactions, and a dedicated endpoint doesn't exist today. Adding
- * either is out of scope for this refactor.
+ * `total` is the aggregate's internal_transactions_count. Handlers
+ * predating that field leave it undefined; the panel then degrades to
+ * sequential paging (Next enabled while pages come back full) instead of
+ * pretending the loaded rows are the whole history.
  */
 
 const columnHelper = createColumnHelper<
@@ -45,22 +51,43 @@ const columnHelper = createColumnHelper<
 >();
 
 interface InternalPanelProps {
+  address: string;
+  /** Page-1 rows from the parent's live aggregate poll. */
   internalt: InternalTransaction[];
+  /** True total when the handler provides it; undefined = unknown. */
+  total?: number;
 }
 
 export default function InternalPanel({
+  address,
   internalt,
+  total,
 }: InternalPanelProps): JSX.Element {
   const [filter, setFilter] = useState('');
+  const [page, setPage] = useState(1);
   const isMobile = useIsMobile();
+
+  const pageQuery = useAggregatePage(address, page);
+  const pageRows = pageQuery.data?.internal_transactions_by_address;
+  const rows = useMemo(
+    () => (page === 1 ? internalt : pageRows ?? []),
+    [page, internalt, pageRows],
+  );
+
+  const knownTotal = typeof total === 'number' && total > 0 ? total : undefined;
+  // Unknown total: assume one more page whenever the current page is full.
+  const hasMore = rows.length === PAGE_LIMIT;
+  const pageCount = knownTotal
+    ? Math.max(1, Math.ceil(knownTotal / PAGE_LIMIT))
+    : page + (hasMore ? 1 : 0);
 
   const data = useMemo(
     () =>
-      internalt.map((tx) => {
+      rows.map((tx) => {
         const [value, valueUnit] = formatAmount(tx.Value);
         return { ...tx, formattedValue: `${value} ${valueUnit}` };
       }),
-    [internalt],
+    [rows],
   );
 
   const columns = useMemo(
@@ -68,7 +95,15 @@ export default function InternalPanel({
       columnHelper.accessor(() => '', {
         id: 'Number',
         header: 'Number',
-        cell: (info) => <span>{internalt.length - info.row.index}</span>,
+        // Descending position within the full history when the total is
+        // known; page-local numbering otherwise (pre-count handlers).
+        cell: (info) => (
+          <span>
+            {knownTotal
+              ? knownTotal - ((page - 1) * PAGE_LIMIT + info.row.index)
+              : rows.length - info.row.index}
+          </span>
+        ),
       }),
       columnHelper.accessor('Type', {
         header: 'Type',
@@ -131,7 +166,7 @@ export default function InternalPanel({
         cell: (info) => <span>{formatTimestamp(info.getValue())}</span>,
       }),
     ],
-    [internalt.length],
+    [knownTotal, page, rows.length],
   );
 
   const table = useReactTable({
@@ -142,10 +177,9 @@ export default function InternalPanel({
     onGlobalFilterChange: setFilter,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
   });
 
-  if (internalt.length === 0) {
+  if (rows.length === 0 && page === 1) {
     return (
       <EmptyState
         title="No internal transactions"
@@ -237,22 +271,52 @@ export default function InternalPanel({
       <div className="p-4 border-b border-[#3d3d3d]">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="text-sm text-gray-400">
-            {internalt.length} internal call{internalt.length === 1 ? '' : 's'} loaded
+            {knownTotal
+              ? `${knownTotal.toLocaleString('en-US')} internal call${knownTotal === 1 ? '' : 's'}`
+              : `${rows.length} internal call${rows.length === 1 ? '' : 's'} loaded`}
           </div>
           <div className="flex items-center space-x-4">
             <DebouncedInput
               value={filter}
               onChange={(v) => setFilter(String(v))}
               className="px-4 py-2 text-sm bg-[#1a1a1a] border border-[#3d3d3d] rounded-lg focus:outline-none focus:border-[#ffa729] text-white w-full md:w-auto"
-              placeholder="Search internal transactions..."
+              placeholder="Search this page..."
             />
-            <DownloadBtnInternal data={internalt} />
+            <DownloadBtnInternal
+              data={rows}
+              fileName={`internal-transactions-${address}`}
+              getData={() =>
+                fetchAllAggregateRows(address, (p) => p.internal_transactions_by_address)
+              }
+            />
           </div>
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        {isMobile ? (
+      {pageQuery.isError && page > 1 && (
+        <div className="p-4 text-sm text-red-400 border-b border-[#3d3d3d]">
+          Failed to load page {page}.{' '}
+          <button
+            type="button"
+            className="underline hover:text-red-300"
+            onClick={() => { void pageQuery.refetch(); }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      <div
+        className={`overflow-x-auto${
+          pageQuery.isFetching && page > 1 ? ' opacity-60' : ''
+        }`}
+      >
+        {rows.length === 0 && pageQuery.isFetching ? (
+          // First visit to a page > 1 has no previous query data to hold
+          // on screen (page 1 lives in the parent poll), so show an
+          // explicit loading state instead of an empty table.
+          <div className="p-8 text-center text-gray-400">Loading internal transactions...</div>
+        ) : isMobile ? (
           <div className="overflow-hidden">
             {table.getRowModel().rows.map((row) => renderCard(row))}
           </div>
@@ -265,14 +329,14 @@ export default function InternalPanel({
       </div>
 
       <Paginator
-        pageIndex={table.getState().pagination.pageIndex}
-        pageCount={table.getPageCount()}
-        canPrev={table.getCanPreviousPage()}
-        canNext={table.getCanNextPage()}
-        goFirst={() => table.setPageIndex(0)}
-        goPrev={() => table.previousPage()}
-        goNext={() => table.nextPage()}
-        goLast={() => table.setPageIndex(table.getPageCount() - 1)}
+        pageIndex={page - 1}
+        pageCount={pageCount}
+        canPrev={page > 1}
+        canNext={page < pageCount}
+        goFirst={() => setPage(1)}
+        goPrev={() => setPage((p) => Math.max(1, p - 1))}
+        goNext={() => setPage((p) => Math.min(pageCount, p + 1))}
+        goLast={() => setPage(pageCount)}
       />
     </div>
   );
