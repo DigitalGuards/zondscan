@@ -305,6 +305,87 @@ func CountTransactions(address string) (int, error) {
 	return int(count), nil
 }
 
+// CountInternalTransactionsByAddress mirrors CountTransactions for the
+// internalTransactionByAddress collection, so the address page can size
+// the Internal Txns pagination honestly instead of guessing from the
+// clipped page it received.
+func CountInternalTransactionsByAddress(address string) (int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Normalize to canonical Q-prefix, matches syncer write format.
+	normalizedAddress := normalizeAddress(address)
+
+	filter := primitive.D{{Key: "$or", Value: []primitive.D{
+		{{Key: "from", Value: normalizedAddress}},
+		{{Key: "to", Value: normalizedAddress}},
+	}}}
+
+	count, err := configs.InternalTransactionByAddressCollection.CountDocuments(ctx, filter)
+	if err != nil {
+		log.Printf("error counting internal transactions: %v", err)
+		return 0, err
+	}
+
+	return int(count), nil
+}
+
+// ReturnAddressActivityRange returns the unix timestamps (seconds) of the
+// oldest and newest native transactions involving the address, or (0, 0)
+// when it has none. The address page's Activity card needs the true range;
+// deriving it from whichever page of transactions happens to be loaded
+// shows the oldest row of the newest page as "First Activity".
+//
+// timeStamp is persisted as a fixed-width "0x" + 8-hex-digit string, so a
+// lexicographic sort orders it numerically (until 2106), the same
+// assumption every timeStamp sort in this file already makes.
+func ReturnAddressActivityRange(address string) (int64, int64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	normalizedAddress := normalizeAddress(address)
+
+	filter := primitive.D{{Key: "$or", Value: []primitive.D{
+		{{Key: "from", Value: normalizedAddress}},
+		{{Key: "to", Value: normalizedAddress}},
+	}}}
+
+	fetchBoundary := func(order int) (int64, error) {
+		var doc struct {
+			TimeStamp string `bson:"timeStamp"`
+		}
+		opts := options.FindOne().
+			SetProjection(primitive.D{{Key: "timeStamp", Value: 1}}).
+			SetSort(primitive.D{{Key: "timeStamp", Value: order}})
+		err := configs.TransactionByAddressCollection.FindOne(ctx, filter, opts).Decode(&doc)
+		if err != nil {
+			return 0, err
+		}
+		ts, err := strconv.ParseInt(strings.TrimPrefix(doc.TimeStamp, "0x"), 16, 64)
+		if err != nil {
+			return 0, fmt.Errorf("malformed timeStamp %q: %w", doc.TimeStamp, err)
+		}
+		return ts, nil
+	}
+
+	first, err := fetchBoundary(1)
+	if err == mongo.ErrNoDocuments {
+		return 0, 0, nil
+	}
+	if err != nil {
+		log.Printf("error fetching first activity: %v", err)
+		return 0, 0, err
+	}
+
+	last, err := fetchBoundary(-1)
+	if err != nil {
+		log.Printf("error fetching last activity: %v", err)
+		return 0, 0, err
+	}
+
+	return first, last, nil
+}
+
 func ReturnSingleTransfer(query string) (models.Transfer, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
