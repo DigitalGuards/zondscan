@@ -31,6 +31,11 @@ func validateEnv() {
 }
 
 func main() {
+	// Load .env before anything reads os.Getenv. The old import-time
+	// ConnectDB loaded it as a side effect; validateEnv below fatals on a
+	// missing NODE_URLS if this doesn't run first (2026-07-11 prod incident).
+	configs.LoadEnv()
+
 	// Ensure logger resources are properly released
 	defer configs.Logger.Sync()
 
