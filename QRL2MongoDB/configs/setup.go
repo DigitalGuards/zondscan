@@ -326,7 +326,7 @@ func initializeCollections(db *mongo.Database) {
 	// tokenTransfers indexes are owned by db.InitializeTokenTransfersCollection
 	// (called from synchroniser.InitializeTokenCollections at startup). Creating
 	// a duplicate, auto-named set here causes IndexOptionsConflict against the
-	// named set declared in db/tokentransfers.go, which aborts the entire
+	// named set declared in db/indexes.go, which aborts the entire
 	// CreateMany in the proper init, including the (txHash, contract, logIndex,
 	// tokenID) unique that ERC-1155 TransferBatch + ERC-721 batch mint depend on
 	// to land more than one row per tx. Leaving that single source of truth in

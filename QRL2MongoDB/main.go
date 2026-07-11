@@ -2,6 +2,7 @@ package main
 
 import (
 	"QRL2MongoDB/configs"
+	"QRL2MongoDB/metadata"
 	"QRL2MongoDB/rpc"
 	"QRL2MongoDB/synchroniser"
 	"context"
@@ -152,7 +153,7 @@ func main() {
 	// metadataURI rows and resolves them through the configured IPFS
 	// gateway. Self-disables via METADATA_FETCHER_ENABLED=false.
 	metadataCtx, cancelMetadata := context.WithCancel(context.Background())
-	metadataSvc := synchroniser.NewMetadataService()
+	metadataSvc := metadata.NewService()
 	metadataSvc.Start(metadataCtx)
 	// Ensure the goroutine stops cleanly on shutdown.
 	go func() {

@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -357,5 +358,168 @@ func StoreERC1155Balance(contractAddress, holderAddress string, tokenID *big.Int
 		return err
 	}
 
+	return nil
+}
+
+// InitializeTokenBalancesCollection sets up tokenBalances indexes, including
+// the Phase 2 per-tokenID migration.
+//
+// Index plan:
+//
+//   - UNIQUE (contractAddress, holderAddress, tokenID): primary key. Legacy
+//     ERC-20 rows lack `tokenID`, Mongo treats missing fields as `null` for
+//     index purposes, so the legacy (contract, holder, null) rows remain
+//     unique by extension of the prior (contract, holder) unique. No
+//     migration collision.
+//   - secondary (contractAddress, tokenID, holderAddress): drives per-id
+//     holder lookups (`/token/<addr>/holders?tokenID=`).
+//   - secondary (holderAddress) and (contractAddress): unchanged, support
+//     address-page and token-page sweeps.
+//
+// Phase 2 migration:
+//
+//   - Create the new 3-tuple unique BEFORE dropping the legacy 2-tuple unique.
+//     A partial failure (e.g. transient duplicate-key on legacy data) leaves
+//     the old unique in place, never an unguarded collection.
+//   - Drop the legacy index by name only after the new one is online. Errors
+//     other than IndexNotFound are warnings; the new unique is the source of
+//     truth either way.
+//
+// Note on the old `address_idx` / `contract_address_idx` indexes from #88:
+// those targeted a non-existent `address` field (storage writes
+// `holderAddress`). They were vestigial, the Phase 2 reset drops them.
+func InitializeTokenBalancesCollection() error {
+	collection := configs.GetTokenBalancesCollection()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	configs.Logger.Info("Initializing tokenBalances collection and indexes")
+
+	indexes := []mongo.IndexModel{
+		{
+			// Phase 2 primary key: per-(contract, holder, tokenID) ownership.
+			// Legacy ERC-20 rows (no tokenID field) collapse to a null third
+			// key, which the prior (contract, holder) unique already kept
+			// distinct, so this is non-disruptive on existing data.
+			Keys: bson.D{
+				{Key: "contractAddress", Value: 1},
+				{Key: "holderAddress", Value: 1},
+				{Key: "tokenID", Value: 1},
+			},
+			Options: options.Index().
+				SetName("contract_holder_tokenID_idx").
+				SetUnique(true).
+				SetBackground(true),
+		},
+		{
+			// Per-id holder lookups: powers /token/<addr>/holders?tokenID=.
+			Keys: bson.D{
+				{Key: "contractAddress", Value: 1},
+				{Key: "tokenID", Value: 1},
+				{Key: "holderAddress", Value: 1},
+			},
+			Options: options.Index().
+				SetName("contract_tokenID_holder_idx").
+				SetBackground(true),
+		},
+		{
+			// Address-page sweep: list every token row a holder owns.
+			Keys: bson.D{
+				{Key: "holderAddress", Value: 1},
+			},
+			Options: options.Index().SetName("holder_idx"),
+		},
+		{
+			// Token-page sweep: list every holder/row for a contract.
+			Keys: bson.D{
+				{Key: "contractAddress", Value: 1},
+			},
+			Options: options.Index().SetName("contract_idx"),
+		},
+	}
+
+	if _, err := collection.Indexes().CreateMany(ctx, indexes); err != nil {
+		configs.Logger.Error("Failed to create indexes for token balances",
+			zap.Error(err))
+		return err
+	}
+
+	// Drop the prior 2-tuple unique once the new 3-tuple unique is online.
+	// We can't rely on the legacy index name because different MongoDB
+	// versions / manual creators may have named it differently (the
+	// `configs.ConnectDB` path historically created it without an explicit
+	// SetName, so Mongo auto-generated something like
+	// `contractAddress_1_holderAddress_1`, but that's not a guarantee).
+	// Iterate every index on the collection, match on the key spec instead,
+	// and drop any (contractAddress, holderAddress) unique. The new 3-tuple
+	// unique is keyed on three fields so it can't be confused.
+	if cursor, err := collection.Indexes().List(ctx); err == nil {
+		defer cursor.Close(ctx)
+		for cursor.Next(ctx) {
+			var idx struct {
+				Name   string `bson:"name"`
+				Key    bson.D `bson:"key"`
+				Unique bool   `bson:"unique"`
+			}
+			if decErr := cursor.Decode(&idx); decErr != nil {
+				continue
+			}
+			if len(idx.Key) != 2 {
+				continue
+			}
+			// Match on the (contractAddress, holderAddress) key pair, in
+			// either order, regardless of direction. The legacy unique
+			// always pinned both to ascending (1), but matching by name
+			// only would miss any variant.
+			haveContract := false
+			haveHolder := false
+			for _, e := range idx.Key {
+				switch e.Key {
+				case "contractAddress":
+					haveContract = true
+				case "holderAddress":
+					haveHolder = true
+				}
+			}
+			if !haveContract || !haveHolder {
+				continue
+			}
+			if _, dErr := collection.Indexes().DropOne(ctx, idx.Name); dErr != nil {
+				msg := dErr.Error()
+				if !strings.Contains(msg, "IndexNotFound") &&
+					!strings.Contains(msg, "ns does not exist") &&
+					!strings.Contains(msg, "NamespaceNotFound") {
+					configs.Logger.Warn("Could not drop legacy 2-tuple unique; new 3-tuple unique still active",
+						zap.String("indexName", idx.Name),
+						zap.Error(dErr))
+				}
+			} else {
+				configs.Logger.Info("Dropped legacy 2-tuple tokenBalances index",
+					zap.String("indexName", idx.Name))
+			}
+		}
+	} else {
+		configs.Logger.Warn("Could not list tokenBalances indexes for migration; new 3-tuple unique still active",
+			zap.Error(err))
+	}
+
+	// Also retire the vestigial pre-Phase-2 indexes that targeted a non-
+	// existent `address` field. Safe to drop, the new indexes cover the
+	// same access patterns through `holderAddress`.
+	for _, name := range []string{"contract_address_idx", "address_idx"} {
+		if _, err := collection.Indexes().DropOne(ctx, name); err != nil {
+			msg := err.Error()
+			if !strings.Contains(msg, "IndexNotFound") &&
+				!strings.Contains(msg, "ns does not exist") &&
+				!strings.Contains(msg, "NamespaceNotFound") {
+				configs.Logger.Warn("Could not drop vestigial tokenBalances index",
+					zap.String("indexName", name),
+					zap.Error(err))
+			}
+		}
+	}
+
+	configs.Logger.Info("Successfully initialized tokenBalances collection and indexes")
 	return nil
 }
