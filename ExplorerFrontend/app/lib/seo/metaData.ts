@@ -1,15 +1,22 @@
 // lib/seo/metaData.ts
 import { Metadata } from 'next';
 
+// Shared social preview image. 1200x800 PNG in public/, well above the
+// summary_large_image minimum (300x157) and close to the recommended
+// ~1.91:1 aspect. metadataBase resolves the relative URL to zondscan.com.
+const OG_IMAGE = {
+  url: '/ZondScan_Logo.png',
+  width: 1200,
+  height: 800,
+  alt: 'ZondScan, the QRL 2.0 blockchain explorer',
+};
+
 export const sharedMetadata: Partial<Metadata> = {
   metadataBase: new URL('https://zondscan.com'),
+  applicationName: 'ZondScan',
   keywords:
-    'QRL, Proof of Stake, Zond, QRL v2 blockchain explorer, Web3, EVM, quantum resistant, cryptocurrency, blockchain, smart contracts, validators, transactions, blocks',
-  alternates: {
-    languages: {
-      'en-US': 'https://zondscan.com',
-    },
-  },
+    'QRL, QRL 2.0, Quantum Resistant Ledger, Zond, blockchain explorer, post-quantum cryptography, Proof of Stake, Web3, EVM, quantum resistant, cryptocurrency, smart contracts, validators, transactions, blocks',
+  manifest: '/manifest.json',
   icons: {
     icon: [
       { url: '/favis/favicon.ico' },
@@ -23,14 +30,16 @@ export const sharedMetadata: Partial<Metadata> = {
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    siteName: 'QRL 2.0 Explorer',
+    siteName: 'ZondScan',
+    images: [OG_IMAGE],
   },
   twitter: {
-    card: 'summary',
+    card: 'summary_large_image',
     creator: '@QRLedger',
     site: '@QRLedger',
+    images: [OG_IMAGE.url],
   },
-  authors: [{ name: 'DigitalGuards' }],
+  authors: [{ name: 'DigitalGuards', url: 'https://digitalguards.nl' }],
   robots: {
     index: true,
     follow: true,
@@ -38,5 +47,5 @@ export const sharedMetadata: Partial<Metadata> = {
       index: true,
       follow: true,
     },
-  }, 
+  },
 };
