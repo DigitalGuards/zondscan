@@ -123,25 +123,6 @@ func RegisterContractCallRoute(router *gin.Engine) {
 	})
 }
 
-// isValidHex returns true for "0x"-prefixed even-length strings of hex
-// digits. Empty payloads (0x by itself) are allowed since some view
-// functions take no arguments and call data is just the 4-byte selector.
-func isValidHex(s string) bool {
-	if !strings.HasPrefix(s, "0x") {
-		return false
-	}
-	hex := s[2:]
-	if len(hex)%2 != 0 {
-		return false
-	}
-	for _, r := range hex {
-		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
-			return false
-		}
-	}
-	return true
-}
-
 // uintToHex formats a uint64 as an 0x-prefixed hex string (no leading
 // zeros, lowercase). Used for the `gas` field in the qrl_call params.
 func uintToHex(n uint64) string {

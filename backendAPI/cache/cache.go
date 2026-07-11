@@ -75,16 +75,35 @@ func (c *TTLCache) get(key string) (interface{}, bool) {
 }
 
 // StartJanitor spawns a goroutine that walks the store every `interval`
-// and deletes expired entries. Returns immediately; the goroutine runs
-// for the process lifetime.
-func (c *TTLCache) StartJanitor(interval time.Duration) {
+// and deletes expired entries. Returns immediately; the returned stop
+// function terminates the goroutine (safe to call more than once) so a
+// shutdown hook can reclaim it.
+func (c *TTLCache) StartJanitor(interval time.Duration) func() {
+	done := make(chan struct{})
 	go func() {
 		t := time.NewTicker(interval)
 		defer t.Stop()
-		for range t.C {
-			c.evictExpired()
+		for {
+			// Check done first so a tick that raced the stop call can't
+			// keep winning the select below; at most one already-committed
+			// eviction pass runs after stop returns.
+			select {
+			case <-done:
+				return
+			default:
+			}
+			select {
+			case <-t.C:
+				c.evictExpired()
+			case <-done:
+				return
+			}
 		}
 	}()
+	var once sync.Once
+	return func() {
+		once.Do(func() { close(done) })
+	}
 }
 
 // evictExpired uses a two-phase lock so a large cache doesn't stall reads
