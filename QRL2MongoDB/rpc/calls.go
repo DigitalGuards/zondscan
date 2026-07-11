@@ -349,6 +349,15 @@ func CallDebugTraceTransaction(hash string) DebugTraceResult {
 		return emptyTrace(err)
 	}
 
+	// Surface JSON-RPC errors instead of treating them as an empty trace;
+	// a non-archive node cannot trace old transactions ("historical state
+	// not available") and callers must be able to tell that apart from a
+	// transaction that genuinely has no internal calls.
+	if tracerResponse.Error != nil {
+		return emptyTrace(fmt.Errorf("debug_traceTransaction failed for %s: %s (code %d)",
+			hash, tracerResponse.Error.Message, tracerResponse.Error.Code))
+	}
+
 	var res DebugTraceResult
 
 	// Flatten the nested call frames before the legacy top-level gate below:

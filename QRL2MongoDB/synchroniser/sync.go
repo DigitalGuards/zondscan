@@ -454,7 +454,11 @@ func processSubsequentBlocks(currentBlock string) string {
 		return utils.AddHexNumbers(currentBlock, "0x1")
 	}
 
-	// Process the block
+	// Process the block. UpdateTransactionStatuses fetches each receipt and
+	// fills tx.Status before persistence; the batch (producer_consumer) and
+	// gap-repair paths already do this, but this head-following path never
+	// did, so live-synced transactions were stored with an empty status.
+	db.UpdateTransactionStatuses(blockData)
 	db.InsertBlockDocument(*blockData)
 	db.ProcessTransactions(*blockData)
 

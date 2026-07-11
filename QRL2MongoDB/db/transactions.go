@@ -367,6 +367,10 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 	}
 
 	trace := rpc.CallDebugTraceTransaction(tx.Hash)
+	if trace.Err != nil {
+		configs.Logger.Warn("Debug trace failed; internal calls for this tx will be missing",
+			zap.String("txHash", txHash), zap.Error(trace.Err))
+	}
 	// Persist the nested (depth >= 1) call frames: value moved by contract
 	// code rather than by the outer transaction itself, e.g. an HTLC claim
 	// paying out contract-held funds. The top-level frame is intentionally
