@@ -6,6 +6,7 @@ import (
 	"QRL2MongoDB/rpc"
 	"QRL2MongoDB/validation"
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -370,7 +371,10 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 	// code rather than by the outer transaction itself, e.g. an HTLC claim
 	// paying out contract-held funds. The top-level frame is intentionally
 	// not stored; it would only duplicate the transactionByAddress row.
-	StoreInternalCalls(trace.InternalCalls, txHash, blockTimestamp, blockNumber)
+	if err := StoreInternalCalls(trace.InternalCalls, txHash, blockTimestamp, blockNumber); err != nil {
+		configs.Logger.Error("Failed to store internal calls",
+			zap.String("txHash", txHash), zap.Error(err))
+	}
 
 	// Calculate fees using hex strings. Guard against empty/short
 	// gasPrice, slicing [2:] on those panics; treat too-short as zero.
@@ -482,9 +486,12 @@ func TransferCollection(blockNumber string, blockTimestamp string, from string, 
 // StoreInternalCalls persists each flattened nested call frame of one
 // transaction as an internalTransactionByAddress row. Shared by the live
 // sync path (processTransactions) and the historical backfill command.
-func StoreInternalCalls(calls []rpc.InternalCall, txHash string, blockTimestamp string, blockNumber string) {
+// A failed insert does not stop the remaining frames; all failures are
+// joined into the returned error.
+func StoreInternalCalls(calls []rpc.InternalCall, txHash string, blockTimestamp string, blockNumber string) error {
+	var errs []error
 	for _, call := range calls {
-		InternalTransactionByAddressCollection(
+		_, err := InternalTransactionByAddressCollection(
 			call.Type,
 			strings.ToLower(call.Type),
 			txHash,
@@ -501,7 +508,11 @@ func StoreInternalCalls(calls []rpc.InternalCall, txHash string, blockTimestamp 
 			blockTimestamp,
 			blockNumber,
 		)
+		if err != nil {
+			errs = append(errs, err)
+		}
 	}
+	return errors.Join(errs...)
 }
 
 func InternalTransactionByAddressCollection(transactionType string, callType string, hash string, from string, to string, input string, output string, traceAddress []int, value float64, gas string, gasUsed string, addressFunctionIdentifier string, amountFunctionIdentifier string, blockTimestamp string, blockNumber string) (*mongo.InsertOneResult, error) {
