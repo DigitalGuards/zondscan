@@ -5,6 +5,7 @@ import (
 	"backendAPI/models"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math/big"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // receiptLog mirrors the subset of qrl_getTransactionReceipt.logs[] the tx
@@ -248,15 +250,19 @@ func handleTx(c *gin.Context) {
 		return
 	}
 	query, err := db.ReturnSingleTransfer(value)
-	if err != nil {
+	if err != nil && !errors.Is(err, mongo.ErrNoDocuments) {
+		// A real db failure must surface as a retryable 500: it used to be
+		// swallowed into the 404 branch below, so a Mongo outage rendered
+		// as a permanent "transaction not found" (and got cached as such
+		// by the frontend's notFound() mapping).
 		log.Printf("error fetching transfer %s: %v", value, err)
+		respondInternal(c)
+		return
 	}
 
-	// ReturnSingleTransfer returns a zero-value Transfer (no error path
-	// distinguishes "found" from "missing" for the transfers-collection
-	// fallback), so detect not-found via an empty TxHash and return 404
-	// instead of a misleading 200 with empty fields. The frontend tx page
-	// maps 404 to notFound().
+	// Detect not-found via an empty TxHash (mongo.ErrNoDocuments or a hash
+	// missing from its block) and return 404 instead of a misleading 200
+	// with empty fields. The frontend tx page maps 404 to notFound().
 	if query.TxHash == "" {
 		c.JSON(http.StatusNotFound, gin.H{"error": "transaction not found"})
 		return

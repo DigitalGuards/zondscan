@@ -55,7 +55,7 @@ func ReturnSingleAddress(query string) (models.Address, error) {
 	return result, nil
 }
 
-func ReturnRichlist() []models.Address {
+func ReturnRichlist() ([]models.Address, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	var addresses []models.Address
 	defer cancel()
@@ -72,7 +72,10 @@ func ReturnRichlist() []models.Address {
 
 	results, err := configs.AddressesCollections.Find(ctx, bson.D{}, opts)
 	if err != nil {
+		// Early return: proceeding onto the nil cursor used to panic on
+		// every request whenever Mongo errored here.
 		log.Printf("error querying richlist: %v", err)
+		return nil, err
 	}
 
 	defer results.Close(ctx)
@@ -84,7 +87,7 @@ func ReturnRichlist() []models.Address {
 		addresses = append(addresses, singleAddress)
 	}
 
-	return addresses
+	return addresses, nil
 }
 
 func ReturnRankAddress(address string) (int64, error) {

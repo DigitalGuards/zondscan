@@ -168,7 +168,11 @@ func handleAddressAggregate(c *gin.Context) {
 func handleRichlist(c *gin.Context) {
 	// Richlist (top wallets by balance) changes slowly, 30 s TTL.
 	v, err := routeCache.GetOrCompute("richlist", 30*time.Second, func() (interface{}, error) {
-		return gin.H{"richlist": db.ReturnRichlist()}, nil
+		richlist, err := db.ReturnRichlist()
+		if err != nil {
+			return nil, err
+		}
+		return gin.H{"richlist": richlist}, nil
 	})
 	if err != nil {
 		log.Printf("error fetching richlist: %v", err)

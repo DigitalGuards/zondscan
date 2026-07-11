@@ -95,10 +95,19 @@ func GetTokenBalancesByAddress(address string, standardFilter *string) ([]models
 				"decimals":        "$tokenInfo.decimals",
 			},
 		},
-		// Convert balance string to decimal for proper numeric sorting
+		// Convert balance string to decimal for proper numeric sorting.
+		// $convert with onError/onNull 0 instead of raw $toDecimal: uint256
+		// balances can exceed Decimal128's 34-digit limit, and one oversized
+		// balance used to 500 this wallet token list permanently. An
+		// oversized value now sorts as 0; the original string stays intact.
 		{
 			"$addFields": bson.M{
-				"balanceDecimal": bson.M{"$toDecimal": "$balance"},
+				"balanceDecimal": bson.M{"$convert": bson.M{
+					"input":   "$balance",
+					"to":      "decimal",
+					"onError": 0,
+					"onNull":  0,
+				}},
 			},
 		},
 		// Sort by balance descending (highest value tokens first)
