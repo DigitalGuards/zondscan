@@ -33,10 +33,7 @@ func StoreTokenBalance(contractAddress string, holderAddress string, amount stri
 	holderAddress = validation.ConvertToQAddress(holderAddress)
 
 	// Special handling for zero address (QRL uses Q prefix)
-	if holderAddress == "Q0" ||
-		holderAddress == configs.QRLZeroAddress ||
-		holderAddress == "0x0" ||
-		holderAddress == "0x0000000000000000000000000000000000000000" {
+	if validation.IsZeroAddress(holderAddress) {
 		configs.Logger.Debug("Skipping token balance update for zero address",
 			zap.String("holderAddress", holderAddress))
 		return nil
@@ -288,10 +285,7 @@ func StoreERC1155Balance(contractAddress, holderAddress string, tokenID *big.Int
 	holderAddress = validation.ConvertToQAddress(holderAddress)
 
 	// Skip zero-address; mint/burn endpoints don't hold balances.
-	if holderAddress == "Q0" ||
-		holderAddress == configs.QRLZeroAddress ||
-		holderAddress == "0x0" ||
-		holderAddress == "0x0000000000000000000000000000000000000000" {
+	if validation.IsZeroAddress(holderAddress) {
 		return nil
 	}
 

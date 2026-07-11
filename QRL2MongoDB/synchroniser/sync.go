@@ -285,7 +285,7 @@ func forceUpdateSyncState(blockNumber string) {
 		bson.M{"_id": db.LastSyncedBlockID},
 		bson.M{"$set": bson.M{
 			"block_number":     blockNumber,
-			"block_number_int": db.HexToInt64(blockNumber),
+			"block_number_int": utils.HexToInt64(blockNumber),
 		}},
 		options.Update().SetUpsert(true),
 	)

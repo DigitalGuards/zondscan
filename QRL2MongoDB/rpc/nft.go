@@ -33,7 +33,7 @@ func GetERC721Owner(contractAddress string, tokenID *big.Int) (string, error) {
 		// JSON-RPC error => contract reverted (typical for burned/unminted ids).
 		// Anything else (transport, marshalling) is transient; propagate so the
 		// caller can preserve existing state.
-		if strings.HasPrefix(callErr.Error(), "RPC error:") {
+		if isNodeRPCError(callErr) {
 			return "", nil
 		}
 		return "", callErr
@@ -57,7 +57,7 @@ func GetERC721Owner(contractAddress string, tokenID *big.Int) (string, error) {
 func GetContractURI(contractAddress string) (string, error) {
 	result, callErr := CallContractMethod(contractAddress, SIG_CONTRACT_URI)
 	if callErr != nil {
-		if strings.HasPrefix(callErr.Error(), "RPC error:") {
+		if isNodeRPCError(callErr) {
 			return "", nil
 		}
 		return "", callErr
@@ -92,7 +92,7 @@ func GetTokenURI(contractAddress string, tokenID *big.Int) (string, error) {
 
 	result, callErr := CallContractMethod(contractAddress, calldata)
 	if callErr != nil {
-		if strings.HasPrefix(callErr.Error(), "RPC error:") {
+		if isNodeRPCError(callErr) {
 			return "", nil
 		}
 		return "", callErr
@@ -124,7 +124,7 @@ func GetERC1155URI(contractAddress string, tokenID *big.Int) (string, error) {
 
 	result, callErr := CallContractMethod(contractAddress, calldata)
 	if callErr != nil {
-		if strings.HasPrefix(callErr.Error(), "RPC error:") {
+		if isNodeRPCError(callErr) {
 			return "", nil
 		}
 		return "", callErr
@@ -179,7 +179,7 @@ func GetERC1155Balance(contractAddress, holderAddress string, tokenID *big.Int) 
 
 	result, callErr := CallContractMethod(contractAddress, calldata)
 	if callErr != nil {
-		if strings.HasPrefix(callErr.Error(), "RPC error:") {
+		if isNodeRPCError(callErr) {
 			return big.NewInt(0), nil
 		}
 		return nil, callErr

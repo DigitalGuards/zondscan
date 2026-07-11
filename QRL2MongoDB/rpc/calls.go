@@ -4,6 +4,7 @@ import (
 	"QRL2MongoDB/models"
 	"QRL2MongoDB/utils"
 	"QRL2MongoDB/validation"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,27 +19,8 @@ import (
 
 func GetLatestBlock() (string, error) {
 	var Zond models.RPC
-
-	group := models.JsonRPC{
-		Jsonrpc: "2.0",
-		Method:  "qrl_blockNumber",
-		Params:  []interface{}{},
-		ID:      1,
-	}
-	b, err := json.Marshal(group)
-	if err != nil {
-		zap.L().Info("Failed JSON marshal", zap.Error(err))
-		return "0x0", err
-	}
-
-	body, err := DoNodeRPC(b)
-	if err != nil {
+	if err := rpcCall("qrl_blockNumber", []interface{}{}, &Zond); err != nil {
 		zap.L().Error("Failed to get response from RPC call after retries/failover", zap.Error(err))
-		return "0x0", err
-	}
-
-	if err = json.Unmarshal(body, &Zond); err != nil {
-		zap.L().Info("Failed to unmarshal response", zap.Error(err))
 		return "0x0", err
 	}
 
@@ -56,27 +38,9 @@ func GetBlockByNumberMainnet(blockNumber string) (*models.ZondDatabaseBlock, err
 		return nil, fmt.Errorf("invalid block number format: %s", blockNumber)
 	}
 
-	group := models.JsonRPC{
-		Jsonrpc: "2.0",
-		Method:  "qrl_getBlockByNumber",
-		Params:  []interface{}{blockNumber, true},
-		ID:      1,
-	}
-	b, err := json.Marshal(group)
-	if err != nil {
-		zap.L().Info("Failed JSON marshal", zap.Error(err))
-		return nil, err
-	}
-
-	body, err := DoNodeRPC(b)
-	if err != nil {
-		zap.L().Info("Failed to get response from RPC call", zap.Error(err))
-		return nil, err
-	}
-
 	var block models.ZondDatabaseBlock
-	if err := json.Unmarshal(body, &block); err != nil {
-		zap.L().Info("Failed to unmarshal block", zap.Error(err))
+	if err := rpcCall("qrl_getBlockByNumber", []interface{}{blockNumber, true}, &block); err != nil {
+		zap.L().Info("Failed to get response from RPC call", zap.Error(err))
 		return nil, err
 	}
 
@@ -108,27 +72,9 @@ func GetContractAddress(txHash string) (string, string, error) {
 	if err := validation.ValidateHexString(txHash, validation.HashLength); err != nil {
 		return "", "", fmt.Errorf("invalid transaction hash: %v", err)
 	}
-	group := models.JsonRPC{
-		Jsonrpc: "2.0",
-		Method:  "qrl_getTransactionReceipt",
-		Params:  []interface{}{txHash},
-		ID:      1,
-	}
-	b, err := json.Marshal(group)
-	if err != nil {
-		zap.L().Info("Failed JSON marshal", zap.Error(err))
-		return "", "", err
-	}
-
-	body, err := DoNodeRPC(b)
-	if err != nil {
-		zap.L().Info("Failed to execute request", zap.Error(err))
-		return "", "", err
-	}
-
 	var ContractAddress models.Contract
-	if err := json.Unmarshal(body, &ContractAddress); err != nil {
-		zap.L().Info("Failed to unmarshal response", zap.Error(err))
+	if err := rpcCall("qrl_getTransactionReceipt", []interface{}{txHash}, &ContractAddress); err != nil {
+		zap.L().Info("Failed to execute request", zap.Error(err))
 		return "", "", err
 	}
 
@@ -336,7 +282,7 @@ func CallDebugTraceTransaction(hash string) DebugTraceResult {
 		zap.L().Error("No node endpoint configured for debug trace")
 		return emptyTrace(fmt.Errorf("no node endpoint configured"))
 	}
-	body, err := postWithRetry(primary, b, 1)
+	body, err := postWithRetry(context.Background(), primary, b, 1)
 	if err != nil {
 		zap.L().Error("Failed to execute request", zap.Error(err))
 		return emptyTrace(err)
@@ -525,30 +471,11 @@ func GetBalance(address string) (string, error) {
 		return "", fmt.Errorf("invalid address format: %v", err)
 	}
 
-	group := models.JsonRPC{
-		Jsonrpc: "2.0",
-		Method:  "qrl_getBalance",
-		Params:  []interface{}{address, "latest"},
-		ID:      1,
-	}
-
-	b, err := json.Marshal(group)
-	if err != nil {
-		zap.L().Info("Failed JSON marshal", zap.Error(err))
-		return "", err
-	}
-
-	body, err := DoNodeRPC(b)
-	if err != nil {
-		zap.L().Info("Failed to execute request", zap.Error(err))
-		return "", err
-	}
-
 	var result struct {
 		Result string `json:"result"`
 	}
-	if err := json.Unmarshal(body, &result); err != nil {
-		zap.L().Info("Failed to unmarshal response", zap.Error(err))
+	if err := rpcCall("qrl_getBalance", []interface{}{address, "latest"}, &result); err != nil {
+		zap.L().Info("Failed to execute request", zap.Error(err))
 		return "", err
 	}
 
@@ -677,28 +604,9 @@ func GetCode(address string, blockNrOrHash string) (string, error) {
 		return "", fmt.Errorf("invalid address format: %v", err)
 	}
 
-	group := models.JsonRPC{
-		Jsonrpc: "2.0",
-		Method:  "qrl_getCode",
-		Params:  []interface{}{address, "latest"},
-		ID:      1,
-	}
-
-	b, err := json.Marshal(group)
-	if err != nil {
-		zap.L().Info("Failed JSON marshal", zap.Error(err))
-		return "", err
-	}
-
-	body, err := DoNodeRPC(b)
-	if err != nil {
-		zap.L().Info("Failed to execute request", zap.Error(err))
-		return "", err
-	}
-
 	var GetCode models.GetCode
-	if err := json.Unmarshal(body, &GetCode); err != nil {
-		zap.L().Info("Failed to unmarshal response", zap.Error(err))
+	if err := rpcCall("qrl_getCode", []interface{}{address, "latest"}, &GetCode); err != nil {
+		zap.L().Info("Failed to execute request", zap.Error(err))
 		return "", err
 	}
 
@@ -730,28 +638,9 @@ func ZondGetBlockLogs(blockNumber string, topic0Filters []string) (*models.ZondL
 		filter["topics"] = [][]string{topic0Filters}
 	}
 
-	group := models.JsonRPC{
-		Jsonrpc: "2.0",
-		Method:  "qrl_getLogs",
-		Params:  []interface{}{filter},
-		ID:      1,
-	}
-
-	b, err := json.Marshal(group)
-	if err != nil {
-		zap.L().Info("Failed JSON marshal", zap.Error(err))
-		return nil, err
-	}
-
-	body, err := DoNodeRPC(b)
-	if err != nil {
-		zap.L().Info("Failed to get response from RPC call", zap.Error(err))
-		return nil, err
-	}
-
 	var responseData models.ZondLogsResponse
-	if err := json.Unmarshal(body, &responseData); err != nil {
-		zap.L().Info("Failed to unmarshal response", zap.Error(err))
+	if err := rpcCall("qrl_getLogs", []interface{}{filter}, &responseData); err != nil {
+		zap.L().Info("Failed to get response from RPC call", zap.Error(err))
 		return nil, err
 	}
 
@@ -767,28 +656,11 @@ func GetTxDetailsByHash(txHash string) (*models.TransactionResult, error) {
 		return nil, fmt.Errorf("invalid transaction hash: %v", err)
 	}
 
-	group := models.JsonRPC{
-		Jsonrpc: "2.0",
-		Method:  "qrl_getTransactionByHash",
-		Params:  []interface{}{txHash},
-		ID:      1,
-	}
-
-	b, err := json.Marshal(group)
-	if err != nil {
-		zap.L().Info("Failed JSON marshal", zap.Error(err))
-		return nil, err
-	}
-
-	body, err := DoNodeRPC(b)
-	if err != nil {
-		zap.L().Info("Failed to execute request", zap.Error(err))
-		return nil, err
-	}
-
+	// rpcCall also surfaces the JSON-RPC error member: previously a node
+	// error here was silently ignored and an empty Result returned.
 	var tx models.TransactionResponse
-	if err := json.Unmarshal(body, &tx); err != nil {
-		zap.L().Info("Failed to unmarshal transaction", zap.Error(err))
+	if err := rpcCall("qrl_getTransactionByHash", []interface{}{txHash}, &tx); err != nil {
+		zap.L().Info("Failed to execute request", zap.Error(err))
 		return nil, err
 	}
 

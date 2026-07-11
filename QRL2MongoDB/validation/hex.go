@@ -132,3 +132,15 @@ func ConvertToQAddress(address string) string {
 
 	return "Q" + strings.ToLower(address)
 }
+
+// IsZeroAddress reports whether addr is any accepted spelling of the zero
+// address (mint/burn endpoint): short or full-width, Q or 0x prefixed.
+func IsZeroAddress(addr string) bool {
+	switch addr {
+	case "Q0", "0x0",
+		"Q0000000000000000000000000000000000000000",
+		"0x0000000000000000000000000000000000000000":
+		return true
+	}
+	return false
+}

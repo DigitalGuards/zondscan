@@ -6,7 +6,6 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
-	"time"
 
 	"QRL2MongoDB/validation"
 
@@ -133,11 +132,7 @@ func GetTokenBalance(contractAddress string, holderAddress string) (string, erro
 		zap.String("holderAddress", holderAddress))
 
 	// Special handling for zero address (common in mint events)
-	// Handle multiple formats of zero address
-	if holderAddress == "Q0" ||
-		holderAddress == "Q0000000000000000000000000000000000000000" ||
-		holderAddress == "0x0" ||
-		holderAddress == "0x0000000000000000000000000000000000000000" {
+	if validation.IsZeroAddress(holderAddress) {
 		zap.L().Info("Zero address detected, returning zero balance",
 			zap.String("contractAddress", contractAddress),
 			zap.String("holderAddress", holderAddress))
@@ -169,35 +164,17 @@ func GetTokenBalance(contractAddress string, holderAddress string) (string, erro
 		zap.String("paddedAddress", paddedAddress),
 		zap.String("data", data))
 
-	// Make the call
+	// Make the call. DoNodeRPC owns the retry + failover budget; a second
+	// retry loop here only multiplied the delay on genuinely dead endpoints.
 	result, err := CallContractMethod(contractAddress, data)
 	if err != nil {
-		// Try up to 3 times with exponential backoff on failure
-		maxRetries := 2
-		for retry := 0; retry < maxRetries && err != nil; retry++ {
-			retryDelay := time.Duration(500*(retry+1)) * time.Millisecond
-
-			zap.L().Warn("Retrying token balance call after failure",
-				zap.String("contractAddress", contractAddress),
-				zap.String("holderAddress", holderAddress),
-				zap.Int("retry", retry+1),
-				zap.Duration("delay", retryDelay),
-				zap.Error(err))
-
-			time.Sleep(retryDelay)
-			result, err = CallContractMethod(contractAddress, data)
-		}
-
-		// If all retries failed
-		if err != nil {
-			zap.L().Error("Contract call for token balance failed after retries",
-				zap.String("contractAddress", contractAddress),
-				zap.String("holderAddress", originalHolderAddress),
-				zap.String("formattedAddress", holderAddress),
-				zap.String("paddedAddress", paddedAddress),
-				zap.Error(err))
-			return "", fmt.Errorf("contract call failed: %v", err)
-		}
+		zap.L().Error("Contract call for token balance failed after retries",
+			zap.String("contractAddress", contractAddress),
+			zap.String("holderAddress", originalHolderAddress),
+			zap.String("formattedAddress", holderAddress),
+			zap.String("paddedAddress", paddedAddress),
+			zap.Error(err))
+		return "", fmt.Errorf("contract call failed: %v", err)
 	}
 
 	// Parse result

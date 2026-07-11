@@ -210,11 +210,11 @@ func SupportsInterface(addr string, interfaceID [4]byte) (supports, hasERC165 bo
 
 	result, callErr := CallContractMethod(addr, calldata)
 	if callErr != nil {
-		// "RPC error: <message>" is set by CallContractMethod ONLY when the
-		// node returned a JSON-RPC error object (revert / invalid opcode /
-		// out-of-gas / unknown method). That's the not-ERC-165 signal.
-		// Anything else (request build, transport, unmarshal) is transient.
-		if strings.HasPrefix(callErr.Error(), "RPC error:") {
+		// A typed *RPCError means the node returned a JSON-RPC error object
+		// (revert / invalid opcode / out-of-gas / unknown method). That's
+		// the not-ERC-165 signal. Anything else (request build, transport,
+		// unmarshal) is transient.
+		if isNodeRPCError(callErr) {
 			return false, false, nil
 		}
 		return false, false, callErr

@@ -208,44 +208,12 @@ func (s *endpointSelector) AllURLs() []string {
 	return out
 }
 
-// ProbeChainHead is a lightweight health probe: it issues `qrl_blockNumber`
-// against the currently-preferred endpoint with no retry budget and a single
-// failover hop. Returns the parsed block height. Used by the synchronizer's
-// /health endpoint to surface degraded state to k8s probes / external watchers.
-func ProbeChainHead() (uint64, error) {
-	body, err := DoNodeRPC([]byte(`{"jsonrpc":"2.0","method":"qrl_blockNumber","params":[],"id":1}`))
-	if err != nil {
-		return 0, err
-	}
-	var resp struct {
-		Result string `json:"result"`
-		Error  *struct {
-			Code    int    `json:"code"`
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(body, &resp); err != nil {
-		return 0, fmt.Errorf("unmarshal qrl_blockNumber: %w", err)
-	}
-	if resp.Error != nil {
-		return 0, fmt.Errorf("rpc error %d: %s", resp.Error.Code, resp.Error.Message)
-	}
-	if !strings.HasPrefix(resp.Result, "0x") {
-		return 0, fmt.Errorf("unexpected qrl_blockNumber result: %q", resp.Result)
-	}
-	height, err := strconv.ParseUint(resp.Result[2:], 16, 64)
-	if err != nil {
-		return 0, fmt.Errorf("parse height: %w", err)
-	}
-	return height, nil
-}
-
-// ProbeChainHeadCtx is the context-aware variant of ProbeChainHead used by the
-// /health handler. It runs synchronously and honours ctx cancellation/deadline
-// for every endpoint attempt, so the handler can bound the probe with the
-// request context without leaking a goroutine when the client disconnects.
-// Same probe semantics as ProbeChainHead: a single attempt per endpoint with
-// one failover hop, no retry budget.
+// ProbeChainHeadCtx is a lightweight health probe used by the /health
+// handler: it issues `qrl_blockNumber` with a single attempt per endpoint
+// and no retry budget, and returns the parsed block height. It runs
+// synchronously and honours ctx cancellation/deadline for every endpoint
+// attempt, so the handler can bound the probe with the request context
+// without leaking a goroutine when the client disconnects.
 func ProbeChainHeadCtx(ctx context.Context) (uint64, error) {
 	body, err := doNodeRPCCtx(ctx, []byte(`{"jsonrpc":"2.0","method":"qrl_blockNumber","params":[],"id":1}`))
 	if err != nil {
@@ -274,64 +242,15 @@ func ProbeChainHeadCtx(ctx context.Context) (uint64, error) {
 	return height, nil
 }
 
-// doNodeRPCCtx posts a JSON-RPC body honouring the caller's context: one
-// attempt per endpoint, failing over to the next on transport error. Used by
-// the health probe so cancellation/deadline propagate to the in-flight HTTP
-// request instead of being abandoned in a detached goroutine.
-func doNodeRPCCtx(ctx context.Context, reqBody []byte) ([]byte, error) {
-	sel := Endpoints()
-	attempts := sel.orderedAttempts()
-	if len(attempts) == 0 {
-		return nil, fmt.Errorf("no node endpoints configured (set NODE_URLS or NODE_URL)")
-	}
-
-	var lastErr error
-	for _, st := range attempts {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		req, err := http.NewRequestWithContext(ctx, "POST", st.url, bytes.NewBuffer(reqBody))
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := GetHTTPClient().Do(req)
-		if err != nil {
-			sel.markFailed(st.url)
-			lastErr = err
-			continue
-		}
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			resp.Body.Close()
-			sel.markFailed(st.url)
-			lastErr = fmt.Errorf("HTTP %d", resp.StatusCode)
-			continue
-		}
-		body, readErr := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if readErr != nil {
-			sel.markFailed(st.url)
-			lastErr = readErr
-			continue
-		}
-		sel.markSucceeded(st.url)
-		return body, nil
-	}
-	return nil, fmt.Errorf("all node endpoints exhausted; last error: %w", lastErr)
-}
-
-// DoNodeRPC posts a JSON-RPC body to the first healthy node endpoint; on
-// failure it rotates to the next. The first endpoint attempt gets the same 3×
-// exponential-backoff retry the existing GetLatestBlock had (so transient
-// network blips against the primary still recover without burning a failover
-// slot); subsequent endpoints get a single attempt each.
+// doNodeRPC posts a JSON-RPC body across the endpoint rotation, honouring
+// ctx for every attempt. firstRetries is the retry budget for the preferred
+// endpoint (transient network blips against the primary recover without
+// burning a failover slot); subsequent endpoints get a single attempt each.
 //
 // Returns the response body bytes on success. The caller is responsible for
-// any application-level (JSON-RPC error field) checks; this helper only treats
-// transport-layer failures as failover triggers.
-func DoNodeRPC(reqBody []byte) ([]byte, error) {
+// any application-level (JSON-RPC error field) checks; this helper only
+// treats transport-layer failures as failover triggers.
+func doNodeRPC(ctx context.Context, reqBody []byte, firstRetries int) ([]byte, error) {
 	sel := Endpoints()
 	attempts := sel.orderedAttempts()
 	if len(attempts) == 0 {
@@ -340,11 +259,14 @@ func DoNodeRPC(reqBody []byte) ([]byte, error) {
 
 	var lastErr error
 	for i, st := range attempts {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		retries := 1
 		if i == 0 {
-			retries = 3
+			retries = firstRetries
 		}
-		body, err := postWithRetry(st.url, reqBody, retries)
+		body, err := postWithRetry(ctx, st.url, reqBody, retries)
 		if err == nil {
 			sel.markSucceeded(st.url)
 			return body, nil
@@ -361,16 +283,30 @@ func DoNodeRPC(reqBody []byte) ([]byte, error) {
 	return nil, fmt.Errorf("all node endpoints exhausted; last error: %w", lastErr)
 }
 
+// doNodeRPCCtx posts with a single attempt per endpoint, used by the health
+// probe so cancellation/deadline propagate to the in-flight HTTP request.
+func doNodeRPCCtx(ctx context.Context, reqBody []byte) ([]byte, error) {
+	return doNodeRPC(ctx, reqBody, 1)
+}
+
+// DoNodeRPC posts a JSON-RPC body to the first healthy node endpoint with a
+// 3-attempt exponential-backoff budget, rotating to the next endpoint on
+// failure.
+func DoNodeRPC(reqBody []byte) ([]byte, error) {
+	return doNodeRPC(context.Background(), reqBody, 3)
+}
+
 // postWithRetry executes the request against a single URL with the given
-// retry budget and the existing exponential-backoff schedule (1s, 2s, 4s).
+// retry budget and the existing exponential-backoff schedule (1s, 2s, 4s),
+// honouring ctx for the request and the backoff waits.
 // Returns the response body on success.
-func postWithRetry(url string, reqBody []byte, retries int) ([]byte, error) {
+func postWithRetry(ctx context.Context, url string, reqBody []byte, retries int) ([]byte, error) {
 	if retries < 1 {
 		retries = 1
 	}
 	var lastErr error
 	for attempt := 0; attempt < retries; attempt++ {
-		req, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBody))
+		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(reqBody))
 		if err != nil {
 			lastErr = err
 			continue
@@ -404,7 +340,11 @@ func postWithRetry(url string, reqBody []byte, retries int) ([]byte, error) {
 				zap.Int("retry", attempt+1),
 				zap.Duration("backoff", backoff),
 				zap.String("url", url))
-			time.Sleep(backoff)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(backoff):
+			}
 		}
 	}
 	return nil, lastErr

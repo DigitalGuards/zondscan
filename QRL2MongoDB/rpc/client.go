@@ -4,6 +4,7 @@ import (
 	"QRL2MongoDB/models"
 	"QRL2MongoDB/validation"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -27,8 +28,68 @@ func GetHTTPClient() *http.Client {
 	return httpClient
 }
 
-type MyHTTPClient interface {
-	Do(req *http.Request) (*http.Response, error)
+// RPCError is a JSON-RPC error member surfaced as a typed error, so callers
+// can distinguish node-reported errors (e.g. contract reverts on qrl_call)
+// from transport failures with errors.As instead of sniffing formatted
+// strings. The Error() text keeps the historical "RPC error: <message>"
+// shape logs and operators already know.
+type RPCError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+func (e *RPCError) Error() string {
+	return fmt.Sprintf("RPC error: %v", e.Message)
+}
+
+// isNodeRPCError reports whether err is a node-reported JSON-RPC error (for
+// qrl_call that means the contract reverted) as opposed to a transport
+// failure. Callers use this to implement the three-way error contract
+// documented on GetERC721Owner / SupportsInterface.
+func isNodeRPCError(err error) bool {
+	var rpcErr *RPCError
+	return errors.As(err, &rpcErr)
+}
+
+// rpcCall marshals a JSON-RPC request, posts it via DoNodeRPC (retry +
+// failover), surfaces a JSON-RPC error member as *RPCError, and unmarshals
+// the full response body into out (pass nil to skip decoding). Every typed
+// node call should go through this instead of hand-rolling the plumbing.
+func rpcCall(method string, params []interface{}, out interface{}) error {
+	group := models.JsonRPC{
+		Jsonrpc: "2.0",
+		Method:  method,
+		Params:  params,
+		ID:      1,
+	}
+	b, err := json.Marshal(group)
+	if err != nil {
+		return fmt.Errorf("failed to marshal JSON: %v", err)
+	}
+
+	body, err := DoNodeRPC(b)
+	if err != nil {
+		return err
+	}
+
+	// Decode the error member separately: most call-site response structs
+	// only model the result shape.
+	var envelope struct {
+		Error *RPCError `json:"error"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return fmt.Errorf("failed to unmarshal response: %v", err)
+	}
+	if envelope.Error != nil {
+		return envelope.Error
+	}
+
+	if out != nil {
+		if err := json.Unmarshal(body, out); err != nil {
+			return fmt.Errorf("failed to unmarshal response: %v", err)
+		}
+	}
+	return nil
 }
 
 // CallContractMethod makes a qrl_call to a contract method and returns the result
@@ -40,66 +101,29 @@ func CallContractMethod(contractAddress string, methodSig string) (string, error
 	// Ensure contract address has Q prefix for QRL RPC
 	contractAddress = validation.ConvertToQAddress(contractAddress)
 
-	group := models.JsonRPC{
-		Jsonrpc: "2.0",
-		Method:  "qrl_call",
-		Params: []interface{}{
-			map[string]string{
-				"to":   contractAddress,
-				"data": methodSig,
-			},
-			"latest",
-		},
-		ID: 1,
-	}
-
-	b, err := json.Marshal(group)
-	if err != nil {
-		zap.L().Error("Failed to marshal JSON for contract call",
-			zap.String("contractAddress", contractAddress),
-			zap.Error(err))
-		return "", fmt.Errorf("failed to marshal JSON: %v", err)
-	}
-
-	zap.L().Debug("Sending RPC request",
-		zap.String("url", Endpoints().CurrentURL()),
-		zap.String("method", "qrl_call"))
-
-	body, err := DoNodeRPC(b)
-	if err != nil {
-		zap.L().Error("Failed to execute HTTP request for contract call",
-			zap.String("contractAddress", contractAddress),
-			zap.Error(err))
-		return "", fmt.Errorf("failed to execute request: %v", err)
-	}
-
-	// Log full response for debugging
-	zap.L().Debug("Received contract call response",
-		zap.String("contractAddress", contractAddress),
-		zap.String("response", string(body)))
-
 	var result struct {
-		Jsonrpc string
-		ID      int
-		Result  string
-		Error   *struct {
-			Code    int
-			Message string
+		Result string
+	}
+	err := rpcCall("qrl_call", []interface{}{
+		map[string]string{
+			"to":   contractAddress,
+			"data": methodSig,
+		},
+		"latest",
+	}, &result)
+	if err != nil {
+		var rpcErr *RPCError
+		if errors.As(err, &rpcErr) {
+			zap.L().Error("RPC error in contract call",
+				zap.String("contractAddress", contractAddress),
+				zap.Int("errorCode", rpcErr.Code),
+				zap.String("errorMessage", rpcErr.Message))
+		} else {
+			zap.L().Error("Failed to execute contract call",
+				zap.String("contractAddress", contractAddress),
+				zap.Error(err))
 		}
-	}
-	if err := json.Unmarshal(body, &result); err != nil {
-		zap.L().Error("Failed to unmarshal response from contract call",
-			zap.String("contractAddress", contractAddress),
-			zap.Error(err))
-		return "", fmt.Errorf("failed to unmarshal response: %v", err)
-	}
-
-	if result.Error != nil {
-		zap.L().Error("RPC error in contract call",
-			zap.String("contractAddress", contractAddress),
-			zap.Int("errorCode", result.Error.Code),
-			zap.String("errorMessage", result.Error.Message))
-		return "", fmt.Errorf("RPC error: %v", result.Error.Message)
+		return "", err
 	}
 
 	// Truncate the result for logging if it's too long
@@ -120,38 +144,9 @@ func GetTransactionReceipt(txHash string) (*models.TransactionReceipt, error) {
 		return nil, fmt.Errorf("transaction hash cannot be empty")
 	}
 
-	group := models.JsonRPC{
-		Jsonrpc: "2.0",
-		Method:  "qrl_getTransactionReceipt",
-		Params:  []interface{}{txHash},
-		ID:      1,
-	}
-
-	b, err := json.Marshal(group)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %v", err)
-	}
-
-	body, err := DoNodeRPC(b)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make RPC request: %v", err)
-	}
-
-	// First unmarshal into a map to check for JSON-RPC error
-	var rawResponse map[string]interface{}
-	if err := json.Unmarshal(body, &rawResponse); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON response: %v", err)
-	}
-
-	// Check for JSON-RPC error
-	if errObj, ok := rawResponse["error"]; ok {
-		return nil, fmt.Errorf("RPC error: %v", errObj)
-	}
-
 	var receipt models.TransactionReceipt
-	if err := json.Unmarshal(body, &receipt); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal receipt: %v", err)
+	if err := rpcCall("qrl_getTransactionReceipt", []interface{}{txHash}, &receipt); err != nil {
+		return nil, err
 	}
-
 	return &receipt, nil
 }
