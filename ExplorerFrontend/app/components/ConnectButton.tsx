@@ -170,7 +170,7 @@ export default function ConnectButton({ onAccount, onProvider }: ConnectButtonPr
         <button
           type="button"
           onClick={disconnect}
-          className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-card-gradient border border-border hover:border-accent text-xs text-gray-300 hover:text-accent transition-colors"
+          className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-card-gradient border border-border hover:border-accent text-xs text-text-secondary hover:text-accent transition-colors"
         >
           Disconnect
         </button>
@@ -183,7 +183,7 @@ export default function ConnectButton({ onAccount, onProvider }: ConnectButtonPr
       <button
         type="button"
         onClick={openPairing}
-        className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-accent text-black text-xs font-medium hover:bg-accent-hover transition-colors"
+        className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-accent text-background text-xs font-medium hover:bg-accent-hover transition-colors"
       >
         Connect Wallet
       </button>
@@ -200,18 +200,18 @@ export default function ConnectButton({ onAccount, onProvider }: ConnectButtonPr
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-sm md:text-base font-semibold text-gray-200">Pair MyQRLWallet</h3>
+              <h3 className="text-sm md:text-base font-semibold text-text-primary">Pair MyQRLWallet</h3>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="text-xs text-gray-400 hover:text-gray-200"
+                className="text-xs text-text-secondary hover:text-text-primary"
                 aria-label="Close"
               >
                 ✕
               </button>
             </div>
 
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-text-secondary">
               Scan the QR with MyQRLWallet (mobile) or tap the URI to deep-link if you&apos;re on a phone.
             </p>
 
@@ -221,18 +221,18 @@ export default function ConnectButton({ onAccount, onProvider }: ConnectButtonPr
                   <QRCodeCanvas value={uri} size={224} level="M" />
                 </div>
               ) : (
-                <div className="h-[248px] w-[248px] flex items-center justify-center text-xs text-gray-500">
+                <div className="h-[248px] w-[248px] flex items-center justify-center text-xs text-text-muted">
                   Generating QR…
                 </div>
               )}
             </div>
 
-            <div className="text-[10px] text-gray-500 font-mono break-all">
+            <div className="text-[10px] text-text-muted font-mono break-all">
               {uri ?? ''}
             </div>
 
             <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-400">{STATUS_LABEL[status]}</span>
+              <span className="text-text-secondary">{STATUS_LABEL[status]}</span>
               <button
                 type="button"
                 onClick={newConnection}

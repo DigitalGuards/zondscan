@@ -197,7 +197,7 @@ export default function VerifyContractClient(): JSX.Element {
         <div className={`rounded-lg border p-3 text-xs md:text-sm ${
           job.status === 'success' ? 'border-green-500/40 bg-green-500/10 text-green-300' :
           job.status === 'failed' ? 'border-red-500/40 bg-red-500/10 text-red-300' :
-          'border-border bg-card-gradient text-gray-300'
+          'border-border bg-card-gradient text-text-secondary'
         }`}>
           <div className="font-medium">
             {job.status === 'pending' && 'Queued…'}
@@ -273,7 +273,7 @@ export default function VerifyContractClient(): JSX.Element {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
           <Field label="Optimizer">
-            <label className="flex items-center gap-2 text-sm text-gray-200">
+            <label className="flex items-center gap-2 text-sm text-text-primary">
               <input
                 type="checkbox"
                 checked={optimizerEnabled}
@@ -349,7 +349,7 @@ export default function VerifyContractClient(): JSX.Element {
         <button
           type="submit"
           disabled={submitting || (job?.status === 'pending' || job?.status === 'compiling')}
-          className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-accent text-black text-sm font-medium hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-accent text-background text-sm font-medium hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {submitting ? 'Submitting…' : 'Verify & Publish'}
         </button>
@@ -361,9 +361,9 @@ export default function VerifyContractClient(): JSX.Element {
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-xs md:text-sm text-gray-400 mb-1">{label}</div>
+      <div className="text-xs md:text-sm text-text-secondary mb-1">{label}</div>
       {children}
-      {hint && <div className="text-[11px] text-gray-500 mt-1">{hint}</div>}
+      {hint && <div className="text-[11px] text-text-muted mt-1">{hint}</div>}
     </div>
   );
 }

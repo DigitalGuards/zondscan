@@ -109,27 +109,27 @@ export default function NftsPanel({ address, onLoaded }: NftsPanelProps): JSX.El
                     alt=""
                     width={40}
                     height={40}
-                    className="w-10 h-10 rounded-md object-cover bg-[#1a1a1a]"
+                    className="w-10 h-10 rounded-md object-cover bg-background"
                     fallback={
-                      <div className="w-10 h-10 rounded-md bg-[#1a1a1a] border border-[#3d3d3d] flex items-center justify-center text-xs font-mono text-gray-500">
+                      <div className="w-10 h-10 rounded-md bg-background border border-border flex items-center justify-center text-xs font-mono text-text-muted">
                         {(r.tokenID || '?').slice(0, 3)}
                       </div>
                     }
                   />
                 ) : (
-                  <div className="w-10 h-10 rounded-md bg-[#1a1a1a] border border-[#3d3d3d] flex items-center justify-center text-xs font-mono text-gray-500">
+                  <div className="w-10 h-10 rounded-md bg-background border border-border flex items-center justify-center text-xs font-mono text-text-muted">
                     {(r.tokenID || '?').slice(0, 3)}
                   </div>
                 )}
                 <div className="min-w-0">
                   <Link
                     href={`/address/${r.contractAddress}`}
-                    className="text-sm text-[#ffa729] hover:text-[#ffb954] transition-colors font-medium break-all"
+                    className="text-sm text-accent hover:text-accent-hover transition-colors font-medium break-all"
                     title={r.contractAddress}
                   >
                     {collectionLabel}
                   </Link>
-                  <div className="text-xs text-gray-400 font-mono break-all">
+                  <div className="text-xs text-text-secondary font-mono break-all">
                     {tokenLabel}
                     {r.name && r.tokenID && ` (#${r.tokenID})`}
                   </div>
@@ -156,7 +156,7 @@ export default function NftsPanel({ address, onLoaded }: NftsPanelProps): JSX.El
             <div className="flex items-center gap-2">
               <Badge variant="warning">{standardBadge}</Badge>
               {r.tokenStandard === 'ERC-1155' && (
-                <span className="text-sm font-mono text-gray-200">x{qty}</span>
+                <span className="text-sm font-mono text-text-primary">x{qty}</span>
               )}
             </div>
           );
@@ -178,33 +178,33 @@ export default function NftsPanel({ address, onLoaded }: NftsPanelProps): JSX.El
   });
 
   if (loading && !loaded) {
-    return <div className="p-8 text-center text-gray-400">Loading NFTs...</div>;
+    return <div className="p-8 text-center text-text-secondary">Loading NFTs...</div>;
   }
   if (error) {
-    return <div className="p-8 text-center text-red-400">{error}</div>;
+    return <div className="p-8 text-center text-error">{error}</div>;
   }
   if (loaded && rows.length === 0) {
-    return <div className="p-8 text-center text-gray-400">No NFTs held by this address.</div>;
+    return <div className="p-8 text-center text-text-secondary">No NFTs held by this address.</div>;
   }
 
   return (
     <div className="w-full">
-      <div className="p-4 border-b border-[#3d3d3d]">
+      <div className="p-4 border-b border-border">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="text-sm text-gray-400">
+          <div className="text-sm text-text-secondary">
             {rows.length} NFT{rows.length === 1 ? '' : 's'} held
           </div>
           <DebouncedInput
             value={filter}
             onChange={(v) => setFilter(String(v))}
-            className="px-4 py-2 text-sm bg-[#1a1a1a] border border-[#3d3d3d] rounded-lg focus:outline-none focus:border-[#ffa729] text-white w-full md:w-auto"
+            className="px-4 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:border-accent text-text-primary w-full md:w-auto"
             placeholder="Search by collection, tokenID, address"
           />
         </div>
       </div>
 
       {table.getRowModel().rows.length === 0 ? (
-        <div className="p-6 text-center text-sm text-gray-400">No NFTs match your search.</div>
+        <div className="p-6 text-center text-sm text-text-secondary">No NFTs match your search.</div>
       ) : (
         <div className="overflow-x-auto">
           <table aria-label="NFT holdings table" className="w-full">

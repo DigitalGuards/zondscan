@@ -196,7 +196,7 @@ export default function FaucetClient(): JSX.Element {
   // an ambiguous half-loaded state.
   if (loadingStatus) {
     return (
-      <div className="max-w-[1200px] mx-auto p-8 flex justify-center items-center min-h-[400px]">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 flex justify-center items-center min-h-[400px]">
         <div className="animate-spin h-8 w-8 border-4 border-accent border-t-transparent rounded-full" />
       </div>
     );
@@ -205,7 +205,7 @@ export default function FaucetClient(): JSX.Element {
   const disabled = status !== null && !status.configured;
 
   return (
-    <div className="max-w-[1200px] mx-auto p-8">
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
       {status?.captchaEnabled && (
         <Script
           src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
@@ -213,8 +213,8 @@ export default function FaucetClient(): JSX.Element {
         />
       )}
       <div className="flex flex-col items-center justify-center">
-        <h2 className="text-2xl font-bold mb-2 text-accent">QRL 2.0 Testnet Faucet</h2>
-        <p className="text-gray-400 mb-8 text-center max-w-md">
+        <h2 className="section-title mb-2">QRL 2.0 Testnet Faucet</h2>
+        <p className="text-text-secondary mb-8 text-center max-w-md">
           Get free testnet QRL to experiment with transactions, contracts, and tooling.
           {status && (
             <>
@@ -224,7 +224,7 @@ export default function FaucetClient(): JSX.Element {
           )}
         </p>
 
-        <div className="w-full max-w-md bg-card-gradient p-8 rounded-lg border border-border shadow-xl">
+        <div className="w-full max-w-md card p-8">
           {disabled ? (
             <div role="alert" className="w-full p-4 bg-background rounded-lg border border-yellow-500/40 text-center">
               <div className="text-sm text-yellow-300">
@@ -236,7 +236,7 @@ export default function FaucetClient(): JSX.Element {
               <div className="relative w-full">
                 <input
                   aria-label="QRL address"
-                  className="w-full px-4 py-3 bg-background text-white rounded-lg border border-border focus:outline-none focus:border-accent transition-all duration-300"
+                  className="w-full px-4 py-3 bg-background text-text-primary rounded-lg border border-border focus:outline-none focus:border-accent transition-all duration-300"
                   type="text"
                   value={address}
                   onChange={handleAddressChange}
@@ -251,7 +251,7 @@ export default function FaucetClient(): JSX.Element {
 
               {result && (
                 <div role="status" className="w-full p-4 bg-background rounded-lg border border-green-500/40">
-                  <div className="text-sm text-gray-400">
+                  <div className="text-sm text-text-secondary">
                     {result.amount} QRL broadcast to your address
                   </div>
                   <Link
@@ -260,7 +260,7 @@ export default function FaucetClient(): JSX.Element {
                   >
                     {result.txHash}
                   </Link>
-                  <div className="mt-1 text-xs text-gray-400">
+                  <div className="mt-1 text-xs text-text-secondary">
                     Transaction is pending: it should confirm within a minute.
                   </div>
                 </div>
@@ -268,18 +268,18 @@ export default function FaucetClient(): JSX.Element {
 
               {error && (
                 <div role="alert" className="w-full p-4 bg-background rounded-lg border border-red-500/50">
-                  <div className="text-sm text-red-400">{error}</div>
+                  <div className="text-sm text-error">{error}</div>
                 </div>
               )}
 
               <button
                 type="submit"
                 disabled={isLoading || (status?.captchaEnabled === true && !captchaToken)}
-                className="w-full px-6 py-3 bg-gradient-to-r from-accent to-accent-hover text-white font-bold rounded-lg hover:from-accent-hover hover:to-accent transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+                className="w-full px-6 py-3 bg-accent text-background font-semibold rounded-lg hover:bg-accent-hover hover:shadow-glow-accent transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
               >
                 {isLoading ? (
                   <div className="flex items-center justify-center">
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-background" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>

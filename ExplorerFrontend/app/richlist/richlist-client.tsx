@@ -32,10 +32,10 @@ export default function RichlistClient({ richlist }: RichlistProps): JSX.Element
       {safeRichlist.map((item, index) => (
         <div
           key={item.id}
-          className="p-4 rounded-lg border border-[#3d3d3d] bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f]"
+          className="p-4 rounded-lg border border-border bg-card-gradient"
         >
           <div className="flex items-center mb-3">
-            <div className="flex items-center text-gray-300">
+            <div className="flex items-center text-text-secondary">
               {index === 0 && (
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -57,17 +57,17 @@ export default function RichlistClient({ richlist }: RichlistProps): JSX.Element
           </div>
           <div className="space-y-2">
             <div>
-              <span className="text-[#ffa729] text-sm">Address:</span>
+              <span className="text-accent text-sm">Address:</span>
               <Link
                 href={`/address/${item.id}`}
-                className="ml-2 text-white hover:text-[#ffa729] text-sm break-all"
+                className="ml-2 text-text-primary hover:text-accent text-sm break-all"
               >
                 {item.id}
               </Link>
             </div>
             <div>
-              <span className="text-[#ffa729] text-sm">Balance:</span>
-              <span className="ml-2 text-white text-sm">
+              <span className="text-accent text-sm">Balance:</span>
+              <span className="ml-2 text-text-primary text-sm">
                 {toFixed(item.balance)} QRL
               </span>
             </div>
@@ -81,25 +81,25 @@ export default function RichlistClient({ richlist }: RichlistProps): JSX.Element
     <div className="overflow-x-auto">
       <table aria-label="Top addresses by balance" className="min-w-full">
         <thead>
-          <tr className="border-b border-[#3d3d3d]">
-            <th scope="col" className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">
+          <tr className="border-b border-border">
+            <th scope="col" className="table-header">
               Rank
             </th>
-            <th scope="col" className="px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm font-medium text-[#ffa729]">
+            <th scope="col" className="table-header">
               Address
             </th>
-            <th scope="col" className="px-3 md:px-6 py-3 md:py-4 text-right text-xs md:text-sm font-medium text-[#ffa729]">
+            <th scope="col" className="px-3 md:px-6 py-3 md:py-4 text-right text-[11px] font-medium uppercase tracking-[0.12em] text-text-muted">
               Balance
             </th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-[#3d3d3d]">
+        <tbody className="divide-y divide-border">
           {safeRichlist.map((item, index) => (
             <tr
               key={item.id}
-              className="border-b border-[#3d3d3d] hover:bg-[rgba(255,167,41,0.05)] transition-colors"
+              className="border-b border-border hover:bg-surface transition-colors"
             >
-              <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300">
+              <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-text-secondary">
                 <div className="flex items-center">
                   {index === 0 && (
                     <svg
@@ -123,12 +123,12 @@ export default function RichlistClient({ richlist }: RichlistProps): JSX.Element
               <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap">
                 <Link
                   href={`/address/${item.id}`}
-                  className="text-[#ffa729] hover:text-[#ffb954] transition-colors text-sm"
+                  className="text-accent hover:text-accent-hover transition-colors text-sm"
                 >
                   {item.id}
                 </Link>
               </td>
-              <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-right text-gray-300 text-sm">
+              <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-right text-text-secondary text-sm">
                 {toFixed(item.balance)} QRL
               </td>
             </tr>
@@ -140,19 +140,19 @@ export default function RichlistClient({ richlist }: RichlistProps): JSX.Element
 
   return (
     <div className="min-h-screen">
-      <div className="max-w-[1200px] mx-auto p-4 md:p-8">
+      <div className="page-content py-4 md:py-8">
         <div className="mb-6 md:mb-8">
-          <h1 className="text-xl md:text-2xl font-bold text-[#ffa729]">Richlist</h1>
-          <p className="text-sm md:text-base text-gray-400 mt-2">
+          <h1 className="section-title">Richlist</h1>
+          <p className="text-sm md:text-base text-text-secondary mt-2">
             Top 50 QRL holders by balance
           </p>
         </div>
 
-        <div className="rounded-lg border border-[#3d3d3d] bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] shadow-xl">
+        <div className="card">
           {windowWidth < 768 ? renderMobileView() : renderDesktopView()}
         </div>
 
-        <div className="mt-4 md:mt-6 text-center text-xs md:text-sm text-gray-400">
+        <div className="mt-4 md:mt-6 text-center text-xs md:text-sm text-text-secondary">
           Note: This list is updated every block
         </div>
       </div>

@@ -89,13 +89,13 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-6 lg:py-8">
         <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-gray-700 rounded w-1/3"></div>
-          <div className="bg-[#2d2d2d] rounded-xl p-6 space-y-4">
-            <div className="h-6 bg-gray-700 rounded w-2/3"></div>
-            <div className="h-6 bg-gray-700 rounded w-1/2"></div>
-            <div className="h-6 bg-gray-700 rounded w-3/4"></div>
+          <div className="h-8 bg-surface-2 rounded w-1/3"></div>
+          <div className="bg-surface-2 rounded-xl p-6 space-y-4">
+            <div className="h-6 bg-surface-2 rounded w-2/3"></div>
+            <div className="h-6 bg-surface-2 rounded w-1/2"></div>
+            <div className="h-6 bg-surface-2 rounded w-3/4"></div>
           </div>
         </div>
       </div>
@@ -104,13 +104,13 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
 
   if (error) {
     return (
-      <div className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-6 lg:py-8">
         <div className="bg-red-900/20 border border-red-800 rounded-xl p-6 text-center">
-          <h2 className="text-xl font-semibold text-red-400 mb-2">Error</h2>
-          <p className="text-gray-400">{error}</p>
+          <h2 className="text-xl font-semibold text-error mb-2">Error</h2>
+          <p className="text-text-secondary">{error}</p>
           <button
             onClick={() => router.back()}
-            className="mt-4 px-4 py-2 bg-[#2d2d2d] border border-[#3d3d3d] rounded-lg text-gray-300 hover:border-[#ffa729]"
+            className="mt-4 px-4 py-2 bg-surface-2 border border-border rounded-lg text-text-secondary hover:border-accent"
           >
             Go Back
           </button>
@@ -133,11 +133,11 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
   const [amount, unit] = formatValidatorBalance(validator.effectiveBalance);
 
   return (
-    <div className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-6 lg:py-8">
       {/* Back Button */}
       <Link
         href="/validators"
-        className="inline-flex items-center text-gray-400 hover:text-[#ffa729] mb-6"
+        className="inline-flex items-center text-text-secondary hover:text-accent mb-6"
       >
         <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -148,10 +148,10 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-[#ffa729]">
+          <h1 className="section-title">
             Validator #{validator.index}
           </h1>
-          <p className="text-gray-400 mt-1">
+          <p className="text-text-secondary mt-1">
             Current Epoch: {parseInt(validator.currentEpoch).toLocaleString()}
           </p>
         </div>
@@ -165,27 +165,27 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
 
       {/* Key Info Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4">
-          <h3 className="text-sm font-medium text-gray-400 mb-1">Effective Balance</h3>
-          <p className="text-xl font-semibold text-[#ffa729]">{amount} {unit}</p>
+        <div className="card p-4">
+          <h3 className="text-sm font-medium text-text-secondary mb-1">Effective Balance</h3>
+          <p className="font-display text-xl font-semibold text-text-primary">{amount} {unit}</p>
         </div>
-        <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4">
-          <h3 className="text-sm font-medium text-gray-400 mb-1">Age</h3>
-          <p className="text-xl font-semibold text-gray-200">
+        <div className="card p-4">
+          <h3 className="text-sm font-medium text-text-secondary mb-1">Age</h3>
+          <p className="text-xl font-semibold text-text-primary">
             {epochsToDays(validator.age).toFixed(1)} days
           </p>
-          <p className="text-sm text-gray-500">{validator.age.toLocaleString()} epochs</p>
+          <p className="text-sm text-text-muted">{validator.age.toLocaleString()} epochs</p>
         </div>
-        <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4">
-          <h3 className="text-sm font-medium text-gray-400 mb-1">Activation Epoch</h3>
-          <p className="text-xl font-semibold text-green-400">
+        <div className="card p-4">
+          <h3 className="text-sm font-medium text-text-secondary mb-1">Activation Epoch</h3>
+          <p className="text-xl font-semibold text-success">
             {formatEpoch(validator.activationEpoch)}
           </p>
         </div>
-        <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-4">
-          <h3 className="text-sm font-medium text-gray-400 mb-1">Exit Epoch</h3>
+        <div className="card p-4">
+          <h3 className="text-sm font-medium text-text-secondary mb-1">Exit Epoch</h3>
           <p className={`text-xl font-semibold ${
-            validator.exitEpoch === FAR_FUTURE_EPOCH ? 'text-gray-500' : 'text-red-400'
+            validator.exitEpoch === FAR_FUTURE_EPOCH ? 'text-text-muted' : 'text-error'
           }`}>
             {formatEpoch(validator.exitEpoch)}
           </p>
@@ -193,17 +193,17 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
       </div>
 
       {/* Details Section */}
-      <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] overflow-hidden">
-        <div className="p-4 border-b border-[#3d3d3d]">
-          <h2 className="text-lg font-semibold text-[#ffa729]">Validator Details</h2>
+      <div className="card overflow-hidden">
+        <div className="p-4 border-b border-border">
+          <h2 className="font-display text-lg font-semibold text-text-primary">Validator Details</h2>
         </div>
-        <div className="divide-y divide-[#3d3d3d]">
+        <div className="divide-y divide-border">
           {/* Public Key */}
           <div className="p-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <span className="text-sm text-gray-400">Public Key</span>
+              <span className="text-sm text-text-secondary">Public Key</span>
               <div className="flex items-center gap-2">
-                <code className="text-sm text-gray-300 font-mono break-all">
+                <code className="text-sm text-text-secondary font-mono break-all">
                   {validator.publicKeyHex}
                 </code>
                 <CopyButton value={validator.publicKeyHex} label="Copy public key" size="sm" />
@@ -214,9 +214,9 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
           {/* Withdrawal Credentials */}
           <div className="p-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <span className="text-sm text-gray-400">Withdrawal Credentials</span>
+              <span className="text-sm text-text-secondary">Withdrawal Credentials</span>
               <div className="flex items-center gap-2">
-                <code className="text-sm text-gray-300 font-mono break-all">
+                <code className="text-sm text-text-secondary font-mono break-all">
                   {validator.withdrawalCredentialsHex}
                 </code>
                 <CopyButton value={validator.withdrawalCredentialsHex} label="Copy withdrawal credentials" size="sm" />
@@ -226,45 +226,45 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
 
           {/* Epoch Timeline */}
           <div className="p-4">
-            <h3 className="text-sm font-medium text-gray-400 mb-4">Epoch Timeline</h3>
+            <h3 className="text-sm font-medium text-text-secondary mb-4">Epoch Timeline</h3>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-blue-400"></div>
-                  <span className="text-gray-300">Activation Eligibility</span>
+                  <span className="text-text-secondary">Activation Eligibility</span>
                 </div>
-                <span className="text-gray-400 font-mono">
+                <span className="text-text-secondary font-mono">
                   Epoch {formatEpoch(validator.activationEligibilityEpoch)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-green-400"></div>
-                  <span className="text-gray-300">Activation</span>
+                  <span className="text-text-secondary">Activation</span>
                 </div>
-                <span className="text-gray-400 font-mono">
+                <span className="text-text-secondary font-mono">
                   Epoch {formatEpoch(validator.activationEpoch)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${
-                    validator.exitEpoch === FAR_FUTURE_EPOCH ? 'bg-gray-600' : 'bg-red-400'
+                    validator.exitEpoch === FAR_FUTURE_EPOCH ? 'bg-surface-3' : 'bg-red-400'
                   }`}></div>
-                  <span className="text-gray-300">Exit</span>
+                  <span className="text-text-secondary">Exit</span>
                 </div>
-                <span className="text-gray-400 font-mono">
+                <span className="text-text-secondary font-mono">
                   {validator.exitEpoch === FAR_FUTURE_EPOCH ? 'Not scheduled' : `Epoch ${formatEpoch(validator.exitEpoch)}`}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${
-                    validator.withdrawableEpoch === FAR_FUTURE_EPOCH ? 'bg-gray-600' : 'bg-purple-400'
+                    validator.withdrawableEpoch === FAR_FUTURE_EPOCH ? 'bg-surface-3' : 'bg-purple-400'
                   }`}></div>
-                  <span className="text-gray-300">Withdrawable</span>
+                  <span className="text-text-secondary">Withdrawable</span>
                 </div>
-                <span className="text-gray-400 font-mono">
+                <span className="text-text-secondary font-mono">
                   {validator.withdrawableEpoch === FAR_FUTURE_EPOCH ? 'Not scheduled' : `Epoch ${formatEpoch(validator.withdrawableEpoch)}`}
                 </span>
               </div>

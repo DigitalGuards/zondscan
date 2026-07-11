@@ -97,13 +97,13 @@ export default function TokensPanel({ address, onLoaded }: TokensPanelProps): JS
             <div className="min-w-0">
               <Link
                 href={`/address/${r.contractAddress}`}
-                className="text-sm text-[#ffa729] hover:text-[#ffb954] transition-colors font-medium break-all"
+                className="text-sm text-accent hover:text-accent-hover transition-colors font-medium break-all"
                 title={r.contractAddress}
               >
                 {label}
               </Link>
               {r.symbol && r.symbol !== r.name && (
-                <span className="text-gray-500 ml-2 font-mono text-xs">({r.symbol})</span>
+                <span className="text-text-muted ml-2 font-mono text-xs">({r.symbol})</span>
               )}
             </div>
           );
@@ -116,9 +116,9 @@ export default function TokensPanel({ address, onLoaded }: TokensPanelProps): JS
           const r = info.row.original;
           const formatted = formatTokenAmount(r.balance, r.decimals ?? 18);
           return (
-            <span className="text-sm font-mono text-gray-200 break-all">
+            <span className="text-sm font-mono text-text-primary break-all">
               {formatted}
-              {r.symbol && <span className="text-gray-500 ml-2">{r.symbol}</span>}
+              {r.symbol && <span className="text-text-muted ml-2">{r.symbol}</span>}
             </span>
           );
         },
@@ -139,33 +139,33 @@ export default function TokensPanel({ address, onLoaded }: TokensPanelProps): JS
   });
 
   if (loading && !loaded) {
-    return <div className="p-8 text-center text-gray-400">Loading tokens...</div>;
+    return <div className="p-8 text-center text-text-secondary">Loading tokens...</div>;
   }
   if (error) {
-    return <div className="p-8 text-center text-red-400">{error}</div>;
+    return <div className="p-8 text-center text-error">{error}</div>;
   }
   if (loaded && rows.length === 0) {
-    return <div className="p-8 text-center text-gray-400">No tokens held by this address.</div>;
+    return <div className="p-8 text-center text-text-secondary">No tokens held by this address.</div>;
   }
 
   return (
     <div className="w-full">
-      <div className="p-4 border-b border-[#3d3d3d]">
+      <div className="p-4 border-b border-border">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="text-sm text-gray-400">
+          <div className="text-sm text-text-secondary">
             {rows.length} QRC-20 token{rows.length === 1 ? '' : 's'} held
           </div>
           <DebouncedInput
             value={filter}
             onChange={(v) => setFilter(String(v))}
-            className="px-4 py-2 text-sm bg-[#1a1a1a] border border-[#3d3d3d] rounded-lg focus:outline-none focus:border-[#ffa729] text-white w-full md:w-auto"
+            className="px-4 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:border-accent text-text-primary w-full md:w-auto"
             placeholder="Search by name, symbol, address"
           />
         </div>
       </div>
 
       {table.getRowModel().rows.length === 0 ? (
-        <div className="p-6 text-center text-sm text-gray-400">No tokens match your search.</div>
+        <div className="p-6 text-center text-sm text-text-secondary">No tokens match your search.</div>
       ) : (
         <div className="overflow-x-auto">
           <table aria-label="Token holdings table" className="w-full">

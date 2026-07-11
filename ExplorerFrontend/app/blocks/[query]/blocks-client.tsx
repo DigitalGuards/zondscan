@@ -60,47 +60,47 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
   };
 
   return (
-    <div className="p-4 sm:p-8 max-w-6xl mx-auto">
-      <h1 className="text-xl sm:text-2xl font-bold mb-4 text-[#ffa729]">Blocks</h1>
+    <div className="py-4 sm:py-6 lg:py-8">
+      <h1 className="section-title mb-4">Blocks</h1>
 
       <div className="mb-6">
         <SearchBar />
       </div>
 
-      <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden mb-6">
+      <div className="card-simple overflow-hidden mb-6">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-[#2a2a2a]">
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Block</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden sm:table-cell">Hash</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Txns</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden lg:table-cell">Activity</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Time</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden md:table-cell">Gas Used</th>
+              <tr className="border-b border-border">
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Block</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">Hash</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Txns</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden lg:table-cell">Activity</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Time</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:table-cell">Gas Used</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 Array.from({ length: ITEMS_PER_PAGE }).map((_, i) => (
-                  <tr key={i} className="border-b border-[#2a2a2a] last:border-b-0">
-                    <td className="px-4 py-3"><div className="h-4 w-16 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                    <td className="px-4 py-3 hidden sm:table-cell"><div className="h-4 w-24 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                    <td className="px-4 py-3"><div className="h-4 w-8 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                    <td className="px-4 py-3 hidden lg:table-cell"><div className="h-4 w-20 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                    <td className="px-4 py-3"><div className="h-4 w-16 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                    <td className="px-4 py-3 hidden md:table-cell"><div className="h-4 w-16 bg-[#2a2a2a] rounded animate-pulse" /></td>
+                  <tr key={i} className="border-b border-border last:border-b-0">
+                    <td className="px-4 py-3"><div className="h-4 w-16 skeleton" /></td>
+                    <td className="px-4 py-3 hidden sm:table-cell"><div className="h-4 w-24 skeleton" /></td>
+                    <td className="px-4 py-3"><div className="h-4 w-8 skeleton" /></td>
+                    <td className="px-4 py-3 hidden lg:table-cell"><div className="h-4 w-20 skeleton" /></td>
+                    <td className="px-4 py-3"><div className="h-4 w-16 skeleton" /></td>
+                    <td className="px-4 py-3 hidden md:table-cell"><div className="h-4 w-16 skeleton" /></td>
                   </tr>
                 ))
               ) : isError ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-red-400">
+                  <td colSpan={6} className="px-4 py-12 text-center text-error">
                     {error instanceof Error ? error.message : 'Failed to load blocks'}
                   </td>
                 </tr>
               ) : !data?.blocks?.length ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
+                  <td colSpan={6} className="px-4 py-12 text-center text-text-muted">
                     No blocks found.
                   </td>
                 </tr>
@@ -114,46 +114,46 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
                   return (
                     <tr
                       key={block.number}
-                      className="border-b border-[#2a2a2a] last:border-b-0 hover:bg-[#252525] transition-colors"
+                      className="border-b border-border last:border-b-0 hover:bg-surface transition-colors"
                     >
                       <td className="px-4 py-3">
                         <Link
                           href={`/block/${blockNum}?from=blocks&page=${currentPage}`}
-                          className="text-[#ffa729] hover:text-[#ffb954] hover:underline font-medium tabular-nums"
+                          className="text-accent hover:text-accent-hover hover:underline font-medium tabular-nums"
                         >
                           {blockNum.toLocaleString()}
                         </Link>
                       </td>
                       <td className="px-4 py-3 hidden sm:table-cell">
-                        <span className="text-gray-400 font-mono text-xs" title={block.hash}>
+                        <span className="text-text-secondary font-mono text-xs" title={block.hash}>
                           {truncateHash(block.hash, 10, 6)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-gray-300 tabular-nums">
+                      <td className="px-4 py-3 text-text-secondary tabular-nums">
                         {block.transactions?.length ?? 0}
                       </td>
                       <td className="px-4 py-3 hidden lg:table-cell whitespace-nowrap">
                         {activity ? (
                           <span className="text-xs font-mono flex items-center gap-2">
                             {activity.tokenTransfers > 0 && (
-                              <span className="text-[#ffa729]" title="Token / NFT transfers across this block's txs">
+                              <span className="text-accent" title="Token / NFT transfers across this block's txs">
                                 {activity.tokenTransfers} token{activity.tokenTransfers === 1 ? '' : 's'}
                               </span>
                             )}
                             {activity.internalCalls > 0 && (
-                              <span className="text-gray-400" title="Internal contract calls across this block's txs">
+                              <span className="text-text-secondary" title="Internal contract calls across this block's txs">
                                 {activity.internalCalls} call{activity.internalCalls === 1 ? '' : 's'}
                               </span>
                             )}
                           </span>
                         ) : (
-                          <span className="text-gray-600 text-xs">-</span>
+                          <span className="text-text-muted text-xs">-</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-gray-400 tabular-nums">
+                      <td className="px-4 py-3 text-text-secondary tabular-nums">
                         {timeAgo(block.timestamp)}
                       </td>
-                      <td className="px-4 py-3 text-gray-400 tabular-nums hidden md:table-cell">
+                      <td className="px-4 py-3 text-text-secondary tabular-nums hidden md:table-cell">
                         {block.gasUsed ? parseInt(block.gasUsed, 16).toLocaleString() : '0'}
                       </td>
                     </tr>

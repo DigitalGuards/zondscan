@@ -51,15 +51,15 @@ export default function TabPillBar<T extends string>({
             aria-controls={withPanelIds ? `tabpanel-${tab.key}` : undefined}
             onClick={() => onSelect(tab.key)}
             type="button"
-            className={`whitespace-nowrap shrink-0 rounded-lg px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-medium transition-colors ${
+            className={`whitespace-nowrap shrink-0 rounded-lg px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-medium border transition-colors ${
               active
-                ? 'bg-[#ffa729] text-black'
-                : 'bg-[#2d2d2d] text-gray-300 hover:bg-[#3d3d3d] hover:text-white'
+                ? 'bg-accent text-background border-accent font-semibold'
+                : 'bg-surface-2 text-text-secondary border-border hover:bg-surface-3 hover:text-text-primary'
             }`}
           >
             {tab.label}
             {tab.badge != null && (
-              <span className={`ml-1 text-xs ${active ? 'text-black/60' : 'opacity-75'}`}>
+              <span className={`ml-1 text-xs ${active ? 'text-background/60' : 'opacity-75'}`}>
                 ({tab.badge})
               </span>
             )}

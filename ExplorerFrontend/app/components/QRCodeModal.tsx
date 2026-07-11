@@ -97,7 +97,7 @@ function ModalContent({ address, displayAddress, qrAddress, onClose }: ModalCont
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
         onClick={onClose}
       />
 
@@ -107,14 +107,14 @@ function ModalContent({ address, displayAddress, qrAddress, onClose }: ModalCont
         role="dialog"
         aria-modal="true"
         aria-labelledby="qrcode-modal-title"
-        className="relative bg-card-gradient rounded-xl p-6 max-w-[340px] w-full mx-4 shadow-2xl border border-border"
+        className="relative card p-6 max-w-[340px] w-full mx-4"
       >
         {/* M4: Close button label */}
         <button
           ref={closeButtonRef}
           onClick={onClose}
           aria-label="Close QR code dialog"
-          className="absolute top-2 right-2 text-gray-400 hover:text-white"
+          className="absolute top-2 right-2 text-text-secondary hover:text-text-primary"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -132,7 +132,7 @@ function ModalContent({ address, displayAddress, qrAddress, onClose }: ModalCont
               includeMargin={true}
             />
           </div>
-          <div className="text-sm text-gray-300 mb-2">
+          <div className="text-sm text-text-secondary mb-2">
             <span className="inline-block">{displayAddress}</span>
             {/* M7: Replace title with aria-label */}
             <button
@@ -145,7 +145,7 @@ function ModalContent({ address, displayAddress, qrAddress, onClose }: ModalCont
               </svg>
             </button>
           </div>
-          <p className="text-xs text-gray-400">Scan with a wallet to use this address</p>
+          <p className="text-xs text-text-secondary">Scan with a wallet to use this address</p>
         </div>
       </div>
     </div>

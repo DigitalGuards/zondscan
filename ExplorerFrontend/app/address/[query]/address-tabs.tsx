@@ -233,7 +233,7 @@ export default function AddressTabs({
         }))}
       />
 
-      <div className="overflow-hidden rounded-xl border border-[#3d3d3d]">
+      <div className="overflow-hidden rounded-xl border border-border">
         {isPanelMounted('transactions') && (
           <div
             role="tabpanel"

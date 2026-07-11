@@ -27,7 +27,7 @@ function BackToBlocksLink(): JSX.Element | null {
   return (
     <Link
       href={`/blocks/${returnPage}`}
-      className="inline-flex items-center text-gray-400 hover:text-[#ffa729] mb-4 md:mb-6"
+      className="inline-flex items-center text-text-secondary hover:text-accent mb-4 md:mb-6"
     >
       <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -204,19 +204,19 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#ffa729]"></div>
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-accent"></div>
       </div>
     );
   }
 
   if (notFound) {
     return (
-      <div className="p-4 sm:p-8 max-w-6xl mx-auto">
-        <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-lg p-6">
-          <p className="font-semibold text-[#ffa729] mb-1">Block #{Number.isFinite(blockNum) ? blockNum.toLocaleString() : blockNumber} not found</p>
-          <p className="text-sm text-gray-300">
+      <div className="py-4 sm:py-6 lg:py-8">
+        <div className="card p-6">
+          <p className="font-semibold text-accent mb-1">Block #{Number.isFinite(blockNum) ? blockNum.toLocaleString() : blockNumber} not found</p>
+          <p className="text-sm text-text-secondary">
             This block hasn&apos;t been produced (or synced) yet. Check back in a few seconds, or
-            {' '}<Link href="/blocks/1" className="text-[#ffa729] hover:underline">browse recent blocks</Link>.
+            {' '}<Link href="/blocks/1" className="text-accent hover:underline">browse recent blocks</Link>.
           </p>
         </div>
       </div>
@@ -225,7 +225,7 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
 
   if (error || !blockData) {
     return (
-      <div className="p-4 sm:p-8 max-w-6xl mx-auto">
+      <div className="py-4 sm:py-6 lg:py-8">
         <div className="bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-xl">
           <p className="font-bold">Error:</p>
           <p className="text-sm">{error || 'Block not found'}</p>
@@ -239,7 +239,7 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
     : parseInt(blockData.timestamp);
 
   return (
-    <main className="p-4 sm:p-8 max-w-6xl mx-auto" aria-labelledby="block-heading">
+    <main className="py-4 sm:py-6 lg:py-8" aria-labelledby="block-heading">
       <Breadcrumbs items={[
         { label: 'Blocks', href: '/blocks/1' },
         { label: `Block #${blockNumber}` },
@@ -250,14 +250,14 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
       </Suspense>
 
       {/* Block Details Card */}
-      <section aria-labelledby="block-heading" className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+      <section aria-labelledby="block-heading" className="card overflow-hidden mb-6">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-[#3d3d3d]">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border">
           <div className="flex items-center gap-3">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
             </svg>
-            <h1 id="block-heading" className="text-xl sm:text-2xl font-bold text-[#ffa729]">Block #{formatNumberWithCommas(hexToNumber(blockData.number).toString())}</h1>
+            <h1 id="block-heading" className="section-title">Block #{formatNumberWithCommas(hexToNumber(blockData.number).toString())}</h1>
             {/* Live depth: surfaces how settled this block is. "Latest"
                 when we're looking at the head, otherwise "N
                 confirmations". Hidden until the first /latestblock
@@ -274,14 +274,14 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
             {blockNum > 0 && (
               <Link
                 href={`/block/${blockNum - 1}`}
-                className="px-3 py-1.5 rounded-lg bg-[#1e1e1e] border border-[#3d3d3d] text-gray-300 text-sm hover:border-[#ffa729] transition-colors"
+                className="px-3 py-1.5 rounded-lg bg-surface border border-border text-text-secondary text-sm hover:border-accent transition-colors"
               >
                 &larr;
               </Link>
             )}
             <Link
               href={`/block/${blockNum + 1}`}
-              className="px-3 py-1.5 rounded-lg bg-[#1e1e1e] border border-[#3d3d3d] text-gray-300 text-sm hover:border-[#ffa729] transition-colors"
+              className="px-3 py-1.5 rounded-lg bg-surface border border-border text-text-secondary text-sm hover:border-accent transition-colors"
             >
               &rarr;
             </Link>
@@ -299,14 +299,14 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
           <DetailRow label="Parent Hash" mono>
             <Link
               href={`/block/${blockNum - 1}`}
-              className="text-gray-300 hover:text-[#ffa729] transition-colors break-all"
+              className="text-text-secondary hover:text-accent transition-colors break-all"
             >
               {blockData.parentHash}
             </Link>
           </DetailRow>
           <DetailRow label="Timestamp">
             {timeAgo(tsNum)}
-            <span className="text-gray-500 ml-2">({formatTimestampUTC(blockData.timestamp)})</span>
+            <span className="text-text-muted ml-2">({formatTimestampUTC(blockData.timestamp)})</span>
           </DetailRow>
           <DetailRow label="Transactions">
             {blockData.transactions?.length ?? 0}
@@ -331,9 +331,9 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
       </section>
 
       {/* Transactions Table */}
-      <section aria-labelledby="block-txs-heading" className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden">
-        <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
-          <h2 id="block-txs-heading" className="text-[15px] font-semibold text-[#ffa729]">
+      <section aria-labelledby="block-txs-heading" className="card overflow-hidden">
+        <div className="px-4 sm:px-6 py-4 border-b border-border">
+          <h2 id="block-txs-heading" className="text-[15px] font-display font-semibold text-text-primary">
             Transactions ({blockData.transactions?.length ?? 0})
           </h2>
         </div>
@@ -342,12 +342,12 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-[#3d3d3d]/50">
-                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Hash</th>
-                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden sm:table-cell">From</th>
-                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden sm:table-cell">To</th>
-                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Value</th>
-                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden md:table-cell">Activity</th>
+                <tr className="border-b border-border/50">
+                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Hash</th>
+                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">From</th>
+                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">To</th>
+                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Value</th>
+                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:table-cell">Activity</th>
                 </tr>
               </thead>
               <tbody>
@@ -357,12 +357,12 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
                   return (
                     <tr
                       key={tx.hash}
-                      className="border-b border-[#3d3d3d]/30 last:border-b-0 hover:bg-[#353535] transition-colors"
+                      className="border-b border-border/30 last:border-b-0 hover:bg-surface-3 transition-colors"
                     >
                       <td className="px-4 sm:px-6 py-3">
                         <Link
                           href={`/tx/${tx.hash}`}
-                          className="text-[#ffa729] hover:text-[#ffb954] hover:underline font-mono text-xs"
+                          className="text-accent hover:text-accent-hover hover:underline font-mono text-xs"
                           title={tx.hash}
                         >
                           {truncateHash(tx.hash, 10, 6)}
@@ -371,7 +371,7 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
                       <td className="px-4 sm:px-6 py-3 hidden sm:table-cell">
                         <Link
                           href={`/address/${tx.from}`}
-                          className="text-gray-400 hover:text-[#ffa729] font-mono text-xs transition-colors"
+                          className="text-text-secondary hover:text-accent font-mono text-xs transition-colors"
                           title={tx.from}
                         >
                           {truncateHash(tx.from, 8, 6)}
@@ -380,32 +380,32 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
                       <td className="px-4 sm:px-6 py-3 hidden sm:table-cell">
                         <Link
                           href={`/address/${tx.to}`}
-                          className="text-gray-400 hover:text-[#ffa729] font-mono text-xs transition-colors"
+                          className="text-text-secondary hover:text-accent font-mono text-xs transition-colors"
                           title={tx.to}
                         >
                           {truncateHash(tx.to, 8, 6)}
                         </Link>
                       </td>
-                      <td className="px-4 sm:px-6 py-3 text-gray-300 tabular-nums whitespace-nowrap">
+                      <td className="px-4 sm:px-6 py-3 text-text-secondary tabular-nums whitespace-nowrap">
                         {amount}
-                        <span className="text-gray-500 text-xs ml-1">{unit}</span>
+                        <span className="text-text-muted text-xs ml-1">{unit}</span>
                       </td>
                       <td className="px-4 sm:px-6 py-3 hidden md:table-cell whitespace-nowrap">
                         {activity ? (
-                          <span className="text-xs font-mono text-gray-300 flex items-center gap-2">
+                          <span className="text-xs font-mono text-text-secondary flex items-center gap-2">
                             {activity.tokenTransfers > 0 && (
-                              <span className="text-[#ffa729]" title="Token / NFT transfers emitted">
+                              <span className="text-accent" title="Token / NFT transfers emitted">
                                 {activity.tokenTransfers} token{activity.tokenTransfers === 1 ? '' : 's'}
                               </span>
                             )}
                             {activity.internalCalls > 0 && (
-                              <span className="text-gray-400" title="Internal contract calls">
+                              <span className="text-text-secondary" title="Internal contract calls">
                                 {activity.internalCalls} call{activity.internalCalls === 1 ? '' : 's'}
                               </span>
                             )}
                           </span>
                         ) : (
-                          <span className="text-gray-600 text-xs">-</span>
+                          <span className="text-text-muted text-xs">-</span>
                         )}
                       </td>
                     </tr>
