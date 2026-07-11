@@ -14,6 +14,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -194,5 +195,109 @@ func TestTokenQueuePriority(t *testing.T) {
 	}
 	if len(rows) != 1 || rows[0].TokenID != "10" {
 		t.Fatalf("limit=1 must return the fresh row first, got %+v", rows)
+	}
+}
+
+// TestComposeBatch locks in the per-track share arithmetic that prevents
+// one saturated track from starving the others. Pure function; lives in
+// the integration file only because the db package's configs init needs
+// MONGOURI at test start.
+func TestComposeBatch(t *testing.T) {
+	seq := func(prefix string, n int) []string {
+		out := make([]string, n)
+		for i := range out {
+			out[i] = prefix
+		}
+		return out
+	}
+	count := func(rows []string, prefix string) int {
+		n := 0
+		for _, r := range rows {
+			if r == prefix {
+				n++
+			}
+		}
+		return n
+	}
+
+	// All tracks saturated at limit 25: 13/6/6.
+	got := composeBatch(25, seq("f", 100), seq("r", 100), seq("s", 100))
+	if len(got) != 25 || count(got, "f") != 13 || count(got, "r") != 6 || count(got, "s") != 6 {
+		t.Fatalf("saturated split = %d f=%d r=%d s=%d, want 25 f=13 r=6 s=6",
+			len(got), count(got, "f"), count(got, "r"), count(got, "s"))
+	}
+
+	// Retry track saturated, no fresh: leftover flows to retry BEFORE
+	// stale, but stale keeps its guaranteed share (the starvation fix).
+	got = composeBatch(25, nil, seq("r", 100), seq("s", 100))
+	if len(got) != 25 || count(got, "r") != 19 || count(got, "s") != 6 {
+		t.Fatalf("no-fresh split = %d r=%d s=%d, want 25 r=19 s=6",
+			len(got), count(got, "r"), count(got, "s"))
+	}
+
+	// Only fresh rows: takes the whole budget.
+	got = composeBatch(25, seq("f", 100), nil, nil)
+	if len(got) != 25 || count(got, "f") != 25 {
+		t.Fatalf("fresh-only = %d, want 25 fresh", len(got))
+	}
+
+	// Fewer rows than budget: everything is returned.
+	got = composeBatch(25, seq("f", 2), seq("r", 3), seq("s", 1))
+	if len(got) != 6 {
+		t.Fatalf("under-budget = %d rows, want 6", len(got))
+	}
+
+	// Tiny limit: fresh wins by priority.
+	got = composeBatch(1, seq("f", 5), seq("r", 5), seq("s", 5))
+	if len(got) != 1 || got[0] != "f" {
+		t.Fatalf("limit=1 = %v, want [f]", got)
+	}
+
+	// Non-positive limit: empty.
+	if got = composeBatch(0, seq("f", 5), nil, nil); len(got) != 0 {
+		t.Fatalf("limit=0 returned %d rows", len(got))
+	}
+}
+
+// TestTokenQueueNoStaleStarvation reproduces the review finding: a
+// saturated retry track must not stop stale rows from being TTL-refreshed.
+func TestTokenQueueNoStaleStarvation(t *testing.T) {
+	cleanupTokens(t)
+	defer cleanupTokens(t)
+	ctx := context.Background()
+	now := time.Now()
+	coll := configs.GetCollection(configs.DB, tokenMetadataCollection)
+
+	// 30 retryable-due rows (more than the 25 batch), 1 stale row.
+	past := now.Add(-time.Minute).UTC().Format(time.RFC3339)
+	for i := 0; i < 30; i++ {
+		if _, err := coll.InsertOne(ctx, bson.M{
+			"contractAddress": itContract, "tokenID": fmt.Sprintf("r%d", i),
+			"tokenStandard": "ERC-721",
+			"fetchError":    "fetch: HTTP 504",
+			"retryCount":    3,
+			"nextRetryAt":   past,
+		}); err != nil {
+			t.Fatalf("insert retryable: %v", err)
+		}
+	}
+	if _, err := coll.InsertOne(ctx, bson.M{
+		"contractAddress": itContract, "tokenID": "stale-1",
+		"tokenStandard": "ERC-721",
+		"fetchedAt":     now.Add(-48 * time.Hour).UTC().Format(time.RFC3339),
+		"fetchError":    "",
+	}); err != nil {
+		t.Fatalf("insert stale: %v", err)
+	}
+
+	rows, err := GetTokensAwaitingMetadata(ctx, 25, now, 24*time.Hour)
+	if err != nil {
+		t.Fatalf("queue: %v", err)
+	}
+	if len(rows) != 25 {
+		t.Fatalf("batch size = %d, want 25", len(rows))
+	}
+	if ids := tokenIDs(rows); !ids["stale-1"] {
+		t.Fatal("stale row starved out of a batch dominated by retryables")
 	}
 }

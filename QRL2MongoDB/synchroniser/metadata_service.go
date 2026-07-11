@@ -44,6 +44,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -334,39 +335,52 @@ func (s *MetadataService) Stop() {
 }
 
 // tick runs one batch of metadata fetches. Errors per row are logged and
-// recorded on the contractCode document; the tick itself never fails.
+// recorded on the row; the tick itself never fails.
 //
 // Phase 3b: every tick also processes a batch of per-token metadata stubs
 // alongside the collection-level batch, sharing the same poll interval +
 // HTTP client + SSRF guard. The two work queues are independent (no
 // cross-row dependencies), so a slow contract-URI fetch doesn't block
-// per-token progress and vice versa.
+// per-token progress and vice versa. The exception is a gateway 429: it
+// aborts the whole tick (both batches), because the rate limit is shared
+// and hammering on regardless would stamp spurious failures.
 func (s *MetadataService) tick(ctx context.Context) {
-	s.tickContracts(ctx)
+	if rateLimited := s.tickContracts(ctx); rateLimited {
+		configs.Logger.Warn("metadata fetcher: skipping token batch this tick (gateway rate limited)")
+		return
+	}
 	s.tickTokens(ctx)
 }
 
-func (s *MetadataService) tickContracts(ctx context.Context) {
+// tickContracts processes one contract batch. Returns true when the batch
+// was aborted because the gateway rate-limited us.
+func (s *MetadataService) tickContracts(ctx context.Context) bool {
 	rows, err := db.GetContractsAwaitingMetadata(ctx, s.batchSize, time.Now(), s.refreshTTL)
 	if err != nil {
 		configs.Logger.Warn("metadata fetcher: failed to read contract work queue", zap.Error(err))
-		return
+		return false
 	}
 	if len(rows) == 0 {
-		return
+		return false
 	}
 	configs.Logger.Info("metadata fetcher: processing contract batch", zap.Int("rows", len(rows)))
 
-	for _, c := range rows {
+	for i, c := range rows {
 		select {
 		case <-ctx.Done():
-			return
+			return false
 		case <-s.stopCh:
-			return
+			return false
 		default:
 		}
-		s.fetchOne(ctx, c)
+		if err := s.fetchOne(ctx, c); errors.Is(err, errGatewayRateLimited) {
+			configs.Logger.Warn("metadata fetcher: contract batch aborted (gateway rate limited)",
+				zap.Int("processed", i),
+				zap.Int("batch", len(rows)))
+			return true
+		}
 	}
+	return false
 }
 
 // tickTokens runs one batch of per-tokenID metadata fetches. For each stub
@@ -385,7 +399,7 @@ func (s *MetadataService) tickTokens(ctx context.Context) {
 	}
 	configs.Logger.Info("metadata fetcher: processing token batch", zap.Int("rows", len(rows)))
 
-	for _, r := range rows {
+	for i, r := range rows {
 		select {
 		case <-ctx.Done():
 			return
@@ -393,7 +407,12 @@ func (s *MetadataService) tickTokens(ctx context.Context) {
 			return
 		default:
 		}
-		s.fetchOneToken(ctx, r)
+		if err := s.fetchOneToken(ctx, r); errors.Is(err, errGatewayRateLimited) {
+			configs.Logger.Warn("metadata fetcher: token batch aborted (gateway rate limited)",
+				zap.Int("processed", i),
+				zap.Int("batch", len(rows)))
+			return
+		}
 	}
 }
 
@@ -404,11 +423,14 @@ func (s *MetadataService) tickTokens(ctx context.Context) {
 // The on-chain URI is re-read on every attempt, so a TTL refresh picks up
 // tokenURI changes; when the URI is unchanged and content-addressed the
 // gateway round trip is skipped and only the freshness stamp is bumped.
-func (s *MetadataService) fetchOneToken(ctx context.Context, stub models.TokenMetadata) {
+//
+// Returns errGatewayRateLimited when the gateway 429'd (row state
+// preserved; the caller aborts the batch), nil otherwise.
+func (s *MetadataService) fetchOneToken(ctx context.Context, stub models.TokenMetadata) error {
 	id, ok := new(big.Int).SetString(stub.TokenID, 10)
 	if !ok {
 		s.recordTokenFailure(ctx, stub, "parse tokenID: not a decimal integer")
-		return
+		return nil
 	}
 
 	var (
@@ -423,7 +445,7 @@ func (s *MetadataService) fetchOneToken(ctx context.Context, stub models.TokenMe
 	default:
 		s.recordTokenFailure(ctx, stub,
 			fmt.Sprintf("unsupported standard %q", stub.TokenStandard))
-		return
+		return nil
 	}
 	if uriErr != nil {
 		// Transport error (node down / flaky): preserve state and let the
@@ -433,13 +455,13 @@ func (s *MetadataService) fetchOneToken(ctx context.Context, stub models.TokenMe
 			zap.String("contract", stub.ContractAddress),
 			zap.String("tokenID", stub.TokenID),
 			zap.Error(uriErr))
-		return
+		return nil
 	}
 	if uri == "" {
 		// Includes reveal-style collections that set the URI later; the
 		// retry track re-probes on backoff until it appears.
 		s.recordTokenFailure(ctx, stub, "contract returned no URI")
-		return
+		return nil
 	}
 
 	// TTL-refresh fast path: `stub.URI` is fetcher-owned and only ever
@@ -457,25 +479,29 @@ func (s *MetadataService) fetchOneToken(ctx context.Context, stub models.TokenMe
 				zap.String("contract", stub.ContractAddress),
 				zap.String("tokenID", stub.TokenID))
 		}
-		return
+		return nil
 	}
 
 	resolved, err := resolveMetadataURI(uri, s.gatewayURL)
 	if err != nil {
 		s.recordTokenFailure(ctx, stub, fmt.Sprintf("resolve: %v", err))
-		return
+		return nil
 	}
 
 	body, fetchErr := s.fetchBody(ctx, resolved)
 	if fetchErr != nil {
+		if errors.Is(fetchErr, errGatewayRateLimited) {
+			// Not a row failure: preserve state, abort the batch.
+			return errGatewayRateLimited
+		}
 		s.recordTokenFailure(ctx, stub, fmt.Sprintf("fetch: %v", fetchErr))
-		return
+		return nil
 	}
 
 	parsed, parseErr := parseTokenMetadataJSON(body)
 	if parseErr != nil {
 		s.recordTokenFailure(ctx, stub, fmt.Sprintf("parse: %v", parseErr))
-		return
+		return nil
 	}
 
 	imageResolved := ""
@@ -508,7 +534,7 @@ func (s *MetadataService) fetchOneToken(ctx context.Context, stub models.TokenMe
 			zap.String("contract", stub.ContractAddress),
 			zap.String("tokenID", stub.TokenID),
 			zap.Error(err))
-		return
+		return nil
 	}
 	configs.Logger.Info("metadata fetcher: token stored",
 		zap.String("contract", stub.ContractAddress),
@@ -516,6 +542,7 @@ func (s *MetadataService) fetchOneToken(ctx context.Context, stub models.TokenMe
 		zap.String("name", parsed.Name),
 		zap.Bool("hasImage", imageResolved != ""),
 		zap.Int("attributes", len(parsed.Attributes)))
+	return nil
 }
 
 // recordTokenFailure persists a failed attempt with its backoff schedule.
@@ -555,7 +582,10 @@ func (s *MetadataService) recordTokenFailure(ctx context.Context, stub models.To
 // last successful fetch, so "URI unchanged" does not imply "stored content
 // matches". Collection rows are one per contract; the occasional full
 // re-fetch is cheap.
-func (s *MetadataService) fetchOne(ctx context.Context, c models.ContractInfo) {
+//
+// Returns errGatewayRateLimited when the gateway 429'd (row state
+// preserved; the caller aborts the batch), nil otherwise.
+func (s *MetadataService) fetchOne(ctx context.Context, c models.ContractInfo) error {
 	uri := c.MetadataURI
 	if fresh, err := rpc.GetContractURI(c.Address); err == nil && fresh != "" {
 		uri = fresh
@@ -564,7 +594,7 @@ func (s *MetadataService) fetchOne(ctx context.Context, c models.ContractInfo) {
 	resolved, err := resolveMetadataURI(uri, s.gatewayURL)
 	if err != nil {
 		s.recordFailure(ctx, c, fmt.Sprintf("resolve: %v", err))
-		return
+		return nil
 	}
 
 	configs.Logger.Debug("metadata fetcher: fetching",
@@ -574,14 +604,18 @@ func (s *MetadataService) fetchOne(ctx context.Context, c models.ContractInfo) {
 
 	body, fetchErr := s.fetchBody(ctx, resolved)
 	if fetchErr != nil {
+		if errors.Is(fetchErr, errGatewayRateLimited) {
+			// Not a row failure: preserve state, abort the batch.
+			return errGatewayRateLimited
+		}
 		s.recordFailure(ctx, c, fmt.Sprintf("fetch: %v", fetchErr))
-		return
+		return nil
 	}
 
 	parsed, parseErr := parseMetadataJSON(body)
 	if parseErr != nil {
 		s.recordFailure(ctx, c, fmt.Sprintf("parse: %v", parseErr))
-		return
+		return nil
 	}
 
 	// Image URLs are resolved through the same gateway so the persisted
@@ -624,13 +658,14 @@ func (s *MetadataService) fetchOne(ctx context.Context, c models.ContractInfo) {
 		configs.Logger.Warn("metadata fetcher: persist failed",
 			zap.String("address", c.Address),
 			zap.Error(err))
-		return
+		return nil
 	}
 
 	configs.Logger.Info("metadata fetcher: stored",
 		zap.String("address", c.Address),
 		zap.String("name", parsed.Name),
 		zap.Bool("hasImage", imageResolved != ""))
+	return nil
 }
 
 // recordFailure persists a failed contract-level attempt with its backoff
@@ -653,6 +688,16 @@ func (s *MetadataService) recordFailure(ctx context.Context, c models.ContractIn
 		zap.String("nextRetryAt", nextRetryAt))
 }
 
+// errGatewayRateLimited is returned by fetchBody on HTTP 429. It is NOT a
+// row failure: the row's state is preserved (no fetchError, no backoff
+// bump) and the tick aborts its remaining batch, because once the gateway
+// has rate-limited us every subsequent request this window will fail the
+// same way and would pointlessly stamp failure churn onto healthy rows.
+// The default gateway (the wallet backend's IPFS proxy) allows
+// 60 req/min/IP, below this fetcher's worst-case budget of two 25-row
+// batches per 30s tick, so 429s are expected during backlog drains.
+var errGatewayRateLimited = errors.New("gateway rate limited (HTTP 429)")
+
 // fetchBody issues an HTTP GET with the configured timeout and size cap.
 func (s *MetadataService) fetchBody(ctx context.Context, resolvedURL string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, resolvedURL, nil)
@@ -668,6 +713,9 @@ func (s *MetadataService) fetchBody(ctx context.Context, resolvedURL string) ([]
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, errGatewayRateLimited
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}

@@ -393,7 +393,8 @@ func MarkContractMetadataFetchFailed(ctx context.Context, address, reason string
 
 // GetContractsAwaitingMetadata returns up to `limit` NFT contracts that have
 // a populated MetadataURI and are due for a collection-level metadata fetch,
-// in the same priority order as GetTokensAwaitingMetadata:
+// drawn from the same three tracks as GetTokensAwaitingMetadata and composed
+// with the same guaranteed per-track shares (composeBatch):
 //
 //  1. fresh rows that have never been attempted,
 //  2. errored rows whose exponential-backoff deadline passed,
@@ -422,36 +423,33 @@ func GetContractsAwaitingMetadata(ctx context.Context, limit int, now time.Time,
 		return f
 	}
 
-	var out []models.ContractInfo
-
-	// 1. Fresh: never attempted.
-	fresh := withBase(
+	fresh, err := findLimited[models.ContractInfo](ctx, collection, withBase(
 		missingOrEmpty("metadataFetchedAt"),
 		missingOrEmpty("metadataFetchError"),
-	)
-	if err := findLimited(ctx, collection, fresh, limit-len(out), &out); err != nil {
+	), limit)
+	if err != nil {
 		return nil, err
 	}
 
-	// 2. Retryable: last attempt failed, backoff deadline passed.
-	retryable := withBase(dueForRetry("metadataFetchError", "metadataNextRetryAt", nowStr))
-	if err := findLimited(ctx, collection, retryable, limit-len(out), &out); err != nil {
+	retryable, err := findLimited[models.ContractInfo](ctx, collection,
+		withBase(dueForRetry("metadataFetchError", "metadataNextRetryAt", nowStr)), limit)
+	if err != nil {
 		return nil, err
 	}
 
-	// 3. Stale: last attempt succeeded longer than refreshTTL ago.
+	var stale []models.ContractInfo
 	if refreshTTL > 0 {
 		cutoff := now.UTC().Add(-refreshTTL).Format(time.RFC3339)
-		stale := withBase(
+		stale, err = findLimited[models.ContractInfo](ctx, collection, withBase(
 			bson.M{"metadataFetchedAt": bson.M{"$gt": "", "$lte": cutoff}},
 			missingOrEmpty("metadataFetchError"),
-		)
-		if err := findLimited(ctx, collection, stale, limit-len(out), &out); err != nil {
+		), limit)
+		if err != nil {
 			return nil, err
 		}
 	}
 
-	return out, nil
+	return composeBatch(limit, fresh, retryable, stale), nil
 }
 
 // standardRank orders TokenStandard values for promote-only merging.
