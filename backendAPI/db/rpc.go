@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"backendAPI/models"
@@ -37,6 +38,24 @@ func (e *RPCError) Error() string {
 // (keep-alive saves a TCP+TLS handshake per request).
 var nodeRPCClient = &http.Client{Timeout: 12 * time.Second}
 
+// nodeURL resolves the node endpoint from NODE_URL exactly once.
+// configs.ValidateEnv fail-fasts at startup when NODE_URL is missing
+// (main.go calls it before serving, and EnvMongoURI has loaded .env by
+// then), so by the time any request path reaches NodeRPC the value is
+// guaranteed non-empty. There is deliberately no localhost fallback: the
+// old silent localhost:8545 default masked misconfiguration in production.
+var (
+	nodeURLOnce  sync.Once
+	nodeURLValue string
+)
+
+func nodeURL() string {
+	nodeURLOnce.Do(func() {
+		nodeURLValue = os.Getenv("NODE_URL")
+	})
+	return nodeURLValue
+}
+
 // NodeRPC issues a single JSON-RPC request to the configured node and
 // returns the raw `result` field. Callers unmarshal `result` into whatever
 // shape the method emits (string, hex, object, …).
@@ -53,11 +72,6 @@ var nodeRPCClient = &http.Client{Timeout: 12 * time.Second}
 //
 // `result` is `nil` only on error.
 func NodeRPC(ctx context.Context, method string, params []interface{}) (json.RawMessage, *RPCError, error) {
-	nodeURL := os.Getenv("NODE_URL")
-	if nodeURL == "" {
-		nodeURL = "http://127.0.0.1:8545"
-	}
-
 	body, err := json.Marshal(models.JsonRPC{
 		Jsonrpc: "2.0",
 		Method:  method,
@@ -68,7 +82,7 @@ func NodeRPC(ctx context.Context, method string, params []interface{}) (json.Raw
 		return nil, nil, fmt.Errorf("marshal rpc body: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, nodeURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, nodeURL(), bytes.NewReader(body))
 	if err != nil {
 		return nil, nil, fmt.Errorf("build rpc request: %w", err)
 	}

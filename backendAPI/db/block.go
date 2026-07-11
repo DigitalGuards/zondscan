@@ -55,7 +55,7 @@ func GetLatestBlockFromSyncState() (string, error) {
 		BlockNumber string `bson:"block_number"`
 	}
 
-	err := configs.GetCollection(configs.DB, "sync_state").FindOne(ctx, primitive.D{{Key: "_id", Value: "last_synced_block"}}).Decode(&result)
+	err := configs.SyncStateCollection.FindOne(ctx, primitive.D{{Key: "_id", Value: "last_synced_block"}}).Decode(&result)
 	if err != nil {
 		return "", fmt.Errorf("failed to get sync state: %v", err)
 	}

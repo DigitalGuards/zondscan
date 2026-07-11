@@ -3,6 +3,8 @@ package db
 import (
 	"reflect"
 	"testing"
+
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 // Tests for the pure-function helpers in this package. The mongo-dependent
@@ -79,5 +81,47 @@ func TestNormalizeAddressBoth(t *testing.T) {
 	want := []string{"Qabc"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("normalizeAddressBoth = %#v, want %#v", got, want)
+	}
+}
+
+func TestAddressOrFilter(t *testing.T) {
+	// The exact { $or: [ {from}, {to} ] } shape is what the compound
+	// (from|to, sort-key) indexes were built for; a drive-by "improvement"
+	// here would silently change query plans across every by-address read.
+	got := addressOrFilter("Qabc")
+	want := bson.M{"$or": []bson.M{
+		{"from": "Qabc"},
+		{"to": "Qabc"},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("addressOrFilter = %#v, want %#v", got, want)
+	}
+}
+
+func TestClampPage(t *testing.T) {
+	// Defaults and caps are per-endpoint frontend contracts; the helper
+	// must apply exactly the caller-supplied values, nothing baked in.
+	cases := []struct {
+		name                          string
+		page, limit, defLimit, maxLim int
+		wantPage, wantLimit           int
+	}{
+		{"in range passes through", 3, 20, 10, 50, 3, 20},
+		{"zero page floors to 1", 0, 20, 10, 50, 1, 20},
+		{"negative page floors to 1", -5, 20, 10, 50, 1, 20},
+		{"zero limit takes default", 1, 0, 10, 50, 1, 10},
+		{"negative limit takes default", 1, -1, 10, 50, 1, 10},
+		{"limit capped at max", 1, 999, 10, 50, 1, 50},
+		{"limit at cap stays", 1, 50, 10, 50, 1, 50},
+		{"maxLimit 0 means uncapped", 1, 999, 10, 0, 1, 999},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotPage, gotLimit := clampPage(tc.page, tc.limit, tc.defLimit, tc.maxLim)
+			if gotPage != tc.wantPage || gotLimit != tc.wantLimit {
+				t.Errorf("clampPage(%d, %d, %d, %d) = (%d, %d), want (%d, %d)",
+					tc.page, tc.limit, tc.defLimit, tc.maxLim, gotPage, gotLimit, tc.wantPage, tc.wantLimit)
+			}
+		})
 	}
 }
