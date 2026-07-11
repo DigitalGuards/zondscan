@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 
 	"backendAPI/db"
@@ -115,7 +114,7 @@ func RegisterVerificationRoutes(router *gin.Engine) {
 		}
 		if err := db.CreateVerificationJob(job); err != nil {
 			log.Printf("create verification job %s: %v", jobID, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			respondInternal(c)
 			return
 		}
 
@@ -133,7 +132,7 @@ func RegisterVerificationRoutes(router *gin.Engine) {
 		job, err := db.GetVerificationJob(jobID)
 		if err != nil {
 			log.Printf("lookup verification job %s: %v", jobID, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			respondInternal(c)
 			return
 		}
 		if job == nil {
@@ -155,21 +154,4 @@ func newJobID() string {
 		panic("verification: crypto/rand unavailable: " + err.Error())
 	}
 	return hex.EncodeToString(buf[:])
-}
-
-// isValidAddress is a permissive Q-prefix check. The full validation
-// happens at the storage layer (normalizeAddress canonicalises case).
-func isValidAddress(a string) bool {
-	if !strings.HasPrefix(a, "Q") {
-		return false
-	}
-	if len(a) != 41 {
-		return false
-	}
-	for _, r := range a[1:] {
-		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
-			return false
-		}
-	}
-	return true
 }
