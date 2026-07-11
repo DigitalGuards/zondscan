@@ -28,6 +28,10 @@ type transferRow struct {
 }
 
 func main() {
+	// Load .env before the env checks below: nothing loads it at import
+	// time anymore.
+	configs.LoadEnv()
+
 	if os.Getenv("ENABLE_DEBUG_TRACE") != "true" {
 		log.Fatal("ENABLE_DEBUG_TRACE=true is required; without it every trace call silently no-ops and the backfill would do nothing")
 	}
