@@ -5,16 +5,26 @@
 //   - The transfer dispatch loop (db/tokentransfers.go) calls StubTokenMetadata
 //     on every NFT transfer with `$setOnInsert` so a row exists as soon as the
 //     token is seen on chain.
-//   - The metadata fetcher service polls GetTokensAwaitingMetadata for stubs
-//     whose URI hasn't been resolved (no FetchedAt and no FetchError), calls
+//   - The metadata fetcher service polls GetTokensAwaitingMetadata, calls
 //     tokenURI(id) or uri(id), resolves through the IPFS gateway, parses the
 //     JSON, and writes the result via UpdateTokenMetadata.
 //
+// Row lifecycle (Phase 3c): a row is eligible for a fetch when it is
+//
+//  1. fresh: never attempted (no FetchedAt, no FetchError), or
+//  2. retryable: the last attempt failed (FetchError set) and the
+//     exponential-backoff deadline NextRetryAt has passed, or
+//  3. stale: the last attempt succeeded (FetchedAt set, no FetchError)
+//     longer than the refresh TTL ago, so an on-chain tokenURI change
+//     can propagate.
+//
 // Same single-writer-per-concern boundary as the contract-metadata path:
 // the stub writer owns URI + initial classification fields, the fetcher
-// owns the resolved content fields. A transient fetch failure preserves
-// last-good content (UpdateTokenMetadata only writes a content field
-// when its argument is non-empty).
+// owns the resolved content fields. A failed fetch preserves last-good
+// content (UpdateTokenMetadata only writes a content field when its
+// argument is non-empty) and keeps the previous FetchedAt, so the explorer
+// keeps serving yesterday's good data while the retry track works through
+// a today-bad gateway.
 package db
 
 import (
@@ -138,16 +148,16 @@ func StubTokenMetadata(ctx context.Context, contractAddress, tokenID, tokenStand
 	return nil
 }
 
-// UpdateTokenMetadata writes the resolved per-token metadata. Same
-// "preserve last-good" semantics as UpdateContractMetadata: empty content
-// args do NOT clear existing values; only FetchedAt and FetchError are
-// always written.
+// UpdateTokenMetadata writes the result of a SUCCESSFUL per-token fetch.
+// Empty content args do NOT clear existing values (preserve last-good);
+// FetchedAt is stamped, FetchError is cleared, and the retry-scheduling
+// fields are removed so the row leaves the retry track.
 func UpdateTokenMetadata(
 	ctx context.Context,
 	contractAddress, tokenID string,
 	uri, name, description, image, externalURL string,
 	attributes []models.TokenAttribute,
-	fetchedAt, fetchError string,
+	fetchedAt string,
 ) error {
 	contractAddress = validation.ConvertToQAddress(contractAddress)
 	if tokenID == "" {
@@ -158,7 +168,7 @@ func UpdateTokenMetadata(
 
 	set := bson.M{
 		"fetchedAt":  fetchedAt,
-		"fetchError": fetchError,
+		"fetchError": "",
 		"updatedAt":  time.Now().UTC().Format(time.RFC3339),
 	}
 	// URI is gap-fill: the stub writer doesn't know it, the fetcher
@@ -190,7 +200,11 @@ func UpdateTokenMetadata(
 	defer cancel()
 
 	filter := bson.M{"contractAddress": contractAddress, "tokenID": tokenID}
-	_, err := collection.UpdateOne(ctx, filter, bson.M{"$set": set})
+	update := bson.M{
+		"$set":   set,
+		"$unset": bson.M{"retryCount": "", "nextRetryAt": ""},
+	}
+	_, err := collection.UpdateOne(ctx, filter, update)
 	if err != nil {
 		configs.Logger.Warn("Failed to update token metadata",
 			zap.String("contract", contractAddress),
@@ -201,45 +215,147 @@ func UpdateTokenMetadata(
 	return nil
 }
 
-// GetTokensAwaitingMetadata returns up to `limit` token stubs that need a
-// metadata fetch (no FetchedAt and no FetchError).
-//
-// Same "don't auto-retry errors" stance as the contract path: an operator
-// triggers re-fetch in Phase 4. An errored row stays put indefinitely
-// because StubTokenMetadata uses $setOnInsert and is therefore a no-op
-// on every transfer after the first, the upsert never clears the error.
-// Auto-retrying every poll cycle would just clog the queue with the same
-// failure since the underlying URL doesn't change.
-func GetTokensAwaitingMetadata(ctx context.Context, limit int) ([]models.TokenMetadata, error) {
+// MarkTokenMetadataFetchFailed records a failed fetch attempt: the error
+// reason plus the retry-scheduling fields computed by the caller. Content
+// fields and FetchedAt are untouched, so a row that succeeded in the past
+// keeps serving its last-good data while it sits on the retry track.
+func MarkTokenMetadataFetchFailed(
+	ctx context.Context,
+	contractAddress, tokenID, reason string,
+	retryCount int,
+	nextRetryAt string,
+) error {
+	contractAddress = validation.ConvertToQAddress(contractAddress)
+	if tokenID == "" {
+		return nil
+	}
+
+	collection := configs.GetCollection(configs.DB, tokenMetadataCollection)
+
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	filter := bson.M{
-		"tokenStandard": bson.M{"$in": []string{"ERC-721", "ERC-1155"}},
-		"$and": []bson.M{
-			{"$or": []bson.M{
-				{"fetchedAt": bson.M{"$exists": false}},
-				{"fetchedAt": ""},
-			}},
-			{"$or": []bson.M{
-				{"fetchError": bson.M{"$exists": false}},
-				{"fetchError": ""},
-			}},
+	filter := bson.M{"contractAddress": contractAddress, "tokenID": tokenID}
+	update := bson.M{"$set": bson.M{
+		"fetchError":  reason,
+		"retryCount":  retryCount,
+		"nextRetryAt": nextRetryAt,
+		"updatedAt":   time.Now().UTC().Format(time.RFC3339),
+	}}
+	_, err := collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		configs.Logger.Warn("Failed to record token metadata fetch failure",
+			zap.String("contract", contractAddress),
+			zap.String("tokenID", tokenID),
+			zap.Error(err))
+		return err
+	}
+	return nil
+}
+
+// missingOrEmpty matches documents where `field` is absent or the empty
+// string. Mongo treats a missing field as null, and null != "", so both
+// arms are needed; rows written before the retry-scheduling fields existed
+// have neither.
+func missingOrEmpty(field string) bson.M {
+	return bson.M{"$or": []bson.M{
+		{field: bson.M{"$exists": false}},
+		{field: ""},
+	}}
+}
+
+// dueForRetry matches errored documents whose backoff deadline has passed.
+// Rows errored before the retry-scheduling fields existed have no
+// `nextRetryAt` and become eligible immediately, which is exactly the
+// migration behaviour we want: one deploy un-bricks every historically
+// failed fetch.
+func dueForRetry(errField, retryField, now string) bson.M {
+	return bson.M{
+		errField: bson.M{"$exists": true, "$ne": ""},
+		"$or": []bson.M{
+			{retryField: bson.M{"$exists": false}},
+			{retryField: ""},
+			{retryField: bson.M{"$lte": now}},
 		},
 	}
-	opts := options.Find().SetLimit(int64(limit))
+}
 
-	collection := configs.GetCollection(configs.DB, tokenMetadataCollection)
-	cur, err := collection.Find(ctx, filter, opts)
+// findLimited runs one work-queue Find with a limit and appends the decoded
+// rows to `out`. A non-positive limit is a no-op so callers can pass the
+// remaining batch budget without guarding.
+func findLimited[T any](ctx context.Context, collection *mongo.Collection, filter bson.M, limit int, out *[]T) error {
+	if limit <= 0 {
+		return nil
+	}
+	cur, err := collection.Find(ctx, filter, options.Find().SetLimit(int64(limit)))
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer cur.Close(ctx)
 
+	var rows []T
+	if err := cur.All(ctx, &rows); err != nil {
+		return err
+	}
+	*out = append(*out, rows...)
+	return nil
+}
+
+// GetTokensAwaitingMetadata returns up to `limit` token stubs that are due
+// for a metadata fetch, in priority order:
+//
+//  1. fresh stubs that have never been attempted,
+//  2. errored rows whose exponential-backoff deadline (nextRetryAt) passed,
+//  3. previously successful rows whose fetchedAt is older than refreshTTL
+//     (skipped when refreshTTL <= 0).
+//
+// `now` is injected by the caller so eligibility is computed against a
+// single instant per tick. Timestamps are RFC3339 UTC strings, which
+// compare correctly as plain strings (fixed-width, most-significant-first).
+func GetTokensAwaitingMetadata(ctx context.Context, limit int, now time.Time, refreshTTL time.Duration) ([]models.TokenMetadata, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	collection := configs.GetCollection(configs.DB, tokenMetadataCollection)
+	nowStr := now.UTC().Format(time.RFC3339)
+	isNFT := bson.M{"$in": []string{"ERC-721", "ERC-1155"}}
+
 	var out []models.TokenMetadata
-	if err := cur.All(ctx, &out); err != nil {
+
+	// 1. Fresh: never attempted.
+	fresh := bson.M{
+		"tokenStandard": isNFT,
+		"$and": []bson.M{
+			missingOrEmpty("fetchedAt"),
+			missingOrEmpty("fetchError"),
+		},
+	}
+	if err := findLimited(ctx, collection, fresh, limit-len(out), &out); err != nil {
 		return nil, err
 	}
+
+	// 2. Retryable: last attempt failed, backoff deadline passed.
+	retryable := bson.M{
+		"tokenStandard": isNFT,
+		"$and":          []bson.M{dueForRetry("fetchError", "nextRetryAt", nowStr)},
+	}
+	if err := findLimited(ctx, collection, retryable, limit-len(out), &out); err != nil {
+		return nil, err
+	}
+
+	// 3. Stale: last attempt succeeded longer than refreshTTL ago.
+	if refreshTTL > 0 {
+		cutoff := now.UTC().Add(-refreshTTL).Format(time.RFC3339)
+		stale := bson.M{
+			"tokenStandard": isNFT,
+			"fetchedAt":     bson.M{"$gt": "", "$lte": cutoff},
+			"$and":          []bson.M{missingOrEmpty("fetchError")},
+		}
+		if err := findLimited(ctx, collection, stale, limit-len(out), &out); err != nil {
+			return nil, err
+		}
+	}
+
 	return out, nil
 }
 
