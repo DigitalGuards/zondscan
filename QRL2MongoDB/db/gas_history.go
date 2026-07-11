@@ -2,6 +2,7 @@ package db
 
 import (
 	"QRL2MongoDB/configs"
+	"QRL2MongoDB/utils"
 	"context"
 	"time"
 
@@ -116,7 +117,7 @@ func UpdateGasHistory() error {
 			skippedDecode++
 			continue
 		}
-		ts := HexToInt64(b.Result.Timestamp)
+		ts := utils.HexToInt64(b.Result.Timestamp)
 		// Skip blocks with a malformed timestamp, they'd corrupt the
 		// retention sweep below.
 		if ts <= 0 {

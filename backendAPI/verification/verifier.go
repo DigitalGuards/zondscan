@@ -28,7 +28,7 @@ type Verifier struct {
 //
 // req.CompilerVersion selects which configured build to compile with; an
 // empty value uses the registry default. (The routes layer already validated
-// it, so an unknown id here only happens for a direct/internal caller — we
+// it, so an unknown id here only happens for a direct/internal caller; we
 // fail the job rather than leave it stuck in 'pending'.)
 //
 // Status transitions:

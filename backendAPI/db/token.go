@@ -30,7 +30,7 @@ func GetTokenBalancesByAddress(address string, standardFilter *string) ([]models
 	// Normalize address to canonical Q-prefix form
 	searchAddresses := normalizeAddressBoth(address)
 
-	collection := configs.GetCollection(configs.DB, "tokenBalances")
+	collection := configs.TokenBalancesCollection
 
 	matchStage := bson.M{
 		"holderAddress": bson.M{"$in": searchAddresses},
@@ -95,10 +95,19 @@ func GetTokenBalancesByAddress(address string, standardFilter *string) ([]models
 				"decimals":        "$tokenInfo.decimals",
 			},
 		},
-		// Convert balance string to decimal for proper numeric sorting
+		// Convert balance string to decimal for proper numeric sorting.
+		// $convert with onError/onNull 0 instead of raw $toDecimal: uint256
+		// balances can exceed Decimal128's 34-digit limit, and one oversized
+		// balance used to 500 this wallet token list permanently. An
+		// oversized value now sorts as 0; the original string stays intact.
 		{
 			"$addFields": bson.M{
-				"balanceDecimal": bson.M{"$toDecimal": "$balance"},
+				"balanceDecimal": bson.M{"$convert": bson.M{
+					"input":   "$balance",
+					"to":      "decimal",
+					"onError": 0,
+					"onNull":  0,
+				}},
 			},
 		},
 		// Sort by balance descending (highest value tokens first)
@@ -173,7 +182,7 @@ func GetTokenHolders(contractAddress, tokenID string, page, limit int) ([]models
 		matchStage["tokenID"] = tokenID
 	}
 
-	collection := configs.GetCollection(configs.DB, "tokenBalances")
+	collection := configs.TokenBalancesCollection
 
 	// Pagination skip+limit (decimal-sorted by balance, descending).
 	skip := int64(page * limit)
@@ -324,7 +333,7 @@ func GetTokenIDs(contractAddress string, page, limit int) ([]TokenIDSummary, int
 		"tokenID":         bson.M{"$exists": true, "$ne": ""},
 	}
 
-	collection := configs.GetCollection(configs.DB, "tokenBalances")
+	collection := configs.TokenBalancesCollection
 
 	// Two-stage group to count distinct (tokenID, holder) pairs per id
 	// without holding the holder list in memory. First stage collapses
@@ -463,7 +472,7 @@ func GetTokenTransfers(contractAddress string, page, limit int) ([]models.TokenT
 
 	contractVariants := normalizeAddressBoth(contractAddress)
 	contractFilter := bson.M{"contractAddress": bson.M{"$in": contractVariants}}
-	collection := configs.GetCollection(configs.DB, "tokenTransfers")
+	collection := configs.TokenTransfersCollection
 
 	// Count total transfers
 	totalCount, err := collection.CountDocuments(ctx, contractFilter)
@@ -530,11 +539,8 @@ func GetTokenTransfersByAddress(address string, page, limit int) ([]models.Token
 	}
 
 	canonical := normalizeAddress(address)
-	filter := bson.M{"$or": []bson.M{
-		{"from": canonical},
-		{"to": canonical},
-	}}
-	collection := configs.GetCollection(configs.DB, "tokenTransfers")
+	filter := addressOrFilter(canonical)
+	collection := configs.TokenTransfersCollection
 
 	totalCount, err := collection.CountDocuments(ctx, filter)
 	if err != nil {
@@ -571,7 +577,7 @@ func GetTokenInfo(contractAddress string) (*models.TokenInfo, error) {
 	contractInFilter := bson.M{"$in": contractVariants}
 
 	// Get contract info
-	contractCollection := configs.GetCollection(configs.DB, "contractCode")
+	contractCollection := configs.ContractInfoCollection
 	var contract models.ContractInfo
 	err := contractCollection.FindOne(ctx, bson.M{"address": contractInFilter}).Decode(&contract)
 	if err != nil {
@@ -579,14 +585,14 @@ func GetTokenInfo(contractAddress string) (*models.TokenInfo, error) {
 	}
 
 	// Count holders
-	balanceCollection := configs.GetCollection(configs.DB, "tokenBalances")
+	balanceCollection := configs.TokenBalancesCollection
 	holderCount, err := balanceCollection.CountDocuments(ctx, bson.M{"contractAddress": contractInFilter})
 	if err != nil {
 		holderCount = 0
 	}
 
 	// Count transfers
-	transferCollection := configs.GetCollection(configs.DB, "tokenTransfers")
+	transferCollection := configs.TokenTransfersCollection
 	transferCount, err := transferCollection.CountDocuments(ctx, bson.M{"contractAddress": contractInFilter})
 	if err != nil {
 		transferCount = 0
@@ -636,7 +642,7 @@ func CountTokenTransfersByTxHashes(txHashes []string) (map[string]int, error) {
 		{"$match": bson.M{"txHash": bson.M{"$in": normalized}}},
 		{"$group": bson.M{"_id": "$txHash", "count": bson.M{"$sum": 1}}},
 	}
-	cursor, err := configs.GetCollection(configs.DB, "tokenTransfers").Aggregate(ctx, pipeline)
+	cursor, err := configs.TokenTransfersCollection.Aggregate(ctx, pipeline)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return out, nil
@@ -675,7 +681,7 @@ func GetTokenTransfersByTxHash(txHash string) ([]models.TokenTransfer, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	collection := configs.GetCollection(configs.DB, "tokenTransfers")
+	collection := configs.TokenTransfersCollection
 
 	normalizedHash := strings.ToLower(txHash)
 	if !strings.HasPrefix(normalizedHash, "0x") {
@@ -718,6 +724,9 @@ func GetTokenTransfersByTxHash(txHash string) ([]models.TokenTransfer, error) {
 // Malformed input falls back to 0, the worst case is a stable but slightly
 // out-of-order row (never a panic, the syncer's own data path is the only
 // writer of this field and always emits a clean hex string).
+//
+// Intentionally NOT ported to hexutil.ParseInt64: the -1/0 sentinels are
+// a frozen sort contract. New hex parsing code should use hexutil.
 func logIndexSortKey(s string) int64 {
 	if s == "" {
 		return -1
@@ -759,7 +768,7 @@ func GetNFTBalancesByAddress(address string, standardFilter *string) ([]models.N
 		"tokenStandard": bson.M{"$in": standards},
 	}
 
-	collection := configs.GetCollection(configs.DB, "tokenBalances")
+	collection := configs.TokenBalancesCollection
 
 	pipeline := []bson.M{
 		{"$match": matchStage},

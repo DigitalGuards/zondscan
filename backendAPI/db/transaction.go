@@ -69,15 +69,7 @@ func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
 // addresses (validators, contracts) where the unpaginated 200-row hit
 // would routinely time out.
 func ReturnAllInternalTransactionsByAddress(address string, page, limit int) ([]models.InternalTx, error) {
-	if page < 1 {
-		page = 1
-	}
-	if limit < 1 {
-		limit = 10
-	}
-	if limit > 50 {
-		limit = 50
-	}
+	page, limit = clampPage(page, limit, 10, 50)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -87,10 +79,7 @@ func ReturnAllInternalTransactionsByAddress(address string, page, limit int) ([]
 	// Normalize to canonical Q-prefix format used by the syncer.
 	normalizedAddress := normalizeAddress(address)
 
-	filter := primitive.D{{Key: "$or", Value: []primitive.D{
-		{{Key: "from", Value: normalizedAddress}},
-		{{Key: "to", Value: normalizedAddress}},
-	}}}
+	filter := addressOrFilter(normalizedAddress)
 
 	projection := primitive.D{
 		{Key: "type", Value: 1},
@@ -138,15 +127,7 @@ func ReturnAllInternalTransactionsByAddress(address string, page, limit int) ([]
 // to bound the $or+sort cost: high-volume addresses (validators,
 // contracts) routinely timed out under the unpaginated 200-row hit.
 func ReturnAllTransactionsByAddress(address string, page, limit int) ([]models.TransactionByAddress, error) {
-	if page < 1 {
-		page = 1
-	}
-	if limit < 1 {
-		limit = 10
-	}
-	if limit > 50 {
-		limit = 50
-	}
+	page, limit = clampPage(page, limit, 10, 50)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -155,10 +136,7 @@ func ReturnAllTransactionsByAddress(address string, page, limit int) ([]models.T
 
 	// Normalize to the canonical Q-prefix form stored by the syncer.
 	normalizedAddress := normalizeAddress(address)
-	filter := primitive.D{{Key: "$or", Value: []primitive.D{
-		{{Key: "from", Value: normalizedAddress}},
-		{{Key: "to", Value: normalizedAddress}},
-	}}}
+	filter := addressOrFilter(normalizedAddress)
 
 	projection := primitive.D{
 		{Key: "timeStamp", Value: 1},
@@ -250,7 +228,7 @@ func ReturnTransactionsNetwork(page, limit int) ([]models.TransactionByAddress, 
 	opts.SetSkip(int64((page - 1) * limit))
 	opts.SetLimit(int64(limit))
 
-	results, err := configs.GetCollection(configs.DB, "transactionByAddress").Find(ctx, primitive.D{}, opts)
+	results, err := configs.TransactionByAddressCollection.Find(ctx, primitive.D{}, opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query transactions: %v", err)
 	}
@@ -276,7 +254,7 @@ func CountTransactionsNetwork() (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	count, err := countDocumentsResilient(ctx, configs.GetCollection(configs.DB, "transactionByAddress"))
+	count, err := countDocumentsResilient(ctx, configs.TransactionByAddressCollection)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count transactions: %v", err)
 	}
@@ -291,10 +269,7 @@ func CountTransactions(address string) (int, error) {
 	// Normalize to canonical Q-prefix, matches syncer write format.
 	normalizedAddress := normalizeAddress(address)
 
-	filter := primitive.D{{Key: "$or", Value: []primitive.D{
-		{{Key: "from", Value: normalizedAddress}},
-		{{Key: "to", Value: normalizedAddress}},
-	}}}
+	filter := addressOrFilter(normalizedAddress)
 
 	count, err := configs.TransactionByAddressCollection.CountDocuments(ctx, filter)
 	if err != nil {
@@ -316,10 +291,7 @@ func CountInternalTransactionsByAddress(address string) (int, error) {
 	// Normalize to canonical Q-prefix, matches syncer write format.
 	normalizedAddress := normalizeAddress(address)
 
-	filter := primitive.D{{Key: "$or", Value: []primitive.D{
-		{{Key: "from", Value: normalizedAddress}},
-		{{Key: "to", Value: normalizedAddress}},
-	}}}
+	filter := addressOrFilter(normalizedAddress)
 
 	count, err := configs.InternalTransactionByAddressCollection.CountDocuments(ctx, filter)
 	if err != nil {
@@ -345,10 +317,7 @@ func ReturnAddressActivityRange(address string) (int64, int64, error) {
 
 	normalizedAddress := normalizeAddress(address)
 
-	filter := primitive.D{{Key: "$or", Value: []primitive.D{
-		{{Key: "from", Value: normalizedAddress}},
-		{{Key: "to", Value: normalizedAddress}},
-	}}}
+	filter := addressOrFilter(normalizedAddress)
 
 	fetchBoundary := func(order int) (int64, error) {
 		var doc struct {
@@ -460,18 +429,11 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 		}
 	}
 
-	// If not found in blocks, try the transfers collection (fallback)
-	decoded, err := hex.DecodeString(strings.TrimPrefix(query, "0x"))
-	if err != nil {
-		return result, fmt.Errorf("invalid tx hash: %w", err)
-	}
-
-	filter := primitive.D{{Key: "txHash", Value: decoded}}
-	err = configs.TransferCollections.FindOne(ctx, filter).Decode(&result)
-	if err != nil {
-		log.Printf("error finding transfer by hash: %v", err)
-	}
-
+	// The historical transfers-collection fallback was deleted: it filtered
+	// the string txHash field with decoded []byte, so it could never match
+	// (and models.Transfer's field types would fail the Decode anyway). The
+	// blocks-collection lookup above, backed by the result_transactions_hash
+	// index, is the real path.
 	return result, err
 }
 
@@ -571,7 +533,7 @@ func ReturnDailyTransactionsVolume() int64 {
 }
 
 func GetTransactionByHash(hash string) (*models.Transaction, error) {
-	collection := configs.GetCollection(configs.DB, "transfer")
+	collection := configs.TransferCollections
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -636,12 +598,7 @@ func ReturnNonZeroTransactions(address string, page, limit int) ([]models.Transa
 	normalizedAddress := normalizeAddress(address)
 	filter := bson.M{
 		"$and": []bson.M{
-			{
-				"$or": []bson.M{
-					{"from": normalizedAddress},
-					{"to": normalizedAddress},
-				},
-			},
+			addressOrFilter(normalizedAddress),
 			{"amount": bson.M{"$gt": 0}}, // Only return transactions with amount > 0
 		},
 	}

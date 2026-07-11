@@ -35,6 +35,11 @@ func main() {
 		log.Fatal("Required environment variable NODE_URLS (or legacy NODE_URL) is not set")
 	}
 
+	// Connect explicitly: configs no longer connects at import time.
+	if err := configs.ConnectDB(); err != nil {
+		log.Fatalf("Failed to connect to MongoDB: %v", err)
+	}
+
 	ctx := context.Background()
 
 	// Hashes that already have internal rows: skip them so re-runs are

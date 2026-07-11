@@ -2,12 +2,13 @@ package db
 
 import (
 	"backendAPI/configs"
+	"backendAPI/hexutil"
 	"backendAPI/models"
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
-	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -103,20 +104,18 @@ func CountValidators() (int64, error) {
 }
 
 // HexToInt converts a hex string (with or without 0x prefix) to int64.
-// Parses as unsigned first: ParseInt returns 0 for any value with the high
-// bit set (block numbers near 2^63), which would silently zero the epoch
-// math downstream. Values that overflow int64 are clamped to math.MaxInt64
-// so the result stays usable for the /128 epoch division callers perform.
+// Parsing delegates to hexutil.ParseInt64 (unsigned-first, so block
+// numbers near 2^63 don't silently zero the epoch math downstream); the
+// sentinel semantics stay here: malformed input yields 0, while values
+// that fit uint64 but overflow int64 (hexutil.ErrRange) are clamped to
+// math.MaxInt64 so the result stays usable for the /128 epoch division
+// callers perform.
 func HexToInt(hexStr string) int64 {
-	hexStr = strings.TrimPrefix(hexStr, "0x")
-	num, err := strconv.ParseUint(hexStr, 16, 64)
-	if err != nil {
+	num, err := hexutil.ParseInt64(hexStr)
+	if err != nil && !errors.Is(err, hexutil.ErrRange) {
 		return 0
 	}
-	if num > math.MaxInt64 {
-		return math.MaxInt64
-	}
-	return int64(num)
+	return num
 }
 
 // FAR_FUTURE_EPOCH represents a validator that hasn't exited.
