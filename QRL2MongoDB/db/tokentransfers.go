@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
 )
 
@@ -65,69 +64,6 @@ func StoreTokenTransfer(transfer models.TokenTransfer) error {
 	return nil
 }
 
-// GetTokenTransfersByContract retrieves all transfers for a specific token contract
-func GetTokenTransfersByContract(contractAddress string, skip, limit int64) ([]models.TokenTransfer, error) {
-	collection := configs.GetCollection(configs.DB, "tokenTransfers")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	opts := options.Find().
-		SetSort(bson.D{{Key: "blockNumberInt", Value: -1}}).
-		SetSkip(skip).
-		SetLimit(limit)
-
-	cursor, err := collection.Find(ctx,
-		bson.M{"contractAddress": contractAddress},
-		opts,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(ctx)
-
-	var transfers []models.TokenTransfer
-	if err = cursor.All(ctx, &transfers); err != nil {
-		return nil, err
-	}
-
-	return transfers, nil
-}
-
-// GetTokenTransfersByAddress retrieves all transfers involving a specific address (as sender or receiver)
-func GetTokenTransfersByAddress(address string, skip, limit int64) ([]models.TokenTransfer, error) {
-	collection := configs.GetCollection(configs.DB, "tokenTransfers")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	opts := options.Find().
-		SetSort(bson.D{{Key: "blockNumberInt", Value: -1}}).
-		SetSkip(skip).
-		SetLimit(limit)
-
-	cursor, err := collection.Find(ctx,
-		bson.M{
-			"$or": []bson.M{
-				{"from": address},
-				{"to": address},
-			},
-		},
-		opts,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(ctx)
-
-	var transfers []models.TokenTransfer
-	if err = cursor.All(ctx, &transfers); err != nil {
-		return nil, err
-	}
-
-	return transfers, nil
-}
-
 // TokenTransferExists checks if a specific token transfer is already
 // persisted. The dedupe key is (txHash, contractAddress, logIndex, tokenID):
 //
@@ -138,8 +74,9 @@ func GetTokenTransfersByAddress(address string, skip, limit int64) ([]models.Tok
 //     same (txHash, contract, logIndex), only tokenID distinguishes them.
 //
 // Legacy rows pre-date the LogIndex and TokenID fields, so a missing-field
-// match is needed for the empty-string sentinel paths (direct-calldata
-// writes LogIndex="" with TokenID=""; pre-NFT rows have no tokenID at all).
+// match is needed for the empty-string sentinel paths (rows written by the
+// long-dead direct-calldata path carry LogIndex="" with TokenID=""; pre-NFT
+// rows have no tokenID at all).
 func TokenTransferExists(txHash, contractAddress, logIndex, tokenID string) (bool, error) {
 	collection := configs.GetCollection(configs.DB, "tokenTransfers")
 

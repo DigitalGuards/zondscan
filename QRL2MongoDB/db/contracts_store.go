@@ -334,17 +334,3 @@ func GetContract(address string) (*models.ContractInfo, error) {
 
 	return &contract, nil
 }
-
-// UpdateContractStatus updates the status of a contract
-func UpdateContractStatus(address string, status string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	update := bson.M{"$set": bson.M{"status": status}}
-	_, err := configs.GetContractsCollection().UpdateOne(ctx, bson.M{"address": address}, update)
-	if err != nil {
-		return fmt.Errorf("failed to update contract status: %v", err)
-	}
-
-	return nil
-}

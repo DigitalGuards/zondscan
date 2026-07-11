@@ -9,16 +9,6 @@ import (
 	"QRL2MongoDB/validation"
 )
 
-// TrimLeftZeros trims leading zeros from hex string
-func TrimLeftZeros(hex string) string {
-	for i := 0; i < len(hex); i++ {
-		if hex[i] != '0' {
-			return hex[i:]
-		}
-	}
-	return "0"
-}
-
 // maxBatchArrayLen caps the per-array element count we'll decode from a
 // TransferBatch log. Real-world batches are <100; this guards against an
 // adversarial payload claiming a huge array to OOM the decoder.

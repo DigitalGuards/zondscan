@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -202,28 +201,6 @@ func processBlockPeriodically() {
 		return
 	}
 
-	// Use the existing GetLastSyncedBlock function to get the last synced block
-	lastSyncedBlockObj, err := db.GetLastSyncedBlock()
-	if err != nil {
-		configs.Logger.Error("Failed to get last synced block", zap.Error(err))
-	} else if lastSyncedBlockObj != nil && lastSyncedBlockObj.Result.Number != "" {
-		// Compare with the current sync state
-		if utils.CompareHexNumbers(lastSyncedBlockObj.Result.Number, lastProcessedBlock) > 0 {
-			configs.Logger.Warn("Sync state mismatch detected - blocks exist but sync state is behind",
-				zap.String("sync_state", lastProcessedBlock),
-				zap.String("highest_block_found", lastSyncedBlockObj.Result.Number))
-
-			// Force update the sync state
-			forceUpdateSyncState(lastSyncedBlockObj.Result.Number)
-
-			// Update our local variable
-			lastProcessedBlock = lastSyncedBlockObj.Result.Number
-
-			configs.Logger.Info("Sync state updated to match actual database state",
-				zap.String("new_sync_state", lastProcessedBlock))
-		}
-	}
-
 	// Check if we're more than BatchSyncThreshold blocks behind
 	lastProcessedBlockNum := utils.HexToInt(lastProcessedBlock).Int64()
 	latestBlockNum := utils.HexToInt(latestBlock).Int64()
@@ -389,32 +366,26 @@ func singleBlockInsertion(stopCh <-chan struct{}) {
 	var wg sync.WaitGroup
 	wg.Add(4) // Block processing, data updates, validator updates, gap detection
 
-	// Define an initialization flag
-	var initialized int32
-	atomic.StoreInt32(&initialized, 0)
-
 	// Start periodic block processing task (every 30 seconds)
 	go func() {
 		defer wg.Done()
-		if atomic.CompareAndSwapInt32(&initialized, 0, 1) {
-			configs.Logger.Info("Starting periodic task",
-				zap.String("task", "block_processing"),
-				zap.Duration("interval", time.Second*30))
+		configs.Logger.Info("Starting periodic task",
+			zap.String("task", "block_processing"),
+			zap.Duration("interval", time.Second*30))
 
-			ticker := time.NewTicker(time.Second * 30)
-			defer ticker.Stop()
+		ticker := time.NewTicker(time.Second * 30)
+		defer ticker.Stop()
 
-			// Run immediately on start
-			processBlockPeriodically()
+		// Run immediately on start
+		processBlockPeriodically()
 
-			for {
-				select {
-				case <-ticker.C:
-					processBlockPeriodically()
-				case <-stopCh:
-					configs.Logger.Info("Stopping block processing on shutdown signal")
-					return
-				}
+		for {
+			select {
+			case <-ticker.C:
+				processBlockPeriodically()
+			case <-stopCh:
+				configs.Logger.Info("Stopping block processing on shutdown signal")
+				return
 			}
 		}
 	}()

@@ -23,14 +23,6 @@ type PendingTransaction struct {
 	CreatedAt            time.Time `bson:"createdAt" json:"createdAt"`
 }
 
-// PendingTransactionResponse represents the RPC response for pending transactions
-// Note: Pending transactions are fetched via txpool_content - use TxPoolContentResponse instead
-type PendingTransactionResponse struct {
-	Jsonrpc string               `json:"jsonrpc"`
-	Id      int                  `json:"id"`
-	Result  []PendingTransaction `json:"result"`
-}
-
 // TxPoolContentResponse represents the txpool_content format used by Zond nodes
 // This is the working method for fetching pending transactions
 // Format: {"pending": {"address": {"nonce": tx}}, "queued": {...}}
@@ -42,6 +34,3 @@ type TxPoolContentResponse struct {
 		Queued  map[string]map[string]PendingTransaction `json:"queued"`
 	} `json:"result"`
 }
-
-// LegacyPendingTransactionResponse is an alias for TxPoolContentResponse for backwards compatibility
-type LegacyPendingTransactionResponse = TxPoolContentResponse

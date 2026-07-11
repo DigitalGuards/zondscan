@@ -179,70 +179,11 @@ func processTokenContract(targetAddress string, txHash string, blockNumber strin
 		zap.String("name", contract.Name),
 		zap.String("symbol", contract.Symbol))
 
-	// Get transaction details
-	txDetails, err := rpc.GetTxDetailsByHash(txHash)
-	if err != nil {
-		configs.Logger.Error("Failed to get transaction details",
-			zap.String("txHash", txHash),
-			zap.Error(err))
-		return
-	}
+	// The former "direct transfer call" calldata-decode branch was deleted:
+	// its decoder could never produce a sender address, so the branch was
+	// unreachable dead code. Transfer detection relies on receipt logs.
 
-	// First check direct transfer calls
-	from, recipient, amount := rpc.DecodeTransferEvent(txDetails.Input)
-	if from != "" && recipient != "" && amount != "" {
-		configs.Logger.Info("Found direct token transfer",
-			zap.String("contract", targetAddress),
-			zap.String("from", from),
-			zap.String("to", recipient),
-			zap.String("amount", amount))
-
-		// Idempotent: the direct-calldata path uses logIndex="" (there's
-		// no originating log) and tokenID="" (ERC-20 only). The unique
-		// tuple for replay-detection is (txHash, contractAddress, "", "").
-		exists, err := TokenTransferExists(txHash, targetAddress, "", "")
-		if err == nil && exists {
-			configs.Logger.Debug("Skipping duplicate direct token transfer",
-				zap.String("txHash", txHash),
-				zap.String("contract", targetAddress))
-		} else {
-			// Store token transfer
-			transfer := models.TokenTransfer{
-				ContractAddress: targetAddress,
-				From:            from,
-				To:              recipient,
-				Amount:          amount,
-				BlockNumber:     blockNumber,
-				TxHash:          txHash,
-				Timestamp:       blockTimestamp,
-				TokenSymbol:     contract.Symbol,
-				TokenDecimals:   contract.Decimals,
-				TokenName:       contract.Name,
-				TransferType:    "direct",
-			}
-			if err := StoreTokenTransfer(transfer); err != nil {
-				configs.Logger.Error("Failed to store token transfer",
-					zap.String("txHash", txHash),
-					zap.Error(err))
-			}
-
-			// Update token balances
-			if err := StoreTokenBalance(targetAddress, from, amount, blockNumber); err != nil {
-				configs.Logger.Error("Failed to store token balance for sender",
-					zap.String("contract", targetAddress),
-					zap.String("holder", from),
-					zap.Error(err))
-			}
-			if err := StoreTokenBalance(targetAddress, recipient, amount, blockNumber); err != nil {
-				configs.Logger.Error("Failed to store token balance for recipient",
-					zap.String("contract", targetAddress),
-					zap.String("holder", recipient),
-					zap.Error(err))
-			}
-		}
-	}
-
-	// Then check transfer events in logs
+	// Check transfer events in logs
 	receipt, err := rpc.GetTransactionReceipt(txHash)
 	if err != nil {
 		configs.Logger.Error("Failed to get transaction receipt",

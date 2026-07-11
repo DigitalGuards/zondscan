@@ -1,15 +1,8 @@
 package configs
 
 import (
-	"os"
-
-	"github.com/go-playground/validator/v10"
 	"go.mongodb.org/mongo-driver/mongo"
 )
-
-const QUANTA float64 = 1000000000000000000
-
-var Url string = os.Getenv("NODE_URL")
 
 // Mongo collection names (database qrldata-z). Single source of truth for
 // the literals: bindCollections binds the handles below to these names,
@@ -73,5 +66,3 @@ var (
 	SyncStateCollection                    *mongo.Collection
 	TokenMetadataCollection                *mongo.Collection
 )
-
-var Validate = validator.New()
