@@ -325,6 +325,7 @@ func UpdateContractMetadata(ctx context.Context, address, uri, name, description
 	set := bson.M{
 		"metadataFetchedAt":  fetchedAt,
 		"metadataFetchError": "",
+		"updatedAt":          time.Now().UTC().Format(time.RFC3339),
 	}
 	// Only overwrite content fields when we have new content, preserving
 	// the last-good state.
@@ -380,6 +381,7 @@ func MarkContractMetadataFetchFailed(ctx context.Context, address, reason string
 			"metadataFetchError":  reason,
 			"metadataRetryCount":  retryCount,
 			"metadataNextRetryAt": nextRetryAt,
+			"updatedAt":           time.Now().UTC().Format(time.RFC3339),
 		}},
 	)
 	if err != nil {
