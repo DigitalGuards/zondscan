@@ -154,19 +154,6 @@ func GetLastKnownBlockNumber() string {
 	return result.BlockNumber
 }
 
-// GetLastSyncedBlock retrieves the last synced block as a ZondDatabaseBlock object
-// This is a wrapper around GetLastKnownBlockNumber that returns a block object
-func GetLastSyncedBlock() (*models.ZondDatabaseBlock, error) {
-	blockNumber := GetLastKnownBlockNumber()
-
-	// Create a block object with the retrieved block number
-	return &models.ZondDatabaseBlock{
-		Result: models.Result{
-			Number: blockNumber,
-		},
-	}, nil
-}
-
 // StoreLastKnownBlockNumber updates the sync state with the given block number
 // Only updates if the new block number is higher than the existing one
 func StoreLastKnownBlockNumber(blockNumber string) error {

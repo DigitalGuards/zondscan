@@ -152,12 +152,3 @@ func GetAllPendingTransactionHashes() ([]string, error) {
 
 	return hashes, nil
 }
-
-// DeletePendingTransaction removes a pending transaction by hash
-func DeletePendingTransaction(hash string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	_, err := configs.PendingTransactionsCollections.DeleteOne(ctx, bson.M{"_id": hash})
-	return err
-}

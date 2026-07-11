@@ -248,25 +248,15 @@ func Sync(stopCh <-chan struct{}) {
 	singleBlockInsertion(stopCh)
 }
 
-// findHighestProcessedBlock finds the highest block number that exists in the database
+// findHighestProcessedBlock returns the sync-state block number.
+// db.GetLastKnownBlockNumber never fails (it returns "0x0" when the sync
+// state is missing), so the historical fallbacks to GetLatestBlockFromDB
+// and a second sync-state read were unreachable and have been removed.
 func findHighestProcessedBlock() string {
-	// First try to get the last synced block from the database
-	lastSyncedBlock, err := db.GetLastSyncedBlock()
-	if err == nil && lastSyncedBlock != nil && lastSyncedBlock.Result.Number != "" {
-		configs.Logger.Info("Using last synced block from sync state",
-			zap.String("block", lastSyncedBlock.Result.Number))
-		return lastSyncedBlock.Result.Number
-	}
-
-	// Fallback to the old method if the above fails
-	// Get the latest block from the database
-	latestBlock := db.GetLatestBlockFromDB()
-	if latestBlock != nil && latestBlock.Result.Number != "" {
-		return latestBlock.Result.Number
-	}
-
-	// Fallback to the last known block number
-	return db.GetLastKnownBlockNumber()
+	block := db.GetLastKnownBlockNumber()
+	configs.Logger.Info("Using last synced block from sync state",
+		zap.String("block", block))
+	return block
 }
 
 // forceUpdateSyncState directly updates the sync state without conditions

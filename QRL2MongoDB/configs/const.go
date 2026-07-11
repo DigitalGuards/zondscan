@@ -14,16 +14,12 @@ const QRLZeroAddress = "Q0000000000000000000000000000000000000000"
 const (
 	ADDRESSES_COLLECTION                       = "addresses"
 	BLOCKS_COLLECTION                          = "blocks"
-	COINBASE_COLLECTION                        = "coinbase"
 	INTERNAL_TRANSACTION_BY_ADDRESS_COLLECTION = "internalTransactionByAddress"
 	TRANSACTION_BY_ADDRESS_COLLECTION          = "transactionByAddress"
 	TRANSFER_COLLECTION                        = "transfer"
-	ATTESTOR_COLLECTION                        = "attestor"
-	STAKE_COLLECTION                           = "stake"
 	VALIDATORS_COLLECTION                      = "validators"
 	CONTRACT_CODE_COLLECTION                   = "contractCode"
 	AVERAGE_BLOCK_SIZE_COLLECTION              = "averageBlockSize"
-	TOTAL_CIRCULATING_QUANTA_COLLECTION        = "totalCirculatingQuanta"
 	COINGECKO_COLLECTION                       = "coingecko"
 	WALLET_COUNT_COLLECTION                    = "walletCount"
 	DAILY_TRANSACTIONS_VOLUME_COLLECTION       = "dailyTransactionsVolume"
@@ -45,16 +41,11 @@ const LOG_FILENAME = "zond_sync.log"
 var (
 	AddressesCollections                    *mongo.Collection
 	BlocksCollections                       *mongo.Collection
-	CoinbaseCollections                     *mongo.Collection
 	InternalTransactionByAddressCollections *mongo.Collection
 	TransactionByAddressCollections         *mongo.Collection
 	TransferCollections                     *mongo.Collection
-	AttestorCollections                     *mongo.Collection
-	StakeCollections                        *mongo.Collection
 	ValidatorsCollections                   *mongo.Collection
-	ContractCodeCollection                  *mongo.Collection
 	AverageBlockSizeCollections             *mongo.Collection
-	TotalCirculatingQuantaCollections       *mongo.Collection
 	CoinGeckoCollections                    *mongo.Collection
 	WalletCountCollections                  *mongo.Collection
 	DailyTransactionsVolumeCollections      *mongo.Collection
@@ -69,16 +60,11 @@ var (
 func bindCollections(client *mongo.Client) {
 	AddressesCollections = GetCollection(client, ADDRESSES_COLLECTION)
 	BlocksCollections = GetCollection(client, BLOCKS_COLLECTION)
-	CoinbaseCollections = GetCollection(client, COINBASE_COLLECTION)
 	InternalTransactionByAddressCollections = GetCollection(client, INTERNAL_TRANSACTION_BY_ADDRESS_COLLECTION)
 	TransactionByAddressCollections = GetCollection(client, TRANSACTION_BY_ADDRESS_COLLECTION)
 	TransferCollections = GetCollection(client, TRANSFER_COLLECTION)
-	AttestorCollections = GetCollection(client, ATTESTOR_COLLECTION)
-	StakeCollections = GetCollection(client, STAKE_COLLECTION)
 	ValidatorsCollections = GetCollection(client, VALIDATORS_COLLECTION)
-	ContractCodeCollection = GetCollection(client, CONTRACT_CODE_COLLECTION)
 	AverageBlockSizeCollections = GetCollection(client, AVERAGE_BLOCK_SIZE_COLLECTION)
-	TotalCirculatingQuantaCollections = GetCollection(client, TOTAL_CIRCULATING_QUANTA_COLLECTION)
 	CoinGeckoCollections = GetCollection(client, COINGECKO_COLLECTION)
 	WalletCountCollections = GetCollection(client, WALLET_COUNT_COLLECTION)
 	DailyTransactionsVolumeCollections = GetCollection(client, DAILY_TRANSACTIONS_VOLUME_COLLECTION)

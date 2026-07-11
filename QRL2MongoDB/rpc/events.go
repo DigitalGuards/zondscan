@@ -26,30 +26,6 @@ const (
 	TransferBatchEventSignature = "0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb"
 )
 
-// DecodeTransferEvent decodes token transfers from both:
-// 1. Direct transfer calls (tx.data starting with 0xa9059cbb)
-// 2. Transfer events in transaction logs
-func DecodeTransferEvent(data string) (string, string, string) {
-	// First try to decode direct transfer call
-	if len(data) >= 10 && data[:10] == "0xa9059cbb" {
-		if len(data) != 138 { // 2 (0x) + 8 (func) + 64 (to) + 64 (amount) = 138
-			return "", "", ""
-		}
-
-		// Extract recipient address, canonical Q-prefix form
-		recipient := "Q" + strings.ToLower(data[34:74])
-		if len(recipient) != 41 { // Check if it's a valid address length (Z + 40 hex chars)
-			return "", "", ""
-		}
-
-		// Extract amount
-		amount := "0x" + data[74:]
-		return "", recipient, amount
-	}
-
-	return "", "", ""
-}
-
 // ProcessTransferLogs processes Transfer events from transaction logs.
 // LogIndex on the returned events is the originating log's index inside
 // the receipt; callers persist it so multi-transfer txs (a swap that

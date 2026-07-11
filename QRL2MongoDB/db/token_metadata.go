@@ -333,27 +333,6 @@ func GetTokensAwaitingMetadata(ctx context.Context, limit int, now time.Time, re
 	return composeBatch(limit, fresh, retryable, stale), nil
 }
 
-// GetTokenMetadataByContract returns all per-token metadata rows for one
-// collection. Used by /token/:addr/tokens enrichment.
-func GetTokenMetadataByContract(ctx context.Context, contractAddress string) ([]models.TokenMetadata, error) {
-	contractAddress = validation.ConvertToQAddress(contractAddress)
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	collection := configs.GetCollection(configs.DB, tokenMetadataCollection)
-	cur, err := collection.Find(ctx, bson.M{"contractAddress": contractAddress})
-	if err != nil {
-		return nil, err
-	}
-	defer cur.Close(ctx)
-
-	var out []models.TokenMetadata
-	if err := cur.All(ctx, &out); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // GetTokenMetadata returns the metadata document for one specific
 // (contract, tokenID) pair, or nil if no stub exists.
 func GetTokenMetadata(ctx context.Context, contractAddress, tokenID string) (*models.TokenMetadata, error) {

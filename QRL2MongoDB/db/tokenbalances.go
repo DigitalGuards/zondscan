@@ -2,7 +2,6 @@ package db
 
 import (
 	"QRL2MongoDB/configs"
-	"QRL2MongoDB/models"
 	"QRL2MongoDB/rpc"
 	"QRL2MongoDB/validation"
 	"context"
@@ -110,51 +109,6 @@ func StoreTokenBalance(contractAddress string, holderAddress string, amount stri
 		zap.Int64("upsertedCount", result.UpsertedCount))
 
 	return nil
-}
-
-// GetTokenBalance retrieves the current token balance for a holder
-func GetTokenBalance(contractAddress string, holderAddress string) (*models.TokenBalance, error) {
-	collection := configs.GetTokenBalancesCollection()
-	var balance models.TokenBalance
-
-	filter := bson.M{
-		"contractAddress": contractAddress,
-		"holderAddress":   holderAddress,
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	err := collection.FindOne(ctx, filter).Decode(&balance)
-	if err != nil {
-		return nil, err
-	}
-
-	return &balance, nil
-}
-
-// GetTokenHolders retrieves all holders of a specific token
-func GetTokenHolders(contractAddress string) ([]models.TokenBalance, error) {
-	collection := configs.GetTokenBalancesCollection()
-	var balances []models.TokenBalance
-
-	filter := bson.M{"contractAddress": contractAddress}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	cursor, err := collection.Find(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(ctx)
-
-	err = cursor.All(ctx, &balances)
-	if err != nil {
-		return nil, err
-	}
-
-	return balances, nil
 }
 
 // StoreERC721Ownership refreshes the single-owner row for one ERC-721

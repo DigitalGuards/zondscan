@@ -429,18 +429,11 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 		}
 	}
 
-	// If not found in blocks, try the transfers collection (fallback)
-	decoded, err := hex.DecodeString(strings.TrimPrefix(query, "0x"))
-	if err != nil {
-		return result, fmt.Errorf("invalid tx hash: %w", err)
-	}
-
-	filter := primitive.D{{Key: "txHash", Value: decoded}}
-	err = configs.TransferCollections.FindOne(ctx, filter).Decode(&result)
-	if err != nil {
-		log.Printf("error finding transfer by hash: %v", err)
-	}
-
+	// The historical transfers-collection fallback was deleted: it filtered
+	// the string txHash field with decoded []byte, so it could never match
+	// (and models.Transfer's field types would fail the Decode anyway). The
+	// blocks-collection lookup above, backed by the result_transactions_hash
+	// index, is the real path.
 	return result, err
 }
 

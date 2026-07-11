@@ -56,22 +56,6 @@ func IsValidAddress(address string) bool {
 	return len(address) == AddressLength+2 // +2 for "0x" prefix
 }
 
-// IsValidHash checks if a string is a valid transaction or block hash
-func IsValidHash(hash string) bool {
-	if !IsValidHexString(hash) {
-		return false
-	}
-	return len(hash) == HashLength+2 // +2 for "0x" prefix
-}
-
-// EnsureHexPrefix adds "0x" prefix if missing
-func EnsureHexPrefix(hex string) string {
-	if !hasHexPrefix(hex) {
-		return "0x" + hex
-	}
-	return hex
-}
-
 // ValidateHexString validates a hex string and returns an error if invalid
 func ValidateHexString(hex string, expectedLength int) error {
 	if !IsValidHexString(hex) {
@@ -93,14 +77,6 @@ func ValidateAddress(address string) error {
 		return fmt.Errorf("invalid address format: %s", address)
 	}
 	return nil
-}
-
-// StripHexPrefix removes "0x" prefix if present
-func StripHexPrefix(hex string) string {
-	if hasHexPrefix(hex) {
-		return hex[2:]
-	}
-	return hex
 }
 
 // StripAddressPrefix removes "0x", "Q", or "q" prefix if present
