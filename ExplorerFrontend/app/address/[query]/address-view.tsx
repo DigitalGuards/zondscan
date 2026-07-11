@@ -36,9 +36,13 @@ export default function AddressView({ addressData, addressSegment }: AddressView
     let firstSeen = addressData.first_seen ?? 0;
     let lastSeen = addressData.last_seen ?? 0;
     if (!firstSeen && addressData.transactions_by_address && Array.isArray(addressData.transactions_by_address) && addressData.transactions_by_address.length > 0) {
-        const timestamps = addressData.transactions_by_address.map(tx => Number(tx.TimeStamp));
-        firstSeen = Math.min(...timestamps);
-        lastSeen = Math.max(...timestamps);
+        const timestamps = addressData.transactions_by_address
+            .map(tx => Number(tx.TimeStamp))
+            .filter(ts => !Number.isNaN(ts));
+        if (timestamps.length > 0) {
+            firstSeen = Math.min(...timestamps);
+            lastSeen = Math.max(...timestamps);
+        }
     }
 
     let addressType = "";
