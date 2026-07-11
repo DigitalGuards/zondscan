@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -365,25 +366,11 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 	}
 
 	trace := rpc.CallDebugTraceTransaction(tx.Hash)
-	if trace.TransactionType == "CALL" || trace.TraceAddress != nil {
-		InternalTransactionByAddressCollection(
-			trace.TransactionType,
-			trace.CallType,
-			txHash,
-			trace.From,
-			trace.To,
-			fmt.Sprintf("0x%x", trace.Input),
-			fmt.Sprintf("0x%x", trace.Output),
-			trace.TraceAddress,
-			float64(trace.Value),
-			fmt.Sprintf("0x%x", trace.Gas),
-			fmt.Sprintf("0x%x", trace.GasUsed),
-			trace.AddressFunctionIdentifier,
-			fmt.Sprintf("0x%x", trace.AmountFunctionIdentifier),
-			blockTimestamp,
-			blockNumber,
-		)
-	}
+	// Persist the nested (depth >= 1) call frames: value moved by contract
+	// code rather than by the outer transaction itself, e.g. an HTLC claim
+	// paying out contract-held funds. The top-level frame is intentionally
+	// not stored; it would only duplicate the transactionByAddress row.
+	StoreInternalCalls(trace.InternalCalls, txHash, blockTimestamp, blockNumber)
 
 	// Calculate fees using hex strings. Guard against empty/short
 	// gasPrice, slicing [2:] on those panics; treat too-short as zero.
@@ -490,6 +477,31 @@ func TransferCollection(blockNumber string, blockTimestamp string, from string, 
 	}
 
 	return result, err
+}
+
+// StoreInternalCalls persists each flattened nested call frame of one
+// transaction as an internalTransactionByAddress row. Shared by the live
+// sync path (processTransactions) and the historical backfill command.
+func StoreInternalCalls(calls []rpc.InternalCall, txHash string, blockTimestamp string, blockNumber string) {
+	for _, call := range calls {
+		InternalTransactionByAddressCollection(
+			call.Type,
+			strings.ToLower(call.Type),
+			txHash,
+			call.From,
+			call.To,
+			call.Input,
+			call.Output,
+			call.TraceAddress,
+			call.Value,
+			call.Gas,
+			call.GasUsed,
+			"",
+			"0x0",
+			blockTimestamp,
+			blockNumber,
+		)
+	}
 }
 
 func InternalTransactionByAddressCollection(transactionType string, callType string, hash string, from string, to string, input string, output string, traceAddress []int, value float64, gas string, gasUsed string, addressFunctionIdentifier string, amountFunctionIdentifier string, blockTimestamp string, blockNumber string) (*mongo.InsertOneResult, error) {
