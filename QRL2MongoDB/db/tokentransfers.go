@@ -4,11 +4,11 @@ import (
 	"QRL2MongoDB/configs"
 	"QRL2MongoDB/models"
 	"QRL2MongoDB/rpc"
+	"QRL2MongoDB/utils"
 	"QRL2MongoDB/validation"
 	"context"
 	"fmt"
 	"math/big"
-	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -39,9 +39,9 @@ func StoreTokenTransfer(transfer models.TokenTransfer) error {
 	transfer.ContractAddress = validation.ConvertToQAddress(transfer.ContractAddress)
 
 	// Populate the numeric block number so sort operations order correctly.
-	// BlockNumber is the raw hex string; HexToInt64 lives in the same db
-	// package (db/blocks.go) and returns 0 on any parse error.
-	transfer.BlockNumberInt = HexToInt64(transfer.BlockNumber)
+	// BlockNumber is the raw hex string; utils.HexToInt64 returns 0 on any
+	// parse error.
+	transfer.BlockNumberInt = utils.HexToInt64(transfer.BlockNumber)
 
 	// Debug-level log for per-record operations; Info is reserved for batch summaries.
 	configs.Logger.Debug("Inserting token transfer document",
@@ -417,9 +417,10 @@ func decodeTransferLog(
 
 // decodeERC20TransferRow produces a single TokenTransfer for an ERC-20
 // Transfer log. Amount is left as the raw hex `log.Data` for backward
-// compatibility with rows written before Phase 1.
+// compatibility with rows written before Phase 1 (the parsed amount from
+// ParseTransferEvent is deliberately unused).
 func decodeERC20TransferRow(log models.Log, base models.TokenTransfer) ([]models.TokenTransfer, error) {
-	from, to, _, err := ParseStandardTransferTopics(log)
+	from, to, _, err := rpc.ParseTransferEvent(log)
 	if err != nil {
 		return nil, err
 	}
@@ -480,43 +481,6 @@ func decodeERC1155TransferBatchRows(log models.Log, base models.TokenTransfer) (
 		out[i] = row
 	}
 	return out, nil
-}
-
-// ParseStandardTransferTopics extracts (from, to) from a standard Transfer
-// event's topics[1] / topics[2]. Returns the canonical Q-prefix lowercase
-// form and an empty *big.Int placeholder (kept in the signature so future
-// callers can fold in amount parsing if needed). Errors on malformed topics.
-func ParseStandardTransferTopics(log models.Log) (string, string, *big.Int, error) {
-	if len(log.Topics) < 3 {
-		return "", "", nil, fmt.Errorf("transfer log requires >=3 topics, got %d", len(log.Topics))
-	}
-	from, err := extractAddressTopic(log.Topics[1])
-	if err != nil {
-		return "", "", nil, fmt.Errorf("from: %w", err)
-	}
-	to, err := extractAddressTopic(log.Topics[2])
-	if err != nil {
-		return "", "", nil, fmt.Errorf("to: %w", err)
-	}
-	return from, to, new(big.Int), nil
-}
-
-// extractAddressTopic returns the Q-prefix lowercase address from a
-// 32-byte indexed topic. Tolerates topics of length <66 (some legacy
-// implementations strip leading zeros).
-func extractAddressTopic(topic string) (string, error) {
-	stripped := topic
-	if len(stripped) >= 2 && stripped[:2] == "0x" {
-		stripped = stripped[2:]
-	}
-	if len(stripped) < 40 {
-		return "", fmt.Errorf("topic too short: %s", topic)
-	}
-	addr := "Q" + strings.ToLower(stripped[len(stripped)-40:])
-	if !validation.IsValidAddress(addr) {
-		return "", fmt.Errorf("invalid address derived from topic: %s", addr)
-	}
-	return addr, nil
 }
 
 // normalizeAddress maps degenerate empty / bare-Q forms to the canonical

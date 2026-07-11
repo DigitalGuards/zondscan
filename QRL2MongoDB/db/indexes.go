@@ -10,6 +10,7 @@ package db
 
 import (
 	"QRL2MongoDB/configs"
+	"QRL2MongoDB/utils"
 	"context"
 	"strings"
 	"time"
@@ -304,7 +305,7 @@ func BackfillTokenTransferBlockNumberInt(ctx context.Context) error {
 
 		models = append(models, mongo.NewUpdateOneModel().
 			SetFilter(bson.M{"_id": doc.ID}).
-			SetUpdate(bson.M{"$set": bson.M{"blockNumberInt": HexToInt64(doc.BlockNumber)}}))
+			SetUpdate(bson.M{"$set": bson.M{"blockNumberInt": utils.HexToInt64(doc.BlockNumber)}}))
 
 		if len(models) >= backfillBatchSize {
 			if flushErr := flush(); flushErr != nil {
