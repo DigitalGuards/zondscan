@@ -308,7 +308,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
               : 'QRC-20 Token';
     const badgeClasses = isNFT
         ? 'bg-purple-500/20 text-purple-300'
-        : 'bg-green-500/20 text-success';
+        : 'bg-success/20 text-success';
 
     const tabs: { id: typeof activeTab; label: string }[] = [
         { id: 'overview', label: 'Overview' },
