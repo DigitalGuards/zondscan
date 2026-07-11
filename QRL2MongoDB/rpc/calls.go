@@ -1,9 +1,7 @@
 package rpc
 
 import (
-	"QRL2MongoDB/configs"
 	"QRL2MongoDB/models"
-	"QRL2MongoDB/services"
 	"QRL2MongoDB/utils"
 	"QRL2MongoDB/validation"
 	"encoding/json"
@@ -251,7 +249,7 @@ func flattenCalls(calls []models.Call, path []int) []InternalCall {
 		if hasValue || strings.HasPrefix(call.Type, "CREATE") {
 			valueFloat := 0.0
 			if hasValue {
-				divisor := new(big.Float).SetFloat64(float64(configs.QUANTA))
+				divisor := new(big.Float).SetFloat64(float64(utils.QUANTA))
 				quo := new(big.Float).Quo(new(big.Float).SetInt(value), divisor)
 				valueFloat, _ = quo.Float64()
 			}
@@ -398,7 +396,7 @@ func CallDebugTraceTransaction(hash string) DebugTraceResult {
 			valueBigInt := new(big.Int)
 			valueBigInt.SetString(tracerResponse.Result.Value[2:], 16)
 
-			divisor := new(big.Float).SetFloat64(float64(configs.QUANTA))
+			divisor := new(big.Float).SetFloat64(float64(utils.QUANTA))
 			bigIntAsFloat := new(big.Float).SetInt(valueBigInt)
 			resultBigFloat := new(big.Float).Quo(bigIntAsFloat, divisor)
 			valueFloat64, _ := resultBigFloat.Float64()
@@ -562,30 +560,27 @@ func GetBalance(address string) (string, error) {
 	return result.Result, nil
 }
 
-func GetValidators() error {
+// GetValidators fetches up to maxPages of validators from the beacon chain
+// API and returns the parsed pages. Persistence is the caller's concern
+// (synchroniser feeds the pages to services.StoreValidators); keeping this
+// function transport-only keeps rpc free of any db/services dependency.
+func GetValidators() ([]models.BeaconValidatorResponse, error) {
 	zap.L().Info("Starting GetValidators call to beacon chain API")
 
 	beaconchainURL := os.Getenv("BEACONCHAIN_API")
 	if beaconchainURL == "" {
-		return fmt.Errorf("BEACONCHAIN_API environment variable not set")
+		return nil, fmt.Errorf("BEACONCHAIN_API environment variable not set")
 	}
 
 	// Base URL for the validators endpoint
 	baseURL := strings.TrimRight(beaconchainURL, "/") + "/qrl/v1alpha1/validators"
 	client := GetHTTPClient()
 
-	// Get current epoch from latest block
-	latestBlock, err := GetLatestBlock()
-	if err != nil {
-		return fmt.Errorf("failed to get latest block: %v", err)
-	}
-	currentEpoch := strconv.FormatUint(uint64(utils.HexToInt(latestBlock).Int64()/128), 10)
-
 	pageToken := ""
 	maxPages := 3 // Configurable based on needs
-	currentPage := 0
+	pages := make([]models.BeaconValidatorResponse, 0, maxPages)
 
-	for currentPage < maxPages {
+	for len(pages) < maxPages {
 		requestURL := baseURL
 		if pageToken != "" {
 			requestURL += "?page_token=" + pageToken
@@ -593,38 +588,32 @@ func GetValidators() error {
 
 		req, err := http.NewRequest("GET", requestURL, nil)
 		if err != nil {
-			return fmt.Errorf("failed to create request: %v", err)
+			return nil, fmt.Errorf("failed to create request: %v", err)
 		}
 
 		resp, err := client.Do(req)
 		if err != nil {
-			return fmt.Errorf("failed to get response from beacon API: %v", err)
+			return nil, fmt.Errorf("failed to get response from beacon API: %v", err)
 		}
 
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
-			return fmt.Errorf("unexpected status code from beacon API: %d", resp.StatusCode)
+			return nil, fmt.Errorf("unexpected status code from beacon API: %d", resp.StatusCode)
 		}
 
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			return fmt.Errorf("failed to read response body: %v", err)
+			return nil, fmt.Errorf("failed to read response body: %v", err)
 		}
 
 		var beaconResponse models.BeaconValidatorResponse
 		err = json.Unmarshal(body, &beaconResponse)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal response: %v", err)
+			return nil, fmt.Errorf("failed to unmarshal response: %v", err)
 		}
 
-		// Store this page of validators using the validator service
-		err = services.StoreValidators(beaconResponse, currentEpoch)
-		if err != nil {
-			return fmt.Errorf("failed to store validators: %v", err)
-		}
-
-		currentPage++
+		pages = append(pages, beaconResponse)
 
 		// Check if there's a next page
 		if beaconResponse.NextPageToken == "" {
@@ -634,10 +623,9 @@ func GetValidators() error {
 	}
 
 	zap.L().Info("Completed fetching validators",
-		zap.Int("pages_processed", currentPage),
-		zap.String("current_epoch", currentEpoch))
+		zap.Int("pages_processed", len(pages)))
 
-	return nil
+	return pages, nil
 }
 
 // GetBeaconChainHead fetches the current chain head information from the beacon chain API

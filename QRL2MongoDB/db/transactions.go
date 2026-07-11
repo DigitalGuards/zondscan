@@ -4,6 +4,7 @@ import (
 	"QRL2MongoDB/configs"
 	"QRL2MongoDB/models"
 	"QRL2MongoDB/rpc"
+	"QRL2MongoDB/utils"
 	"QRL2MongoDB/validation"
 	"context"
 	"errors"
@@ -334,7 +335,7 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 			value.SetInt64(0)
 		}
 	}
-	divisor := new(big.Float).SetFloat64(float64(configs.QUANTA))
+	divisor := new(big.Float).SetFloat64(float64(utils.QUANTA))
 	bigIntAsFloat := new(big.Float).SetInt(value)
 	resultBigFloat := new(big.Float).Quo(bigIntAsFloat, divisor)
 	valueFloat64, _ := resultBigFloat.Float64()
@@ -357,7 +358,7 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 				continue
 			}
 
-			divisor := new(big.Float).SetFloat64(float64(configs.QUANTA))
+			divisor := new(big.Float).SetFloat64(float64(utils.QUANTA))
 			bigIntAsFloat := new(big.Float).SetInt(getBalanceResult)
 			resultBigFloat := new(big.Float).Quo(bigIntAsFloat, divisor)
 			resultFloat64, _ := resultBigFloat.Float64()
@@ -429,7 +430,7 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 	// Legacy float fields, kept for backward-compatible numeric queries (e.g.
 	// amount $gt 0). The exact, drift-free value travels alongside them as the
 	// amountWei / paidFeesWei base-10 integer strings (value and feesBig).
-	divisor = new(big.Float).SetFloat64(float64(configs.QUANTA))
+	divisor = new(big.Float).SetFloat64(float64(utils.QUANTA))
 	feesFloat := new(big.Float).SetInt(feesBig)
 	feesResult := new(big.Float).Quo(feesFloat, divisor)
 	fees, _ := feesResult.Float64()

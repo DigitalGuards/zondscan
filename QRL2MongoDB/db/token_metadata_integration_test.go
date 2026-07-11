@@ -15,6 +15,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -25,6 +26,16 @@ import (
 )
 
 const itContract = "Q00000000000000000000000000000000000000aa"
+
+// TestMain connects to the MONGOURI Mongo before any integration test runs:
+// configs no longer connects at import time, so tagged runs must do it here.
+func TestMain(m *testing.M) {
+	if err := configs.ConnectDB(); err != nil {
+		fmt.Println("integration tests need a live MongoDB:", err)
+		os.Exit(1)
+	}
+	os.Exit(m.Run())
+}
 
 func cleanupTokens(t *testing.T) {
 	t.Helper()
