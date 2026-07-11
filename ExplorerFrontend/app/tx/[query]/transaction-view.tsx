@@ -270,7 +270,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                 <CopyButton value={transaction.to} label="Copy address" size="sm" />
               </div>
             ) : (
-              <span className="text-text-muted">—</span>
+              <span className="text-text-muted">-</span>
             )}
           </DetailRow>
           <DetailRow label="Value">
@@ -684,7 +684,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             </div>
             {/* Whole body of the card is a native <details> disclosure
                 so the only visible row when collapsed is the toggle
-                row directly under the header — no empty padded body
+                row directly under the header - no empty padded body
                 creating dead space, no stray divider hanging above
                 the toggle. Decoded args, raw hex, and the verify
                 nudge all live inside the expanded region. Order

@@ -811,7 +811,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                 // Phase 3b: render the off-chain image if the fetcher has
                                                 // populated it; fall back to a #N monogram tile. The "Token"
                                                 // column shows the metadata name when present, otherwise
-                                                // just "#<id>" — keeps unfetched / no-metadata cases clean.
+                                                // just "#<id>" - keeps unfetched / no-metadata cases clean.
                                                 const tokenLabel = t.name?.trim() || `#${t.tokenID}`;
                                                 const subLabel = t.name?.trim() ? `#${t.tokenID}` : null;
                                                 return (

@@ -55,12 +55,14 @@ interface PageProps {
 export async function generateMetadata({ params }: { params: Promise<{ query: string }> }): Promise<Metadata> {
   const resolvedParams = await params;
   const pageNumber = resolvedParams.query || '1';
-  const canonicalUrl = `https://zondscan.com/transactions`;
-  
+  // Self-referencing canonical so pages 2+ stay indexable instead of all
+  // collapsing into the /transactions index page.
+  const canonicalUrl = `https://zondscan.com/transactions/${pageNumber}`;
+
   return {
     ...sharedMetadata,
     title: `Transactions - Page ${pageNumber} | ZondScan`,
-    description: `View all transactions on the QRL blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
+    description: `View all transactions on the QRL 2.0 blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
     alternates: {
       ...sharedMetadata.alternates,
       canonical: canonicalUrl,
@@ -68,7 +70,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     openGraph: {
       ...sharedMetadata.openGraph,
       title: `Transactions - Page ${pageNumber} | ZondScan`,
-      description: `View all transactions on the QRL blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
+      description: `View all transactions on the QRL 2.0 blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
       url: `https://zondscan.com/transactions/${pageNumber}`,
       siteName: 'ZondScan',
       type: 'website',
@@ -76,7 +78,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     twitter: {
       ...sharedMetadata.twitter,
       title: `Transactions - Page ${pageNumber} | ZondScan`,
-      description: `View all transactions on the QRL blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
+      description: `View all transactions on the QRL 2.0 blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
     },
   };
 }

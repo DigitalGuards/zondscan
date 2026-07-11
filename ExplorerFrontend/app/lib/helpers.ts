@@ -1208,7 +1208,7 @@ export function qNormaliseAbiValue(v: unknown, type: string): unknown {
  * Cheap client-side format check for a QRL address: a `Q`/`q` prefix (or bare
  * hex) followed by exactly 40 hex chars. QRL addresses are Q-prefixed; `0x` is
  * only for block/tx hashes, so it's intentionally not accepted here. This is a
- * UX guard only — the server's normalizeQrlAddress remains authoritative; we
+ * UX guard only - the server's normalizeQrlAddress remains authoritative; we
  * use it to avoid a wasted round-trip + Turnstile token on obvious typos.
  */
 export function isValidQrlAddressFormat(address: string): boolean {

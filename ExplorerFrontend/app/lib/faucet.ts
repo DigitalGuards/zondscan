@@ -84,7 +84,7 @@ export function getFaucetConfig(): FaucetConfig {
   if (configured && !captchaEnabled && !warnedNoCaptcha) {
     warnedNoCaptcha = true;
     console.warn(
-      '[faucet] Turnstile is NOT configured — the faucet has no captcha protection. ' +
+      '[faucet] Turnstile is NOT configured - the faucet has no captcha protection. ' +
         'Set TURNSTILE_SECRET + NEXT_PUBLIC_TURNSTILE_SITE_KEY before exposing it publicly' +
         (isProd && !allowNoCaptcha
           ? '. Claims are disabled until captcha is configured (set FAUCET_ALLOW_NO_CAPTCHA=true to override).'
@@ -127,7 +127,7 @@ export class FaucetError extends Error {
 /**
  * Validate and normalise a user-supplied QRL address to the canonical
  * `Q`+lowercase-hex form the @theqrl/web3 lib accepts for `to`. QRL addresses
- * are Q-prefixed — the `0x` prefix is only ever used for block/tx hashes — so we
+ * are Q-prefixed - the `0x` prefix is only ever used for block/tx hashes - so we
  * accept a `Q`/`q` prefix or bare hex. Returns null when the value isn't a
  * 40-hex-character address.
  */
@@ -144,7 +144,7 @@ export function normalizeQrlAddress(input: string): string | null {
  * verbatim, but IPv6 is reduced to its `/64` prefix: ISPs and clouds routinely
  * hand a single client a whole `/64` (2^64 addresses), so keying on the full
  * address would let one client rotate around the cooldown for free. On any
- * parse failure we fall back to the raw string (fail safe — still *some* key).
+ * parse failure we fall back to the raw string (fail safe - still *some* key).
  */
 export function ipCooldownKey(ip: string | null): string | null {
   if (!ip) return null;
@@ -157,13 +157,13 @@ export function ipCooldownKey(ip: string | null): string | null {
   // IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1), which a dual-stack socket hands
   // back for plain IPv4 clients. Its first four hextets are all zero, so the
   // /64 reduction below would collapse every such client into one shared
-  // bucket — key on the embedded IPv4 instead.
+  // bucket - key on the embedded IPv4 instead.
   const mapped = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i.exec(addr);
   if (mapped) return mapped[1];
 
   // Expand `::` and take the first four hextets (the /64 network prefix).
   const halves = addr.split('::');
-  if (halves.length > 2) return raw; // malformed — more than one '::'
+  if (halves.length > 2) return raw; // malformed - more than one '::'
   const head = halves[0] ? halves[0].split(':') : [];
   const tail = halves.length === 2 ? (halves[1] ? halves[1].split(':') : []) : [];
   let groups: string[];
@@ -467,7 +467,7 @@ async function ensureClaimIndexes(col: Collection<FaucetClaim>): Promise<void> {
 export interface ClaimSlot {
   /** True when the slot was reserved and the caller may broadcast. */
   ok: boolean;
-  /** Reservation id — pass to finalizeClaim or deletePendingClaim. */
+  /** Reservation id - pass to finalizeClaim or deletePendingClaim. */
   claimId?: ObjectId;
   /** Seconds until the cooldown clears, when ok is false. */
   retryAfterSeconds?: number;
@@ -478,7 +478,7 @@ export interface ClaimSlot {
  * naive check-then-send leaves open. We INSERT a PENDING row first, THEN look
  * for any *other* claim inside the cooldown window: because both concurrent
  * requests insert before they check, neither can slip through unseen. Fails
- * closed — if a rival row exists we delete our own and report the cooldown, so
+ * closed - if a rival row exists we delete our own and report the cooldown, so
  * the worst case is a spurious retry, never a double drip.
  *
  * On `ok`, the caller MUST settle the reservation: finalizeClaim once the drip

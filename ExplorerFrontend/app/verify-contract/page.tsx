@@ -1,10 +1,27 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import VerifyContractClient from './verify-contract-client';
+import { sharedMetadata } from '../lib/seo/metaData';
 
 export const metadata: Metadata = {
-  title: 'Verify Contract | Zondscan',
+  ...sharedMetadata,
+  title: 'Verify Contract | ZondScan',
   description: 'Verify and publish a Hyperion smart contract on the QRL 2.0 network.',
+  alternates: {
+    ...sharedMetadata.alternates,
+    canonical: 'https://zondscan.com/verify-contract',
+  },
+  openGraph: {
+    ...sharedMetadata.openGraph,
+    title: 'Verify Contract | ZondScan',
+    description: 'Verify and publish a Hyperion smart contract on the QRL 2.0 network.',
+    url: 'https://zondscan.com/verify-contract',
+  },
+  twitter: {
+    ...sharedMetadata.twitter,
+    title: 'Verify Contract | ZondScan',
+    description: 'Verify and publish a Hyperion smart contract on the QRL 2.0 network.',
+  },
 };
 
 export default function VerifyContractPage(): JSX.Element {
