@@ -48,7 +48,6 @@ export {
   type DownloadBtnProps,
   type DownloadBtnInternalProps,
   type TransactionsListProps,
-  type TransactionCardProps,
   type PaginationProps,
   type PageProps,
 } from './components';

@@ -21,8 +21,8 @@ export default function ContractBytecode({ contractCode }: ContractBytecodeProps
     return (
         <div>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
-                <div className="text-xs md:text-sm text-gray-400">
-                    Contract Bytecode <span className="text-gray-500">({byteLength.toLocaleString()} bytes)</span>
+                <div className="text-xs md:text-sm text-text-secondary">
+                    Contract Bytecode <span className="text-text-muted">({byteLength.toLocaleString()} bytes)</span>
                 </div>
                 <div className="flex items-center gap-2">
                     <button
@@ -31,7 +31,7 @@ export default function ContractBytecode({ contractCode }: ContractBytecodeProps
                         aria-expanded={expanded}
                         className="inline-flex items-center px-3 py-1.5 rounded-lg
                                    bg-card-gradient border border-border hover:border-accent
-                                   text-sm text-gray-300 hover:text-accent transition-colors"
+                                   text-sm text-text-secondary hover:text-accent transition-colors"
                     >
                         {expanded ? 'Collapse' : 'Expand'}
                     </button>
@@ -39,7 +39,7 @@ export default function ContractBytecode({ contractCode }: ContractBytecodeProps
                 </div>
             </div>
             <div
-                className={`rounded-lg bg-black/40 border border-border p-3 font-mono text-xs text-gray-300
+                className={`rounded-lg bg-black/40 border border-border p-3 font-mono text-xs text-text-secondary
                             break-all overflow-y-auto transition-[max-height] duration-200
                             ${expanded ? 'max-h-[32rem]' : 'max-h-24'}`}
             >

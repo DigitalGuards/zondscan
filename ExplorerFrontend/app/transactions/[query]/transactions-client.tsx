@@ -61,15 +61,15 @@ export default function TransactionsClient({ initialData, pageNumber }: Transact
 
   if (error) {
     return (
-      <div className="p-4 sm:p-8 max-w-6xl mx-auto">
-        <h1 className="text-xl sm:text-2xl font-bold mb-4 text-[#ffa729]">Transactions</h1>
+      <div className="py-4 sm:py-6 lg:py-8">
+        <h1 className="section-title mb-4">Transactions</h1>
         <div className="bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-xl">
           <p className="font-bold">Error:</p>
           <p className="text-sm">{error}</p>
         </div>
         <button
           onClick={refetchData}
-          className="mt-4 px-4 py-2 bg-[#ffa729] text-black rounded-lg hover:bg-[#ffb85c] transition-colors"
+          className="mt-4 px-4 py-2 bg-accent text-background rounded-lg hover:bg-accent-hover transition-colors"
         >
           Try Again
         </button>
@@ -80,8 +80,8 @@ export default function TransactionsClient({ initialData, pageNumber }: Transact
   if (isLoading) {
     return (
       <div className="flex justify-center items-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#ffa729]"></div>
-        <span className="ml-2 text-gray-400">Refreshing transactions...</span>
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-accent"></div>
+        <span className="ml-2 text-text-secondary">Refreshing transactions...</span>
       </div>
     );
   }

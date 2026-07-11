@@ -3,8 +3,30 @@ import Sidebar from "./components/Sidebar"
 import Script from 'next/script'
 import Providers from './providers'
 import type { Metadata } from 'next';
+import { Chakra_Petch, IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google';
 import { sharedMetadata } from './lib/seo/metaData';
 import Footer from './components/Footer';
+
+const displayFont = Chakra_Petch({
+  weight: ['500', '600', '700'],
+  subsets: ['latin'],
+  variable: '--font-zs-display',
+  display: 'swap',
+});
+
+const sansFont = IBM_Plex_Sans({
+  weight: ['400', '500', '600'],
+  subsets: ['latin'],
+  variable: '--font-zs-sans',
+  display: 'swap',
+});
+
+const monoFont = IBM_Plex_Mono({
+  weight: ['400', '500'],
+  subsets: ['latin'],
+  variable: '--font-zs-mono',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   ...sharedMetadata,
@@ -30,7 +52,7 @@ export const metadata: Metadata = {
 
 
 export const viewport = {
-  themeColor: '#1a1a1a',
+  themeColor: '#0b0d13',
 }
 
 interface RootLayoutProps {
@@ -39,7 +61,7 @@ interface RootLayoutProps {
 
 export default function RootLayout({ children }: RootLayoutProps): JSX.Element {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className={`dark ${displayFont.variable} ${sansFont.variable} ${monoFont.variable}`}>
       <head>
         <Script id="schema-org" type="application/ld+json" strategy="beforeInteractive">
           {`
@@ -118,9 +140,9 @@ export default function RootLayout({ children }: RootLayoutProps): JSX.Element {
           `}
         </Script>
       </head>
-      <body className="min-h-screen bg-[#1a1a1a] text-gray-300">
+      <body className="min-h-screen bg-background text-text-secondary">
         <Providers>
-          <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-[#ffa729] focus:text-black focus:rounded-lg focus:text-sm focus:font-medium">
+          <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-accent focus:text-background focus:rounded-lg focus:text-sm focus:font-medium">
             Skip to main content
           </a>
           <div className="flex min-h-screen">
@@ -130,7 +152,7 @@ export default function RootLayout({ children }: RootLayoutProps): JSX.Element {
                 auto), so any wide table or long unbroken hash stretches the
                 whole page beyond the mobile viewport instead of scrolling
                 inside its own overflow-x-auto container. */}
-            <div className="flex-1 min-w-0 lg:ml-64 min-h-screen relative transition-all duration-300 mt-[72px] lg:mt-4 flex flex-col">
+            <div className="flex-1 min-w-0 lg:ml-64 min-h-screen relative transition-all duration-300 mt-14 lg:mt-4 flex flex-col">
               <main id="main-content" className="flex-1 relative">
                 {children}
               </main>

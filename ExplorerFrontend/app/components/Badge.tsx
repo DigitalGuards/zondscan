@@ -5,22 +5,25 @@ interface BadgeProps {
   dot?: boolean
 }
 
+/* One badge recipe across the app: soft status fill, hairline border in the
+   same hue, status-colored text. StatusBadge/MethodBadge follow the same
+   pattern so "status" reads identically on every page. */
 const VARIANT_STYLES = {
-  success: 'bg-green-900/30 text-green-400 border-green-800',
-  warning: 'bg-yellow-900/30 text-yellow-400 border-yellow-800',
-  error: 'bg-red-900/30 text-red-400 border-red-800',
-  info: 'bg-blue-900/30 text-blue-400 border-blue-800',
-  neutral: 'bg-gray-900/30 text-gray-400 border-gray-700',
-  brand: 'bg-[#ffa729]/20 text-[#ffa729] border-[#ffa729]/30',
+  success: 'bg-success/10 text-success border-success/25',
+  warning: 'bg-warning/10 text-warning border-warning/25',
+  error: 'bg-error/10 text-error border-error/25',
+  info: 'bg-info/10 text-info border-info/25',
+  neutral: 'bg-surface-2 text-text-secondary border-border',
+  brand: 'bg-accent/10 text-accent border-accent/25',
 } as const
 
 const DOT_COLORS = {
-  success: 'bg-green-400',
-  warning: 'bg-yellow-400',
-  error: 'bg-red-400',
-  info: 'bg-blue-400',
-  neutral: 'bg-gray-400',
-  brand: 'bg-[#ffa729]',
+  success: 'bg-success',
+  warning: 'bg-warning',
+  error: 'bg-error',
+  info: 'bg-info',
+  neutral: 'bg-text-muted',
+  brand: 'bg-accent',
 } as const
 
 const SIZE_STYLES = {
@@ -30,7 +33,7 @@ const SIZE_STYLES = {
 
 export default function Badge({ variant, children, size = 'sm', dot = false }: BadgeProps): JSX.Element {
   return (
-    <span className={`inline-flex items-center rounded-full font-medium border ${VARIANT_STYLES[variant]} ${SIZE_STYLES[size]}`}>
+    <span className={`inline-flex items-center rounded-md font-medium border ${VARIANT_STYLES[variant]} ${SIZE_STYLES[size]}`}>
       {dot && <span className={`w-1.5 h-1.5 rounded-full ${DOT_COLORS[variant]} mr-1.5`} />}
       {children}
     </span>

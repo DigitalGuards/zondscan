@@ -163,12 +163,12 @@ export default function TokenTransfersPanel({
               <div className="flex flex-col">
                 <Link
                   href={`/address/${contractAddress}`}
-                  className="text-[#ffa729] hover:text-[#ffb954] font-medium"
+                  className="text-accent hover:text-accent-hover font-medium"
                   title={contractAddress}
                 >
                   {label}
                 </Link>
-                <div className="flex items-center gap-2 text-xs text-gray-400">
+                <div className="flex items-center gap-2 text-xs text-text-secondary">
                   <span className="font-mono">{badge}</span>
                   {tokenID && <span className="font-mono">#{tokenID}</span>}
                   {symbol && symbol !== name && (
@@ -189,11 +189,11 @@ export default function TokenTransfersPanel({
             <div className="flex flex-col gap-1">
               {from && (
                 <div className="flex items-center gap-1">
-                  <span className="text-gray-400 text-sm">From:</span>
+                  <span className="text-text-secondary text-sm">From:</span>
                   <Link
                     href={`/address/${from}`}
                     title={from}
-                    className="text-[#ffa729] hover:text-[#ffb954]"
+                    className="text-accent hover:text-accent-hover"
                   >
                     {truncateMiddle(from)}
                   </Link>
@@ -201,11 +201,11 @@ export default function TokenTransfersPanel({
               )}
               {to && (
                 <div className="flex items-center gap-1">
-                  <span className="text-gray-400 text-sm">To:</span>
+                  <span className="text-text-secondary text-sm">To:</span>
                   <Link
                     href={`/address/${to}`}
                     title={to}
-                    className="text-[#ffa729] hover:text-[#ffb954]"
+                    className="text-accent hover:text-accent-hover"
                   >
                     {truncateMiddle(to)}
                   </Link>
@@ -222,7 +222,7 @@ export default function TokenTransfersPanel({
           return (
             <span className="font-mono">
               {info.getValue()}
-              {r.tokenSymbol && <span className="text-gray-500 ml-2">{r.tokenSymbol}</span>}
+              {r.tokenSymbol && <span className="text-text-muted ml-2">{r.tokenSymbol}</span>}
             </span>
           );
         },
@@ -236,7 +236,7 @@ export default function TokenTransfersPanel({
               <Link
                 href={`/tx/${fullHash}`}
                 title={fullHash}
-                className="text-[#ffa729] hover:text-[#ffb954]"
+                className="text-accent hover:text-accent-hover"
               >
                 {truncateMiddle(fullHash)}
               </Link>
@@ -266,14 +266,14 @@ export default function TokenTransfersPanel({
   });
 
   if (loading && !loaded) {
-    return <div className="p-8 text-center text-gray-400">Loading token transfers...</div>;
+    return <div className="p-8 text-center text-text-secondary">Loading token transfers...</div>;
   }
   if (error) {
-    return <div className="p-8 text-center text-red-400">{error}</div>;
+    return <div className="p-8 text-center text-error">{error}</div>;
   }
   if (loaded && rows.length === 0) {
     return (
-      <div className="p-8 text-center text-gray-400">
+      <div className="p-8 text-center text-text-secondary">
         No token transfers for this address.
       </div>
     );
@@ -286,24 +286,24 @@ export default function TokenTransfersPanel({
     const badge = r.tokenStandard ? r.tokenStandard.replace(/^ERC-/, 'QRC-') : 'Token';
     const label = r.tokenName || r.tokenSymbol || r.contractAddress;
     return (
-      <div key={row.id} className="p-4 border-b border-[#3d3d3d] last:border-b-0">
+      <div key={row.id} className="p-4 border-b border-border last:border-b-0">
         <div className="space-y-3">
           <div className="flex justify-between items-start">
             <div className="space-y-1">
-              <div className="text-xs text-gray-400">Token</div>
+              <div className="text-xs text-text-secondary">Token</div>
               <Link
                 href={`/address/${r.contractAddress}`}
-                className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
+                className="text-sm text-accent hover:text-accent-hover break-all"
               >
                 {label}
               </Link>
-              <div className="text-xs text-gray-400 font-mono">
+              <div className="text-xs text-text-secondary font-mono">
                 {badge}
                 {r.tokenID ? ` #${r.tokenID}` : ''}
               </div>
             </div>
-            <div className="px-2 py-1 rounded bg-[#3d3d3d] bg-opacity-40">
-              <span className="text-xs text-[#ffa729]">
+            <div className="px-2 py-1 rounded bg-surface-2">
+              <span className="text-xs text-accent">
                 {r.formattedAmount}
                 {r.tokenSymbol ? ' ' + r.tokenSymbol : ''}
               </span>
@@ -311,11 +311,11 @@ export default function TokenTransfersPanel({
           </div>
 
           <div>
-            <div className="text-xs text-gray-400">Transaction Hash</div>
+            <div className="text-xs text-text-secondary">Transaction Hash</div>
             <div className="flex items-start gap-2">
               <Link
                 href={`/tx/${r.txHash}`}
-                className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
+                className="text-sm text-accent hover:text-accent-hover break-all"
               >
                 {r.txHash}
               </Link>
@@ -325,10 +325,10 @@ export default function TokenTransfersPanel({
 
           {r.from && (
             <div>
-              <div className="text-xs text-gray-400">From</div>
+              <div className="text-xs text-text-secondary">From</div>
               <Link
                 href={`/address/${r.from}`}
-                className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
+                className="text-sm text-accent hover:text-accent-hover break-all"
               >
                 {truncateMiddle(r.from)}
               </Link>
@@ -337,10 +337,10 @@ export default function TokenTransfersPanel({
 
           {r.to && (
             <div>
-              <div className="text-xs text-gray-400">To</div>
+              <div className="text-xs text-text-secondary">To</div>
               <Link
                 href={`/address/${r.to}`}
-                className="text-sm text-[#ffa729] hover:text-[#ffb954] break-all"
+                className="text-sm text-accent hover:text-accent-hover break-all"
               >
                 {truncateMiddle(r.to)}
               </Link>
@@ -348,8 +348,8 @@ export default function TokenTransfersPanel({
           )}
 
           <div>
-            <div className="text-xs text-gray-400">Time</div>
-            <div className="text-sm text-white">{formatTimestamp(r.tsSeconds)}</div>
+            <div className="text-xs text-text-secondary">Time</div>
+            <div className="text-sm text-text-primary">{formatTimestamp(r.tsSeconds)}</div>
           </div>
         </div>
       </div>
@@ -358,9 +358,9 @@ export default function TokenTransfersPanel({
 
   return (
     <div className="w-full">
-      <div className="p-4 border-b border-[#3d3d3d]">
+      <div className="p-4 border-b border-border">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="text-sm text-gray-400">
+          <div className="text-sm text-text-secondary">
             {total.toLocaleString('en-US')} transfer{total === 1 ? '' : 's'}
             {rows.length < total && (
               <span className="ml-2 text-xs">
@@ -371,7 +371,7 @@ export default function TokenTransfersPanel({
           <DebouncedInput
             value={filter}
             onChange={(v) => setFilter(String(v))}
-            className="px-4 py-2 text-sm bg-[#1a1a1a] border border-[#3d3d3d] rounded-lg focus:outline-none focus:border-[#ffa729] text-white w-full md:w-auto"
+            className="px-4 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:border-accent text-text-primary w-full md:w-auto"
             placeholder="Search token transfers..."
           />
         </div>

@@ -60,13 +60,15 @@ export default function CopyButton({
         type="button"
         onClick={copyToClipboard}
         aria-label={label}
-        className="inline-flex items-center p-1 rounded-md
-                  bg-card-gradient border border-border hover:border-accent
-                  transition-all duration-300 group"
+        // p-1.5 + 14px icon keeps the target at ~26px, above the WCAG 2.2
+        // 24px minimum for inline controls.
+        className="inline-flex items-center p-1.5 rounded-md
+                  bg-surface-2 border border-border hover:border-accent/50 hover:bg-surface-3
+                  transition-all duration-200 group"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          className="h-3 w-3 text-accent"
+          className="h-3.5 w-3.5 text-accent"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -88,8 +90,8 @@ export default function CopyButton({
         onClick={copyToClipboard}
         aria-label={label}
         className="inline-flex items-center px-3 py-1.5 rounded-lg
-                  bg-card-gradient border border-border hover:border-accent
-                  transition-all duration-300 group"
+                  bg-surface-2 border border-border hover:border-accent/50 hover:bg-surface-3
+                  transition-all duration-200 group"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -103,7 +105,7 @@ export default function CopyButton({
         </svg>
         <span
           aria-live="polite"
-          className="text-sm text-gray-300 group-hover:text-accent transition-colors"
+          className="text-sm text-text-secondary group-hover:text-accent transition-colors"
         >
           {copySuccess ? 'Copied!' : 'Copy'}
         </span>

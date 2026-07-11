@@ -157,7 +157,7 @@ export default async function TransactionPage({ params }: PageProps): Promise<JS
       <div className="container mx-auto px-4">
         <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg mt-6">
           <h2 className="text-red-500 font-semibold mb-2">Invalid Transaction Hash</h2>
-          <p className="text-gray-300">
+          <p className="text-text-secondary">
             The provided transaction hash is not in the correct format.
             Transaction hashes should start with &apos;0x&apos; followed by 64 hexadecimal characters.
           </p>
@@ -185,10 +185,10 @@ export default async function TransactionPage({ params }: PageProps): Promise<JS
       <div className="container mx-auto px-4">
         <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg mt-6">
           <h2 className="text-red-500 font-semibold mb-2">Transaction Not Found</h2>
-          <p className="text-gray-300">
+          <p className="text-text-secondary">
             The transaction could not be found. This could mean:
           </p>
-          <ul className="list-disc ml-6 mt-2 text-gray-300">
+          <ul className="list-disc ml-6 mt-2 text-text-secondary">
             <li>The transaction hash is incorrect</li>
             <li>The transaction has not been mined yet</li>
             <li>The transaction was dropped from the network</li>
