@@ -349,7 +349,7 @@ func TestIsForbiddenIP(t *testing.T) {
 		{"8.8.8.8", false},
 		{"1.1.1.1", false},
 		{"209.250.255.226", false}, // QRL Foundation public RPC
-		{"REDACTED", false},   // Our testnet node
+		{"9.9.9.9", false},   // Quad9 public DNS
 		{"2606:4700:4700::1111", false}, // Cloudflare DNS over IPv6
 
 		// Loopback
