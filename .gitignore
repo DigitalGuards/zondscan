@@ -67,3 +67,6 @@ QRL2MongoDB/synchroniser/logs/zond_sync.log
 QRL2MongoDB/**/logs/
 QRL2MongoDB/logs/
 backendAPI/syncer
+
+# Local operating notes; never tracked (private infrastructure detail)
+CLAUDE.md
