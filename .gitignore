@@ -61,3 +61,6 @@ QRL2MongoDB/rpc/logs/
 QRL2MongoDB/synchroniser/synchroniser
 QRL2MongoDB/zsyncer.log
 QRL2MongoDB/synchroniser/logs/zond_sync.log
+
+# Local operating notes; never tracked (private infrastructure detail)
+CLAUDE.md
