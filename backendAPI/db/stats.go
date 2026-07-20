@@ -4,12 +4,14 @@ import (
 	"backendAPI/configs"
 	"backendAPI/models"
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -112,7 +114,15 @@ func GetPriceChange24h(currentPrice float64) float64 {
 	var then models.PriceHistory
 	err := configs.PriceHistoryCollection.FindOne(ctx,
 		bson.M{"timestamp": bson.M{"$gte": since}}, opts).Decode(&then)
-	if err != nil || then.PriceUSD <= 0 {
+	if err != nil {
+		// An empty window is expected on fresh deployments; anything else
+		// is a real database problem worth surfacing.
+		if !errors.Is(err, mongo.ErrNoDocuments) {
+			log.Printf("error fetching 24h price baseline: %v", err)
+		}
+		return 0
+	}
+	if then.PriceUSD <= 0 {
 		return 0
 	}
 
