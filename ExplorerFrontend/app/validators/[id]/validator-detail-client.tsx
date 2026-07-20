@@ -5,23 +5,10 @@ import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import Link from 'next/link';
 import config from '../../../config';
-import { epochsToDays } from '../../lib/helpers';
+import { epochsToDays, formatValidatorBalance } from '../../lib/helpers';
 import Badge from '../../components/Badge';
 import CopyButton from '../../components/CopyButton';
 import EmptyState from '../../components/EmptyState';
-
-// Format staked amount (beacon chain stores effective balance in Shor, 1 QRL = 10^9 Shor)
-function formatValidatorBalance(amount: string): [string, string] {
-  if (!amount || amount === '0') return ['0', 'QRL'];
-  try {
-    const value = BigInt(amount);
-    const divisor = BigInt('1000000000'); // 10^9 (Shor to QRL)
-    const qrlValue = Number(value / divisor);
-    return [qrlValue.toLocaleString(undefined, { maximumFractionDigits: 0 }), 'QRL'];
-  } catch {
-    return ['0', 'QRL'];
-  }
-}
 
 interface ValidatorDetail {
   index: string;

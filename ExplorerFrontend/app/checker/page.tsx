@@ -31,7 +31,7 @@ export const metadata: Metadata = {
 export default function BalanceChecker(): JSX.Element {
   return (
     <main aria-labelledby="checker-heading">
-      <h1 id="checker-heading" className="sr-only">QRL Balance Checker</h1>
+      <h1 id="checker-heading" className="sr-only">Quanta Balance Checker</h1>
       <CheckerClient />
     </main>
   );

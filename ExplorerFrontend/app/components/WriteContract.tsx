@@ -197,7 +197,7 @@ function WriteFunctionCard({
           {fn.stateMutability === 'payable' && (
             <div>
               <div className="text-xs text-text-secondary mb-1">
-                value <span className="font-mono text-text-muted">(QRL)</span>
+                value <span className="font-mono text-text-muted">(Quanta)</span>
               </div>
               <input
                 value={value}

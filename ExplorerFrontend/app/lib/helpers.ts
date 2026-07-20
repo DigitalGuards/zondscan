@@ -15,6 +15,10 @@ function keccakHex(sig: string): string {
 // the tx page, pending-tx page, and search resolver all validate identically.
 export const TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
 
+// Display unit for whole-coin amounts. Ecosystem convention: amounts show
+// as "Quanta"; "QRL" is the project name and exchange-ticker only.
+export const NATIVE_UNIT = 'Quanta';
+
 /** True when `value` is a well-formed "0x"-prefixed 32-byte transaction hash. */
 export function isTxHash(value: string | undefined | null): boolean {
   return !!value && TX_HASH_RE.test(value);
@@ -31,7 +35,7 @@ export function timeAgo(unixSeconds: number): string {
 }
 
 // Validator effective balances on the QRL beacon chain are Shor-denominated
-// (10^-9 QRL / "Quanta"). Convert to whole-QRL display.
+// (10^-9 Quanta). Convert to whole-Quanta display.
 export function formatStaked(shor: string): string {
   try {
     const val = BigInt(shor || '0');
@@ -39,9 +43,25 @@ export function formatStaked(shor: string): string {
     const remainder = val % BigInt(1_000_000_000);
     const decimalStr = remainder.toString().padStart(9, '0').replace(/0+$/, '');
     const result = formatNumberWithCommas(qrlBase.toString());
-    return decimalStr.length > 0 ? `${result}.${decimalStr} QRL` : `${result} QRL`;
+    return decimalStr.length > 0 ? `${result}.${decimalStr} ${NATIVE_UNIT}` : `${result} ${NATIVE_UNIT}`;
   } catch {
-    return '0 QRL';
+    return `0 ${NATIVE_UNIT}`;
+  }
+}
+
+// Validator balances arrive Shor-denominated as decimal strings. Whole-coin
+// display with no fraction: stake magnitudes make sub-Quanta noise. Returns
+// [value, unit] like formatAmount so callers style the unit independently.
+// Consolidated here from two previously duplicated component-local copies.
+export function formatValidatorBalance(amount: string | undefined | null): [string, string] {
+  if (!amount || amount === '0') return ['0', NATIVE_UNIT];
+  try {
+    const value = BigInt(amount);
+    const divisor = BigInt('1000000000'); // 10^9 (Shor to whole coin)
+    const qrlValue = Number(value / divisor);
+    return [qrlValue.toLocaleString(undefined, { maximumFractionDigits: 0 }), NATIVE_UNIT];
+  } catch {
+    return ['0', NATIVE_UNIT];
   }
 }
 
@@ -182,12 +202,12 @@ export function formatPlanckAdaptive(planck: number | string | undefined | null)
 export function formatAmount(amount: number | string | undefined | null): [string, string] {
   // Handle undefined or null
   if (amount === undefined || amount === null) {
-    return ['0.00', 'QRL'];
+    return ['0.00', NATIVE_UNIT];
   }
 
   // Handle zero amount
   if (amount === 0 || amount === '0' || amount === '0x0') {
-    return ['0.00', 'QRL'];
+    return ['0.00', NATIVE_UNIT];
   }
 
   let totalNum: number;
@@ -219,24 +239,24 @@ export function formatAmount(amount: number | string | undefined | null): [strin
     }
   } catch (error) {
     console.error('Error converting amount:', error, amount);
-    return ['0.00', 'QRL'];
+    return ['0.00', NATIVE_UNIT];
   }
 
   // Format with appropriate decimal places, avoiding scientific notation
   if (totalNum === 0) {
-    return ['0.00', 'QRL'];
+    return ['0.00', NATIVE_UNIT];
   } else if (totalNum < 0.000001) {
     // For very small numbers, show all significant digits without trailing zeros
-    return [totalNum.toFixed(18).replace(/\.?0+$/, ''), 'QRL'];
+    return [totalNum.toFixed(18).replace(/\.?0+$/, ''), NATIVE_UNIT];
   } else if (totalNum < 1) {
     // For numbers less than 1, show up to 6 decimal places
-    return [totalNum.toFixed(6).replace(/\.?0+$/, ''), 'QRL'];
+    return [totalNum.toFixed(6).replace(/\.?0+$/, ''), NATIVE_UNIT];
   } else if (totalNum < 1000) {
     // For numbers between 1 and 999, show up to 4 decimal places
-    return [totalNum.toFixed(4).replace(/\.?0+$/, ''), 'QRL'];
+    return [totalNum.toFixed(4).replace(/\.?0+$/, ''), NATIVE_UNIT];
   } else {
     // For large numbers, show 2 decimal places
-    return [totalNum.toFixed(2).replace(/\.?0+$/, ''), 'QRL'];
+    return [totalNum.toFixed(2).replace(/\.?0+$/, ''), NATIVE_UNIT];
   }
 }
 

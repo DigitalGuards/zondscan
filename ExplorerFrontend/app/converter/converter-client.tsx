@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { smallestUnitToDecimal, decimalToSmallestUnit } from '../lib/helpers';
+import { smallestUnitToDecimal, decimalToSmallestUnit, NATIVE_UNIT } from '../lib/helpers';
 
 function Converter(): JSX.Element {
   const [quanta, setQuanta] = useState("");
@@ -50,7 +50,7 @@ function Converter(): JSX.Element {
           <div className="space-y-6">
             {/* Quanta Input */}
             <div>
-              <label htmlFor="quanta-input" className="block text-sm font-medium text-text-secondary mb-2">Quanta (QRL)</label>
+              <label htmlFor="quanta-input" className="block text-sm font-medium text-text-secondary mb-2">Quanta</label>
               <div className="relative">
                 <input
                   id="quanta-input"
@@ -61,7 +61,7 @@ function Converter(): JSX.Element {
                   className="w-full px-4 py-3 bg-background text-text-primary rounded-lg border border-border focus:outline-none focus:border-accent transition-all duration-300"
                 />
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <span className="text-text-secondary">QRL</span>
+                  <span className="text-text-secondary">{NATIVE_UNIT}</span>
                 </div>
               </div>
             </div>
@@ -106,7 +106,7 @@ function Converter(): JSX.Element {
             {/* Info Box */}
             <div className="mt-6 p-4 bg-background rounded-lg border border-border">
               <p className="text-sm text-text-secondary">
-                1 QRL = 1,000,000,000,000,000,000 Shor (10^18)
+                1 {NATIVE_UNIT} = 1,000,000,000,000,000,000 Shor (10^18)
               </p>
             </div>
           </div>

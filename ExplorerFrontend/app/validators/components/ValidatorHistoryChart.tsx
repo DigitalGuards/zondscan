@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { NATIVE_UNIT } from '../../lib/helpers';
 import { Group } from '@visx/group';
 import { LinePath, AreaClosed } from '@visx/shape';
 import { AxisLeft, AxisBottom } from '@visx/axis';
@@ -122,7 +123,7 @@ export default function ValidatorHistoryChart({
   const formatTooltipValue = (d: HistoryRecord) => {
     if (type === 'staked') {
       const val = getStaked(d);
-      return `${val.toLocaleString(undefined, { maximumFractionDigits: 2 })} QRL`;
+      return `${val.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${NATIVE_UNIT}`;
     }
     return d.validatorsCount.toLocaleString();
   };

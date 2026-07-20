@@ -6,6 +6,8 @@
  * Shape mirrors RichlistClient: header + subtitle and the three-column
  * (rank / address / balance) table card.
  */
+import { NATIVE_UNIT } from '../lib/helpers';
+
 export default function Loading(): JSX.Element {
   return (
     <div role="status" aria-label="Loading rich list" className="min-h-screen">
@@ -13,7 +15,7 @@ export default function Loading(): JSX.Element {
         <div className="mb-6 md:mb-8">
           <h1 className="section-title">Richlist</h1>
           <p className="text-sm md:text-base text-text-secondary mt-2">
-            Top 50 QRL holders by balance
+            Top 50 {NATIVE_UNIT} holders by balance
           </p>
         </div>
 

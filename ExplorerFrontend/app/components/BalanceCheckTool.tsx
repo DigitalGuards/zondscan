@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type { FormEvent, ChangeEvent } from 'react';
 import axios, { AxiosError } from 'axios';
 import config from '../../config';
-import { toFixed } from '../lib/helpers';
+import { NATIVE_UNIT, toFixed } from '../lib/helpers';
 
 interface BalanceResponse {
   balance: string;
@@ -36,7 +36,7 @@ export default function BalanceCheckTool(): JSX.Element {
             );
 
             if (response.data.balance !== "header not found") {
-                setBalance(`${toFixed(response.data.balance)} QRL`);
+                setBalance(`${toFixed(response.data.balance)} ${NATIVE_UNIT}`);
                 setError(null);
             } else {
                 setBalance(null);
