@@ -68,7 +68,7 @@ export default function RichlistClient({ richlist }: RichlistProps): JSX.Element
             <div>
               <span className="text-accent text-sm">Balance:</span>
               <span className="ml-2 text-text-primary text-sm">
-                {toFixed(item.balance)} QRL
+                {toFixed(item.balance)} Quanta
               </span>
             </div>
           </div>
@@ -129,7 +129,7 @@ export default function RichlistClient({ richlist }: RichlistProps): JSX.Element
                 </Link>
               </td>
               <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-right text-text-secondary text-sm">
-                {toFixed(item.balance)} QRL
+                {toFixed(item.balance)} Quanta
               </td>
             </tr>
           ))}
@@ -144,7 +144,7 @@ export default function RichlistClient({ richlist }: RichlistProps): JSX.Element
         <div className="mb-6 md:mb-8">
           <h1 className="section-title">Richlist</h1>
           <p className="text-sm md:text-base text-text-secondary mt-2">
-            Top 50 QRL holders by balance
+            Top 50 Quanta holders by balance
           </p>
         </div>
 

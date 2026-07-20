@@ -13,7 +13,7 @@ export default function Loading(): JSX.Element {
         <div className="mb-6 md:mb-8">
           <h1 className="section-title">Richlist</h1>
           <p className="text-sm md:text-base text-text-secondary mt-2">
-            Top 50 QRL holders by balance
+            Top 50 Quanta holders by balance
           </p>
         </div>
 

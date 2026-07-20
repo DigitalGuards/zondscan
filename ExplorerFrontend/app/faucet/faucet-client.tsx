@@ -215,10 +215,10 @@ export default function FaucetClient(): JSX.Element {
       <div className="flex flex-col items-center justify-center">
         <h2 className="section-title mb-2">QRL 2.0 Testnet Faucet</h2>
         <p className="text-text-secondary mb-8 text-center max-w-md">
-          Get free testnet QRL to experiment with transactions, contracts, and tooling.
+          Get free testnet Quanta to experiment with transactions, contracts, and tooling.
           {status && (
             <>
-              {' '}Sends <span className="text-accent font-semibold">{status.dripQuanta} QRL</span> per
+              {' '}Sends <span className="text-accent font-semibold">{status.dripQuanta} Quanta</span> per
               address, once every {status.cooldownHours}h.
             </>
           )}
@@ -252,7 +252,7 @@ export default function FaucetClient(): JSX.Element {
               {result && (
                 <div role="status" className="w-full p-4 bg-background rounded-lg border border-green-500/40">
                   <div className="text-sm text-text-secondary">
-                    {result.amount} QRL broadcast to your address
+                    {result.amount} Quanta broadcast to your address
                   </div>
                   <Link
                     href={result.explorerUrl}

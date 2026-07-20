@@ -156,7 +156,7 @@ function StatBar({ data }: { data: HomeData }) {
     { label: 'Avg Gas Price', value: data.avgGasPriceHex ? `${formatGasPrice(data.avgGasPriceHex)} Shor` : '…', icon: icons.gas },
     { label: 'Block Height', value: formatNumberWithCommas(data.blockHeight.toString()), icon: icons.block, live: true },
     { label: 'Validators', value: formatNumberWithCommas(data.validatorCount.toString()), icon: icons.validators },
-    { label: 'Staked QRL', value: data.totalStaked !== '0' ? formatStaked(data.totalStaked) : '…', icon: icons.staked },
+    { label: 'Staked Quanta', value: data.totalStaked !== '0' ? formatStaked(data.totalStaked) : '…', icon: icons.staked },
     { label: 'Transactions', value: formatNumberWithCommas(data.totalTransactions.toString()), icon: icons.transactions },
     { label: 'Market Cap', value: data.marketCap > 0 ? '$' + formatNumberWithCommas(data.marketCap.toString()) : '…', icon: icons.marketCap },
   ];

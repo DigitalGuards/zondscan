@@ -83,7 +83,7 @@ export default function ValidatorStatsCards({ stats, loading }: ValidatorStatsCa
     },
     {
       label: 'Total Staked',
-      value: `${formattedStake} QRL`,
+      value: `${formattedStake} Quanta`,
       color: 'text-accent',
     },
   ];

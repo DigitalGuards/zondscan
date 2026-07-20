@@ -36,7 +36,7 @@ export default function BalanceCheckTool(): JSX.Element {
             );
 
             if (response.data.balance !== "header not found") {
-                setBalance(`${toFixed(response.data.balance)} QRL`);
+                setBalance(`${toFixed(response.data.balance)} Quanta`);
                 setError(null);
             } else {
                 setBalance(null);

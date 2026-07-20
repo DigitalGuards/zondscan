@@ -114,8 +114,8 @@ export default function TransactionsPanel({
             ? parseFloat(String(rawFees))
             : 0;
         const formattedFees = Number.isFinite(feeQuanta)
-          ? `${parseFloat(feeQuanta.toFixed(8))} QRL`
-          : '0 QRL';
+          ? `${parseFloat(feeQuanta.toFixed(8))} Quanta`
+          : '0 Quanta';
         return {
           ...tx,
           formattedAmount: `${amount} ${amountUnit}`,

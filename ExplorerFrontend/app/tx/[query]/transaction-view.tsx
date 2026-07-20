@@ -280,7 +280,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
           {(transaction.gasUsed || transaction.gasPrice) && (
             <DetailRow label="Transaction Fee">
               {paidFees}
-              <span className="text-text-muted ml-1">QRL</span>
+              <span className="text-text-muted ml-1">Quanta</span>
               {(() => {
                 // USD conversion is opt-in: requires both a fee > 0 and a
                 // price from the polled /latestblock response. Skips the
@@ -606,7 +606,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                       </Badge>
                     )}
                     {itx.value > 0 && (
-                      <Badge variant="warning">{itx.value} QRL</Badge>
+                      <Badge variant="warning">{itx.value} Quanta</Badge>
                     )}
                   </div>
                   <div className="space-y-1 text-xs">

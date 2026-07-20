@@ -79,18 +79,18 @@ describe('formatBigGas', () => {
 });
 
 describe('formatStaked', () => {
-  it('converts Shor (1e9) to QRL with trailing zeros stripped', () => {
-    expect(formatStaked('1000000000')).toBe('1 QRL');
-    expect(formatStaked('1500000000')).toBe('1.5 QRL');
+  it('converts Shor (1e9) to Quanta with trailing zeros stripped', () => {
+    expect(formatStaked('1000000000')).toBe('1 Quanta');
+    expect(formatStaked('1500000000')).toBe('1.5 Quanta');
   });
 
   it('handles whole-billion balances cleanly', () => {
-    expect(formatStaked('32000000000')).toBe('32 QRL');
+    expect(formatStaked('32000000000')).toBe('32 Quanta');
   });
 
-  it('returns "0 QRL" for empty / malformed input', () => {
-    expect(formatStaked('')).toBe('0 QRL');
-    expect(formatStaked('not-a-number')).toBe('0 QRL');
+  it('returns "0 Quanta" for empty / malformed input', () => {
+    expect(formatStaked('')).toBe('0 Quanta');
+    expect(formatStaked('not-a-number')).toBe('0 Quanta');
   });
 });
 

@@ -595,7 +595,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                             {(() => {
                                                 if (!creationTx?.GasUsed || !creationTx?.GasPrice) return '-';
                                                 const [formattedFee] = formatAmount(`0x${(BigInt(creationTx.GasUsed) * BigInt(creationTx.GasPrice)).toString(16)}`);
-                                                return `${formattedFee} QRL`;
+                                                return `${formattedFee} Quanta`;
                                             })()}
                                         </div>
                                     </div>
@@ -604,9 +604,9 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                         <div className="text-xs md:text-sm text-text-secondary">Value</div>
                                         <div className="text-sm text-text-secondary">
                                             {(() => {
-                                                if (!creationTx?.Value) return '0 QRL';
+                                                if (!creationTx?.Value) return '0 Quanta';
                                                 const [formattedValue] = formatAmount(creationTx.Value);
-                                                return `${formattedValue} QRL`;
+                                                return `${formattedValue} Quanta`;
                                             })()}
                                         </div>
                                     </div>

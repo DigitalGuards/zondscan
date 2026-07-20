@@ -154,7 +154,7 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
                         </td>
                         <td className="px-4 py-3 text-text-secondary tabular-nums whitespace-nowrap">
                           {formattedValue}
-                          <span className="text-text-muted text-xs ml-1">QRL</span>
+                          <span className="text-text-muted text-xs ml-1">Quanta</span>
                         </td>
                         <td className="px-4 py-3">
                           <Badge variant={statusVariant(tx.status)} dot>

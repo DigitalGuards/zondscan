@@ -2,21 +2,8 @@
 
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { epochsToDays } from '../../lib/helpers';
+import { epochsToDays, formatValidatorBalance } from '../../lib/helpers';
 import Badge from '../../components/Badge';
-
-// Format staked amount (beacon chain stores effective balance in Shor, 1 QRL = 10^9 Shor)
-function formatValidatorStake(amount: string): [string, string] {
-  if (!amount || amount === '0') return ['0', 'QRL'];
-  try {
-    const value = BigInt(amount);
-    const divisor = BigInt('1000000000'); // 10^9 (Shor to QRL)
-    const qrlValue = Number(value / divisor);
-    return [qrlValue.toLocaleString(undefined, { maximumFractionDigits: 0 }), 'QRL'];
-  } catch {
-    return ['0', 'QRL'];
-  }
-}
 
 interface Validator {
   index: string;
@@ -229,7 +216,7 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
           </thead>
           <tbody className="divide-y divide-border">
             {currentValidators.map((validator) => {
-              const [stakeValue, stakeUnit] = formatValidatorStake(validator.stakedAmount);
+              const [stakeValue, stakeUnit] = formatValidatorBalance(validator.stakedAmount);
               return (
               <tr
                 key={validator.index}
