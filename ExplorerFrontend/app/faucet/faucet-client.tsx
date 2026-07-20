@@ -5,7 +5,7 @@ import type { FormEvent, ChangeEvent } from 'react';
 import Link from 'next/link';
 import Script from 'next/script';
 
-import { formatDuration, isValidQrlAddressFormat } from '../lib/helpers';
+import { formatDuration, isValidQrlAddressFormat, NATIVE_UNIT } from '../lib/helpers';
 
 interface FaucetStatus {
   configured: boolean;
@@ -218,7 +218,7 @@ export default function FaucetClient(): JSX.Element {
           Get free testnet Quanta to experiment with transactions, contracts, and tooling.
           {status && (
             <>
-              {' '}Sends <span className="text-accent font-semibold">{status.dripQuanta} Quanta</span> per
+              {' '}Sends <span className="text-accent font-semibold">{status.dripQuanta} {NATIVE_UNIT}</span> per
               address, once every {status.cooldownHours}h.
             </>
           )}
@@ -252,7 +252,7 @@ export default function FaucetClient(): JSX.Element {
               {result && (
                 <div role="status" className="w-full p-4 bg-background rounded-lg border border-green-500/40">
                   <div className="text-sm text-text-secondary">
-                    {result.amount} Quanta broadcast to your address
+                    {result.amount} {NATIVE_UNIT} broadcast to your address
                   </div>
                   <Link
                     href={result.explorerUrl}

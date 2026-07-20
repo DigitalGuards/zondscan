@@ -6,7 +6,7 @@ import config from '../../../config';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { formatAmount, formatGasPrice, timeAgo, truncateHash } from '../../lib/helpers';
+import { formatAmount, formatGasPrice, NATIVE_UNIT, timeAgo, truncateHash } from '../../lib/helpers';
 import type { PendingTransaction } from '@/app/types';
 import Badge from '../../components/Badge';
 import Pagination from '../../components/Pagination';
@@ -154,7 +154,7 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
                         </td>
                         <td className="px-4 py-3 text-text-secondary tabular-nums whitespace-nowrap">
                           {formattedValue}
-                          <span className="text-text-muted text-xs ml-1">Quanta</span>
+                          <span className="text-text-muted text-xs ml-1">{NATIVE_UNIT}</span>
                         </td>
                         <td className="px-4 py-3">
                           <Badge variant={statusVariant(tx.status)} dot>

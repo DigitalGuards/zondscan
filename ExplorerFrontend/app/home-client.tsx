@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
-import { formatNumberWithCommas, timeAgo, formatStaked, formatGasPrice, truncateHash, formatAmount, formatAddress } from './lib/helpers';
+import { formatNumberWithCommas, timeAgo, formatStaked, formatGasPrice, truncateHash, formatAmount, formatAddress, NATIVE_UNIT } from './lib/helpers';
 import type { EpochInfo } from './types';
 import config from '../config.js';
 import SearchBar from './components/SearchBar';
@@ -156,7 +156,7 @@ function StatBar({ data }: { data: HomeData }) {
     { label: 'Avg Gas Price', value: data.avgGasPriceHex ? `${formatGasPrice(data.avgGasPriceHex)} Shor` : '…', icon: icons.gas },
     { label: 'Block Height', value: formatNumberWithCommas(data.blockHeight.toString()), icon: icons.block, live: true },
     { label: 'Validators', value: formatNumberWithCommas(data.validatorCount.toString()), icon: icons.validators },
-    { label: 'Staked Quanta', value: data.totalStaked !== '0' ? formatStaked(data.totalStaked) : '…', icon: icons.staked },
+    { label: `Staked ${NATIVE_UNIT}`, value: data.totalStaked !== '0' ? formatStaked(data.totalStaked) : '…', icon: icons.staked },
     { label: 'Transactions', value: formatNumberWithCommas(data.totalTransactions.toString()), icon: icons.transactions },
     { label: 'Market Cap', value: data.marketCap > 0 ? '$' + formatNumberWithCommas(data.marketCap.toString()) : '…', icon: icons.marketCap },
   ];

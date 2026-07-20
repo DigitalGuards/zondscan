@@ -1,5 +1,7 @@
 'use client';
 
+import { NATIVE_UNIT } from '../../lib/helpers';
+
 interface ValidatorStats {
   totalValidators: number;
   activeCount: number;
@@ -83,7 +85,7 @@ export default function ValidatorStatsCards({ stats, loading }: ValidatorStatsCa
     },
     {
       label: 'Total Staked',
-      value: `${formattedStake} Quanta`,
+      value: `${formattedStake} ${NATIVE_UNIT}`,
       color: 'text-accent',
     },
   ];

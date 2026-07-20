@@ -6,7 +6,7 @@ import Link from 'next/link';
 import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import { type TransactionDetails, getConfirmations, getTransactionStatus } from '@/app/types';
-import { formatAmount, formatTokenAmount, decodeEventLog, decodeTokenTransferInput, decodeContractCall } from '../../lib/helpers';
+import { formatAmount, formatTokenAmount, decodeEventLog, decodeTokenTransferInput, decodeContractCall, NATIVE_UNIT } from '../../lib/helpers';
 import { useIsMobile } from '../../lib/hooks';
 import config from '../../../config';
 import CopyButton from '../../components/CopyButton';
@@ -280,7 +280,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
           {(transaction.gasUsed || transaction.gasPrice) && (
             <DetailRow label="Transaction Fee">
               {paidFees}
-              <span className="text-text-muted ml-1">Quanta</span>
+              <span className="text-text-muted ml-1">{NATIVE_UNIT}</span>
               {(() => {
                 // USD conversion is opt-in: requires both a fee > 0 and a
                 // price from the polled /latestblock response. Skips the
@@ -606,7 +606,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                       </Badge>
                     )}
                     {itx.value > 0 && (
-                      <Badge variant="warning">{itx.value} Quanta</Badge>
+                      <Badge variant="warning">{itx.value} {NATIVE_UNIT}</Badge>
                     )}
                   </div>
                   <div className="space-y-1 text-xs">

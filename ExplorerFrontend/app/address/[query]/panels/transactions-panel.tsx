@@ -14,6 +14,7 @@ import {
   formatAmount,
   formatTimestamp,
   normalizeHexString,
+  NATIVE_UNIT,
 } from '../../../lib/helpers';
 import CopyButton from '../../../components/CopyButton';
 import DebouncedInput from '../../../components/DebouncedInput';
@@ -56,7 +57,7 @@ import {
  *     expected, so the cell rendered empty for every row. Removed rather
  *     than translated because the value adds no information the In/Out
  *     column doesn't already convey.
- *   - "Paid Fees" renders in QRL with up to 8 decimals; the wire value is
+ *   - "Paid Fees" renders in Quanta with up to 8 decimals; the wire value is
  *     a decimal-Quanta string like "0.000078750000357000" the old
  *     calculateFees treated as 0.
  */
@@ -103,8 +104,8 @@ export default function TransactionsPanel({
       rows.map((tx) => {
         const [amount, amountUnit] = formatAmount(tx.Amount);
         // PaidFees comes off the wire as a decimal-Quanta string
-        // ("0.0000787..."). Render in QRL with up to 8 decimals,
-        // Etherscan-style ("0.00428184 QRL"). Cast via unknown because
+        // ("0.0000787..."). Render in Quanta with up to 8 decimals,
+        // Etherscan-style ("0.00428184 Quanta"). Cast via unknown because
         // the type still says `number?` even though the wire shape is
         // a string. Trailing zeros trim out via parseFloat round-trip
         // so 0.10000000 displays as 0.1, not 0.10000000.
@@ -114,8 +115,8 @@ export default function TransactionsPanel({
             ? parseFloat(String(rawFees))
             : 0;
         const formattedFees = Number.isFinite(feeQuanta)
-          ? `${parseFloat(feeQuanta.toFixed(8))} Quanta`
-          : '0 Quanta';
+          ? `${parseFloat(feeQuanta.toFixed(8))} ${NATIVE_UNIT}`
+          : `0 ${NATIVE_UNIT}`;
         return {
           ...tx,
           formattedAmount: `${amount} ${amountUnit}`,

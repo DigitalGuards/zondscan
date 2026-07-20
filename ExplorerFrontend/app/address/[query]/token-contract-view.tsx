@@ -10,7 +10,7 @@ import ContractTabs from "../../components/ContractTabs";
 import TabPillBar from "../../components/TabPillBar";
 import VerifiedBadge from "../../components/VerifiedBadge";
 import type { ContractData } from "../../types/address";
-import { compactTokenIDLabel, formatAmount } from "../../lib/helpers";
+import { compactTokenIDLabel, formatAmount, NATIVE_UNIT } from "../../lib/helpers";
 import Breadcrumbs from "../../components/Breadcrumbs";
 
 interface TokenInfo {
@@ -594,8 +594,8 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                         <div className="text-sm text-text-secondary">
                                             {(() => {
                                                 if (!creationTx?.GasUsed || !creationTx?.GasPrice) return '-';
-                                                const [formattedFee] = formatAmount(`0x${(BigInt(creationTx.GasUsed) * BigInt(creationTx.GasPrice)).toString(16)}`);
-                                                return `${formattedFee} Quanta`;
+                                                const [formattedFee, feeUnit] = formatAmount(`0x${(BigInt(creationTx.GasUsed) * BigInt(creationTx.GasPrice)).toString(16)}`);
+                                                return `${formattedFee} ${feeUnit}`;
                                             })()}
                                         </div>
                                     </div>
@@ -604,9 +604,9 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                         <div className="text-xs md:text-sm text-text-secondary">Value</div>
                                         <div className="text-sm text-text-secondary">
                                             {(() => {
-                                                if (!creationTx?.Value) return '0 Quanta';
-                                                const [formattedValue] = formatAmount(creationTx.Value);
-                                                return `${formattedValue} Quanta`;
+                                                if (!creationTx?.Value) return `0 ${NATIVE_UNIT}`;
+                                                const [formattedValue, valueUnit] = formatAmount(creationTx.Value);
+                                                return `${formattedValue} ${valueUnit}`;
                                             })()}
                                         </div>
                                     </div>
