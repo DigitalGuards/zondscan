@@ -92,6 +92,33 @@ func GetCurrentVolume() float64 {
 	return data.VolumeUSD
 }
 
+// GetPriceChange24h returns the percent change between the stored price
+// closest to 24 hours ago and the given current price. Returns 0 when the
+// current price is unknown or there is no history old enough to compare
+// against, callers treat 0 as "no change data".
+func GetPriceChange24h(currentPrice float64) float64 {
+	if currentPrice <= 0 {
+		return 0
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Snapshots are written every ~30 min, so the oldest document inside
+	// the trailing 24h window is the closest one to 24 hours ago.
+	since := time.Now().Add(-24 * time.Hour)
+	opts := options.FindOne().SetSort(bson.D{{Key: "timestamp", Value: 1}})
+
+	var then models.PriceHistory
+	err := configs.PriceHistoryCollection.FindOne(ctx,
+		bson.M{"timestamp": bson.M{"$gte": since}}, opts).Decode(&then)
+	if err != nil || then.PriceUSD <= 0 {
+		return 0
+	}
+
+	return (currentPrice - then.PriceUSD) / then.PriceUSD * 100
+}
+
 // GetPriceHistory returns historical price data for the given duration
 // interval can be: "4h", "12h", "24h", "7d", "30d", "all"
 func GetPriceHistory(interval string) ([]models.PriceHistory, error) {
