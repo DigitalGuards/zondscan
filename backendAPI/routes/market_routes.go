@@ -44,9 +44,12 @@ func handleOverview(c *gin.Context) {
 
 		tradingVolume := market.VolumeUSD
 
+		priceChange24h := db.GetPriceChange24h(currentPrice)
+
 		return gin.H{
 			"marketcap":      marketCap,
 			"currentPrice":   currentPrice,
+			"priceChange24h": priceChange24h,
 			"countwallets":   walletCount,
 			"circulating":    circulating,
 			"volume":         volume,
