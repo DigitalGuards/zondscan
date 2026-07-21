@@ -1251,3 +1251,54 @@ export function formatDuration(totalSeconds: number): string {
   const remMins = mins % 60;
   return remMins > 0 ? `${hours}h ${remMins}m` : `${hours}h`;
 }
+
+/**
+ * QRL unit system relative to the base unit Planck:
+ * 1 Quanta = 10^9 Shor = 10^18 Planck (matches @theqrl/web3-utils qrlUnitMap).
+ */
+export const UNIT_PLANCK_EXPONENTS = {
+  Quanta: 18,
+  Shor: 9,
+  Planck: 0,
+} as const;
+
+export type ConvertibleUnit = keyof typeof UNIT_PLANCK_EXPONENTS;
+
+/**
+ * Exact conversion between Quanta/Shor/Planck via BigInt string math (no
+ * floats). Returns null when the input is not a plain decimal number or has
+ * more fractional digits than the source unit can represent (e.g. "0.5"
+ * Planck), so callers can surface a validation error instead of silently
+ * truncating.
+ */
+export function convertUnits(
+  value: string,
+  from: ConvertibleUnit,
+  to: ConvertibleUnit
+): string | null {
+  const trimmed = value.trim();
+  if (!/^(\d+\.?\d*|\.\d+)$/.test(trimmed)) return null;
+  const expFrom = UNIT_PLANCK_EXPONENTS[from];
+  const expTo = UNIT_PLANCK_EXPONENTS[to];
+  const fraction = trimmed.split('.')[1] ?? '';
+  if (fraction.length > expFrom) return null;
+  const planck = decimalToSmallestUnit(trimmed, expFrom);
+  return smallestUnitToDecimal(planck, expTo);
+}
+
+/**
+ * Decode beacon withdrawal credentials to the execution-layer withdrawal
+ * address. On Zond the credentials are prefix byte 0x00 + 11 zero bytes +
+ * the 20-byte address (qrysm WithdrawalCredentialsAddress), so the last 40
+ * hex chars are the address. Returns null for any other shape so callers
+ * fall back to showing the raw credentials.
+ */
+export function withdrawalCredentialsToAddress(
+  credsHex: string | null | undefined
+): string | null {
+  if (!credsHex) return null;
+  const hex = credsHex.trim().toLowerCase().replace(/^0x/, '');
+  if (!/^[0-9a-f]{64}$/.test(hex)) return null;
+  if (!hex.startsWith('000000000000000000000000')) return null;
+  return `Q${hex.slice(24)}`;
+}

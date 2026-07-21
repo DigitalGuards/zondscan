@@ -33,6 +33,7 @@ import {
   fetchAllAggregateRows,
   useAggregatePage,
 } from './use-aggregate-page';
+import { useUrlIntParam } from '../../../lib/use-url-param';
 
 /**
  * Native transactions panel with server-side pagination.
@@ -83,7 +84,11 @@ export default function TransactionsPanel({
   total,
 }: TransactionsPanelProps): JSX.Element {
   const [filter, setFilter] = useState('');
-  const [page, setPage] = useState(1);
+  // URL-backed page (?txPage) so browser Back restores it; read during
+  // render, so a lazy-mounted panel hydrates the page before its first
+  // fetch. replace (the hook default) keeps tab-internal paging out of
+  // browser history.
+  const [page, setPage] = useUrlIntParam('txPage', 1);
   const isMobile = useIsMobile();
 
   const pageQuery = useAggregatePage(address, page);
@@ -368,8 +373,8 @@ export default function TransactionsPanel({
         canPrev={page > 1}
         canNext={page < pageCount}
         goFirst={() => setPage(1)}
-        goPrev={() => setPage((p) => Math.max(1, p - 1))}
-        goNext={() => setPage((p) => Math.min(pageCount, p + 1))}
+        goPrev={() => setPage(Math.max(1, page - 1))}
+        goNext={() => setPage(Math.min(pageCount, page + 1))}
         goLast={() => setPage(pageCount)}
       />
     </div>

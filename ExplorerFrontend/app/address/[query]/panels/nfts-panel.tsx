@@ -20,6 +20,7 @@ import {
   renderTableBody,
   renderTableHeader,
 } from './_table-utils';
+import { useUrlIntParam } from '../../../lib/use-url-param';
 
 /**
  * NFT holdings panel (QRC-721 + QRC-1155). Lazy-fetches `/address/:addr/nfts`
@@ -54,6 +55,12 @@ export default function NftsPanel({ address, onLoaded }: NftsPanelProps): JSX.El
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
+  // URL-backed page (?nftPage, 1-based) so browser Back restores it. Read
+  // during render, so a lazy-mounted panel hydrates its page before the
+  // rows arrive; autoResetPageIndex is off below because the post-mount
+  // fetch swapping `data` in would otherwise clobber the restored page.
+  const [pageParam, setPageParam] = useUrlIntParam('nftPage', 1);
+  const pagination = { pageIndex: pageParam - 1, pageSize: PAGE_SIZE };
 
   useEffect(() => {
     let cancelled = false;
@@ -169,12 +176,16 @@ export default function NftsPanel({ address, onLoaded }: NftsPanelProps): JSX.El
   const table = useReactTable({
     data: rows,
     columns,
-    state: { globalFilter: filter },
+    state: { globalFilter: filter, pagination },
     onGlobalFilterChange: setFilter,
+    onPaginationChange: (updater) => {
+      const next = typeof updater === 'function' ? updater(pagination) : updater;
+      setPageParam(next.pageIndex + 1);
+    },
+    autoResetPageIndex: false,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    initialState: { pagination: { pageIndex: 0, pageSize: PAGE_SIZE } },
   });
 
   if (loading && !loaded) {
@@ -196,7 +207,12 @@ export default function NftsPanel({ address, onLoaded }: NftsPanelProps): JSX.El
           </div>
           <DebouncedInput
             value={filter}
-            onChange={(v) => setFilter(String(v))}
+            onChange={(v) => {
+              setFilter(String(v));
+              // Manual reset since autoResetPageIndex is off: a new search
+              // starts from page 1.
+              setPageParam(1);
+            }}
             className="px-4 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:border-accent text-text-primary w-full md:w-auto"
             placeholder="Search by collection, tokenID, address"
           />

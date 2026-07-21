@@ -125,6 +125,12 @@ func StoreContract(contract models.ContractInfo) error {
 		if merged.CreationBlockNumber == "" && contract.CreationBlockNumber != "" {
 			merged.CreationBlockNumber = contract.CreationBlockNumber
 		}
+		// GenesisContract latches true forever, mirroring HasERC165: code at
+		// block 0 is an immutable chain fact, a later pass with a zero-valued
+		// flag must never clear it.
+		if contract.GenesisContract {
+			merged.GenesisContract = true
+		}
 		if merged.ContractCode == "" && contract.ContractCode != "" && contract.ContractCode != "0x" {
 			merged.ContractCode = contract.ContractCode
 		}
@@ -290,6 +296,11 @@ func syncerOwnedSet(c models.ContractInfo) bson.M {
 	}
 	if c.BaseURI != "" {
 		m["baseURI"] = c.BaseURI
+	}
+	// GenesisContract latches true; omit when false so a pass that never ran
+	// the genesis probe can't clear a previously-set flag.
+	if c.GenesisContract {
+		m["genesisContract"] = true
 	}
 	// Phase 3a collection metadata: classifier writes only the URI; the
 	// resolved fields are owned by the fetcher and updated through

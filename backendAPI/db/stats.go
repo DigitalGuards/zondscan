@@ -21,7 +21,11 @@ func ReturnTotalCirculatingSupply() string {
 
 	var result models.CirculatingSupply
 
-	err := configs.TotalCirculatingSupplyCollection.FindOne(ctx, primitive.D{}).Decode(&result)
+	// Pin the read to the syncer's well-known document. An unfiltered
+	// FindOne could return the bootstrap seed doc (circulating "0") even
+	// after the syncer had written a real total under _id "totalBalance".
+	filter := bson.M{"_id": "totalBalance"}
+	err := configs.TotalCirculatingSupplyCollection.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
 		log.Printf("error fetching circulating supply: %v", err)
 		return ""

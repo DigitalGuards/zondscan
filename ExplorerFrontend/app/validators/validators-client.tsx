@@ -12,7 +12,8 @@ import ValidatorTable from './components/ValidatorTable';
 
 interface Validator {
   index: string;
-  address: string;
+  publicKeyHex: string;
+  withdrawalCredentialsHex?: string;
   status: string;
   age: number;
   stakedAmount: string;
@@ -101,10 +102,13 @@ export default function ValidatorsWrapper(): JSX.Element {
         axios.get(`${config.handlerUrl}/validators/history?limit=100`).catch((err) => { console.error('Failed to fetch validator history:', err); return { data: { history: [] } }; }),
       ]);
 
-      // Process validators - add Q prefix to addresses
+      // The API's `address` field carries the validator's raw ML-DSA-87
+      // public key hex, not an account address. Surface it as publicKeyHex
+      // (no Q prefix) and pass withdrawalCredentialsHex through when the
+      // backend provides it (absent on older cached responses).
       const processedValidators = (validatorsRes.data.validators || []).map((v: any) => ({
         ...v,
-        address: v.address.startsWith('Q') ? v.address : 'Q' + v.address,
+        publicKeyHex: v.address ?? '',
       }));
 
       setValidators(processedValidators);

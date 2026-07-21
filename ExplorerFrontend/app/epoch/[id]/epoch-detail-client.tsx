@@ -53,6 +53,11 @@ function formatGasUsed(hex: string): string {
   return formatNumberWithCommas(val.toString());
 }
 
+// The execution coinbase is always the zero address on this network, so
+// linking it as "proposer" would be misleading. Render a dash for it until
+// proposer-index enrichment lands (the column stays so it can slot in).
+const ZERO_ADDRESS = 'Q0000000000000000000000000000000000000000';
+
 // ── Summary Row ──────────────────────────────────────────────────────────────
 
 function SummaryRow({ label, children }: { label: string; children: React.ReactNode }) {
@@ -189,6 +194,7 @@ export default function EpochDetailClient({ epochId }: { epochId: string }): JSX
                 <thead>
                   <tr className="border-b border-border">
                     <th className="text-left px-4 py-2.5 text-[11px] font-normal text-text-muted uppercase tracking-wider">Slot</th>
+                    <th className="text-left px-4 py-2.5 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden lg:table-cell">Block Hash</th>
                     <th className="text-left px-4 py-2.5 text-[11px] font-normal text-text-muted uppercase tracking-wider">Status</th>
                     <th className="text-left px-4 py-2.5 text-[11px] font-normal text-text-muted uppercase tracking-wider">Time</th>
                     <th className="text-left px-4 py-2.5 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">Proposer</th>
@@ -216,6 +222,19 @@ export default function EpochDetailClient({ epochId }: { epochId: string }): JSX
                             <span className="text-text-muted">{formatNumberWithCommas(slot.slot.toString())}</span>
                           )}
                         </td>
+                        <td className="px-4 py-2 hidden lg:table-cell">
+                          {isProposed && slot.blockHash ? (
+                            <Link
+                              href={`/block/${slot.slot}`}
+                              className="text-text-secondary hover:text-accent hover:underline font-mono text-xs transition-colors"
+                              title={slot.blockHash}
+                            >
+                              {truncateHash(slot.blockHash, 10, 6)}
+                            </Link>
+                          ) : (
+                            <span className="text-text-muted">…</span>
+                          )}
+                        </td>
                         <td className="px-4 py-2">
                           <StatusBadge status={slot.status} />
                         </td>
@@ -223,12 +242,14 @@ export default function EpochDetailClient({ epochId }: { epochId: string }): JSX
                           {isProposed ? timeAgo(timestamp) : '…'}
                         </td>
                         <td className="px-4 py-2 hidden sm:table-cell">
-                          {isProposed && proposer ? (
+                          {isProposed && proposer && proposer !== ZERO_ADDRESS ? (
                             <Link href={`/address/${proposer}`} className="text-text-secondary hover:text-accent hover:underline font-mono text-xs transition-colors">
                               {truncateHash(proposer, 8, 6)}
                             </Link>
+                          ) : isProposed ? (
+                            <span className="text-text-muted">-</span>
                           ) : (
-                            <span className="text-text-muted">,</span>
+                            <span className="text-text-muted">…</span>
                           )}
                         </td>
                         <td className="px-4 py-2 text-text-secondary tabular-nums">

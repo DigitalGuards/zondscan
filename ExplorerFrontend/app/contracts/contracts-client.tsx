@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import ImageWithFallback from '../components/ImageWithFallback';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import config from '../../config';
+import { setUrlParams, useUrlIntParam, useUrlParam } from '../lib/use-url-param';
 import Badge from '../components/Badge';
 import EmptyState from '../components/EmptyState';
 
@@ -153,33 +153,41 @@ function truncateAddress(addr: string, start = 8, end = 6): string {
 }
 
 export default function ContractsClient({ initialData, totalContracts }: ContractsClientProps) {
-  // URL-backed active tab so deep-links like /contracts?tab=erc1155 land on
-  // the right pane and breadcrumb back-steps from contract detail pages
-  // return the user to the section they came from. URL is the source of
-  // truth; clicking a tab pushes a replace() so the back button stays
-  // useful for in-page navigation.
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const urlTab = parseTab(searchParams.get('tab'));
-  const [activeTab, setActiveTabState] = useState<TabType>(urlTab);
+  // URL-backed tab / search / page so deep-links like
+  // /contracts?tab=erc1155&page=3 land on the right view and the browser
+  // Back button restores it instead of dumping the user on page 1. The URL
+  // is the single source of truth (no useState mirrors); tab and search
+  // write with replace (no history spam), page writes with push so Back
+  // walks pages the same way /blocks does. setUrlParams is a shallow
+  // History-API write, so none of these trigger an RSC refetch.
+  const [rawTab] = useUrlParam('tab', 'erc20');
+  const activeTab = parseTab(rawTab);
   const setActiveTab = useCallback((t: TabType) => {
-    setActiveTabState(t);
-    const params = new URLSearchParams(searchParams.toString());
-    params.set('tab', t);
-    router.replace(`/contracts?${params.toString()}`, { scroll: false });
-  }, [router, searchParams]);
-  // Keep state in sync when the URL changes from outside (back/forward,
-  // breadcrumb click on a different tab). Adjusting state during render
-  // via a prev-value tracker, the React-recommended replacement for the
-  // set-state-in-effect anti-pattern. Matches the cadence used in
-  // pending-transaction-view.tsx for ETA resync.
-  const [prevUrlTab, setPrevUrlTab] = useState<TabType>(urlTab);
-  if (urlTab !== prevUrlTab) {
-    setPrevUrlTab(urlTab);
-    setActiveTabState(urlTab);
+    // Tab change resets pagination in the same URL write so Back restores
+    // tab + page atomically.
+    setUrlParams({ tab: t === 'erc20' ? null : t, page: null }, 'replace');
+  }, []);
+  const [pageParam, setPageParam] = useUrlIntParam('page', 1, { history: 'push' });
+  // 1-based in the URL for readability; 0-based for the fetch + render math.
+  const currentPage = pageParam - 1;
+  const setCurrentPage = useCallback(
+    (p: number) => setPageParam(p + 1),
+    [setPageParam],
+  );
+  // ?q is authoritative (mount, Back/Forward); the input keeps a local
+  // mirror so typing stays responsive while the URL write debounces.
+  const [searchQuery] = useUrlParam('q', '');
+  const [searchInput, setSearchInput] = useState(searchQuery);
+  // Re-sync the input when the URL changes from outside (back/forward),
+  // adjusting state during render via a prev-value tracker, the
+  // React-recommended replacement for the set-state-in-effect
+  // anti-pattern. Matches the cadence used in pending-transaction-view.tsx
+  // for ETA resync.
+  const [prevSearchQuery, setPrevSearchQuery] = useState(searchQuery);
+  if (searchQuery !== prevSearchQuery) {
+    setPrevSearchQuery(searchQuery);
+    setSearchInput(searchQuery);
   }
-  const [searchQuery, setSearchQuery] = useState('');
-  const [currentPage, setCurrentPage] = useState(0);
   const [contracts, setContracts] = useState<ContractData[]>(initialData);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(totalContracts);
@@ -258,25 +266,40 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
     }
   }, []);
 
-  // Fetch when tab, search, or page changes
+  // Debounced search → URL. Writing ?q (and clearing ?page in the same
+  // call, so Back restores search + page atomically) is what triggers the
+  // fetch below; the 300ms wait keeps each keystroke from firing a request.
   useEffect(() => {
+    if (searchInput === searchQuery) return;
+    // During a route transition the old page can stay mounted after the URL
+    // has already flipped (popstate/Link commit lag); firing then would stamp
+    // ?q onto the destination's URL, so the write aborts if the path moved.
+    const scheduledPath = window.location.pathname;
     const timer = setTimeout(() => {
-      fetchContracts(currentPage, searchQuery, activeTab);
-    }, searchQuery ? 300 : 0);
-
+      if (window.location.pathname !== scheduledPath) return;
+      setUrlParams({ q: searchInput || null, page: null }, 'replace');
+    }, 300);
     return () => clearTimeout(timer);
-  }, [activeTab, searchQuery, currentPage, fetchContracts]);
-
-  // Reset page when tab or search changes, adjusting state on prop/state
-  // change instead of writing it in an effect (set-state-in-effect).
-  const [prevReset, setPrevReset] = useState<string>(`${activeTab}|${searchQuery}`);
-  const resetKey = `${activeTab}|${searchQuery}`;
-  if (prevReset !== resetKey) {
-    setPrevReset(resetKey);
-    if (currentPage !== 0) setCurrentPage(0);
-  }
+  }, [searchInput, searchQuery]);
 
   const totalPages = Math.max(1, Math.ceil(total / ITEMS_PER_PAGE));
+  // Deep-linked/stale ?page beyond the last page clamps to the last page
+  // instead of fetching an empty one ("Page 999 of 3" over a bogus empty
+  // state). The clamp tracks the freshest total, so a first fetch against a
+  // stale total self-corrects once the real total lands.
+  const safePage = Math.min(currentPage, totalPages - 1);
+
+  // Fetch when tab, search, or page changes. All three are URL-derived, so
+  // Back/Forward refetches exactly like the old setState-driven effect did.
+  // The zero-delay timer defers the setLoading call inside fetchContracts
+  // off the effect body (set-state-in-effect) and coalesces double flips
+  // within one commit, same shape as the old debounce timer.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchContracts(safePage, searchQuery, activeTab);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [activeTab, searchQuery, safePage, fetchContracts]);
 
   return (
     <div className="py-4 sm:py-6 lg:py-8">
@@ -307,8 +330,8 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
             type="text"
             aria-label="Search contracts"
             placeholder={activeTab === 'contracts' ? 'Search by contract address...' : 'Search by token name or address...'}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             className="w-full p-3 pl-10 bg-surface-2 border border-border rounded-lg text-text-secondary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
           />
         </div>
@@ -349,27 +372,27 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
         <div className="mt-6 flex flex-wrap justify-center items-center gap-2">
           <button
             aria-label="Go to previous page"
-            onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
-            disabled={currentPage === 0}
+            onClick={() => setCurrentPage(Math.max(0, safePage - 1))}
+            disabled={safePage === 0}
             className="px-3 py-1.5 rounded-lg bg-surface-2 text-text-secondary border border-border hover:border-accent disabled:opacity-50 disabled:hover:border-border text-sm"
           >
             Previous
           </button>
 
           <span className="text-sm text-text-secondary mx-2">
-            Page {currentPage + 1} of {totalPages}
+            Page {safePage + 1} of {totalPages}
           </span>
 
           {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
             let pageNum;
             if (totalPages <= 5) {
               pageNum = i;
-            } else if (currentPage <= 2) {
+            } else if (safePage <= 2) {
               pageNum = i;
-            } else if (currentPage >= totalPages - 3) {
+            } else if (safePage >= totalPages - 3) {
               pageNum = totalPages - 5 + i;
             } else {
-              pageNum = currentPage - 2 + i;
+              pageNum = safePage - 2 + i;
             }
 
             return (
@@ -378,7 +401,7 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
                 aria-label={`Go to page ${pageNum + 1}`}
                 onClick={() => setCurrentPage(pageNum)}
                 className={`w-8 h-8 rounded-lg text-sm ${
-                  currentPage === pageNum
+                  safePage === pageNum
                     ? 'bg-accent text-background font-semibold'
                     : 'bg-surface-2 text-text-secondary hover:bg-surface-3'
                 }`}
@@ -390,8 +413,8 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
 
           <button
             aria-label="Go to next page"
-            onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
-            disabled={currentPage >= totalPages - 1}
+            onClick={() => setCurrentPage(Math.min(totalPages - 1, safePage + 1))}
+            disabled={safePage >= totalPages - 1}
             className="px-3 py-1.5 rounded-lg bg-surface-2 text-text-secondary border border-border hover:border-accent disabled:opacity-50 disabled:hover:border-border text-sm"
           >
             Next

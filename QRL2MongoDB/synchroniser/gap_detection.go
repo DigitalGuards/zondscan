@@ -218,11 +218,12 @@ func detectAndFillGapsPeriodically() {
 		return
 	}
 
-	// Check the last MaxGapDetectionBlocks blocks for gaps
+	// Check the last MaxGapDetectionBlocks blocks for gaps. Clamp to 0, not 1:
+	// the genesis block is a fillable gap like any other.
 	lastKnownNum := utils.HexToInt(lastKnown).Int64()
 	fromNum := lastKnownNum - MaxGapDetectionBlocks
-	if fromNum < 1 {
-		fromNum = 1
+	if fromNum < 0 {
+		fromNum = 0
 	}
 
 	fromBlock := utils.IntToHex(int(fromNum))

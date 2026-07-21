@@ -6,6 +6,7 @@ import (
 	"QRL2MongoDB/rpc"
 	"QRL2MongoDB/validation"
 	"context"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -88,6 +89,64 @@ func processContracts(tx *models.Transaction) (string, string, string, bool) {
 	}
 
 	return to, contractAddress, statusTx, isContract
+}
+
+// storeInternalContractCreations registers contracts created by nested
+// CREATE/CREATE2 frames of a traced transaction. The creation branch in
+// processContracts only sees top-level deployments (tx.To == ""), so without
+// this sync-time hook a factory-created contract gets no contractCode row
+// until a later interaction or reprocess pass stumbles on it. Mirrors the
+// processContracts store flow (code fetch + classification + StoreContract),
+// with the outer transaction's sender/hash/block as the creation metadata.
+// The calls slice is empty unless debug tracing is enabled
+// (ENABLE_DEBUG_TRACE), so this is a no-op on nodes without the debug_ API.
+func storeInternalContractCreations(calls []rpc.InternalCall, creator string, txHash string, blockNumber string, statusTx string) {
+	for _, call := range calls {
+		if !strings.HasPrefix(call.Type, "CREATE") || call.To == "" {
+			continue
+		}
+
+		contractCode, err := rpc.GetCode(call.To, "latest")
+		if err != nil {
+			configs.Logger.Error("Failed to get contract code",
+				zap.String("address", call.To),
+				zap.Error(err))
+		}
+
+		// Classify the contract (ERC-20 / ERC-721 / ERC-1155 / unknown).
+		// On transient probe failure the result is zero-valued; the
+		// StoreContract merge's promote-only invariant prevents that
+		// from clobbering a previously-good classification.
+		detection, detErr := rpc.DetectContractType(call.To)
+		if detErr != nil {
+			configs.Logger.Warn("Contract type detection failed; storing without classification",
+				zap.String("address", call.To),
+				zap.Error(detErr))
+		}
+
+		contract := models.ContractInfo{
+			Address:             call.To,
+			Status:              statusTx,
+			IsToken:             detection.Standard != "",
+			Name:                detection.Name,
+			Symbol:              detection.Symbol,
+			Decimals:            detection.Decimals,
+			TotalSupply:         detection.TotalSupply,
+			TokenStandard:       detection.Standard,
+			HasERC165:           detection.HasERC165,
+			ContractCode:        contractCode,
+			CreatorAddress:      creator,
+			CreationTransaction: txHash,
+			CreationBlockNumber: blockNumber,
+			UpdatedAt:           time.Now().UTC().Format(time.RFC3339),
+		}
+
+		if err := StoreContract(contract); err != nil {
+			configs.Logger.Error("Failed to store contract",
+				zap.String("address", call.To),
+				zap.Error(err))
+		}
+	}
 }
 
 // IsAddressContract checks if an address is a contract by querying the contractCode collection

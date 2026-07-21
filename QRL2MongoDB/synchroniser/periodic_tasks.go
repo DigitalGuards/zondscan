@@ -168,12 +168,6 @@ func StartWalletCountSync(stopCh <-chan struct{}) {
 func processBlockPeriodically() {
 	configs.Logger.Info("Starting block processing check")
 
-	// Initialize collections if they don't exist
-	if !db.IsCollectionsExist() {
-		processInitialBlock()
-		return
-	}
-
 	// Process the latest block
 	latestBlock, err := rpc.GetLatestBlock()
 	if err != nil {
@@ -181,12 +175,11 @@ func processBlockPeriodically() {
 		return
 	}
 
+	// Collections and the genesis block are guaranteed by Sync() before this
+	// loop starts, so no initialization branch is needed here. A sync state
+	// of "0x0" (fresh chain, only genesis stored) falls through to the
+	// normal path and starts processing at block 0x1.
 	lastProcessedBlock := db.GetLastKnownBlockNumber()
-	if lastProcessedBlock == "0x0" {
-		configs.Logger.Info("No blocks in database, initializing...")
-		processInitialBlock()
-		return
-	}
 
 	// Log both states to help diagnose issues
 	configs.Logger.Info("Block sync status",
@@ -330,6 +323,11 @@ func updateDataPeriodically() {
 	configs.Logger.Info("Counting wallets...")
 	db.CountWallets()
 
+	// Update total circulating supply (writes the totalBalance document the
+	// backend's supply endpoint reads)
+	configs.Logger.Info("Updating total circulating supply...")
+	db.UpdateTotalBalance()
+
 	// Update transaction volume
 	configs.Logger.Info("Calculating daily transaction volume...")
 	db.GetDailyTransactionVolume()
@@ -356,11 +354,6 @@ func updateDataPeriodically() {
 // which lets Sync() (and therefore main.go's doneCh) complete cleanly.
 func singleBlockInsertion(stopCh <-chan struct{}) {
 	configs.Logger.Info("Starting single block insertion process")
-
-	// Initialize collections if they don't exist
-	if !db.IsCollectionsExist() {
-		processInitialBlock()
-	}
 
 	// Create a wait group to keep the main goroutine alive
 	var wg sync.WaitGroup

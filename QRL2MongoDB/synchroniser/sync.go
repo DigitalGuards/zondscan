@@ -115,6 +115,39 @@ func Sync(stopCh <-chan struct{}) {
 		// the syncer can still index blocks and we'll log the issue loudly.
 	}
 
+	// Idempotent genesis guard: the producer loop below starts at
+	// lastKnown+1, which skips block 0 forever on a fresh DB (a sync state of
+	// "0x0" means "nothing synced", not "block 0 done"). Insert block 0
+	// through the normal insert path; InsertBlockDocument no-ops when the
+	// block already exists, so a restart never duplicates it.
+	if !db.BlockExists("0x0") {
+		// Retry with the same backoff the latest-block fetch below uses: gap
+		// detection only scans the newest blocks, so a startup failure here
+		// would otherwise leave genesis missing for the whole process
+		// lifetime (until the next restart).
+		var genesisBlock *models.ZondDatabaseBlock
+		var genErr error
+		for retries := 0; retries < 5; retries++ {
+			genesisBlock, genErr = rpc.GetBlockByNumberMainnet("0x0")
+			if genErr == nil {
+				break
+			}
+			configs.Logger.Warn("Failed to fetch genesis block, retrying...",
+				zap.Error(genErr),
+				zap.Int("retry", retries+1))
+			time.Sleep(time.Duration(1<<uint(retries)) * time.Second)
+		}
+		if genErr != nil {
+			configs.Logger.Error("Failed to fetch genesis block after retries; continuing without it (retried on next restart)",
+				zap.Error(genErr))
+		} else {
+			db.UpdateTransactionStatuses(genesisBlock)
+			db.InsertBlockDocument(*genesisBlock)
+			db.ProcessTransactions(*genesisBlock)
+			configs.Logger.Info("Genesis block inserted")
+		}
+	}
+
 	// DB queries, no retry needed, these are local and don't fail transiently.
 	nextBlock = db.GetLastKnownBlockNumber()
 	if nextBlock == "0x0" {
@@ -288,52 +321,6 @@ func forceUpdateSyncState(blockNumber string) {
 		configs.Logger.Info("Successfully updated sync state",
 			zap.String("block", blockNumber))
 	}
-}
-
-// processInitialBlock processes the genesis block and initializes collections
-func processInitialBlock() {
-	configs.Logger.Info("Processing genesis block")
-
-	// Initialize token collections using the token sync module
-	if err := InitializeTokenCollections(); err != nil {
-		configs.Logger.Error("Failed to initialize token collections", zap.Error(err))
-		// Continue anyway - we'll log the error but try to proceed
-	}
-
-	// Initialize validators
-	configs.Logger.Info("Initializing validators")
-	if err := syncValidators(); err != nil {
-		configs.Logger.Error("Failed to initialize validators", zap.Error(err))
-	} else {
-		configs.Logger.Info("Successfully initialized validators")
-	}
-
-	// Get block 0
-	genesisBlock, err := rpc.GetBlockByNumberMainnet("0x0")
-	if err != nil {
-		configs.Logger.Error("Failed to get genesis block",
-			zap.Error(err))
-		return
-	}
-
-	// Update tx status in block 0
-	db.UpdateTransactionStatuses(genesisBlock)
-
-	// Insert block document
-	blocksCollection := configs.GetCollection(configs.DB, "blocks")
-	ctx := context.Background()
-	_, err = blocksCollection.InsertOne(ctx, genesisBlock)
-	if err != nil {
-		configs.Logger.Error("Failed to insert genesis block",
-			zap.Error(err))
-		return
-	}
-
-	// Process transactions
-	db.ProcessTransactions(*genesisBlock)
-
-	db.StoreLastKnownBlockNumber("0x0")
-	configs.Logger.Info("Genesis block processed successfully")
 }
 
 // processSubsequentBlocks processes a single block and returns the next block to process

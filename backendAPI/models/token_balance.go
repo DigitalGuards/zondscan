@@ -119,4 +119,5 @@ type TokenInfo struct {
 	CreatorAddress  string `json:"creatorAddress"`
 	CreationTxHash  string `json:"creationTxHash"`
 	CreationBlock   string `json:"creationBlock"`
+	GenesisContract bool   `json:"genesisContract,omitempty"`
 }

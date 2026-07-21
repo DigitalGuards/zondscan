@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, InputHTMLAttributes } from "react";
 
 interface DebouncedInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
@@ -26,13 +26,26 @@ export default function DebouncedInput({
     setValue(initialValue);
   }
 
+  // Keep the latest onChange out of the effect deps: consumers pass inline
+  // closures, and a fresh identity per parent render must not re-arm the
+  // timer (it would re-emit the unchanged value, e.g. resetting a consumer's
+  // page param on every poll re-render).
+  const onChangeRef = useRef(onChange);
   useEffect(() => {
+    onChangeRef.current = onChange;
+  });
+
+  useEffect(() => {
+    // Only emit when the user's edit actually diverges from the parent's
+    // value: no mount fire (a deep-linked page param would be wiped by an
+    // initial onChange), no echo after the parent adopts the emitted value.
+    if (value === initialValue) return;
     const timeout = setTimeout(() => {
-      onChange(value);
+      onChangeRef.current(value);
     }, debounce);
 
     return () => clearTimeout(timeout);
-  }, [value, onChange, debounce]);
+  }, [value, initialValue, debounce]);
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>): void => {
     setValue(e.target.value);
