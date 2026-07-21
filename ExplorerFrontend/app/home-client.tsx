@@ -59,6 +59,7 @@ interface HomeData {
   txs: TxResult[];
   totalStaked: string;
   marketCap: number;
+  circulating: string;
   avgGasPriceHex: string | null;
   loading: boolean;
   error: boolean;
@@ -139,6 +140,11 @@ const icons = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
     </svg>
   ),
+  circulating: (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+    </svg>
+  ),
 };
 
 // ── Stat Cluster ─────────────────────────────────────────────────────────────
@@ -159,6 +165,9 @@ function StatBar({ data }: { data: HomeData }) {
     { label: `Staked ${NATIVE_UNIT}`, value: data.totalStaked !== '0' ? formatStaked(data.totalStaked) : '…', icon: icons.staked },
     { label: 'Transactions', value: formatNumberWithCommas(data.totalTransactions.toString()), icon: icons.transactions },
     { label: 'Market Cap', value: data.marketCap > 0 ? '$' + formatNumberWithCommas(data.marketCap.toString()) : '…', icon: icons.marketCap },
+    // Unit lives on the label line per the Quanta layout convention; the
+    // value stays a bare number so the 8-cell strip keeps its width budget.
+    { label: `Circulating ${NATIVE_UNIT}`, value: data.circulating !== '0' ? formatNumberWithCommas(data.circulating) : '…', icon: icons.circulating },
   ];
 
   return (
@@ -166,7 +175,7 @@ function StatBar({ data }: { data: HomeData }) {
     // breakpoint (the old per-index border logic left uneven seams at the
     // sm 4-column layout).
     <div className="rounded-2xl border border-border overflow-hidden bg-border/60 shadow-card">
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-px">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-px">
         {stats.map((stat) => (
           <div
             key={stat.label}
@@ -387,6 +396,7 @@ export default function HomeClient(): JSX.Element {
     txs: [],
     totalStaked: '0',
     marketCap: 0,
+    circulating: '0',
     avgGasPriceHex: null,
     loading: true,
     error: false,
@@ -415,6 +425,7 @@ export default function HomeClient(): JSX.Element {
           next.validatorCount = overviewRes.value.data.validatorCount || 0;
           next.dataInitialized = overviewRes.value.data.status?.dataInitialized ?? false;
           next.marketCap = overviewRes.value.data.marketcap || 0;
+          next.circulating = overviewRes.value.data.circulating || '0';
         }
         if (latestBlockRes.status === 'fulfilled') {
           next.blockHeight = latestBlockRes.value.data.blockNumber || 0;
