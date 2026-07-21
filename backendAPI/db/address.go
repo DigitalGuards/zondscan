@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"strconv"
 	"strings"
 	"time"
 
@@ -106,12 +107,24 @@ func ReturnRichlist() ([]models.RichlistEntry, error) {
 		return nil, err
 	}
 
-	// Percent-of-supply uses the same balances the ranking sorts on so the
-	// column stays consistent with the ordering. On error the column
-	// degrades to 0 rather than failing the whole richlist.
-	total, err := totalAddressBalance(ctx)
-	if err != nil {
-		log.Printf("error summing total balance for richlist: %v", err)
+	// Percent-of-supply prefers the precalculated circulating total (written
+	// by the syncer every 30 min, shared with /overview) over summing the
+	// whole addresses collection, which is O(N) per cache window. The
+	// aggregation stays as the fallback for fresh deployments where the
+	// total has not been written yet; on error the column degrades to 0
+	// rather than failing the whole richlist.
+	var total float64
+	if circulating := ReturnTotalCirculatingSupply(); circulating != "" {
+		if parsed, parseErr := strconv.ParseFloat(circulating, 64); parseErr == nil {
+			total = parsed
+		}
+	}
+	if total <= 0 {
+		var sumErr error
+		total, sumErr = totalAddressBalance(ctx)
+		if sumErr != nil {
+			log.Printf("error summing total balance for richlist: %v", sumErr)
+		}
 	}
 
 	for i := range entries {

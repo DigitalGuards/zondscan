@@ -164,7 +164,7 @@ func ReprocessIncompleteContracts() error {
 				configs.Logger.Debug("Genesis code probe failed; leaving creation info incomplete",
 					zap.String("address", contract.Address),
 					zap.Error(codeErr))
-			} else if genesisCode != "" && genesisCode != "0x" {
+			} else if genesisCode != "" && genesisCode != "0x" && genesisCode != "0x0" {
 				contract.CreationBlockNumber = "0x0"
 				contract.GenesisContract = true
 				configs.Logger.Info("Contract code present at genesis, pinned creation block to 0x0",
