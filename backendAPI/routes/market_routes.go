@@ -25,8 +25,13 @@ func handleOverview(c *gin.Context) {
 		currentPrice := market.PriceUSD
 		walletCount := db.GetWalletCount()
 
-		circulating := db.ReturnTotalCirculatingSupply()
-		if circulating == "" {
+		// "0" is the bootstrap seed value written before the syncer's first
+		// supply pass, treat it like a missing doc so the UI never shows 0
+		// circulating during initial sync. The raw value still feeds
+		// dataInitialized below, which must not count the fallback.
+		rawCirculating := db.ReturnTotalCirculatingSupply()
+		circulating := rawCirculating
+		if circulating == "" || circulating == "0" {
 			circulating = "65000000" // default when no data is available
 		}
 
@@ -58,7 +63,7 @@ func handleOverview(c *gin.Context) {
 			"contractCount":  contractCount,
 			"status": gin.H{
 				"syncing":         true,
-				"dataInitialized": marketCap > 0 || currentPrice > 0 || walletCount > 0 || circulating != "0" || volume > 0,
+				"dataInitialized": marketCap > 0 || currentPrice > 0 || walletCount > 0 || (rawCirculating != "" && rawCirculating != "0") || volume > 0,
 			},
 		}, nil
 	})

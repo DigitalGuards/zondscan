@@ -609,6 +609,7 @@ func GetTokenInfo(contractAddress string) (*models.TokenInfo, error) {
 		CreatorAddress:  contract.ContractCreatorAddress,
 		CreationTxHash:  contract.CreationTransaction,
 		CreationBlock:   contract.CreationBlockNumber,
+		GenesisContract: contract.GenesisContract,
 	}, nil
 }
 

@@ -319,25 +319,7 @@ func ReturnAddressActivityRange(address string) (int64, int64, error) {
 
 	filter := addressOrFilter(normalizedAddress)
 
-	fetchBoundary := func(order int) (int64, error) {
-		var doc struct {
-			TimeStamp string `bson:"timeStamp"`
-		}
-		opts := options.FindOne().
-			SetProjection(primitive.D{{Key: "timeStamp", Value: 1}}).
-			SetSort(primitive.D{{Key: "timeStamp", Value: order}})
-		err := configs.TransactionByAddressCollection.FindOne(ctx, filter, opts).Decode(&doc)
-		if err != nil {
-			return 0, err
-		}
-		ts, err := strconv.ParseInt(strings.TrimPrefix(doc.TimeStamp, "0x"), 16, 64)
-		if err != nil {
-			return 0, fmt.Errorf("malformed timeStamp %q: %w", doc.TimeStamp, err)
-		}
-		return ts, nil
-	}
-
-	first, err := fetchBoundary(1)
+	first, err := fetchActivityBoundary(ctx, filter, 1)
 	if err == mongo.ErrNoDocuments {
 		return 0, 0, nil
 	}
@@ -346,13 +328,58 @@ func ReturnAddressActivityRange(address string) (int64, int64, error) {
 		return 0, 0, err
 	}
 
-	last, err := fetchBoundary(-1)
+	last, err := fetchActivityBoundary(ctx, filter, -1)
 	if err != nil {
 		log.Printf("error fetching last activity: %v", err)
 		return 0, 0, err
 	}
 
 	return first, last, nil
+}
+
+// fetchActivityBoundary returns the unix timestamp (seconds) of the oldest
+// (order 1) or newest (order -1) native transaction matching the address
+// filter, or mongo.ErrNoDocuments when there are none. Index-backed: the
+// sort rides the same timeStamp ordering assumption documented on
+// ReturnAddressActivityRange.
+func fetchActivityBoundary(ctx context.Context, filter bson.M, order int) (int64, error) {
+	var doc struct {
+		TimeStamp string `bson:"timeStamp"`
+	}
+	opts := options.FindOne().
+		SetProjection(primitive.D{{Key: "timeStamp", Value: 1}}).
+		SetSort(primitive.D{{Key: "timeStamp", Value: order}})
+	err := configs.TransactionByAddressCollection.FindOne(ctx, filter, opts).Decode(&doc)
+	if err != nil {
+		return 0, err
+	}
+	ts, err := strconv.ParseInt(strings.TrimPrefix(doc.TimeStamp, "0x"), 16, 64)
+	if err != nil {
+		return 0, fmt.Errorf("malformed timeStamp %q: %w", doc.TimeStamp, err)
+	}
+	return ts, nil
+}
+
+// FirstSeen returns the unix timestamp (seconds) of the oldest native
+// transaction involving the address, or 0 when it has none (the richlist
+// renders that as a dash). Same first-boundary lookup the address page's
+// Activity card uses via ReturnAddressActivityRange.
+func FirstSeen(address string) int64 {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	filter := addressOrFilter(normalizeAddress(address))
+
+	first, err := fetchActivityBoundary(ctx, filter, 1)
+	if err == mongo.ErrNoDocuments {
+		return 0
+	}
+	if err != nil {
+		log.Printf("error fetching first seen for %s: %v", address, err)
+		return 0
+	}
+
+	return first
 }
 
 func ReturnSingleTransfer(query string) (models.Transfer, error) {

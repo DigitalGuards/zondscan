@@ -427,10 +427,13 @@ func initializeCollections(db *mongo.Database) {
 		log.Printf("Warning: Failed to initialize dailyTransactionsVolume collection: %v", err)
 	}
 
-	// Initialize totalCirculatingSupply collection with fallback data
+	// Initialize totalCirculatingSupply collection with fallback data.
+	// Keyed to the syncer's well-known _id so the seed and the syncer's
+	// writer share one document; an unkeyed upsert used to insert a
+	// random-_id doc the reader could pick up forever.
 	_, err = db.Collection(totalCirculatingSupplyCollName).UpdateOne(
 		ctx,
-		bson.M{},
+		bson.M{"_id": "totalBalance"},
 		bson.M{"$setOnInsert": bson.M{"circulating": "0"}},
 		options.Update().SetUpsert(true),
 	)

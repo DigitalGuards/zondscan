@@ -68,12 +68,13 @@ func ReturnValidators(pageToken string) (*models.ValidatorResponse, error) {
 		}
 
 		validators = append(validators, models.Validator{
-			Index:        d.ID,
-			Address:      d.PublicKeyHex,
-			Status:       status,
-			Age:          age,
-			StakedAmount: d.EffectiveBalance,
-			IsActive:     isActive,
+			Index:                    d.ID,
+			Address:                  d.PublicKeyHex,
+			WithdrawalCredentialsHex: d.WithdrawalCredentialsHex,
+			Status:                   status,
+			Age:                      age,
+			StakedAmount:             d.EffectiveBalance,
+			IsActive:                 isActive,
 		})
 
 		if balance, err := strconv.ParseInt(d.EffectiveBalance, 10, 64); err == nil {

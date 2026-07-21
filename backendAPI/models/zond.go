@@ -1,9 +1,5 @@
 package models
 
-import (
-	"go.mongodb.org/mongo-driver/bson/primitive"
-)
-
 type ZondDatabaseBlock struct {
 	Jsonrpc string `json:"jsonrpc"`
 	ID      int    `json:"id"`
@@ -57,7 +53,9 @@ type Result struct {
 	WithdrawalsRoot  string        `json:"withdrawalsRoot"`
 }
 
+// CirculatingSupply mirrors the syncer's totalCirculatingSupply document,
+// which lives under the fixed string _id "totalBalance" (not an ObjectId).
 type CirculatingSupply struct {
-	ID          primitive.ObjectID `bson:"_id,omitempty"`
-	Circulating string             `bson:"circulating"`
+	ID          string `bson:"_id,omitempty"`
+	Circulating string `bson:"circulating"`
 }
