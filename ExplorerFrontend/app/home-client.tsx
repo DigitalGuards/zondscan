@@ -425,7 +425,7 @@ export default function HomeClient(): JSX.Element {
           next.validatorCount = overviewRes.value.data.validatorCount || 0;
           next.dataInitialized = overviewRes.value.data.status?.dataInitialized ?? false;
           next.marketCap = overviewRes.value.data.marketcap || 0;
-          next.circulating = overviewRes.value.data.circulating || '0';
+          next.circulating = String(overviewRes.value.data.circulating || '0');
         }
         if (latestBlockRes.status === 'fulfilled') {
           next.blockHeight = latestBlockRes.value.data.blockNumber || 0;
