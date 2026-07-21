@@ -33,6 +33,7 @@ import {
   fetchAllAggregateRows,
   useAggregatePage,
 } from './use-aggregate-page';
+import { useUrlIntParam } from '../../../lib/use-url-param';
 
 /**
  * Internal-transactions panel. Sub-frame calls emitted by contract
@@ -64,7 +65,11 @@ export default function InternalPanel({
   total,
 }: InternalPanelProps): JSX.Element {
   const [filter, setFilter] = useState('');
-  const [page, setPage] = useState(1);
+  // URL-backed page (?itxPage) so browser Back restores it; read during
+  // render, so a lazy-mounted panel hydrates the page before its first
+  // fetch. replace (the hook default) keeps tab-internal paging out of
+  // browser history.
+  const [page, setPage] = useUrlIntParam('itxPage', 1);
   const isMobile = useIsMobile();
 
   const pageQuery = useAggregatePage(address, page);
@@ -334,8 +339,8 @@ export default function InternalPanel({
         canPrev={page > 1}
         canNext={page < pageCount}
         goFirst={() => setPage(1)}
-        goPrev={() => setPage((p) => Math.max(1, p - 1))}
-        goNext={() => setPage((p) => Math.min(pageCount, p + 1))}
+        goPrev={() => setPage(Math.max(1, page - 1))}
+        goNext={() => setPage(Math.min(pageCount, page + 1))}
         goLast={() => setPage(pageCount)}
       />
     </div>

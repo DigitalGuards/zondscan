@@ -22,6 +22,7 @@ import {
   truncateMiddle,
   useIsMobile,
 } from './_table-utils';
+import { useUrlIntParam } from '../../../lib/use-url-param';
 
 /**
  * Token Transfers panel for the address page. Lazy-fetches up to 250 rows
@@ -54,6 +55,10 @@ interface TokenTransferRow {
   tokenID?: string;
 }
 
+// TanStack's default 10/page, made explicit now that pagination state is
+// controlled (URL-backed ?ttPage).
+const TRANSFERS_PAGE_SIZE = 10;
+
 const columnHelper = createColumnHelper<
   TokenTransferRow & { formattedAmount: string; tsSeconds: number }
 >();
@@ -75,6 +80,12 @@ export default function TokenTransfersPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
+  // URL-backed page (?ttPage, 1-based) so browser Back restores it. Read
+  // during render, so a lazy-mounted panel hydrates its page before the
+  // rows arrive; autoResetPageIndex is off below because the post-mount
+  // fetch swapping `data` in would otherwise clobber the restored page.
+  const [pageParam, setPageParam] = useUrlIntParam('ttPage', 1);
+  const pagination = { pageIndex: pageParam - 1, pageSize: TRANSFERS_PAGE_SIZE };
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -258,8 +269,13 @@ export default function TokenTransfersPanel({
     columns: columns as ColumnDef<
       TokenTransferRow & { formattedAmount: string; tsSeconds: number }
     >[],
-    state: { globalFilter: filter },
+    state: { globalFilter: filter, pagination },
     onGlobalFilterChange: setFilter,
+    onPaginationChange: (updater) => {
+      const next = typeof updater === 'function' ? updater(pagination) : updater;
+      setPageParam(next.pageIndex + 1);
+    },
+    autoResetPageIndex: false,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
@@ -370,7 +386,12 @@ export default function TokenTransfersPanel({
           </div>
           <DebouncedInput
             value={filter}
-            onChange={(v) => setFilter(String(v))}
+            onChange={(v) => {
+              setFilter(String(v));
+              // Manual reset since autoResetPageIndex is off: a new search
+              // starts from page 1.
+              setPageParam(1);
+            }}
             className="px-4 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:border-accent text-text-primary w-full md:w-auto"
             placeholder="Search token transfers..."
           />

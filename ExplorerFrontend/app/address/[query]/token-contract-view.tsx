@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import Image from 'next/image';
+import { useState, useEffect, useCallback } from 'react';
 import ImageWithFallback from '../../components/ImageWithFallback';
 import Link from 'next/link';
 import CopyButton from "../../components/CopyButton";
@@ -12,6 +11,17 @@ import VerifiedBadge from "../../components/VerifiedBadge";
 import type { ContractData } from "../../types/address";
 import { compactTokenIDLabel, formatAmount, NATIVE_UNIT } from "../../lib/helpers";
 import Breadcrumbs from "../../components/Breadcrumbs";
+import { setUrlParams, useUrlIntParam, useUrlParam } from "../../lib/use-url-param";
+
+// Tab set for the pill bar below. ?tab values outside this list (hand-edited
+// URLs) fall back to the overview pane.
+const TOKEN_TABS = ['overview', 'holders', 'transfers', 'tokens'] as const;
+type TokenTab = (typeof TOKEN_TABS)[number];
+function parseTokenTab(raw: string): TokenTab {
+    return (TOKEN_TABS as readonly string[]).includes(raw)
+        ? (raw as TokenTab)
+        : 'overview';
+}
 
 interface TokenInfo {
     contractAddress: string;
@@ -24,6 +34,9 @@ interface TokenInfo {
     creatorAddress: string;
     creationTxHash: string;
     creationBlock: string;
+    // Optional backend flag for contracts baked into the chain at genesis
+    // (no deployment tx). Absent on handlers predating it.
+    genesisContract?: boolean;
 }
 
 interface TokenHolder {
@@ -90,6 +103,10 @@ interface TokenContractViewProps {
         decimals?: number;
         totalSupply?: string;
         status?: string;
+        creationBlockNumber?: string;
+        // Optional genesis flag mirrored from the contract-info payload;
+        // treat absence as "deployed normally".
+        genesisContract?: boolean;
     };
     handlerUrl: string;
 }
@@ -154,23 +171,56 @@ const formatTimestamp = (timestamp: string): string => {
 };
 
 export default function TokenContractView({ address, contractData, handlerUrl }: TokenContractViewProps) {
-    const [activeTab, setActiveTab] = useState<'overview' | 'holders' | 'transfers' | 'tokens'>('overview');
+    const tokenStandard = contractData.tokenStandard;
+    const isNFT = tokenStandard === 'ERC-721' || tokenStandard === 'ERC-1155';
+    // URL-backed tab + per-tab pages + tokenID filter so the browser Back
+    // button restores the exact view instead of resetting to Overview. All
+    // writes use replace (shallow History-API, no RSC refetch); pages are
+    // 1-based in the URL for readability and converted to the 0-based
+    // values the fetches use.
+    const [rawTab, setRawTab] = useUrlParam('tab', 'overview');
+    const parsedTab = parseTokenTab(rawTab);
+    // Non-NFT contracts have no Tokens tab; clamp a stray ?tab=tokens.
+    const activeTab = parsedTab === 'tokens' && !isNFT ? 'overview' : parsedTab;
     const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null);
     const [holders, setHolders] = useState<TokenHolder[]>([]);
     const [transfers, setTransfers] = useState<TokenTransfer[]>([]);
     const [holdersTotal, setHoldersTotal] = useState(0);
     const [transfersTotal, setTransfersTotal] = useState(0);
-    const [holdersPage, setHoldersPage] = useState(0);
-    const [transfersPage, setTransfersPage] = useState(0);
+    const [holdersPageParam, setHoldersPageParam] = useUrlIntParam('hp', 1);
+    const [transfersPageParam, setTransfersPageParam] = useUrlIntParam('tp', 1);
+    const holdersPage = holdersPageParam - 1;
+    const transfersPage = transfersPageParam - 1;
+    const setHoldersPage = useCallback(
+        (p: number) => setHoldersPageParam(p + 1),
+        [setHoldersPageParam],
+    );
+    const setTransfersPage = useCallback(
+        (p: number) => setTransfersPageParam(p + 1),
+        [setTransfersPageParam],
+    );
     const [loading, setLoading] = useState(true);
     const [creationTx, setCreationTx] = useState<CreationTxData | null>(null);
     // Phase 2: NFT-specific state. holderTokenIDFilter narrows /holders to
     // a single tokenID; tokensList drives the new "Tokens" tab listing.
-    const [holderTokenIDFilter, setHolderTokenIDFilter] = useState<string>('');
-    const [holderTokenIDInput, setHolderTokenIDInput] = useState<string>('');
+    const [holderTokenIDFilter] = useUrlParam('tokenId', '');
+    const [holderTokenIDInput, setHolderTokenIDInput] = useState<string>(holderTokenIDFilter);
+    // Keep the filter input display in sync when ?tokenId changes from
+    // outside the input (Back/Forward, Tokens-tab row click), adjusting
+    // state during render via a prev-value tracker instead of an effect.
+    const [prevTokenIDFilter, setPrevTokenIDFilter] = useState(holderTokenIDFilter);
+    if (holderTokenIDFilter !== prevTokenIDFilter) {
+        setPrevTokenIDFilter(holderTokenIDFilter);
+        setHolderTokenIDInput(holderTokenIDFilter);
+    }
     const [tokensList, setTokensList] = useState<TokenIDSummary[]>([]);
     const [tokensTotal, setTokensTotal] = useState(0);
-    const [tokensPage, setTokensPage] = useState(0);
+    const [tokensPageParam, setTokensPageParam] = useUrlIntParam('kp', 1);
+    const tokensPage = tokensPageParam - 1;
+    const setTokensPage = useCallback(
+        (p: number) => setTokensPageParam(p + 1),
+        [setTokensPageParam],
+    );
     const limit = 25;
 
     // Fetch token info
@@ -298,8 +348,14 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
     const totalSupply = tokenInfo?.totalSupply ?? contractData.totalSupply ?? '0';
     const creatorAddress = creationTx?.From || tokenInfo?.creatorAddress || contractData.creatorAddress || '';
     const creationTxHash = tokenInfo?.creationTxHash || contractData.creationTransaction || '';
-    const tokenStandard = contractData.tokenStandard;
-    const isNFT = tokenStandard === 'ERC-721' || tokenStandard === 'ERC-1155';
+    // Genesis contracts are baked into the chain at block 0 and have no
+    // deployment transaction; the backend flags them via the optional
+    // genesisContract boolean, with a '0x0' creation block as the same
+    // signal on payloads carrying the block but not the flag.
+    const isGenesisContract =
+        tokenInfo?.genesisContract === true ||
+        contractData.genesisContract === true ||
+        contractData.creationBlockNumber === '0x0';
     const badgeLabel =
         tokenStandard === 'ERC-721'
             ? 'QRC-721 NFT'
@@ -458,7 +514,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                 <TabPillBar
                     ariaLabel="Token contract sections"
                     activeKey={activeTab}
-                    onSelect={setActiveTab}
+                    onSelect={setRawTab}
                     tabs={tabs.map((tab) => ({ key: tab.id, label: tab.label }))}
                 />
             </div>
@@ -533,14 +589,20 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
                                     <div className="text-xs md:text-sm text-text-secondary">Transaction Hash</div>
                                     <div className="flex items-center gap-2 min-w-0">
-                                        <Link
-                                            href={`/tx/${creationTxHash}`}
-                                            className="text-accent hover:text-accent-hover font-mono text-xs md:text-sm break-all"
-                                        >
-                                            {creationTxHash || 'Unknown'}
-                                        </Link>
-                                        {creationTxHash && (
-                                            <CopyButton value={creationTxHash} label="Copy transaction hash" />
+                                        {creationTxHash ? (
+                                            <>
+                                                <Link
+                                                    href={`/tx/${creationTxHash}`}
+                                                    className="text-accent hover:text-accent-hover font-mono text-xs md:text-sm break-all"
+                                                >
+                                                    {creationTxHash}
+                                                </Link>
+                                                <CopyButton value={creationTxHash} label="Copy transaction hash" />
+                                            </>
+                                        ) : (
+                                            <span className="text-xs md:text-sm text-text-secondary">
+                                                {isGenesisContract ? 'Genesis contract' : 'Unknown'}
+                                            </span>
                                         )}
                                     </div>
                                 </div>
@@ -550,16 +612,26 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div className="flex justify-between md:flex-col">
                                         <div className="text-xs md:text-sm text-text-secondary">Block</div>
-                                        <Link
-                                            href={`/block/${creationTx?.BlockNumber || tokenInfo?.creationBlock || ''}`}
-                                            className="text-accent hover:text-accent-hover text-sm"
-                                        >
-                                            {creationTx?.BlockNumber
-                                                ? parseInt(creationTx.BlockNumber, 16).toLocaleString()
-                                                : tokenInfo?.creationBlock
-                                                    ? parseInt(tokenInfo.creationBlock, 16).toLocaleString()
-                                                    : '-'}
-                                        </Link>
+                                        {(() => {
+                                            // Only link when a block is actually known; a bare
+                                            // /block/ href renders as a broken link.
+                                            const creationBlock = creationTx?.BlockNumber || tokenInfo?.creationBlock || '';
+                                            if (!creationBlock) {
+                                                return (
+                                                    <span className="text-sm text-text-secondary">
+                                                        {isGenesisContract ? 'Genesis' : '-'}
+                                                    </span>
+                                                );
+                                            }
+                                            return (
+                                                <Link
+                                                    href={`/block/${creationBlock}`}
+                                                    className="text-accent hover:text-accent-hover text-sm"
+                                                >
+                                                    {parseInt(creationBlock, 16).toLocaleString()}
+                                                </Link>
+                                            );
+                                        })()}
                                     </div>
 
                                     <div className="flex justify-between md:flex-col">
@@ -636,16 +708,16 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                     onChange={(e) => setHolderTokenIDInput(e.target.value.replace(/[^0-9]/g, ''))}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') {
-                                            setHoldersPage(0);
-                                            setHolderTokenIDFilter(holderTokenIDInput.trim());
+                                            // Filter + page reset in one URL write so Back
+                                            // restores both atomically.
+                                            setUrlParams({ tokenId: holderTokenIDInput.trim() || null, hp: null }, 'replace');
                                         }
                                     }}
                                     className="px-2 py-1 rounded bg-black/40 border border-border text-sm text-text-primary font-mono w-32"
                                 />
                                 <button
                                     onClick={() => {
-                                        setHoldersPage(0);
-                                        setHolderTokenIDFilter(holderTokenIDInput.trim());
+                                        setUrlParams({ tokenId: holderTokenIDInput.trim() || null, hp: null }, 'replace');
                                     }}
                                     className="px-3 py-1 rounded bg-accent/20 text-accent text-sm hover:bg-accent/30"
                                 >
@@ -655,8 +727,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                     <button
                                         onClick={() => {
                                             setHolderTokenIDInput('');
-                                            setHolderTokenIDFilter('');
-                                            setHoldersPage(0);
+                                            setUrlParams({ tokenId: null, hp: null }, 'replace');
                                         }}
                                         className="px-3 py-1 rounded bg-surface-2 text-sm hover:bg-surface-3"
                                     >
@@ -763,7 +834,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                         <div className="flex gap-2">
                                             <button
                                                 aria-label="Go to previous page"
-                                                onClick={() => setHoldersPage(p => Math.max(0, p - 1))}
+                                                onClick={() => setHoldersPage(Math.max(0, holdersPage - 1))}
                                                 disabled={holdersPage === 0}
                                                 className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
                                             >
@@ -771,7 +842,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                             </button>
                                             <button
                                                 aria-label="Go to next page"
-                                                onClick={() => setHoldersPage(p => p + 1)}
+                                                onClick={() => setHoldersPage(holdersPage + 1)}
                                                 disabled={(holdersPage + 1) * limit >= holdersTotal}
                                                 className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
                                             >
@@ -819,10 +890,10 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                         key={t.tokenID}
                                                         className="hover:bg-white/5 cursor-pointer"
                                                         onClick={() => {
-                                                            setHolderTokenIDInput(t.tokenID);
-                                                            setHolderTokenIDFilter(t.tokenID);
-                                                            setHoldersPage(0);
-                                                            setActiveTab('holders');
+                                                            // Tab + filter + page in ONE URL write so Back
+                                                            // undoes the jump atomically; the filter input
+                                                            // syncs from ?tokenId via the render tracker.
+                                                            setUrlParams({ tab: 'holders', tokenId: t.tokenID, hp: null }, 'replace');
                                                         }}
                                                     >
                                                         <td className="px-4 py-3">
@@ -874,7 +945,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                         <div className="flex gap-2">
                                             <button
                                                 aria-label="Go to previous page"
-                                                onClick={() => setTokensPage(p => Math.max(0, p - 1))}
+                                                onClick={() => setTokensPage(Math.max(0, tokensPage - 1))}
                                                 disabled={tokensPage === 0}
                                                 className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
                                             >
@@ -882,7 +953,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                             </button>
                                             <button
                                                 aria-label="Go to next page"
-                                                onClick={() => setTokensPage(p => p + 1)}
+                                                onClick={() => setTokensPage(tokensPage + 1)}
                                                 disabled={(tokensPage + 1) * limit >= tokensTotal}
                                                 className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
                                             >
@@ -954,7 +1025,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                         <div className="flex gap-2">
                                             <button
                                                 aria-label="Go to previous page"
-                                                onClick={() => setTransfersPage(p => Math.max(0, p - 1))}
+                                                onClick={() => setTransfersPage(Math.max(0, transfersPage - 1))}
                                                 disabled={transfersPage === 0}
                                                 className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
                                             >
@@ -962,7 +1033,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                             </button>
                                             <button
                                                 aria-label="Go to next page"
-                                                onClick={() => setTransfersPage(p => p + 1)}
+                                                onClick={() => setTransfersPage(transfersPage + 1)}
                                                 disabled={(transfersPage + 1) * limit >= transfersTotal}
                                                 className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
                                             >

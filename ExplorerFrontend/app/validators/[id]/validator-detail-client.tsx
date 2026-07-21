@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import Link from 'next/link';
 import config from '../../../config';
-import { epochsToDays, formatValidatorBalance } from '../../lib/helpers';
+import { epochsToDays, formatValidatorBalance, withdrawalCredentialsToAddress } from '../../lib/helpers';
 import Badge from '../../components/Badge';
+import CollapsibleHex from '../../components/CollapsibleHex';
 import CopyButton from '../../components/CopyButton';
 import EmptyState from '../../components/EmptyState';
 
@@ -118,6 +119,9 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
   }
 
   const [amount, unit] = formatValidatorBalance(validator.effectiveBalance);
+  // Decoded execution-layer withdrawal address; null for non-standard
+  // credentials, in which case only the raw hex row below is shown.
+  const withdrawalAddress = withdrawalCredentialsToAddress(validator.withdrawalCredentialsHex);
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-6 lg:py-8">
@@ -141,17 +145,26 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
           <p className="text-text-secondary mt-1">
             Current Epoch: {parseInt(validator.currentEpoch).toLocaleString()}
           </p>
+          {withdrawalAddress && (
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <span className="text-sm text-text-secondary">Withdrawal Address:</span>
+              <Link
+                href={`/address/${withdrawalAddress}`}
+                className="text-accent hover:underline font-mono text-sm break-all"
+              >
+                {withdrawalAddress}
+              </Link>
+              <CopyButton value={withdrawalAddress} label="Copy withdrawal address" size="sm" />
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-4">
           {getStatusBadge(validator.status)}
-          {validator.slashed && (
-            <Badge variant="error" size="md" dot>Slashed</Badge>
-          )}
         </div>
       </div>
 
       {/* Key Info Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
         <div className="card p-4">
           <h3 className="text-sm font-medium text-text-secondary mb-1">Effective Balance</h3>
           <p className="font-display text-xl font-semibold text-text-primary">{amount} {unit}</p>
@@ -163,20 +176,6 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
           </p>
           <p className="text-sm text-text-muted">{validator.age.toLocaleString()} epochs</p>
         </div>
-        <div className="card p-4">
-          <h3 className="text-sm font-medium text-text-secondary mb-1">Activation Epoch</h3>
-          <p className="text-xl font-semibold text-success">
-            {formatEpoch(validator.activationEpoch)}
-          </p>
-        </div>
-        <div className="card p-4">
-          <h3 className="text-sm font-medium text-text-secondary mb-1">Exit Epoch</h3>
-          <p className={`text-xl font-semibold ${
-            validator.exitEpoch === FAR_FUTURE_EPOCH ? 'text-text-muted' : 'text-error'
-          }`}>
-            {formatEpoch(validator.exitEpoch)}
-          </p>
-        </div>
       </div>
 
       {/* Details Section */}
@@ -185,20 +184,12 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
           <h2 className="font-display text-lg font-semibold text-text-primary">Validator Details</h2>
         </div>
         <div className="divide-y divide-border">
-          {/* Public Key */}
+          {/* Public Key (2592-byte ML-DSA-87 key, collapsed by default) */}
           <div className="p-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <span className="text-sm text-text-secondary">Public Key</span>
-              <div className="flex items-center gap-2">
-                <code className="text-sm text-text-secondary font-mono break-all">
-                  {validator.publicKeyHex}
-                </code>
-                <CopyButton value={validator.publicKeyHex} label="Copy public key" size="sm" />
-              </div>
-            </div>
+            <CollapsibleHex label="Public Key" hex={validator.publicKeyHex} copyLabel="Copy public key" />
           </div>
 
-          {/* Withdrawal Credentials */}
+          {/* Withdrawal Credentials (raw 32-byte form of the address above) */}
           <div className="p-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <span className="text-sm text-text-secondary">Withdrawal Credentials</span>

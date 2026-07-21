@@ -8,12 +8,20 @@ import ReadContract from './ReadContract';
 import WriteContract from './WriteContract';
 import AiExplainCard from './AiExplainCard';
 import type { ContractData } from '../types/address';
+import { useUrlParam } from '../lib/use-url-param';
 
 interface ContractTabsProps {
   contractData: ContractData;
 }
 
-type TabKey = 'code' | 'read' | 'write';
+const TAB_KEYS = ['code', 'read', 'write'] as const;
+type TabKey = (typeof TAB_KEYS)[number];
+
+// ?ctab values outside the known set (hand-edited URLs) fall back to the
+// first tab.
+function parseTab(raw: string): TabKey {
+  return (TAB_KEYS as readonly string[]).includes(raw) ? (raw as TabKey) : 'code';
+}
 
 /**
  * Replacement for the old standalone ContractBytecode block on the address
@@ -27,7 +35,11 @@ type TabKey = 'code' | 'read' | 'write';
  *            session (M5).
  */
 export default function ContractTabs({ contractData }: ContractTabsProps): JSX.Element {
-  const [tab, setTab] = useState<TabKey>('code');
+  // URL-backed (?ctab) so browser Back restores the selected sub-tab.
+  // Distinct param from the page-level ?tab since both live on address
+  // pages; replace keeps in-page tab clicks out of browser history.
+  const [rawTab, setTab] = useUrlParam('ctab', 'code');
+  const tab = parseTab(rawTab);
 
   const parsedAbi = useMemo(() => {
     if (!contractData.abi) return null;

@@ -10,6 +10,7 @@ import {
   QuestionMarkCircleIcon,
   ArrowTopRightOnSquareIcon,
   CodeBracketIcon,
+  HomeIcon,
   ArrowsRightLeftIcon,
   ClockIcon,
   CubeIcon,
@@ -41,6 +42,7 @@ const navGroups: NavGroup[] = [
   {
     label: 'Blockchain',
     items: [
+      { name: 'Overview', href: '/', icon: HomeIcon },
       { name: 'Transactions', href: '/transactions/1', icon: ArrowsRightLeftIcon },
       { name: 'Pending', href: '/pending/1', icon: ClockIcon },
       { name: 'Blocks', href: '/blocks/1', icon: CubeIcon },

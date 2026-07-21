@@ -3,8 +3,8 @@
  * awaits the /richlist fetch (force-dynamic), so without a fallback the
  * page is briefly blank between click and data.
  *
- * Shape mirrors RichlistClient: header + subtitle and the three-column
- * (rank / address / balance) table card.
+ * Shape mirrors RichlistClient: header + subtitle and the six-column
+ * (rank / address / type / first seen / balance / % supply) table card.
  */
 import { NATIVE_UNIT } from '../lib/helpers';
 
@@ -26,7 +26,10 @@ export default function Loading(): JSX.Element {
                 <tr className="border-b border-border">
                   <th className="table-header">Rank</th>
                   <th className="table-header">Address</th>
+                  <th className="table-header">Type</th>
+                  <th className="table-header">First Seen</th>
                   <th className="px-3 md:px-6 py-3 md:py-4 text-right text-[11px] font-medium uppercase tracking-[0.12em] text-text-muted">Balance</th>
+                  <th className="px-3 md:px-6 py-3 md:py-4 text-right text-[11px] font-medium uppercase tracking-[0.12em] text-text-muted">% Supply</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -34,7 +37,10 @@ export default function Loading(): JSX.Element {
                   <tr key={i} className="border-b border-border">
                     <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap"><div className="h-4 w-8 skeleton" /></td>
                     <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap"><div className="h-4 w-64 max-w-full skeleton" /></td>
+                    <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap"><div className="h-4 w-16 skeleton" /></td>
+                    <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap"><div className="h-4 w-32 skeleton" /></td>
                     <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap"><div className="h-4 w-24 skeleton ml-auto" /></td>
+                    <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap"><div className="h-4 w-14 skeleton ml-auto" /></td>
                   </tr>
                 ))}
               </tbody>

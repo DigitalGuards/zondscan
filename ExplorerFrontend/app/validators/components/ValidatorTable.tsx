@@ -1,13 +1,15 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
-import { epochsToDays, formatValidatorBalance } from '../../lib/helpers';
+import { epochsToDays, formatValidatorBalance, withdrawalCredentialsToAddress } from '../../lib/helpers';
+import { setUrlParams, useUrlParam, useUrlIntParam } from '../../lib/use-url-param';
 import Badge from '../../components/Badge';
 
 interface Validator {
   index: string;
-  address: string;
+  publicKeyHex: string;
+  withdrawalCredentialsHex?: string;
   status: string;
   age: number;
   stakedAmount: string;
@@ -29,6 +31,24 @@ const statusOrder: Record<string, number> = {
   slashed: 3,
 };
 
+// Defensive parsing for URL-sourced sort state: unknown ?sort / ?dir values
+// fall back to the defaults instead of breaking the table.
+function parseSortField(value: string): SortField {
+  switch (value) {
+    case 'index':
+    case 'age':
+    case 'stakedAmount':
+    case 'status':
+      return value;
+    default:
+      return 'index';
+  }
+}
+
+function parseSortDirection(value: string): SortDirection {
+  return value === 'desc' ? 'desc' : 'asc';
+}
+
 function SortIcon({ field, sortField, sortDirection }: { field: SortField; sortField: SortField; sortDirection: SortDirection }) {
   if (sortField !== field) {
     return <span className="text-text-muted ml-1">↕</span>;
@@ -41,31 +61,95 @@ function SortIcon({ field, sortField, sortDirection }: { field: SortField; sortF
 }
 
 export default function ValidatorTable({ validators, loading }: ValidatorTableProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortField, setSortField] = useState<SortField>('index');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [currentPage, setCurrentPage] = useState(1);
+  // Table state lives in the URL (?q, ?sort, ?dir, ?page) so Back/Forward
+  // and shared links restore the same view. Defaults are removed from the
+  // URL to keep canonical links clean.
+  const [urlQuery] = useUrlParam('q', '');
+  const [sortParam] = useUrlParam('sort', 'index');
+  const [dirParam] = useUrlParam('dir', 'asc');
+  const [currentPage, setCurrentPage] = useUrlIntParam('page', 1);
+  const sortField = parseSortField(sortParam);
+  const sortDirection = parseSortDirection(dirParam);
+
+  // Local echo of ?q so typing stays responsive while the URL write debounces.
+  const [searchQuery, setSearchQuery] = useState(urlQuery);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastWrittenQueryRef = useRef(urlQuery);
   const itemsPerPage = 15;
 
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
+  // Adopt external ?q changes (Back/Forward while mounted); our own
+  // debounced writes are skipped via lastWrittenQueryRef. The setState is
+  // deferred so it lands outside the synchronous effect body
+  // (set-state-in-effect rule).
+  useEffect(() => {
+    if (urlQuery === lastWrittenQueryRef.current) return;
+    lastWrittenQueryRef.current = urlQuery;
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    const timer = setTimeout(() => setSearchQuery(urlQuery), 0);
+    return () => clearTimeout(timer);
+  }, [urlQuery]);
+
+  // Cancel any pending debounced write on unmount so it cannot fire after
+  // navigation and stamp ?q onto another page's URL.
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, []);
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    // Debounce the URL write so typing does not spam replaceState; the page
+    // reset rides in the same call so both restore atomically. The write
+    // aborts if a navigation started meanwhile: during a route transition
+    // this component can stay mounted after the URL has already flipped, and
+    // firing then would stamp ?q onto the destination's URL.
+    const scheduledPath = window.location.pathname;
+    searchDebounceRef.current = setTimeout(() => {
+      if (window.location.pathname !== scheduledPath) return;
+      lastWrittenQueryRef.current = value;
+      setUrlParams({ q: value || null, page: null });
+    }, 300);
   };
 
-  const filteredAndSortedValidators = useMemo(() => {
-    let result = [...validators];
+  const handleSort = (field: SortField) => {
+    const nextDirection: SortDirection =
+      sortField === field && sortDirection === 'asc' ? 'desc' : 'asc';
+    // Single replaceState call so sort, direction, and the page reset land
+    // in the URL atomically.
+    setUrlParams({
+      sort: field === 'index' ? null : field,
+      dir: nextDirection === 'asc' ? null : nextDirection,
+      page: null,
+    });
+  };
 
-    // Filter
+  // Decode withdrawal credentials once per data refresh; the decoded
+  // execution address feeds both the Address column and the search filter.
+  const decoratedValidators = useMemo(
+    () =>
+      validators.map((v) => ({
+        ...v,
+        withdrawalAddress: withdrawalCredentialsToAddress(v.withdrawalCredentialsHex),
+      })),
+    [validators]
+  );
+
+  const filteredAndSortedValidators = useMemo(() => {
+    let result = [...decoratedValidators];
+
+    // Filter: strip an optional leading Q (address prefix) so pasted
+    // Q-addresses match the decoded withdrawal address hex; the query also
+    // matches the raw public key hex, index, and status.
     if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+      const normalized = searchQuery.trim().toLowerCase();
+      const query = normalized.startsWith('q') ? normalized.slice(1) : normalized;
       result = result.filter(
         (v) =>
           v.index.toLowerCase().includes(query) ||
-          v.address.toLowerCase().includes(query) ||
+          v.publicKeyHex.toLowerCase().includes(query) ||
+          (v.withdrawalAddress !== null && v.withdrawalAddress.slice(1).includes(query)) ||
           v.status.toLowerCase().includes(query)
       );
     }
@@ -99,10 +183,12 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
     });
 
     return result;
-  }, [validators, searchQuery, sortField, sortDirection]);
+  }, [decoratedValidators, searchQuery, sortField, sortDirection]);
 
   const totalPages = Math.ceil(filteredAndSortedValidators.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
+  // Clamp deep-linked ?page values that exceed the filtered result set.
+  const safePage = Math.min(currentPage, Math.max(totalPages, 1));
+  const startIndex = (safePage - 1) * itemsPerPage;
   const currentValidators = filteredAndSortedValidators.slice(
     startIndex,
     startIndex + itemsPerPage
@@ -144,10 +230,7 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
             aria-label="Search validators"
             placeholder="Search validators..."
             value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setCurrentPage(1);
-            }}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="flex-1 p-2 text-sm sm:text-base bg-surface-2 border border-border rounded-lg text-text-secondary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
           />
           <div className="text-xs sm:text-sm text-text-secondary flex items-center">
@@ -175,6 +258,9 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
               </th>
               <th scope="col" className="px-4 py-3 text-left text-[11px] font-medium text-text-muted uppercase tracking-[0.12em]">
                 Address
+              </th>
+              <th scope="col" className="hidden md:table-cell px-4 py-3 text-left text-[11px] font-medium text-text-muted uppercase tracking-[0.12em]">
+                Public Key
               </th>
               <th
                 scope="col"
@@ -231,17 +317,24 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
                   </Link>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm">
-                  <Link
-                    href={`/validators/${validator.index}`}
-                    className="text-text-secondary hover:text-accent font-mono"
-                  >
-                    <span className="hidden md:inline">
-                      Q{validator.address.slice(0, 16)}...{validator.address.slice(-8)}
-                    </span>
-                    <span className="md:hidden">
-                      Q{validator.address.slice(0, 8)}...
-                    </span>
-                  </Link>
+                  {validator.withdrawalAddress ? (
+                    <Link
+                      href={`/address/${validator.withdrawalAddress}`}
+                      className="text-accent hover:underline font-mono"
+                    >
+                      <span className="hidden md:inline">
+                        {validator.withdrawalAddress.slice(0, 12)}...{validator.withdrawalAddress.slice(-8)}
+                      </span>
+                      <span className="md:hidden">
+                        {validator.withdrawalAddress.slice(0, 8)}...
+                      </span>
+                    </Link>
+                  ) : (
+                    <span className="text-text-muted">-</span>
+                  )}
+                </td>
+                <td className="hidden md:table-cell px-4 py-3 whitespace-nowrap text-sm text-text-secondary font-mono">
+                  {validator.publicKeyHex.slice(0, 16)}...{validator.publicKeyHex.slice(-8)}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm">
                   {getStatusBadge(validator.status)}
@@ -264,15 +357,15 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
         <div className="p-3 sm:p-4 border-t border-border flex flex-wrap justify-center items-center gap-1 sm:gap-2">
           <button
             aria-label="Go to previous page"
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
+            onClick={() => setCurrentPage(Math.max(1, safePage - 1))}
+            disabled={safePage === 1}
             className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-surface-2 text-text-secondary border border-border hover:border-accent disabled:opacity-50 disabled:hover:border-border text-xs sm:text-sm"
           >
             Prev
           </button>
 
           <span className="text-xs sm:text-sm text-text-secondary mx-1 sm:mx-2">
-            {currentPage}/{totalPages}
+            {safePage}/{totalPages}
           </span>
 
           {/* Hide page numbers on very small screens */}
@@ -281,12 +374,12 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
               let pageNum;
               if (totalPages <= 5) {
                 pageNum = i + 1;
-              } else if (currentPage <= 3) {
+              } else if (safePage <= 3) {
                 pageNum = i + 1;
-              } else if (currentPage >= totalPages - 2) {
+              } else if (safePage >= totalPages - 2) {
                 pageNum = totalPages - 4 + i;
               } else {
-                pageNum = currentPage - 2 + i;
+                pageNum = safePage - 2 + i;
               }
 
               return (
@@ -295,7 +388,7 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
                   aria-label={`Go to page ${pageNum}`}
                   onClick={() => setCurrentPage(pageNum)}
                   className={`w-8 h-8 rounded-lg text-sm ${
-                    currentPage === pageNum
+                    safePage === pageNum
                       ? 'bg-accent text-background font-semibold'
                       : 'bg-surface-2 text-text-secondary hover:bg-surface-3'
                   }`}
@@ -308,8 +401,8 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
 
           <button
             aria-label="Go to next page"
-            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
+            onClick={() => setCurrentPage(Math.min(totalPages, safePage + 1))}
+            disabled={safePage === totalPages}
             className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-surface-2 text-text-secondary border border-border hover:border-accent disabled:opacity-50 disabled:hover:border-border text-xs sm:text-sm"
           >
             Next

@@ -2,11 +2,34 @@
 
 import React from "react";
 import Link from "next/link";
-import { NATIVE_UNIT, toFixed } from "../lib/helpers";
+import Badge from "../components/Badge";
+import { NATIVE_UNIT, formatTimestamp, toFixed } from "../lib/helpers";
 
 interface RichlistEntry {
   id: string;
   balance: string | number;
+  // Newer /richlist responses only; optional so old cached payloads
+  // degrade to "-" instead of rendering NaN / broken badges.
+  isContract?: boolean;
+  firstSeen?: number;
+  supplyPercent?: number;
+}
+
+// Percent of circulating supply, 2 decimals. Values that would round to
+// "0.00%" but are non-zero surface as "<0.01%"; missing data renders "-".
+function formatSupplyPercent(pct: number | undefined): string {
+  if (typeof pct !== "number" || !Number.isFinite(pct)) return "-";
+  if (pct > 0 && pct < 0.005) return "<0.01%";
+  return `${pct.toFixed(2)}%`;
+}
+
+function typeBadge(isContract: boolean | undefined): React.ReactNode {
+  if (typeof isContract !== "boolean") return "-";
+  return isContract ? (
+    <Badge variant="info">Contract</Badge>
+  ) : (
+    <Badge variant="neutral">Wallet</Badge>
+  );
 }
 
 interface RichlistProps {
@@ -66,9 +89,27 @@ export default function RichlistClient({ richlist }: RichlistProps): JSX.Element
               </Link>
             </div>
             <div>
+              <span className="text-accent text-sm">Type:</span>
+              <span className="ml-2 text-text-primary text-sm">
+                {typeBadge(item.isContract)}
+              </span>
+            </div>
+            <div>
+              <span className="text-accent text-sm">First Seen:</span>
+              <span className="ml-2 text-text-primary text-sm">
+                {item.firstSeen ? formatTimestamp(item.firstSeen) : "-"}
+              </span>
+            </div>
+            <div>
               <span className="text-accent text-sm">Balance:</span>
               <span className="ml-2 text-text-primary text-sm">
                 {toFixed(item.balance)} {NATIVE_UNIT}
+              </span>
+            </div>
+            <div>
+              <span className="text-accent text-sm">% Supply:</span>
+              <span className="ml-2 text-text-primary text-sm">
+                {formatSupplyPercent(item.supplyPercent)}
               </span>
             </div>
           </div>
@@ -88,8 +129,17 @@ export default function RichlistClient({ richlist }: RichlistProps): JSX.Element
             <th scope="col" className="table-header">
               Address
             </th>
+            <th scope="col" className="table-header">
+              Type
+            </th>
+            <th scope="col" className="table-header">
+              First Seen
+            </th>
             <th scope="col" className="px-3 md:px-6 py-3 md:py-4 text-right text-[11px] font-medium uppercase tracking-[0.12em] text-text-muted">
               Balance
+            </th>
+            <th scope="col" className="px-3 md:px-6 py-3 md:py-4 text-right text-[11px] font-medium uppercase tracking-[0.12em] text-text-muted">
+              % Supply
             </th>
           </tr>
         </thead>
@@ -128,8 +178,17 @@ export default function RichlistClient({ richlist }: RichlistProps): JSX.Element
                   {item.id}
                 </Link>
               </td>
+              <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-text-secondary text-sm">
+                {typeBadge(item.isContract)}
+              </td>
+              <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-text-secondary text-sm">
+                {item.firstSeen ? formatTimestamp(item.firstSeen) : "-"}
+              </td>
               <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-right text-text-secondary text-sm">
                 {toFixed(item.balance)} {NATIVE_UNIT}
+              </td>
+              <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-right text-text-secondary text-sm">
+                {formatSupplyPercent(item.supplyPercent)}
               </td>
             </tr>
           ))}

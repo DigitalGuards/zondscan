@@ -258,6 +258,11 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
               <path strokeLinecap="round" strokeLinejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
             </svg>
             <h1 id="block-heading" className="section-title">Block #{formatNumberWithCommas(hexToNumber(blockData.number).toString())}</h1>
+            {/* Block 0 is the chain's genesis block: flag it so the all-zero
+                parent hash below reads as expected rather than broken. */}
+            {blockNum === 0 && (
+              <Badge variant="brand">Genesis</Badge>
+            )}
             {/* Live depth: surfaces how settled this block is. "Latest"
                 when we're looking at the head, otherwise "N
                 confirmations". Hidden until the first /latestblock
@@ -297,12 +302,18 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
             </div>
           </DetailRow>
           <DetailRow label="Parent Hash" mono>
-            <Link
-              href={`/block/${blockNum - 1}`}
-              className="text-text-secondary hover:text-accent transition-colors break-all"
-            >
-              {blockData.parentHash}
-            </Link>
+            {/* Genesis has no parent: same guard as the prev-block arrow
+                above, an unlinked all-zero hash beats a link to block -1. */}
+            {blockNum > 0 ? (
+              <Link
+                href={`/block/${blockNum - 1}`}
+                className="text-text-secondary hover:text-accent transition-colors break-all"
+              >
+                {blockData.parentHash}
+              </Link>
+            ) : (
+              <span className="break-all">{blockData.parentHash}</span>
+            )}
           </DetailRow>
           <DetailRow label="Timestamp">
             {timeAgo(tsNum)}

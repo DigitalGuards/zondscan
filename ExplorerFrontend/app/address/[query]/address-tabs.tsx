@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import type { InternalTransaction, Transaction } from '@/app/types';
@@ -12,6 +12,7 @@ import InternalPanel from './panels/internal-panel';
 import TokenTransfersPanel from './panels/token-transfers-panel';
 import TokensPanel from './panels/tokens-panel';
 import NftsPanel from './panels/nfts-panel';
+import { setUrlParams } from '../../lib/use-url-param';
 
 /**
  * Single unified tab bar that replaces the old stacked HoldingsDisplay +
@@ -23,9 +24,11 @@ import NftsPanel from './panels/nfts-panel';
  * Source-of-truth choices, deliberate:
  *   - activeTab is derived from useSearchParams every render; no local
  *     useState mirror to drift out of sync.
- *   - router.replace (not push) so tab clicks don't pollute browser
- *     history. Back-button returns to the previous page, not the previous
- *     tab. Matches the codebase pattern (TransactionsList, blocks-client).
+ *   - setUrlParams replace (not push) so tab clicks don't pollute browser
+ *     history: Back returns to the previous page, not the previous tab.
+ *     The shallow History-API write avoids the RSC refetch router.replace
+ *     caused and preserves the panels' page params (?txPage etc.) so Back
+ *     can restore them.
  *   - Per-address reset is delegated to the parent: address-view passes
  *     key={addressSegment} so React unmounts + remounts this whole
  *     component on address change. All internal state (mountedTabs,
@@ -96,8 +99,6 @@ export default function AddressTabs({
   internalt: initialInternalt,
   internalTransactionsCount: initialInternalTransactionsCount,
 }: AddressTabsProps): JSX.Element {
-  const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   // Keep the native-tx feed + counts live by polling the same
@@ -168,13 +169,10 @@ export default function AddressTabs({
     () => new Set([activeTab]),
   );
 
-  const setTab = useCallback(
-    (key: TabKey) => {
-      setMountedTabs((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
-      router.replace(`${pathname}?tab=${key}`, { scroll: false });
-    },
-    [router, pathname],
-  );
+  const setTab = useCallback((key: TabKey) => {
+    setMountedTabs((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
+    setUrlParams({ tab: key }, 'replace');
+  }, []);
 
   // If the URL ever flips to a tab the click handler didn't go through
   // (theoretically possible on some external navigation), fall back to

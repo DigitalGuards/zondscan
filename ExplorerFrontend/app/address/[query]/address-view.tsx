@@ -156,11 +156,13 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                     <div>
                                         <div className="text-xs md:text-sm text-text-secondary mb-1">Creator Address</div>
                                         <div className="flex items-center space-x-2">
-                                            <AddressDisplay
-                                                address={contractData.creatorAddress || 'Unknown'}
-                                            />
-                                            {contractData.creatorAddress && (
-                                                <CopyButton value={contractData.creatorAddress} label="Copy address" />
+                                            {contractData.creatorAddress ? (
+                                                <>
+                                                    <AddressDisplay address={contractData.creatorAddress} />
+                                                    <CopyButton value={contractData.creatorAddress} label="Copy address" />
+                                                </>
+                                            ) : (
+                                                <span className="text-xs md:text-sm text-text-secondary">Unknown</span>
                                             )}
                                         </div>
                                     </div>
