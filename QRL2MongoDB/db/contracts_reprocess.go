@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
 )
 
@@ -132,7 +133,9 @@ func ReprocessIncompleteContracts() error {
 			contract.CreationBlockNumber = creationBlockNumber
 		}
 
-		// Backfill missing creation transaction from the transfer collection
+		// Backfill missing creation transaction from the authoritative
+		// sources: the transfer collection (direct deploys) and the
+		// internal-transaction index (factory deploys via CREATE frames).
 		if contract.CreationTransaction == "" && contract.Address != "" {
 			creationTx := findCreationTransaction(contract.Address)
 			if creationTx != nil {
@@ -145,6 +148,47 @@ func ReprocessIncompleteContracts() error {
 						zap.String("creator", contract.CreatorAddress),
 						zap.String("tx", contract.CreationTransaction))
 				}
+			}
+		}
+
+		// Genesis contracts have no creation transaction anywhere on chain.
+		// Probe the code at block 0 BEFORE the mint heuristic below: a
+		// genesis-baked token that later emits a mint would otherwise get the
+		// mint tx latched as its creation tx, permanently blocking this probe.
+		// A hit pins creationBlockNumber to genesis and flags the row so later
+		// passes skip the probe. Fail soft on RPC error (the node may lack
+		// archive state for historical getCode) and leave the record incomplete.
+		if contract.CreationTransaction == "" && contract.CreationBlockNumber == "" && !contract.GenesisContract {
+			genesisCode, codeErr := rpc.GetCode(contract.Address, "0x0")
+			if codeErr != nil {
+				configs.Logger.Debug("Genesis code probe failed; leaving creation info incomplete",
+					zap.String("address", contract.Address),
+					zap.Error(codeErr))
+			} else if genesisCode != "" && genesisCode != "0x" {
+				contract.CreationBlockNumber = "0x0"
+				contract.GenesisContract = true
+				configs.Logger.Info("Contract code present at genesis, pinned creation block to 0x0",
+					zap.String("address", contract.Address))
+			}
+		}
+
+		// Last-resort mint heuristic for factory deploys without internal-tx
+		// coverage: the earliest mint is usually the create+mint tx. When the
+		// creation block is already known, the mint must sit in that exact
+		// block: a later mint would stamp a creation tx from the wrong block.
+		if contract.CreationTransaction == "" && !contract.GenesisContract && contract.Address != "" {
+			mintTx := findCreationTransactionFromMint(contract.Address, contract.CreationBlockNumber)
+			if mintTx != nil {
+				contract.CreationTransaction = mintTx.TxHash
+				if contract.CreationBlockNumber == "" {
+					contract.CreationBlockNumber = mintTx.BlockNumber
+				}
+				if mintTx.From != "" && mintTx.From != "Q" {
+					contract.CreatorAddress = mintTx.From
+				}
+				configs.Logger.Info("Backfilled creation info from earliest mint",
+					zap.String("contract", contract.Address),
+					zap.String("tx", contract.CreationTransaction))
 			}
 		}
 
@@ -194,10 +238,13 @@ type creationTxInfo struct {
 	BlockNumber string `bson:"blockNumber"`
 }
 
-// findCreationTransaction looks up the contract creation transaction.
-// It first checks the transfer collection (direct deployments have contractAddress set).
-// For factory-deployed contracts it falls back to the tokenTransfers collection,
-// finding the initial mint event (from zero address) and resolving the real tx sender.
+// findCreationTransaction looks up the contract creation transaction from the
+// authoritative sources: the transfer collection (direct deployments have
+// contractAddress set), then the internal-transaction index for a
+// CREATE/CREATE2 frame targeting the address (authoritative for factory
+// deployments, including non-token ones). The mint heuristic lives separately
+// in findCreationTransactionFromMint so callers can order the genesis probe
+// between the two.
 func findCreationTransaction(contractAddress string) *creationTxInfo {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -211,37 +258,88 @@ func findCreationTransaction(contractAddress string) *creationTxInfo {
 		return &result
 	}
 
-	// 2. Factory deployment: find the initial mint in tokenTransfers
+	// 2. Factory deployment: CREATE/CREATE2 frame from the internal-transaction
+	// index (populated when debug tracing is enabled). An address is only ever
+	// created once, so a plain FindOne needs no sort.
+	var frame struct {
+		Hash        string `bson:"hash"`
+		From        string `bson:"from"`
+		BlockNumber string `bson:"blockNumber"`
+	}
+	err = configs.InternalTransactionByAddressCollections.FindOne(ctx, bson.M{
+		"type": bson.M{"$in": []string{"CREATE", "CREATE2"}},
+		"to":   contractAddress,
+	}).Decode(&frame)
+	if err == nil && frame.Hash != "" {
+		// The frame's own `from` is the immediate caller (the factory
+		// contract); resolve the outer transaction sender for the creator
+		// field, falling back to the frame's from if the lookup fails.
+		from := lookupTransactionSender(ctx, frame.Hash)
+		if from == "" {
+			from = frame.From
+		}
+		return &creationTxInfo{
+			TxHash:      frame.Hash,
+			From:        from,
+			BlockNumber: frame.BlockNumber,
+		}
+	}
+
+	return nil
+}
+
+// findCreationTransactionFromMint is the last-resort heuristic for factory
+// deployments without internal-tx coverage: find the initial mint in
+// tokenTransfers. Mints store the zero address in the full-width spelling
+// (StoreTokenTransfer normalizes empty senders to configs.QRLZeroAddress);
+// the short "Q0" form is matched too in case any legacy row carries it. Sort
+// ascending by blockNumberInt so the EARLIEST mint (the create+mint tx) is
+// picked, not an arbitrary one. When the creation block is already known,
+// requiredBlock pins the lookup to that block so a later mint cannot be
+// misattributed as the creation tx; pass "" when the block is unknown.
+func findCreationTransactionFromMint(contractAddress string, requiredBlock string) *creationTxInfo {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	filter := bson.M{
+		"contractAddress": contractAddress,
+		"from":            bson.M{"$in": []string{configs.QRLZeroAddress, "Q0"}},
+	}
+	if requiredBlock != "" {
+		filter["blockNumber"] = requiredBlock
+	}
+
 	var mint struct {
 		TxHash      string `bson:"txHash"`
 		BlockNumber string `bson:"blockNumber"`
 	}
-	err = configs.GetTokenTransfersCollection().FindOne(ctx, bson.M{
-		"contractAddress": contractAddress,
-		"from":            "Q0",
-	}).Decode(&mint)
+	mintOpts := options.FindOne().SetSort(bson.D{{Key: "blockNumberInt", Value: 1}})
+	err := configs.GetTokenTransfersCollection().FindOne(ctx, filter, mintOpts).Decode(&mint)
 	if err != nil || mint.TxHash == "" {
 		return nil
 	}
 
 	// Look up the actual transaction sender from the transfer collection
+	from := lookupTransactionSender(ctx, mint.TxHash)
+	return &creationTxInfo{
+		TxHash:      mint.TxHash,
+		From:        from,
+		BlockNumber: mint.BlockNumber,
+	}
+}
+
+// lookupTransactionSender resolves the outer sender of a transaction from the
+// transfer collection. Returns "" when the row is missing; callers treat that
+// as "creator unknown" and keep whatever fallback they have.
+func lookupTransactionSender(ctx context.Context, txHash string) string {
 	var tx struct {
 		From string `bson:"from"`
 	}
-	err = configs.TransferCollections.FindOne(ctx, bson.M{
-		"txHash": mint.TxHash,
+	err := configs.TransferCollections.FindOne(ctx, bson.M{
+		"txHash": txHash,
 	}).Decode(&tx)
 	if err != nil {
-		// Still return what we have from the mint event
-		return &creationTxInfo{
-			TxHash:      mint.TxHash,
-			BlockNumber: mint.BlockNumber,
-		}
+		return ""
 	}
-
-	return &creationTxInfo{
-		TxHash:      mint.TxHash,
-		From:        tx.From,
-		BlockNumber: mint.BlockNumber,
-	}
+	return tx.From
 }

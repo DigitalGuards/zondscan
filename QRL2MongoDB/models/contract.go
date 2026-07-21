@@ -58,7 +58,11 @@ type ContractInfo struct {
 	CreatorAddress      string `bson:"creatorAddress" json:"creatorAddress"`
 	CreationTransaction string `bson:"creationTransaction" json:"creationTransaction"`
 	CreationBlockNumber string `bson:"creationBlockNumber" json:"creationBlockNumber"`
-	UpdatedAt           string `bson:"updatedAt" json:"updatedAt"`
+	// GenesisContract marks contracts whose code already exists at block 0;
+	// they have no creation transaction anywhere on chain. Written by the
+	// reprocess backfill only; latches true (see db/contracts_store.go).
+	GenesisContract bool   `bson:"genesisContract,omitempty" json:"genesisContract,omitempty"`
+	UpdatedAt       string `bson:"updatedAt" json:"updatedAt"`
 	// CustomERC20 properties
 	MaxSupply       string `bson:"maxSupply,omitempty" json:"maxSupply,omitempty"`
 	MaxWalletAmount string `bson:"maxWalletAmount,omitempty" json:"maxWalletAmount,omitempty"`

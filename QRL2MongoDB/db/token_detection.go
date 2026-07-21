@@ -82,11 +82,19 @@ func EnsureContractClassified(contractAddress string, blockNumber string, txHash
 		UpdatedAt:     time.Now().UTC().Format(time.RFC3339),
 	}
 
-	if existingContract == nil {
-		// First sighting, try to backfill creator info from the transfer
-		// collection now (cheap DB lookup) rather than waiting for the
-		// hourly reprocess job.
-		contractInfo.CreationBlockNumber = blockNumber
+	if existingContract != nil {
+		preserveCreationInfo(&contractInfo, existingContract)
+	}
+
+	// Backfill creation info now (cheap DB lookup) rather than waiting for the
+	// hourly reprocess job. Runs on first sighting AND when an existing record
+	// still has empty creation fields (gap-fill, not blind preserve). Only the
+	// authoritative sources are consulted here: the earliest-mint heuristic
+	// and the genesis code probe are deliberately left to the reprocess pass,
+	// which orders the probe first so a genesis-baked token cannot get a later
+	// mint tx latched as its creation tx. The first-sighted log block is NOT
+	// the creation block for a token first seen late, so nothing is guessed.
+	if contractInfo.CreationTransaction == "" {
 		if creationTx := findCreationTransaction(contractAddress); creationTx != nil {
 			contractInfo.CreationTransaction = creationTx.TxHash
 			contractInfo.CreationBlockNumber = creationTx.BlockNumber
@@ -94,8 +102,6 @@ func EnsureContractClassified(contractAddress string, blockNumber string, txHash
 				contractInfo.CreatorAddress = creationTx.From
 			}
 		}
-	} else {
-		preserveCreationInfo(&contractInfo, existingContract)
 	}
 
 	if err := StoreContract(contractInfo); err != nil {

@@ -487,8 +487,8 @@ func GetBalance(address string) (string, error) {
 	return result.Result, nil
 }
 
-// GetValidators fetches up to maxPages of validators from the beacon chain
-// API and returns the parsed pages. Persistence is the caller's concern
+// GetValidators fetches every page of validators from the beacon chain API
+// and returns the parsed pages. Persistence is the caller's concern
 // (synchroniser feeds the pages to services.StoreValidators); keeping this
 // function transport-only keeps rpc free of any db/services dependency.
 func GetValidators() ([]models.BeaconValidatorResponse, error) {
@@ -504,10 +504,14 @@ func GetValidators() ([]models.BeaconValidatorResponse, error) {
 	client := GetHTTPClient()
 
 	pageToken := ""
-	maxPages := 3 // Configurable based on needs
-	pages := make([]models.BeaconValidatorResponse, 0, maxPages)
+	// Safety ceiling against a misbehaving API that keeps returning page
+	// tokens, not an expected operating point. Pagination normally ends when
+	// NextPageToken comes back empty; the old cap of 3 silently truncated the
+	// validator set once it outgrew three pages.
+	const maxPages = 100
+	var pages []models.BeaconValidatorResponse
 
-	for len(pages) < maxPages {
+	for {
 		requestURL := baseURL
 		if pageToken != "" {
 			requestURL += "?page_token=" + pageToken
@@ -544,6 +548,11 @@ func GetValidators() ([]models.BeaconValidatorResponse, error) {
 
 		// Check if there's a next page
 		if beaconResponse.NextPageToken == "" {
+			break
+		}
+		if len(pages) >= maxPages {
+			zap.L().Warn("Validator pagination hit safety ceiling, result truncated",
+				zap.Int("max_pages", maxPages))
 			break
 		}
 		pageToken = beaconResponse.NextPageToken
@@ -604,8 +613,15 @@ func GetCode(address string, blockNrOrHash string) (string, error) {
 		return "", fmt.Errorf("invalid address format: %v", err)
 	}
 
+	// Honor the caller's block parameter. This used to hardcode "latest",
+	// which silently broke historical probes like the genesis-code check in
+	// ReprocessIncompleteContracts.
+	if blockNrOrHash == "" {
+		blockNrOrHash = "latest"
+	}
+
 	var GetCode models.GetCode
-	if err := rpcCall("qrl_getCode", []interface{}{address, "latest"}, &GetCode); err != nil {
+	if err := rpcCall("qrl_getCode", []interface{}{address, blockNrOrHash}, &GetCode); err != nil {
 		zap.L().Info("Failed to execute request", zap.Error(err))
 		return "", err
 	}

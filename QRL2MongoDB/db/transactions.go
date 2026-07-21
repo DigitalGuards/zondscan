@@ -281,31 +281,24 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 	resultBigFloat := new(big.Float).Quo(bigIntAsFloat, divisor)
 	valueFloat64, _ := resultBigFloat.Float64()
 
-	hashmap := map[string]string{"from": tx.From, "to": tx.To}
-
-	for _, address := range hashmap {
-		if address != "" {
-			responseBalance, err := rpc.GetBalance(address)
-			if err != nil {
-				configs.Logger.Warn("Failed to do rpc request: ", zap.Error(err))
-				continue
-			}
-
-			getBalanceResult := new(big.Int)
-			if responseBalance != "" && len(responseBalance) > 2 {
-				getBalanceResult.SetString(responseBalance[2:], 16)
-			} else {
-				configs.Logger.Warn("Invalid balance response", zap.String("balance", responseBalance))
-				continue
-			}
-
-			divisor := new(big.Float).SetFloat64(float64(utils.QUANTA))
-			bigIntAsFloat := new(big.Float).SetInt(getBalanceResult)
-			resultBigFloat := new(big.Float).Quo(bigIntAsFloat, divisor)
-			resultFloat64, _ := resultBigFloat.Float64()
-
-			UpsertTransactions(address, resultFloat64, isContract)
-		}
+	// Per-role address upserts. The old map iteration passed the RECIPIENT's
+	// isContract flag to both parties, so any EOA that ever sent a tx to a
+	// contract got a sticky isContract=true addresses row (UpsertTransactions
+	// never demotes true). Senders are always EOAs on Zond: contract-originated
+	// value moves are internal txs handled separately, so the sender is
+	// upserted with isContract=false and only the recipient carries the
+	// computed flag.
+	if from != "" {
+		upsertAddressBalance(from, false)
+	}
+	if to != "" {
+		upsertAddressBalance(to, isContract)
+	}
+	// Contract creation (to == ""): register the freshly created contract's
+	// addresses row immediately with isContract=true instead of waiting for
+	// its first inbound transaction.
+	if contractAddress != "" {
+		upsertAddressBalance(contractAddress, true)
 	}
 
 	trace := rpc.CallDebugTraceTransaction(tx.Hash)
@@ -321,6 +314,12 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 		configs.Logger.Error("Failed to store internal calls",
 			zap.String("txHash", txHash), zap.Error(err))
 	}
+
+	// Register contracts created by nested CREATE/CREATE2 frames (factory
+	// deployments). Only effective when debug tracing is enabled: with
+	// ENABLE_DEBUG_TRACE unset the trace carries no internal calls and this
+	// is a no-op, matching how traces are gated everywhere else.
+	storeInternalContractCreations(trace.InternalCalls, from, txHash, blockNumber, statusTx)
 
 	// Calculate fees using hex strings. Guard against empty/short
 	// gasPrice, slicing [2:] on those panics; treat too-short as zero.
@@ -538,6 +537,33 @@ func TransactionByAddressCollection(timeStamp string, txType string, from string
 	}
 
 	return result, err
+}
+
+// upsertAddressBalance fetches the current balance of one address via RPC and
+// upserts its addresses row with the given contract flag. Failures are logged
+// and swallowed: a missed balance refresh self-heals on the address's next
+// transaction.
+func upsertAddressBalance(address string, isContract bool) {
+	responseBalance, err := rpc.GetBalance(address)
+	if err != nil {
+		configs.Logger.Warn("Failed to do rpc request: ", zap.Error(err))
+		return
+	}
+
+	getBalanceResult := new(big.Int)
+	if responseBalance != "" && len(responseBalance) > 2 {
+		getBalanceResult.SetString(responseBalance[2:], 16)
+	} else {
+		configs.Logger.Warn("Invalid balance response", zap.String("balance", responseBalance))
+		return
+	}
+
+	divisor := new(big.Float).SetFloat64(float64(utils.QUANTA))
+	bigIntAsFloat := new(big.Float).SetInt(getBalanceResult)
+	resultBigFloat := new(big.Float).Quo(bigIntAsFloat, divisor)
+	resultFloat64, _ := resultBigFloat.Float64()
+
+	UpsertTransactions(address, resultFloat64, isContract)
 }
 
 func UpsertTransactions(address string, value float64, isContract bool) (*mongo.UpdateResult, error) {
