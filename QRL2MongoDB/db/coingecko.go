@@ -80,50 +80,6 @@ func InsertPriceHistory(data *models.MarketDataResponse) error {
 	return nil
 }
 
-func GetCurrentPrice() float32 {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	var doc models.CoinGeckoDocument
-	err := configs.CoinGeckoCollections.FindOne(ctx, primitive.D{}).Decode(&doc)
-	if err != nil {
-		configs.Logger.Error("Failed to get current price from database", zap.Error(err))
-
-		// Check if data is stale (older than 5 minutes)
-		if doc.LastUpdated.Add(5 * time.Minute).Before(time.Now()) {
-			// Try to fetch fresh data
-			if data, err := fetch.FetchCoinGeckoData(); err == nil && data != nil {
-				return data.MarketData.CurrentPrice.USD
-			}
-		}
-		return 0
-	}
-
-	return doc.PriceUSD
-}
-
-func GetMarketCap() float32 {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	var doc models.CoinGeckoDocument
-	err := configs.CoinGeckoCollections.FindOne(ctx, primitive.D{}).Decode(&doc)
-	if err != nil {
-		configs.Logger.Error("Failed to get market cap from database", zap.Error(err))
-
-		// Check if data is stale (older than 5 minutes)
-		if doc.LastUpdated.Add(5 * time.Minute).Before(time.Now()) {
-			// Try to fetch fresh data
-			if data, err := fetch.FetchCoinGeckoData(); err == nil && data != nil {
-				return data.MarketData.MarketCap.USD
-			}
-		}
-		return 0
-	}
-
-	return doc.MarketCapUSD
-}
-
 func PeriodicallyUpdateCoinGeckoData() {
 	data, err := fetch.FetchCoinGeckoData()
 	if err != nil {

@@ -33,20 +33,33 @@ type VerifyEnqueueResponse struct {
 	Address string `json:"address"`
 }
 
-// CompilerInfoResponse is the body of GET /contract/compiler-info, the
-// single pinned hypc build the backend is willing to verify against.
+// CompilerInfoResponse is the body of GET /contract/compiler-info: every
+// hypc build the backend can verify against, plus which one is used when a
+// submission omits compilerVersion. The top-level Language/BuildID mirror
+// the default build so single-build clients (which only read those two
+// fields) keep working unchanged.
 type CompilerInfoResponse struct {
-	Language string `json:"language"`
+	Language  string          `json:"language"`
+	BuildID   string          `json:"buildId"`
+	Default   string          `json:"default"`
+	Compilers []CompilerBuild `json:"compilers"`
+}
+
+// CompilerBuild describes one selectable compiler build in the
+// /contract/compiler-info response.
+type CompilerBuild struct {
 	BuildID  string `json:"buildId"`
+	Language string `json:"language"`
+	Default  bool   `json:"default"`
 }
 
 // StandardJSONInput is the Hyperion standard-JSON shape we feed to the
 // runner. Mirrors the Solidity standard-JSON layout, see
 // theQRL/hyperion docs for details.
 type StandardJSONInput struct {
-	Language string                              `json:"language"`
-	Sources  map[string]StandardJSONSource       `json:"sources"`
-	Settings StandardJSONSettings                `json:"settings"`
+	Language string                        `json:"language"`
+	Sources  map[string]StandardJSONSource `json:"sources"`
+	Settings StandardJSONSettings          `json:"settings"`
 }
 
 type StandardJSONSource struct {
@@ -54,10 +67,10 @@ type StandardJSONSource struct {
 }
 
 type StandardJSONSettings struct {
-	Optimizer       *Optimizer                              `json:"optimizer,omitempty"`
-	EVMVersion      string                                  `json:"evmVersion,omitempty"`
-	Libraries       map[string]map[string]string            `json:"libraries,omitempty"`
-	OutputSelection map[string]map[string][]string          `json:"outputSelection"`
+	Optimizer       *Optimizer                     `json:"optimizer,omitempty"`
+	EVMVersion      string                         `json:"evmVersion,omitempty"`
+	Libraries       map[string]map[string]string   `json:"libraries,omitempty"`
+	OutputSelection map[string]map[string][]string `json:"outputSelection"`
 }
 
 type Optimizer struct {
@@ -67,8 +80,8 @@ type Optimizer struct {
 
 // StandardJSONOutput is the runner's JSON output shape.
 type StandardJSONOutput struct {
-	Errors    []CompilerError                            `json:"errors,omitempty"`
-	Contracts map[string]map[string]CompiledContract     `json:"contracts,omitempty"`
+	Errors    []CompilerError                        `json:"errors,omitempty"`
+	Contracts map[string]map[string]CompiledContract `json:"contracts,omitempty"`
 }
 
 type CompilerError struct {
@@ -82,8 +95,8 @@ type CompilerError struct {
 // for a given source unit. The bytecode is published under different
 // top-level keys depending on the hypc version:
 //
-//   hypc 0.0.2  → `zvm`  (the legacy Zond VM naming)
-//   hypc 0.2.x+ → `qrvm` (post-fork QRL VM rename)
+//	hypc 0.0.2  → `zvm`  (the legacy Zond VM naming)
+//	hypc 0.2.x+ → `qrvm` (post-fork QRL VM rename)
 //
 // Both shapes are parsed; the verifier picks whichever is populated via
 // `CompiledContract.DeployedBytecode()` so downstream code doesn't have

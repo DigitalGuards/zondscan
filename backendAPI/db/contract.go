@@ -47,26 +47,37 @@ func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool
 		// address + creatorAddress exact-match branches).
 		normalizedSearch := normalizeAddress(search)
 
-		// Escape regex metacharacters in the user input so a `.` or `*`
-		// in the search term doesn't behave as a wildcard or DoS vector.
-		escaped := regexp.QuoteMeta(search)
-		nameRegex := bson.D{{Key: "$regex", Value: escaped}, {Key: "$options", Value: "i"}}
+		// Build the $or branches. Exact address/creatorAddress matches are
+		// always included so short queries can still resolve a contract by
+		// its address. The case-insensitive name/symbol/metadataName regex
+		// branches run an unanchored full-collection scan, so we only add
+		// them for queries of at least 3 chars: a 1-2 char regex matches
+		// nearly every row and turns search into a table scan with no useful
+		// result. Shorter queries simply return the exact-match results
+		// (often empty), which the contracts page renders as a normal empty
+		// paginated list.
+		orBranches := bson.A{
+			bson.D{{Key: "address", Value: normalizedSearch}},
+			bson.D{{Key: "creatorAddress", Value: normalizedSearch}},
+		}
+		if len(search) >= 3 {
+			// Escape regex metacharacters in the user input so a `.` or `*`
+			// in the search term doesn't behave as a wildcard or DoS vector.
+			escaped := regexp.QuoteMeta(search)
+			nameRegex := bson.D{{Key: "$regex", Value: escaped}, {Key: "$options", Value: "i"}}
 
-		// Search by exact address, exact creator address, OR partial
-		// case-insensitive match against name + symbol + metadataName.
-		// Symbol was previously absent, searching "MQW" missed tokens whose
-		// `name` field held the full project label instead of the ticker.
-		// Phase 3a adds metadataName so a user searching by the off-chain
-		// display title hits the row even when on-chain name() is empty.
-		searchFilter := bson.D{
-			{Key: "$or", Value: bson.A{
-				bson.D{{Key: "address", Value: normalizedSearch}},
-				bson.D{{Key: "creatorAddress", Value: normalizedSearch}},
+			// Symbol was previously absent, searching "MQW" missed tokens whose
+			// `name` field held the full project label instead of the ticker.
+			// Phase 3a adds metadataName so a user searching by the off-chain
+			// display title hits the row even when on-chain name() is empty.
+			orBranches = append(orBranches,
 				bson.D{{Key: "name", Value: nameRegex}},
 				bson.D{{Key: "symbol", Value: nameRegex}},
 				bson.D{{Key: "metadataName", Value: nameRegex}},
-			}},
+			)
 		}
+
+		searchFilter := bson.D{{Key: "$or", Value: orBranches}}
 		// Combine with existing filter
 		if len(filter) > 0 {
 			filter = bson.D{{Key: "$and", Value: bson.A{filter, searchFilter}}}
@@ -81,12 +92,25 @@ func ReturnContracts(page int64, limit int64, search string, isTokenFilter *bool
 		return nil, 0, err
 	}
 
-	// Set up pagination options
+	// Set up pagination options. The contracts list/grid renders only the
+	// lightweight summary fields (address, name, symbol, decimals, standard,
+	// metadata thumbnail, etc), so project out the heavy verification blobs
+	// (full source, ABI, constructor args, libraries, raw bytecode, AI
+	// explanation). These can be tens to hundreds of KB per row and would
+	// otherwise be streamed for every page even though no consumer reads them.
 	skip := page * limit
 	opts := options.Find().
 		SetSkip(skip).
 		SetLimit(limit).
-		SetSort(bson.D{{Key: "_id", Value: -1}}) // Latest first
+		SetSort(bson.D{{Key: "_id", Value: -1}}). // Latest first
+		SetProjection(bson.D{
+			{Key: "sourceCode", Value: 0},
+			{Key: "abi", Value: 0},
+			{Key: "constructorArguments", Value: 0},
+			{Key: "libraries", Value: 0},
+			{Key: "contractCode", Value: 0},
+			{Key: "aiExplanation", Value: 0},
+		})
 
 	cursor, err := configs.ContractInfoCollection.Find(ctx, filter, opts)
 	if err != nil {
@@ -221,9 +245,22 @@ func GetContractsByAddresses(addresses []string) (map[string]models.ContractInfo
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// The /tx and /pending-transaction consumers read only the lightweight
+	// metadata (name, symbol, tokenStandard, verified, contractName) plus the
+	// ABI (used for calldata/event decoding when the contract is verified), so
+	// project out the heavy verification blobs that aren't consumed here:
+	// full source, constructor args, libraries, raw bytecode, AI explanation.
+	// The ABI itself is kept because the callers decode against it.
+	opts := options.Find().SetProjection(bson.D{
+		{Key: "sourceCode", Value: 0},
+		{Key: "constructorArguments", Value: 0},
+		{Key: "libraries", Value: 0},
+		{Key: "contractCode", Value: 0},
+		{Key: "aiExplanation", Value: 0},
+	})
 	cursor, err := configs.ContractInfoCollection.Find(ctx, bson.M{
 		"address": bson.M{"$in": normalized},
-	})
+	}, opts)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return out, nil
@@ -280,14 +317,14 @@ func ReturnContractCode(address string) (models.ContractInfo, error) {
 }
 
 // CountContracts returns the total number of smart contracts. Uses
-// EstimatedDocumentCount (metadata read, ~microseconds) instead of
-// CountDocuments({}) which is O(rows) and blocked hot endpoints
-// (/overview) under any concurrency.
+// countDocumentsResilient (fast metadata read with an exact-count fallback when
+// the metadata reads 0, which it currently does on this deployment). The result
+// is cached by callers (/overview), so the fallback runs at most once per window.
 func CountContracts() (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	count, err := configs.ContractInfoCollection.EstimatedDocumentCount(ctx)
+	count, err := countDocumentsResilient(ctx, configs.ContractInfoCollection)
 	if err != nil {
 		return 0, err
 	}

@@ -2,11 +2,14 @@ package main
 
 import (
 	"QRL2MongoDB/configs"
+	"QRL2MongoDB/metadata"
 	"QRL2MongoDB/rpc"
 	"QRL2MongoDB/synchroniser"
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -16,12 +19,43 @@ import (
 	"go.uber.org/zap"
 )
 
+// validateEnv fails fast if the node endpoint env vars are missing. Without
+// this, an empty NODE_URLS/NODE_URL only logs a warning in
+// rpc.newEndpointSelectorFromEnv and the first RPC call returns "no node
+// endpoints configured", so Sync exits silently with no obvious cause.
+// MONGOURI is validated inside configs.ConnectDB, called explicitly below.
+func validateEnv() {
+	if os.Getenv("NODE_URLS") == "" && os.Getenv("NODE_URL") == "" {
+		log.Fatal("Required environment variable NODE_URLS (or legacy NODE_URL) is not set")
+	}
+}
+
 func main() {
+	// Load .env before anything reads os.Getenv. The old import-time
+	// ConnectDB loaded it as a side effect; validateEnv below fatals on a
+	// missing NODE_URLS if this doesn't run first (2026-07-11 prod incident).
+	configs.LoadEnv()
+
 	// Ensure logger resources are properly released
 	defer configs.Logger.Sync()
 
+	// Route the zap global logger (zap.L()) to our file logger. The rpc
+	// package logs failover events through zap.L(); without this call those
+	// go to zap's default no-op logger and are silently discarded.
+	zap.ReplaceGlobals(configs.Logger)
+
 	configs.Logger.Info("Initializing QRL to MongoDB synchronizer...")
+
+	// Fail fast before any sync work if required env vars are missing.
+	validateEnv()
+
 	configs.Logger.Info("Connecting to MongoDB and RPC node...")
+
+	// Connect explicitly: nothing connects at import time anymore, and a
+	// missing/unreachable MONGOURI must be fatal for the syncer.
+	if err := configs.ConnectDB(); err != nil {
+		configs.Logger.Fatal("Failed to connect to MongoDB", zap.Error(err))
+	}
 
 	// stopCh is closed when a termination signal is received. Sync() and other
 	// long-running loops should watch this channel so they can finish their current
@@ -65,7 +99,10 @@ func main() {
 	}()
 
 	configs.Logger.Info("Starting blockchain synchronization process...")
-	configs.Logger.Info("MongoDB URL: " + os.Getenv("MONGOURI"))
+	// Log only the host: MONGOURI may embed credentials.
+	if u, err := url.Parse(os.Getenv("MONGOURI")); err == nil && u.Host != "" {
+		configs.Logger.Info("MongoDB host: " + u.Host)
+	}
 	configs.Logger.Info("Node URLs: " + strings.Join(rpc.Endpoints().AllURLs(), ", "))
 
 	// Start health check server for Kubernetes probes. The handler probes the
@@ -74,28 +111,13 @@ func main() {
 	// now (not just that the process is alive).
 	go func() {
 		http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+			// Probe synchronously under the request context with a 5s cap.
+			// ProbeChainHeadCtx honours ctx for the in-flight HTTP request, so
+			// a client disconnect cancels the probe instead of leaking a
+			// detached goroutine that outlives the handler.
 			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 			defer cancel()
-			done := make(chan struct {
-				height uint64
-				err    error
-			}, 1)
-			go func() {
-				h, e := rpc.ProbeChainHead()
-				done <- struct {
-					height uint64
-					err    error
-				}{h, e}
-			}()
-			var height uint64
-			var probeErr error
-			select {
-			case <-ctx.Done():
-				probeErr = ctx.Err()
-			case res := <-done:
-				height = res.height
-				probeErr = res.err
-			}
+			height, probeErr := rpc.ProbeChainHeadCtx(ctx)
 
 			w.Header().Set("Content-Type", "application/json")
 			payload := map[string]interface{}{
@@ -125,16 +147,18 @@ func main() {
 		}
 	}()
 
-	// Start pending transaction sync (this is not started in sync.go)
+	// Start pending transaction sync (this is not started in sync.go).
+	// stopCh is threaded in so the mempool/cleanup/verify tickers stop
+	// accepting new work when a shutdown signal arrives.
 	configs.Logger.Info("Starting pending transaction sync service...")
-	synchroniser.StartPendingTransactionSync()
+	synchroniser.StartPendingTransactionSync(stopCh)
 
 	// Phase 3a: start the off-chain NFT collection metadata fetcher.
 	// Background goroutine that polls contractCode for unfetched
 	// metadataURI rows and resolves them through the configured IPFS
 	// gateway. Self-disables via METADATA_FETCHER_ENABLED=false.
 	metadataCtx, cancelMetadata := context.WithCancel(context.Background())
-	metadataSvc := synchroniser.NewMetadataService()
+	metadataSvc := metadata.NewService()
 	metadataSvc.Start(metadataCtx)
 	// Ensure the goroutine stops cleanly on shutdown.
 	go func() {
@@ -147,8 +171,9 @@ func main() {
 	go func() {
 		defer close(doneCh)
 		// Sync will now handle starting wallet count and contract reprocessing
-		// services after initial sync is complete
-		synchroniser.Sync()
+		// services after initial sync is complete. stopCh is threaded in so
+		// every background ticker goroutine Sync starts can observe shutdown.
+		synchroniser.Sync(stopCh)
 	}()
 
 	// Block until either sync finishes naturally or a shutdown signal arrives.

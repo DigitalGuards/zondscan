@@ -3,8 +3,8 @@ package routes
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"log"
 	"net/http"
-	"strings"
 	"time"
 
 	"backendAPI/db"
@@ -30,7 +30,7 @@ func RegisterVerificationRoutes(router *gin.Engine) {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "contract verification not configured"})
 			return
 		}
-		c.JSON(http.StatusOK, v.Compiler.CompilerInfo())
+		c.JSON(http.StatusOK, v.Registry.Info())
 	})
 
 	// Maximum body size for a verify submission. The compiler also has
@@ -62,14 +62,19 @@ func RegisterVerificationRoutes(router *gin.Engine) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "contractName and sourceCode are required"})
 			return
 		}
-		if req.CompilerVersion != "" && req.CompilerVersion != v.Compiler.BuildID {
+		// Resolve the requested build (empty selects the registry default).
+		// Pin the request to the resolved build id so the stored payload and
+		// the async compile can't drift from what we validated here.
+		comp, ok := v.Registry.Resolve(req.CompilerVersion)
+		if !ok {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error":           "unsupported compilerVersion, see /contract/compiler-info",
-				"supportedBuild":  v.Compiler.BuildID,
 				"requestedBuild":  req.CompilerVersion,
+				"supportedBuilds": v.Registry.SupportedBuildIDs(),
 			})
 			return
 		}
+		req.CompilerVersion = comp.BuildID
 
 		// Idempotency: if the contract is already verified, return success
 		// without spawning another compile.
@@ -97,7 +102,7 @@ func RegisterVerificationRoutes(router *gin.Engine) {
 			Payload: models.VerificationJobPayload{
 				SourceCode:           req.SourceCode,
 				ContractName:         req.ContractName,
-				CompilerVersion:      v.Compiler.BuildID,
+				CompilerVersion:      comp.BuildID,
 				OptimizationEnabled:  req.OptimizerEnabled,
 				OptimizationRuns:     req.OptimizerRuns,
 				EvmVersion:           req.EvmVersion,
@@ -108,7 +113,8 @@ func RegisterVerificationRoutes(router *gin.Engine) {
 			},
 		}
 		if err := db.CreateVerificationJob(job); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "create job: " + err.Error()})
+			log.Printf("create verification job %s: %v", jobID, err)
+			respondInternal(c)
 			return
 		}
 
@@ -125,7 +131,8 @@ func RegisterVerificationRoutes(router *gin.Engine) {
 		jobID := c.Param("jobId")
 		job, err := db.GetVerificationJob(jobID)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "lookup: " + err.Error()})
+			log.Printf("lookup verification job %s: %v", jobID, err)
+			respondInternal(c)
 			return
 		}
 		if job == nil {
@@ -147,21 +154,4 @@ func newJobID() string {
 		panic("verification: crypto/rand unavailable: " + err.Error())
 	}
 	return hex.EncodeToString(buf[:])
-}
-
-// isValidAddress is a permissive Q-prefix check. The full validation
-// happens at the storage layer (normalizeAddress canonicalises case).
-func isValidAddress(a string) bool {
-	if !strings.HasPrefix(a, "Q") {
-		return false
-	}
-	if len(a) != 41 {
-		return false
-	}
-	for _, r := range a[1:] {
-		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
-			return false
-		}
-	}
-	return true
 }

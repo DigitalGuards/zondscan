@@ -1,5 +1,28 @@
-import { keccak256 } from 'ethereumjs-util';
-import { Buffer } from 'buffer';
+import { keccak_256 } from '@noble/hashes/sha3.js';
+import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+
+const textDecoder = new TextDecoder();
+
+// keccak256 of a utf8 signature string, as a bare lowercase hex string.
+// @noble/hashes replaces ethereumjs-util here: same Keccak-256 (original
+// padding, not NIST SHA-3) at ~6 KB gz instead of dragging the whole
+// bn.js/elliptic/secp256k1 tree (~135 KB gz) into every page bundle.
+function keccakHex(sig: string): string {
+  return bytesToHex(keccak_256(utf8ToBytes(sig)));
+}
+
+// Canonical transaction-hash shape: "0x" + exactly 64 hex chars. Shared so
+// the tx page, pending-tx page, and search resolver all validate identically.
+export const TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
+
+// Display unit for whole-coin amounts. Ecosystem convention: amounts show
+// as "Quanta"; "QRL" is the project name and exchange-ticker only.
+export const NATIVE_UNIT = 'Quanta';
+
+/** True when `value` is a well-formed "0x"-prefixed 32-byte transaction hash. */
+export function isTxHash(value: string | undefined | null): boolean {
+  return !!value && TX_HASH_RE.test(value);
+}
 
 export function timeAgo(unixSeconds: number): string {
   const now = Math.floor(Date.now() / 1000);
@@ -12,7 +35,7 @@ export function timeAgo(unixSeconds: number): string {
 }
 
 // Validator effective balances on the QRL beacon chain are Shor-denominated
-// (10^-9 QRL / "Quanta"). Convert to whole-QRL display.
+// (10^-9 Quanta). Convert to whole-Quanta display.
 export function formatStaked(shor: string): string {
   try {
     const val = BigInt(shor || '0');
@@ -20,9 +43,25 @@ export function formatStaked(shor: string): string {
     const remainder = val % BigInt(1_000_000_000);
     const decimalStr = remainder.toString().padStart(9, '0').replace(/0+$/, '');
     const result = formatNumberWithCommas(qrlBase.toString());
-    return decimalStr.length > 0 ? `${result}.${decimalStr} QRL` : `${result} QRL`;
+    return decimalStr.length > 0 ? `${result}.${decimalStr} ${NATIVE_UNIT}` : `${result} ${NATIVE_UNIT}`;
   } catch {
-    return '0 QRL';
+    return `0 ${NATIVE_UNIT}`;
+  }
+}
+
+// Validator balances arrive Shor-denominated as decimal strings. Whole-coin
+// display with no fraction: stake magnitudes make sub-Quanta noise. Returns
+// [value, unit] like formatAmount so callers style the unit independently.
+// Consolidated here from two previously duplicated component-local copies.
+export function formatValidatorBalance(amount: string | undefined | null): [string, string] {
+  if (!amount || amount === '0') return ['0', NATIVE_UNIT];
+  try {
+    const value = BigInt(amount);
+    const divisor = BigInt('1000000000'); // 10^9 (Shor to whole coin)
+    const qrlValue = Number(value / divisor);
+    return [qrlValue.toLocaleString(undefined, { maximumFractionDigits: 0 }), NATIVE_UNIT];
+  } catch {
+    return ['0', NATIVE_UNIT];
   }
 }
 
@@ -163,12 +202,12 @@ export function formatPlanckAdaptive(planck: number | string | undefined | null)
 export function formatAmount(amount: number | string | undefined | null): [string, string] {
   // Handle undefined or null
   if (amount === undefined || amount === null) {
-    return ['0.00', 'QRL'];
+    return ['0.00', NATIVE_UNIT];
   }
 
   // Handle zero amount
   if (amount === 0 || amount === '0' || amount === '0x0') {
-    return ['0.00', 'QRL'];
+    return ['0.00', NATIVE_UNIT];
   }
 
   let totalNum: number;
@@ -200,24 +239,24 @@ export function formatAmount(amount: number | string | undefined | null): [strin
     }
   } catch (error) {
     console.error('Error converting amount:', error, amount);
-    return ['0.00', 'QRL'];
+    return ['0.00', NATIVE_UNIT];
   }
 
   // Format with appropriate decimal places, avoiding scientific notation
   if (totalNum === 0) {
-    return ['0.00', 'QRL'];
+    return ['0.00', NATIVE_UNIT];
   } else if (totalNum < 0.000001) {
     // For very small numbers, show all significant digits without trailing zeros
-    return [totalNum.toFixed(18).replace(/\.?0+$/, ''), 'QRL'];
+    return [totalNum.toFixed(18).replace(/\.?0+$/, ''), NATIVE_UNIT];
   } else if (totalNum < 1) {
     // For numbers less than 1, show up to 6 decimal places
-    return [totalNum.toFixed(6).replace(/\.?0+$/, ''), 'QRL'];
+    return [totalNum.toFixed(6).replace(/\.?0+$/, ''), NATIVE_UNIT];
   } else if (totalNum < 1000) {
     // For numbers between 1 and 999, show up to 4 decimal places
-    return [totalNum.toFixed(4).replace(/\.?0+$/, ''), 'QRL'];
+    return [totalNum.toFixed(4).replace(/\.?0+$/, ''), NATIVE_UNIT];
   } else {
     // For large numbers, show 2 decimal places
-    return [totalNum.toFixed(2).replace(/\.?0+$/, ''), 'QRL'];
+    return [totalNum.toFixed(2).replace(/\.?0+$/, ''), NATIVE_UNIT];
   }
 }
 
@@ -799,7 +838,7 @@ function eventSignatureAndHash(entry: AbiEventEntry): { signature: string; hash:
   if (types.length !== entry.inputs.length) return null;
   const sig = `${entry.name}(${types.join(',')})`;
   try {
-    const hash = '0x' + keccak256(Buffer.from(sig, 'utf8')).toString('hex');
+    const hash = '0x' + keccakHex(sig);
     return { signature: sig, hash };
   } catch {
     return null;
@@ -949,7 +988,7 @@ function functionSelector(entry: AbiFunctionEntry): { signature: string; selecto
   if (types.length !== entry.inputs.length) return null;
   const sig = `${entry.name}(${types.join(',')})`;
   try {
-    const full = keccak256(Buffer.from(sig, 'utf8')).toString('hex');
+    const full = keccakHex(sig);
     return { signature: sig, selector: '0x' + full.slice(0, 8) };
   } catch {
     return null;
@@ -981,8 +1020,8 @@ function decodeDynamicAt(label: string, type: string, argsBlock: string, headOff
   const hex = argsBlock.slice(dataStart, dataEnd);
   if (type === 'string') {
     try {
-      const bytes = Buffer.from(hex, 'hex');
-      return { label, type: 'string', value: bytes.toString('utf8') };
+      const bytes = hexToBytes(hex);
+      return { label, type: 'string', value: textDecoder.decode(bytes) };
     } catch {
       return { label, type: 'raw', value: '0x' + hex };
     }
@@ -1183,4 +1222,83 @@ export function qNormaliseAbiValue(v: unknown, type: string): unknown {
     return v.map(x => qNormaliseAbiValue(x, innerType));
   }
   return v;
+}
+
+/**
+ * Cheap client-side format check for a QRL address: a `Q`/`q` prefix (or bare
+ * hex) followed by exactly 40 hex chars. QRL addresses are Q-prefixed; `0x` is
+ * only for block/tx hashes, so it's intentionally not accepted here. This is a
+ * UX guard only - the server's normalizeQrlAddress remains authoritative; we
+ * use it to avoid a wasted round-trip + Turnstile token on obvious typos.
+ */
+export function isValidQrlAddressFormat(address: string): boolean {
+  let core = address.trim();
+  if (/^[Qq]/.test(core)) core = core.slice(1);
+  return /^[0-9a-fA-F]{40}$/.test(core);
+}
+
+/**
+ * Render a duration in seconds as a compact human-readable string
+ * (e.g. "45s", "12 min", "2h 5m", "1h"). Used for faucet cooldown messaging;
+ * shared here so other countdown surfaces can reuse it.
+ */
+export function formatDuration(totalSeconds: number): string {
+  const secs = Math.max(0, Math.ceil(totalSeconds));
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.ceil(secs / 60);
+  if (mins < 60) return `${mins} min`;
+  const hours = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return remMins > 0 ? `${hours}h ${remMins}m` : `${hours}h`;
+}
+
+/**
+ * QRL unit system relative to the base unit Planck:
+ * 1 Quanta = 10^9 Shor = 10^18 Planck (matches @theqrl/web3-utils qrlUnitMap).
+ */
+export const UNIT_PLANCK_EXPONENTS = {
+  Quanta: 18,
+  Shor: 9,
+  Planck: 0,
+} as const;
+
+export type ConvertibleUnit = keyof typeof UNIT_PLANCK_EXPONENTS;
+
+/**
+ * Exact conversion between Quanta/Shor/Planck via BigInt string math (no
+ * floats). Returns null when the input is not a plain decimal number or has
+ * more fractional digits than the source unit can represent (e.g. "0.5"
+ * Planck), so callers can surface a validation error instead of silently
+ * truncating.
+ */
+export function convertUnits(
+  value: string,
+  from: ConvertibleUnit,
+  to: ConvertibleUnit
+): string | null {
+  const trimmed = value.trim();
+  if (!/^(\d+\.?\d*|\.\d+)$/.test(trimmed)) return null;
+  const expFrom = UNIT_PLANCK_EXPONENTS[from];
+  const expTo = UNIT_PLANCK_EXPONENTS[to];
+  const fraction = trimmed.split('.')[1] ?? '';
+  if (fraction.length > expFrom) return null;
+  const planck = decimalToSmallestUnit(trimmed, expFrom);
+  return smallestUnitToDecimal(planck, expTo);
+}
+
+/**
+ * Decode beacon withdrawal credentials to the execution-layer withdrawal
+ * address. On Zond the credentials are prefix byte 0x00 + 11 zero bytes +
+ * the 20-byte address (qrysm WithdrawalCredentialsAddress), so the last 40
+ * hex chars are the address. Returns null for any other shape so callers
+ * fall back to showing the raw credentials.
+ */
+export function withdrawalCredentialsToAddress(
+  credsHex: string | null | undefined
+): string | null {
+  if (!credsHex) return null;
+  const hex = credsHex.trim().toLowerCase().replace(/^0x/, '');
+  if (!/^[0-9a-f]{64}$/.test(hex)) return null;
+  if (!hex.startsWith('000000000000000000000000')) return null;
+  return `Q${hex.slice(24)}`;
 }

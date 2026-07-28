@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import { type TransactionDetails, getConfirmations, getTransactionStatus } from '@/app/types';
-import { formatAmount, formatTokenAmount, decodeEventLog, decodeTokenTransferInput, decodeContractCall } from '../../lib/helpers';
+import { formatAmount, formatTokenAmount, decodeEventLog, decodeTokenTransferInput, decodeContractCall, NATIVE_UNIT } from '../../lib/helpers';
+import { useIsMobile } from '../../lib/hooks';
 import config from '../../../config';
 import CopyButton from '../../components/CopyButton';
 import Breadcrumbs from '../../components/Breadcrumbs';
@@ -29,7 +30,7 @@ function BackToTransactionsLink(): JSX.Element | null {
   return (
     <Link
       href={`/transactions/${returnPage}`}
-      className="inline-flex items-center text-gray-400 hover:text-[#ffa729] mb-4 md:mb-6"
+      className="inline-flex items-center text-text-secondary hover:text-accent mb-4 md:mb-6"
     >
       <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -84,16 +85,7 @@ interface TransactionViewProps {
 }
 
 export default function TransactionView({ transaction }: TransactionViewProps): JSX.Element {
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkScreenSize = (): void => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    checkScreenSize();
-    window.addEventListener('resize', checkScreenSize);
-    return () => window.removeEventListener('resize', checkScreenSize);
-  }, []);
+  const isMobile = useIsMobile();
 
   // Poll /latestblock so the confirmation count ticks up live; stops
   // once we cross the terminal-confirmations threshold to bound load
@@ -176,15 +168,15 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
       {/* Main Details Card */}
       <section
         aria-labelledby="tx-detail-heading"
-        className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6"
+        className="card overflow-hidden mb-6"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-[#3d3d3d]">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border">
           <div className="flex items-center gap-3">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-[#ffa729]" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-accent" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
             </svg>
-            <h1 id="tx-detail-heading" className="text-xl sm:text-2xl font-bold text-[#ffa729]">Transaction Details</h1>
+            <h1 id="tx-detail-heading" className="section-title">Transaction Details</h1>
           </div>
           <Badge variant={badgeVariant} size="md" dot>{effectiveStatus.text}</Badge>
         </div>
@@ -199,9 +191,9 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
           </DetailRow>
           <DetailRow label="Status">
             <Badge variant={badgeVariant} dot>{effectiveStatus.text}</Badge>
-            <span className="text-gray-500 text-xs ml-2">{confirmationText}</span>
+            <span className="text-text-muted text-xs ml-2">{confirmationText}</span>
             {isReverted && (
-              <p className="text-xs text-gray-500 mt-2 max-w-prose">
+              <p className="text-xs text-text-muted mt-2 max-w-prose">
                 The EVM rolled this transaction back; any state changes it
                 tried to make were not applied. Gas was still consumed by
                 the partial execution (see Transaction Fee below).
@@ -212,12 +204,12 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             {transaction.blockNumber ? (
               <Link
                 href={`/block/${transaction.blockNumber}`}
-                className="text-[#ffa729] hover:text-[#ffb954] transition-colors"
+                className="text-accent hover:text-accent-hover transition-colors"
               >
                 #{transaction.blockNumber}
               </Link>
             ) : (
-              <span className="text-gray-400">Pending</span>
+              <span className="text-text-secondary">Pending</span>
             )}
           </DetailRow>
           <DetailRow label="Timestamp">{formatTimestamp(transaction.timestamp)}</DetailRow>
@@ -225,7 +217,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             <div className="flex items-start gap-2">
               <Link
                 href={`/address/${transaction.from}`}
-                className="text-gray-200 hover:text-[#ffa729] transition-colors break-all"
+                className="text-text-primary hover:text-accent transition-colors break-all"
               >
                 {displayAddr(transaction.from)}
               </Link>
@@ -233,24 +225,62 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             </div>
           </DetailRow>
           <DetailRow label="To" mono>
-            <div className="flex items-start gap-2">
-              <Link
-                href={`/address/${transaction.to}`}
-                className="text-gray-200 hover:text-[#ffa729] transition-colors break-all"
-              >
-                {displayAddr(transaction.to)}
-              </Link>
-              <CopyButton value={transaction.to} label="Copy address" size="sm" />
-            </div>
+            {/* Contract-creation txs have an empty `to` because the tx
+                doesn't target an existing address; the new contract's
+                address comes back on the receipt. Render Etherscan-style:
+                "[Contract Created]" label + the new contract address as
+                a link, instead of an empty field. The separate "Contract
+                Created" section below still surfaces the token / standard
+                details. */}
+            {transaction.contractCreated?.address ? (
+              <div className="flex items-start gap-2 flex-wrap">
+                <span className="inline-flex items-center gap-1 text-xs text-success font-sans">
+                  <svg
+                    className="w-3.5 h-3.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    stroke="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                  Contract Created
+                </span>
+                <Link
+                  href={`/address/${transaction.contractCreated.address}`}
+                  className="text-text-primary hover:text-accent transition-colors break-all"
+                >
+                  {displayAddr(transaction.contractCreated.address)}
+                </Link>
+                <CopyButton
+                  value={transaction.contractCreated.address}
+                  label="Copy contract address"
+                  size="sm"
+                />
+              </div>
+            ) : transaction.to ? (
+              <div className="flex items-start gap-2">
+                <Link
+                  href={`/address/${transaction.to}`}
+                  className="text-text-primary hover:text-accent transition-colors break-all"
+                >
+                  {displayAddr(transaction.to)}
+                </Link>
+                <CopyButton value={transaction.to} label="Copy address" size="sm" />
+              </div>
+            ) : (
+              <span className="text-text-muted">-</span>
+            )}
           </DetailRow>
           <DetailRow label="Value">
-            <span className="font-semibold text-[#ffa729]">{formattedValue}</span>
-            <span className="text-gray-500 ml-1">{unit}</span>
+            <span className="font-semibold text-accent">{formattedValue}</span>
+            <span className="text-text-muted ml-1">{unit}</span>
           </DetailRow>
           {(transaction.gasUsed || transaction.gasPrice) && (
             <DetailRow label="Transaction Fee">
               {paidFees}
-              <span className="text-gray-500 ml-1">QRL</span>
+              <span className="text-text-muted ml-1">{NATIVE_UNIT}</span>
               {(() => {
                 // USD conversion is opt-in: requires both a fee > 0 and a
                 // price from the polled /latestblock response. Skips the
@@ -265,7 +295,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                 const display = dollars < 0.001
                   ? '<$0.001'
                   : `≈ $${dollars < 1 ? dollars.toFixed(4) : dollars.toFixed(2)}`;
-                return <span className="text-gray-500 text-xs ml-2" title={`@${usd.toFixed(4)} USD/QRL`}>{display}</span>;
+                return <span className="text-text-muted text-xs ml-2" title={`@${usd.toFixed(4)} USD/QRL`}>{display}</span>;
               })()}
             </DetailRow>
           )}
@@ -286,13 +316,13 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             ? `(${cc.symbol})`
             : 'Unnamed Collection';
         return (
-        <section aria-labelledby="contract-created-heading" className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
-          <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
+        <section aria-labelledby="contract-created-heading" className="card overflow-hidden mb-6">
+          <div className="px-4 sm:px-6 py-4 border-b border-border">
             <div className="flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-green-400" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-success" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <h2 id="contract-created-heading" className="text-[15px] font-semibold text-green-400">Contract Created</h2>
+              <h2 id="contract-created-heading" className="text-[15px] font-semibold text-success">Contract Created</h2>
               {cc.isToken && (
                 <Badge variant={ccStandard === 'ERC-721' || ccStandard === 'ERC-1155' ? 'warning' : 'brand'}>
                   {qrcBadgeText(ccStandard)} Token
@@ -304,14 +334,14 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             <DetailRow label="Contract Address" mono>
               <Link
                 href={`/address/${cc.address}`}
-                className="text-[#ffa729] hover:text-[#ffb84d] transition-colors break-all"
+                className="text-accent hover:text-accent-hover transition-colors break-all"
               >
                 {displayAddr(cc.address)}
               </Link>
             </DetailRow>
             {cc.isToken && (
               <DetailRow label="Token">
-                <span className="font-medium text-white">{tokenLabel}</span>
+                <span className="font-medium text-text-primary">{tokenLabel}</span>
               </DetailRow>
             )}
           </div>
@@ -335,14 +365,14 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
         <section
           key={rowKey}
           aria-labelledby={`token-transfer-${rowKey}-heading`}
-          className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6"
+          className="card overflow-hidden mb-6"
         >
-          <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
+          <div className="px-4 sm:px-6 py-4 border-b border-border">
             <div className="flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-accent" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
               </svg>
-              <h2 id={`token-transfer-${rowKey}-heading`} className="text-[15px] font-semibold text-[#ffa729]">{headerLabel}</h2>
+              <h2 id={`token-transfer-${rowKey}-heading`} className="text-[15px] font-display font-semibold text-text-primary">{headerLabel}</h2>
               <Badge variant={isNFT ? 'warning' : 'brand'}>{qrcBadgeText(standard)}</Badge>
             </div>
           </div>
@@ -350,7 +380,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             <DetailRow label={standard === 'ERC-721' ? 'Collection' : standard === 'ERC-1155' ? 'Collection' : 'Token'}>
               <Link
                 href={`/address/${tt.contractAddress}`}
-                className="text-[#ffa729] hover:text-[#ffb84d] font-medium transition-colors"
+                className="text-accent hover:text-accent-hover font-medium transition-colors"
               >
                 {tt.tokenName || tt.tokenSymbol || tt.contractAddress}
                 {tt.tokenName && tt.tokenSymbol && tt.tokenSymbol !== tt.tokenName ? ` (${tt.tokenSymbol})` : ''}
@@ -358,18 +388,18 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             </DetailRow>
             {tt.tokenID && (
               <DetailRow label="Token ID" mono>
-                <span className="font-semibold text-white">#{tt.tokenID}</span>
+                <span className="font-semibold text-text-primary">#{tt.tokenID}</span>
               </DetailRow>
             )}
             {standard !== 'ERC-721' && (
               <DetailRow label="Amount">
-                <span className="font-semibold text-white">
+                <span className="font-semibold text-text-primary">
                   {standard === 'ERC-1155'
                     ? formatErc1155Amount(tt.amount)
                     : formatTokenAmount(tt.amount, tt.tokenDecimals)}
                 </span>
                 {tt.tokenSymbol && (
-                  <span className="text-[#ffa729] ml-2 text-sm">{tt.tokenSymbol}</span>
+                  <span className="text-accent ml-2 text-sm">{tt.tokenSymbol}</span>
                 )}
               </DetailRow>
             )}
@@ -377,11 +407,11 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               {isZeroAddress(tt.from) ? (
                 <div className="flex items-center gap-2">
                   <Badge variant="success">Mint</Badge>
-                  <span className="text-sm text-gray-400">
+                  <span className="text-sm text-text-secondary">
                     via{' '}
                     <Link
                       href={`/address/${tt.contractAddress}`}
-                      className="text-[#ffa729] hover:text-[#ffb84d] transition-colors"
+                      className="text-accent hover:text-accent-hover transition-colors"
                     >
                       {tt.tokenName || 'Contract'}
                     </Link>
@@ -390,7 +420,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               ) : (
                 <Link
                   href={`/address/${tt.from}`}
-                  className="text-gray-200 hover:text-[#ffa729] transition-colors break-all"
+                  className="text-text-primary hover:text-accent transition-colors break-all"
                 >
                   {displayAddr(tt.from)}
                 </Link>
@@ -402,7 +432,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               ) : (
                 <Link
                   href={`/address/${tt.to}`}
-                  className="text-gray-200 hover:text-[#ffa729] transition-colors break-all"
+                  className="text-text-primary hover:text-accent transition-colors break-all"
                 >
                   {displayAddr(tt.to)}
                 </Link>
@@ -418,13 +448,13 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
           ApprovalForAll) inline; everything else falls back to topics +
           data so users can copy them into a decoder. */}
       {transaction.logs && transaction.logs.length > 0 && (
-        <section aria-labelledby="event-logs-heading" className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
-          <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
+        <section aria-labelledby="event-logs-heading" className="card overflow-hidden mb-6">
+          <div className="px-4 sm:px-6 py-4 border-b border-border">
             <div className="flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-accent" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
               </svg>
-              <h2 id="event-logs-heading" className="text-[15px] font-semibold text-[#ffa729]">Event Logs</h2>
+              <h2 id="event-logs-heading" className="text-[15px] font-display font-semibold text-text-primary">Event Logs</h2>
               <Badge variant="neutral">{transaction.logs.length}</Badge>
             </div>
           </div>
@@ -437,7 +467,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               const idxLabel = (() => { try { return parseInt(logEntry.logIndex || '0x0', 16).toString(); } catch { return logEntry.logIndex; } })();
               const decodedViaAbi = !!decoded && !decoded.standard;
               return (
-                <div key={`${logEntry.address}-${logEntry.logIndex}`} className="rounded-lg bg-[#1a1a1a]/60 border border-[#3d3d3d] p-3 sm:p-4">
+                <div key={`${logEntry.address}-${logEntry.logIndex}`} className="rounded-lg bg-background/60 border border-border p-3 sm:p-4">
                   <div className="flex flex-wrap items-center gap-2 mb-2">
                     <Badge variant="neutral">#{idxLabel}</Badge>
                     {decoded ? (
@@ -446,10 +476,10 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                           {decoded.name}
                         </Badge>
                         {decoded.standard && (
-                          <span className="text-xs text-gray-500 font-mono">{decoded.standard}</span>
+                          <span className="text-xs text-text-muted font-mono">{decoded.standard}</span>
                         )}
                         {decodedViaAbi && logEntry.contract?.contractName && (
-                          <span className="text-xs text-gray-500 font-mono">via {logEntry.contract.contractName}</span>
+                          <span className="text-xs text-text-muted font-mono">via {logEntry.contract.contractName}</span>
                         )}
                       </>
                     ) : (
@@ -457,33 +487,33 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                     )}
                     <Link
                       href={`/address/${logEntry.address}`}
-                      className="text-[#ffa729] hover:text-[#ffb84d] transition-colors break-all text-xs font-mono"
+                      className="text-accent hover:text-accent-hover transition-colors break-all text-xs font-mono"
                     >
                       {logEntry.address}
                     </Link>
                   </div>
                   {decoded ? (
                     <>
-                      <p className="text-xs text-gray-500 font-mono mb-2">{decoded.signature}</p>
+                      <p className="text-xs text-text-muted font-mono mb-2">{decoded.signature}</p>
                       <div className="space-y-1">
                         {decoded.args.map((arg) => (
                           <div key={arg.label} className="text-xs flex flex-wrap items-start gap-2">
-                            <span className="text-gray-400 font-mono min-w-[80px]">{arg.label}:</span>
+                            <span className="text-text-secondary font-mono min-w-[80px]">{arg.label}:</span>
                             {arg.type === 'address' && arg.value ? (
                               <Link
                                 href={`/address/${arg.value}`}
-                                className="text-gray-200 hover:text-[#ffa729] transition-colors break-all font-mono"
+                                className="text-text-primary hover:text-accent transition-colors break-all font-mono"
                               >
                                 {arg.value}
                               </Link>
                             ) : arg.type === 'bool' ? (
                               <Badge variant={arg.value === 'true' ? 'success' : 'error'}>{arg.value}</Badge>
                             ) : arg.type === 'uint256' ? (
-                              <span className="text-gray-200 font-mono break-all">
+                              <span className="text-text-primary font-mono break-all">
                                 {(() => { try { return BigInt(arg.value || '0').toLocaleString('en-US'); } catch { return arg.value || ''; } })()}
                               </span>
                             ) : arg.type === 'uint256[]' ? (
-                              <span className="text-gray-200 font-mono break-all">
+                              <span className="text-text-primary font-mono break-all">
                                 {arg.values && arg.values.length > 0
                                   ? arg.values.map((v) => {
                                       try { return BigInt(v).toLocaleString('en-US'); } catch { return v; }
@@ -491,11 +521,11 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                                   : '[]'}
                               </span>
                             ) : arg.type === 'string' ? (
-                              <span className="text-gray-200 break-all">{arg.value}</span>
+                              <span className="text-text-primary break-all">{arg.value}</span>
                             ) : (
                               // 'raw' or unknown; surface the slot so it's at
                               // least copy-pasteable into another decoder.
-                              <span className="text-gray-200 font-mono break-all">{arg.value}</span>
+                              <span className="text-text-primary font-mono break-all">{arg.value}</span>
                             )}
                           </div>
                         ))}
@@ -504,17 +534,17 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                   ) : (
                     <div className="text-xs space-y-1">
                       <div>
-                        <span className="text-gray-400 font-mono">topics:</span>
+                        <span className="text-text-secondary font-mono">topics:</span>
                         <div className="ml-2 mt-1 space-y-0.5">
                           {logEntry.topics.map((t, ti) => (
-                            <div key={ti} className="text-gray-200 font-mono break-all">[{ti}] {t}</div>
+                            <div key={ti} className="text-text-primary font-mono break-all">[{ti}] {t}</div>
                           ))}
                         </div>
                       </div>
                       {logEntry.data && logEntry.data !== '0x' && (
                         <div>
-                          <span className="text-gray-400 font-mono">data:</span>
-                          <p className="ml-2 mt-1 text-gray-200 font-mono break-all">{logEntry.data}</p>
+                          <span className="text-text-secondary font-mono">data:</span>
+                          <p className="ml-2 mt-1 text-text-primary font-mono break-all">{logEntry.data}</p>
                         </div>
                       )}
                       {/* The decoder fell through to raw because the emitting
@@ -522,10 +552,10 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                           at all). Surface a CTA so users hit a path of
                           action instead of a wall of hex. */}
                       {(!logEntry.contract || !logEntry.contract.verified) && (
-                        <p className="mt-2 text-[11px] text-gray-500">
+                        <p className="mt-2 text-[11px] text-text-muted">
                           <Link
                             href={`/verify-contract?address=${logEntry.address}`}
-                            className="text-[#ffa729] hover:text-[#ffb84d] hover:underline"
+                            className="text-accent hover:text-accent-hover hover:underline"
                           >
                             Verify this contract
                           </Link>
@@ -546,13 +576,13 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
           under `internalTransactionByAddress` keyed by parent tx hash.
           Most simple txs have none; complex contract calls fan out. */}
       {transaction.internalTransactions && transaction.internalTransactions.length > 0 && (
-        <section aria-labelledby="internal-tx-heading" className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
-          <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
+        <section aria-labelledby="internal-tx-heading" className="card overflow-hidden mb-6">
+          <div className="px-4 sm:px-6 py-4 border-b border-border">
             <div className="flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-accent" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 17.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
               </svg>
-              <h2 id="internal-tx-heading" className="text-[15px] font-semibold text-[#ffa729]">Internal Transactions</h2>
+              <h2 id="internal-tx-heading" className="text-[15px] font-display font-semibold text-text-primary">Internal Transactions</h2>
               <Badge variant="neutral">{transaction.internalTransactions.length}</Badge>
             </div>
           </div>
@@ -565,7 +595,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               return (
                 <div
                   key={`${path}-${i}`}
-                  className="rounded-lg bg-[#1a1a1a]/60 border border-[#3d3d3d] p-3 sm:p-4"
+                  className="rounded-lg bg-background/60 border border-border p-3 sm:p-4"
                   style={{ marginLeft: depth > 0 ? `${Math.min(depth, 4) * 12}px` : 0 }}
                 >
                   <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -576,38 +606,38 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                       </Badge>
                     )}
                     {itx.value > 0 && (
-                      <Badge variant="warning">{itx.value} QRL</Badge>
+                      <Badge variant="warning">{itx.value} {NATIVE_UNIT}</Badge>
                     )}
                   </div>
                   <div className="space-y-1 text-xs">
                     {itx.from && (
                       <div className="flex flex-wrap items-start gap-2">
-                        <span className="text-gray-400 font-mono min-w-[60px]">from:</span>
-                        <Link href={`/address/${itx.from}`} className="text-gray-200 hover:text-[#ffa729] transition-colors break-all font-mono">
+                        <span className="text-text-secondary font-mono min-w-[60px]">from:</span>
+                        <Link href={`/address/${itx.from}`} className="text-text-primary hover:text-accent transition-colors break-all font-mono">
                           {itx.from}
                         </Link>
                       </div>
                     )}
                     {itx.to && (
                       <div className="flex flex-wrap items-start gap-2">
-                        <span className="text-gray-400 font-mono min-w-[60px]">to:</span>
-                        <Link href={`/address/${itx.to}`} className="text-[#ffa729] hover:text-[#ffb84d] transition-colors break-all font-mono">
+                        <span className="text-text-secondary font-mono min-w-[60px]">to:</span>
+                        <Link href={`/address/${itx.to}`} className="text-accent hover:text-accent-hover transition-colors break-all font-mono">
                           {itx.to}
                         </Link>
                       </div>
                     )}
                     {itx.input && itx.input !== '0x' && itx.input !== '0x0' && (
                       <div className="flex flex-wrap items-start gap-2">
-                        <span className="text-gray-400 font-mono min-w-[60px]">input:</span>
-                        <span className="text-gray-300 font-mono break-all">
+                        <span className="text-text-secondary font-mono min-w-[60px]">input:</span>
+                        <span className="text-text-secondary font-mono break-all">
                           {itx.input.length > 18 ? `${itx.input.slice(0, 18)}…` : itx.input}
                         </span>
                       </div>
                     )}
                     {itx.gasUsed && itx.gasUsed !== '0x0' && (
                       <div className="flex flex-wrap items-start gap-2">
-                        <span className="text-gray-400 font-mono min-w-[60px]">gasUsed:</span>
-                        <span className="text-gray-300 font-mono">
+                        <span className="text-text-secondary font-mono min-w-[60px]">gasUsed:</span>
+                        <span className="text-text-secondary font-mono">
                           {(() => { try { return BigInt(itx.gasUsed).toLocaleString('en-US'); } catch { return itx.gasUsed; } })()}
                         </span>
                       </div>
@@ -633,10 +663,10 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
           ? decodeContractCall(transaction.input, transaction.targetContract?.abi)
           : null;
         return (
-          <section aria-labelledby="input-data-heading" className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
-            <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
+          <section aria-labelledby="input-data-heading" className="card overflow-hidden mb-6">
+            <div className="px-4 sm:px-6 py-4 border-b border-border">
               <div className="flex items-center gap-2">
-                <h2 id="input-data-heading" className="text-[15px] font-semibold text-[#ffa729]">Input Data</h2>
+                <h2 id="input-data-heading" className="text-[15px] font-display font-semibold text-text-primary">Input Data</h2>
                 {decodedInput && (
                   <Badge variant={decodedInput.standard === 'ERC-20' ? 'brand' : 'warning'}>
                     {decodedInput.methodName}
@@ -646,72 +676,111 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                   <>
                     <Badge variant="info">{decodedCall.name}</Badge>
                     {transaction.targetContract?.contractName && (
-                      <span className="text-xs text-gray-500 font-mono">via {transaction.targetContract.contractName}</span>
+                      <span className="text-xs text-text-muted font-mono">via {transaction.targetContract.contractName}</span>
                     )}
                   </>
                 )}
               </div>
             </div>
-            <div className="p-4 sm:p-6">
-              {decodedInput && (
-                <p className="text-xs text-gray-500 font-mono mb-2">
-                  {decodedInput.standard} · {decodedInput.methodName}
+            {/* Whole body of the card is a native <details> disclosure
+                so the only visible row when collapsed is the toggle
+                row directly under the header - no empty padded body
+                creating dead space, no stray divider hanging above
+                the toggle. Decoded args, raw hex, and the verify
+                nudge all live inside the expanded region. Order
+                preserved: decoded view (if any) renders first, raw
+                hex below, matching the "default to decoded when
+                verified" intent. */}
+            <details className="group">
+              <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center gap-2 px-4 sm:px-6 py-3 hover:bg-white/5 transition-colors">
+                {/* Heroicons-style chevron-right; rotates 90° to point
+                    down when the disclosure is open. currentColor so
+                    the surrounding text-text-secondary / group-hover accent
+                    apply. */}
+                <svg
+                  className="w-4 h-4 text-text-secondary group-hover:text-accent group-open:rotate-90 transition-transform duration-150"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  aria-hidden="true"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                </svg>
+                <span className="text-sm text-text-secondary group-hover:text-text-primary">More Details</span>
+                <span className="text-xs text-text-muted">
+                  ({transaction.input.length.toLocaleString('en-US')} chars)
+                </span>
+              </summary>
+              <div className="px-4 sm:px-6 py-4 border-t border-border">
+                {decodedInput && (
+                  <p className="text-xs text-text-muted font-mono mb-2">
+                    {decodedInput.standard} · {decodedInput.methodName}
+                  </p>
+                )}
+                {decodedCall && (
+                  <>
+                    <p className="text-xs text-text-muted font-mono mb-2">{decodedCall.signature}</p>
+                    <div className="space-y-1 mb-3">
+                      {decodedCall.args.map((arg) => (
+                        <div key={arg.label} className="text-xs flex flex-wrap items-start gap-2">
+                          <span className="text-text-secondary font-mono min-w-[80px]">{arg.label}:</span>
+                          {arg.type === 'address' && arg.value ? (
+                            <Link
+                              href={`/address/${arg.value}`}
+                              className="text-text-primary hover:text-accent transition-colors break-all font-mono"
+                            >
+                              {arg.value}
+                            </Link>
+                          ) : arg.type === 'bool' ? (
+                            <Badge variant={arg.value === 'true' ? 'success' : 'error'}>{arg.value}</Badge>
+                          ) : arg.type === 'uint256' ? (
+                            <span className="text-text-primary font-mono break-all">
+                              {(() => { try { return BigInt(arg.value || '0').toLocaleString('en-US'); } catch { return arg.value || ''; } })()}
+                            </span>
+                          ) : arg.type === 'uint256[]' ? (
+                            <span className="text-text-primary font-mono break-all">
+                              {arg.values && arg.values.length > 0
+                                ? arg.values.map((v) => { try { return BigInt(v).toLocaleString('en-US'); } catch { return v; } }).join(', ')
+                                : '[]'}
+                            </span>
+                          ) : arg.type === 'string' ? (
+                            <span className="text-text-primary break-all">{arg.value}</span>
+                          ) : (
+                            <span className="text-text-primary font-mono break-all">{arg.value}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] text-text-muted uppercase tracking-wide">
+                    Raw input data (hex)
+                  </span>
+                  <CopyButton value={transaction.input} label="Copy raw input" size="sm" />
+                </div>
+                <p className="font-mono text-text-secondary break-all text-xs leading-relaxed">
+                  {transaction.input}
                 </p>
-              )}
-              {decodedCall && (
-                <>
-                  <p className="text-xs text-gray-500 font-mono mb-2">{decodedCall.signature}</p>
-                  <div className="space-y-1 mb-3">
-                    {decodedCall.args.map((arg) => (
-                      <div key={arg.label} className="text-xs flex flex-wrap items-start gap-2">
-                        <span className="text-gray-400 font-mono min-w-[80px]">{arg.label}:</span>
-                        {arg.type === 'address' && arg.value ? (
-                          <Link
-                            href={`/address/${arg.value}`}
-                            className="text-gray-200 hover:text-[#ffa729] transition-colors break-all font-mono"
-                          >
-                            {arg.value}
-                          </Link>
-                        ) : arg.type === 'bool' ? (
-                          <Badge variant={arg.value === 'true' ? 'success' : 'error'}>{arg.value}</Badge>
-                        ) : arg.type === 'uint256' ? (
-                          <span className="text-gray-200 font-mono break-all">
-                            {(() => { try { return BigInt(arg.value || '0').toLocaleString('en-US'); } catch { return arg.value || ''; } })()}
-                          </span>
-                        ) : arg.type === 'uint256[]' ? (
-                          <span className="text-gray-200 font-mono break-all">
-                            {arg.values && arg.values.length > 0
-                              ? arg.values.map((v) => { try { return BigInt(v).toLocaleString('en-US'); } catch { return v; } }).join(', ')
-                              : '[]'}
-                          </span>
-                        ) : arg.type === 'string' ? (
-                          <span className="text-gray-200 break-all">{arg.value}</span>
-                        ) : (
-                          <span className="text-gray-200 font-mono break-all">{arg.value}</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-              <p className="font-mono text-gray-300 break-all text-xs leading-relaxed">{transaction.input}</p>
-              {/* Neither the well-known-token-selector decoder nor the
-                  ABI decoder produced a hit. If the target has a
-                  contractCode row but isn't verified, nudge users
-                  toward verification so future hits to this tx show
-                  a labelled method instead of raw hex. */}
-              {!decodedInput && !decodedCall && transaction.to && transaction.targetContract && !transaction.targetContract.verified && (
-                <p className="mt-2 text-[11px] text-gray-500">
-                  <Link
-                    href={`/verify-contract?address=${transaction.to}`}
-                    className="text-[#ffa729] hover:text-[#ffb84d] hover:underline"
-                  >
-                    Verify this contract
-                  </Link>
-                  {' '}to see the method name + labelled arguments instead of raw calldata.
-                </p>
-              )}
-            </div>
+                {/* Neither the well-known-token-selector decoder nor
+                    the ABI decoder produced a hit. If the target has
+                    a contractCode row but isn't verified, nudge users
+                    toward verification so future hits to this tx
+                    show a labelled method instead of raw hex. */}
+                {!decodedInput && !decodedCall && transaction.to && transaction.targetContract && !transaction.targetContract.verified && (
+                  <p className="mt-3 text-[11px] text-text-muted">
+                    <Link
+                      href={`/verify-contract?address=${transaction.to}`}
+                      className="text-accent hover:text-accent-hover hover:underline"
+                    >
+                      Verify this contract
+                    </Link>
+                    {' '}to see the method name + labelled arguments instead of raw calldata.
+                  </p>
+                )}
+              </div>
+            </details>
           </section>
         );
       })()}

@@ -14,6 +14,8 @@ backendAPI/main.exe
 backendAPI/.env.production
 backendAPI/.env.development
 backendAPI/verification/runner/node_modules
+# Host-specific compiler manifest (HYPC_COMPILERS); commit compilers.example.json instead
+backendAPI/verification/runner/compilers.json
 *.exe
 .DS_Store
 npm-debug.log*
@@ -61,6 +63,10 @@ QRL2MongoDB/rpc/logs/
 QRL2MongoDB/synchroniser/synchroniser
 QRL2MongoDB/zsyncer.log
 QRL2MongoDB/synchroniser/logs/zond_sync.log
+# Runtime log directories created wherever the syncer/tests run
+QRL2MongoDB/**/logs/
+QRL2MongoDB/logs/
+backendAPI/syncer
 
 # Local operating notes; never tracked (private infrastructure detail)
 CLAUDE.md

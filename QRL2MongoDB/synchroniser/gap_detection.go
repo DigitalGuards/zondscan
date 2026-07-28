@@ -166,6 +166,21 @@ func fillGaps(gaps []string) int {
 			continue
 		}
 
+		// Idempotency guard: skip both the block insert and ProcessTransactions
+		// together if the block already exists. A "gap" can close between
+		// detection and fill (the single-block loop retries failed blocks, the
+		// batch path may overlap), and ProcessTransactions has no txHash unique
+		// index, so re-running it would duplicate transfer + transactionByAddress
+		// rows. InsertBlockDocument alone already no-ops on an existing block;
+		// the guard keeps the transaction processing consistent with it.
+		if db.BlockExists(blockNum) {
+			configs.Logger.Info("Gap block already exists, skipping insert and transaction processing",
+				zap.String("block", blockNum))
+			clearFailedBlock(blockNum)
+			filled++
+			continue
+		}
+
 		// Insert the block
 		db.UpdateTransactionStatuses(data)
 		db.InsertBlockDocument(*data)
@@ -203,11 +218,12 @@ func detectAndFillGapsPeriodically() {
 		return
 	}
 
-	// Check the last MaxGapDetectionBlocks blocks for gaps
+	// Check the last MaxGapDetectionBlocks blocks for gaps. Clamp to 0, not 1:
+	// the genesis block is a fillable gap like any other.
 	lastKnownNum := utils.HexToInt(lastKnown).Int64()
 	fromNum := lastKnownNum - MaxGapDetectionBlocks
-	if fromNum < 1 {
-		fromNum = 1
+	if fromNum < 0 {
+		fromNum = 0
 	}
 
 	fromBlock := utils.IntToHex(int(fromNum))

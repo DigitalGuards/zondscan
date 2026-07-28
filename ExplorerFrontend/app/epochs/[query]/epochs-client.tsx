@@ -64,8 +64,8 @@ export default function EpochsClient({ initialData, initialPage }: EpochsClientP
 
   if (isError) {
     return (
-      <div className="p-4 sm:p-8 max-w-6xl mx-auto">
-        <h1 className="text-xl sm:text-2xl font-bold mb-4 text-[#ffa729]">Epochs</h1>
+      <div className="page-content py-4 sm:py-6 lg:py-8">
+        <h1 className="section-title mb-4">Epochs</h1>
         <div className="bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-xl">
           <p className="font-bold">Error:</p>
           <p className="text-sm">{error instanceof Error ? error.message : 'Failed to load epochs'}</p>
@@ -75,41 +75,41 @@ export default function EpochsClient({ initialData, initialPage }: EpochsClientP
   }
 
   return (
-    <div className="p-4 sm:p-8 max-w-6xl mx-auto">
-      <h1 className="text-xl sm:text-2xl font-bold mb-4 text-[#ffa729]">Epochs</h1>
+    <div className="page-content py-4 sm:py-6 lg:py-8">
+      <h1 className="section-title mb-4">Epochs</h1>
 
       <div className="mb-6">
         <SearchBar />
       </div>
 
-      <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden mb-6">
+      <div className="card-simple overflow-hidden mb-6">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-[#2a2a2a]">
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Epoch</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Time</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider">Status</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden sm:table-cell">Validators</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden sm:table-cell">Active</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-gray-600 uppercase tracking-wider hidden md:table-cell">Total Staked</th>
+              <tr className="border-b border-border">
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Epoch</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Time</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Status</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">Validators</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">Active</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:table-cell">Total Staked</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 Array.from({ length: ITEMS_PER_PAGE }).map((_, i) => (
-                  <tr key={i} className="border-b border-[#2a2a2a] last:border-b-0">
-                    <td className="px-4 py-3"><div className="h-4 w-12 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                    <td className="px-4 py-3"><div className="h-4 w-16 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                    <td className="px-4 py-3"><div className="h-4 w-16 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                    <td className="px-4 py-3 hidden sm:table-cell"><div className="h-4 w-10 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                    <td className="px-4 py-3 hidden sm:table-cell"><div className="h-4 w-10 bg-[#2a2a2a] rounded animate-pulse" /></td>
-                    <td className="px-4 py-3 hidden md:table-cell"><div className="h-4 w-24 bg-[#2a2a2a] rounded animate-pulse" /></td>
+                  <tr key={i} className="border-b border-border last:border-b-0">
+                    <td className="px-4 py-3"><div className="h-4 w-12 skeleton" /></td>
+                    <td className="px-4 py-3"><div className="h-4 w-16 skeleton" /></td>
+                    <td className="px-4 py-3"><div className="h-4 w-16 skeleton" /></td>
+                    <td className="px-4 py-3 hidden sm:table-cell"><div className="h-4 w-10 skeleton" /></td>
+                    <td className="px-4 py-3 hidden sm:table-cell"><div className="h-4 w-10 skeleton" /></td>
+                    <td className="px-4 py-3 hidden md:table-cell"><div className="h-4 w-24 skeleton" /></td>
                   </tr>
                 ))
               ) : !data?.epochs?.length ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
+                  <td colSpan={6} className="px-4 py-12 text-center text-text-muted">
                     No epoch data available yet. The explorer is still syncing.
                   </td>
                 </tr>
@@ -117,24 +117,24 @@ export default function EpochsClient({ initialData, initialPage }: EpochsClientP
                 data.epochs.map((epoch) => (
                   <tr
                     key={epoch.epoch}
-                    className="border-b border-[#2a2a2a] last:border-b-0 hover:bg-[#252525] transition-colors"
+                    className="border-b border-border last:border-b-0 hover:bg-surface transition-colors"
                   >
                     <td className="px-4 py-3">
-                      <Link href={`/epoch/${epoch.epoch}`} className="text-[#ffa729] hover:text-[#ffb954] hover:underline font-medium tabular-nums">
+                      <Link href={`/epoch/${epoch.epoch}`} className="text-accent hover:text-accent-hover hover:underline font-medium tabular-nums">
                         {formatNumberWithCommas(epoch.epoch)}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-gray-400 tabular-nums">{timeAgo(epoch.timestamp)}</td>
+                    <td className="px-4 py-3 text-text-secondary tabular-nums">{timeAgo(epoch.timestamp)}</td>
                     <td className="px-4 py-3">
                       <StatusBadge status={epoch.status} />
                     </td>
-                    <td className="px-4 py-3 text-gray-300 tabular-nums hidden sm:table-cell">
+                    <td className="px-4 py-3 text-text-secondary tabular-nums hidden sm:table-cell">
                       {formatNumberWithCommas(epoch.validatorsCount.toString())}
                     </td>
-                    <td className="px-4 py-3 text-gray-300 tabular-nums hidden sm:table-cell">
+                    <td className="px-4 py-3 text-text-secondary tabular-nums hidden sm:table-cell">
                       {formatNumberWithCommas(epoch.activeCount.toString())}
                     </td>
-                    <td className="px-4 py-3 text-gray-400 tabular-nums hidden md:table-cell">
+                    <td className="px-4 py-3 text-text-secondary tabular-nums hidden md:table-cell">
                       {formatStaked(epoch.totalStaked)}
                     </td>
                   </tr>

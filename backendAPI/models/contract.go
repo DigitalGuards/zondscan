@@ -34,6 +34,11 @@ type ContractInfo struct {
 	HasERC165     bool   `json:"hasERC165,omitempty" bson:"hasERC165,omitempty"`
 	BaseURI       string `json:"baseURI,omitempty" bson:"baseURI,omitempty"`
 
+	// Set by the syncer for contracts baked into the genesis allocation
+	// (no creation transaction exists). Pass-through so the frontend can
+	// label them; mirror QRL2MongoDB/models/contract.go.
+	GenesisContract bool `json:"genesisContract,omitempty" bson:"genesisContract,omitempty"`
+
 	// Collection-level off-chain metadata (Phase 3a). Mirrors
 	// QRL2MongoDB/models/contract.go. Written by the syncer's metadata
 	// fetcher service; the backend holds them for read-through to clients.

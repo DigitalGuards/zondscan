@@ -2,18 +2,7 @@
 const nextConfig = {
   distDir: 'build',
   output: 'standalone',
-  // Turbopack configuration (empty for now, may need buffer polyfill in future)
   turbopack: {},
-  webpack: (config, { isServer }) => {
-    if (!isServer) {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        buffer: require.resolve('buffer/'),
-      };
-    }
-    return config;
-  },
-  transpilePackages: ['buffer'],
   env: {
     HANDLER_URL: process.env.HANDLER_URL,
     DOMAIN_NAME: process.env.DOMAIN_NAME,
@@ -45,6 +34,25 @@ const nextConfig = {
   // Enable experimental optimizations
   experimental: {
     optimizePackageImports: ['@visx/axis', '@visx/shape', '@visx/scale', '@visx/group'],
+  },
+  // Baseline security headers applied to every route. A Content-Security-Policy
+  // is intentionally NOT set here: the app loads TradingView from
+  // s3.tradingview.com, Cloudflare Turnstile, and inline schema.org JSON-LD
+  // scripts, so a wrong CSP would break the site. CSP is deferred to a
+  // dedicated pass that can build and verify the allowlist in isolation.
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+        ],
+      },
+    ];
   },
   // Proxy /api/* requests to the backend API server
   async rewrites() {

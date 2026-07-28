@@ -1,100 +1,137 @@
 'use client';
 
 import React, { useState } from 'react';
-import { smallestUnitToDecimal, decimalToSmallestUnit } from '../lib/helpers';
+import { convertUnits, NATIVE_UNIT } from '../lib/helpers';
+import type { ConvertibleUnit } from '../lib/helpers';
+
+const UNITS: ConvertibleUnit[] = ['Quanta', 'Shor', 'Planck'];
+
+const INPUT_CLASSES =
+  'w-full px-4 py-3 bg-background text-text-primary rounded-lg border border-border focus:outline-none focus:border-accent transition-all duration-300';
+
+// The Quanta option label reuses NATIVE_UNIT so a unit rename stays one-line.
+function unitLabel(unit: ConvertibleUnit): string {
+  return unit === 'Quanta' ? NATIVE_UNIT : unit;
+}
+
+// Shown when the input is a valid number but has more fractional digits
+// than the source unit can represent (convertUnits returns null).
+const FRACTION_ERRORS: Record<ConvertibleUnit, string> = {
+  Quanta: `${NATIVE_UNIT} supports at most 18 decimal places`,
+  Shor: 'Shor supports at most 9 decimal places',
+  Planck: 'Planck is indivisible',
+};
+
+// Selects only ever offer the three known units; fall back to Quanta so
+// the value narrows to ConvertibleUnit without a type assertion.
+function parseUnit(value: string): ConvertibleUnit {
+  return value === 'Shor' || value === 'Planck' ? value : 'Quanta';
+}
 
 function Converter(): JSX.Element {
-  const [quanta, setQuanta] = useState("");
-  const [shor, setShor] = useState("");
-  const [error, setError] = useState("");
+  const [amount, setAmount] = useState('');
+  const [fromUnit, setFromUnit] = useState<ConvertibleUnit>('Quanta');
+  const [toUnit, setToUnit] = useState<ConvertibleUnit>('Shor');
 
-  const handleChangeShors = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    const value = e.target.value;
-    if (value === '') {
-      setError('');
-      setShor('');
-      setQuanta('');
-      return;
-    }
-    if (!/^\d+$/.test(value)) {
-      setError("Invalid Input: Enter a whole number (Shor is indivisible)");
-    } else {
-      setError('');
-      setShor(value);
-      setQuanta(smallestUnitToDecimal(value, 18));
-    }
-  };
+  // Keep the raw string in state and derive result + error every render:
+  // keystrokes are never swallowed, invalid input just surfaces an error.
+  const trimmed = amount.trim();
+  const result = trimmed === '' ? '' : convertUnits(trimmed, fromUnit, toUnit);
+  const isPlainNumber = /^(\d+\.?\d*|\.\d+)$/.test(trimmed);
+  const error =
+    trimmed === '' || result !== null
+      ? ''
+      : isPlainNumber
+        ? FRACTION_ERRORS[fromUnit]
+        : 'Invalid Input: Enter a valid number';
 
-  const handleChangeQuanta = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    const value = e.target.value;
-    if (value === '') {
-      setError('');
-      setShor('');
-      setQuanta('');
-      return;
-    }
-    if (!/^\d*\.?\d*$/.test(value) || value === '.') {
-      setError("Invalid Input: Enter a valid number");
-    } else {
-      setError('');
-      setQuanta(value);
-      setShor(decimalToSmallestUnit(value, 18));
-    }
+  const handleSwap = (): void => {
+    setFromUnit(toUnit);
+    setToUnit(fromUnit);
   };
 
   return (
-    <div className="max-w-[1200px] mx-auto p-8">
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
       <div className="flex flex-col items-center justify-center">
-        <h2 className="text-2xl font-bold mb-8 text-[#ffa729]">Unit Converter</h2>
-        <div className="w-full max-w-md bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] p-8 rounded-lg border border-[#3d3d3d] shadow-xl">
+        <h2 className="section-title mb-8">Unit Converter</h2>
+        <div className="w-full max-w-md card p-8">
           <div className="space-y-6">
-            {/* Quanta Input */}
+            {/* Amount Input */}
             <div>
-              <label htmlFor="quanta-input" className="block text-sm font-medium text-gray-300 mb-2">Quanta (QRL)</label>
-              <div className="relative">
-                <input
-                  id="quanta-input"
-                  type="text"
-                  value={quanta}
-                  onChange={handleChangeQuanta}
-                  placeholder="Enter amount in Quanta"
-                  className="w-full px-4 py-3 bg-[#1a1a1a] text-white rounded-lg border border-[#3d3d3d] focus:outline-none focus:border-[#ffa729] transition-all duration-300"
-                />
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <span className="text-gray-400">QRL</span>
-                </div>
+              <label htmlFor="amount-input" className="block text-sm font-medium text-text-secondary mb-2">Amount</label>
+              <input
+                id="amount-input"
+                type="text"
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder={`Enter amount in ${unitLabel(fromUnit)}`}
+                className={INPUT_CLASSES}
+              />
+            </div>
+
+            {/* Unit Selects + Swap */}
+            <div className="flex items-end gap-3">
+              <div className="flex-1">
+                <label htmlFor="from-unit" className="block text-sm font-medium text-text-secondary mb-2">From</label>
+                <select
+                  id="from-unit"
+                  value={fromUnit}
+                  onChange={(e) => setFromUnit(parseUnit(e.target.value))}
+                  className={INPUT_CLASSES}
+                >
+                  {UNITS.map((unit) => (
+                    <option key={unit} value={unit}>{unitLabel(unit)}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={handleSwap}
+                aria-label="Swap units"
+                className="p-3 rounded-lg border border-border text-accent hover:border-accent hover:bg-background transition-all duration-300"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                </svg>
+              </button>
+              <div className="flex-1">
+                <label htmlFor="to-unit" className="block text-sm font-medium text-text-secondary mb-2">To</label>
+                <select
+                  id="to-unit"
+                  value={toUnit}
+                  onChange={(e) => setToUnit(parseUnit(e.target.value))}
+                  className={INPUT_CLASSES}
+                >
+                  {UNITS.map((unit) => (
+                    <option key={unit} value={unit}>{unitLabel(unit)}</option>
+                  ))}
+                </select>
               </div>
             </div>
 
-            {/* Conversion Arrow */}
-            <div className="flex justify-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#ffa729]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-              </svg>
-            </div>
-
-            {/* Shor Input */}
+            {/* Result */}
             <div>
-              <label htmlFor="shor-input" className="block text-sm font-medium text-gray-300 mb-2">Shor</label>
+              <label htmlFor="result-output" className="block text-sm font-medium text-text-secondary mb-2">Result</label>
               <div className="relative">
                 <input
-                  id="shor-input"
+                  id="result-output"
                   type="text"
-                  value={shor}
-                  onChange={handleChangeShors}
-                  placeholder="Enter amount in Shor"
-                  className="w-full px-4 py-3 bg-[#1a1a1a] text-white rounded-lg border border-[#3d3d3d] focus:outline-none focus:border-[#ffa729] transition-all duration-300"
+                  readOnly
+                  value={result ?? ''}
+                  placeholder="0"
+                  className={`${INPUT_CLASSES} pr-20`}
                 />
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <span className="text-gray-400">Shor</span>
+                  <span className="text-text-secondary">{unitLabel(toUnit)}</span>
                 </div>
               </div>
             </div>
 
             {/* Error Message */}
             {error && (
-              <div className="p-4 bg-[#1a1a1a] rounded-lg border border-red-500/50">
-                <div className="flex items-center text-red-400">
+              <div className="p-4 bg-background rounded-lg border border-red-500/50">
+                <div className="flex items-center text-error">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
@@ -104,9 +141,12 @@ function Converter(): JSX.Element {
             )}
 
             {/* Info Box */}
-            <div className="mt-6 p-4 bg-[#1a1a1a] rounded-lg border border-[#3d3d3d]">
-              <p className="text-sm text-gray-400">
-                1 QRL = 1,000,000,000,000,000,000 Shor (10^18)
+            <div className="mt-6 p-4 bg-background rounded-lg border border-border">
+              <p className="text-sm text-text-secondary">
+                1 {NATIVE_UNIT} = 10^9 Shor = 10^18 Planck
+              </p>
+              <p className="text-sm text-text-secondary mt-1">
+                1 Shor = 10^9 Planck
               </p>
             </div>
           </div>

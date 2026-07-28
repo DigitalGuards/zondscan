@@ -10,7 +10,7 @@ async function getTransactions(page: string): Promise<TransactionsResponse> {
   try {
     const pageNum = parseInt(page, 10) || 1;
 
-    // Cache the response server-side for 10 s. Block time on QRL Zond is
+    // Cache the response server-side for 10 s. Block time on QRL 2.0 is
     // O(1 minute), so 10 s is well within a "freshness" SLA for a listing
     // page and lets ISR absorb concurrent traffic instead of hammering
     // the backend with one fetch per pageview. Drop the _t cache-buster
@@ -55,12 +55,14 @@ interface PageProps {
 export async function generateMetadata({ params }: { params: Promise<{ query: string }> }): Promise<Metadata> {
   const resolvedParams = await params;
   const pageNumber = resolvedParams.query || '1';
-  const canonicalUrl = `https://zondscan.com/transactions`;
-  
+  // Self-referencing canonical so pages 2+ stay indexable instead of all
+  // collapsing into the /transactions index page.
+  const canonicalUrl = `https://zondscan.com/transactions/${pageNumber}`;
+
   return {
     ...sharedMetadata,
     title: `Transactions - Page ${pageNumber} | ZondScan`,
-    description: `View all transactions on the Zond blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
+    description: `View all transactions on the QRL 2.0 blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
     alternates: {
       ...sharedMetadata.alternates,
       canonical: canonicalUrl,
@@ -68,7 +70,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     openGraph: {
       ...sharedMetadata.openGraph,
       title: `Transactions - Page ${pageNumber} | ZondScan`,
-      description: `View all transactions on the Zond blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
+      description: `View all transactions on the QRL 2.0 blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
       url: `https://zondscan.com/transactions/${pageNumber}`,
       siteName: 'ZondScan',
       type: 'website',
@@ -76,7 +78,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     twitter: {
       ...sharedMetadata.twitter,
       title: `Transactions - Page ${pageNumber} | ZondScan`,
-      description: `View all transactions on the Zond blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
+      description: `View all transactions on the QRL 2.0 blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
     },
   };
 }

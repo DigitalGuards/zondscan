@@ -11,20 +11,12 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-const (
-	DEFAULT_PAGE_SIZE  = 10
-	PENDING_COLLECTION = "pending_transactions"
-)
+const DEFAULT_PAGE_SIZE = 10
 
 func GetPendingTransactions(page, limit int) (*models.PaginatedPendingTransactions, error) {
-	if page < 1 {
-		page = 1
-	}
-	if limit < 1 {
-		limit = DEFAULT_PAGE_SIZE
-	}
+	page, limit = clampPage(page, limit, DEFAULT_PAGE_SIZE, 0)
 
-	collection := configs.GetCollection(configs.DB, PENDING_COLLECTION)
+	collection := configs.PendingTransactionsCollection
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -71,7 +63,7 @@ func GetPendingTransactions(page, limit int) (*models.PaginatedPendingTransactio
 }
 
 func GetPendingTransactionByHash(hash string) (*models.PendingTransaction, error) {
-	collection := configs.GetCollection(configs.DB, PENDING_COLLECTION)
+	collection := configs.PendingTransactionsCollection
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 

@@ -6,7 +6,7 @@ import { sharedMetadata } from '../lib/seo/metaData';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'Rich List | QRL Zond Explorer',
+  title: 'Rich List | ZondScan',
   description:
     'Explore the top wallets by balance on the Quantum Resistant Ledger Proof-of-Stake network. Discover which addresses hold the most value in our rich list.',
   alternates: {
@@ -15,14 +15,14 @@ export const metadata: Metadata = {
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'Rich List | QRL Zond Explorer',
+    title: 'Rich List | ZondScan',
     description:
       'Explore the top wallets by balance on the Quantum Resistant Ledger Proof-of-Stake network. Discover which addresses hold the most value in our rich list.',
     url: 'https://zondscan.com/richlist',
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'Rich List | QRL Zond Explorer',
+    title: 'Rich List | ZondScan',
     description:
       'Explore the top wallets by balance on the Quantum Resistant Ledger Proof-of-Stake network. Discover which addresses hold the most value in our rich list.',
   },
@@ -44,7 +44,7 @@ export default async function RichlistPage(): Promise<JSX.Element> {
   const data = await response.json();
   return (
     <main aria-labelledby="richlist-heading">
-      <h1 id="richlist-heading" className="sr-only">QRL Zond Rich List</h1>
+      <h1 id="richlist-heading" className="sr-only">QRL 2.0 Rich List</h1>
       <RichlistClient richlist={data.richlist ?? []} />
     </main>
   );

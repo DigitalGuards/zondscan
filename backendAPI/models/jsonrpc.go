@@ -12,16 +12,3 @@ type ZondUint64Version struct {
 	ID      int    `json:"id"`
 	Result  Result `json:"result"`
 }
-
-
-type Balance struct {
-	Jsonrpc string `json:"jsonrpc"`
-	ID      int    `json:"id"`
-	Result  string `json:"result"`
-	Error   Error  `json:"error"`
-}
-
-type Error struct {
-    Code    int    `json:"code"`
-    Message string `json:"message"`
-}

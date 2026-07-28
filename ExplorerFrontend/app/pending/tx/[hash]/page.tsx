@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import config from '../../../../config';
 import type { PendingTransaction } from '@/app/types';
 import { sharedMetadata } from '@/app/lib/seo/metaData';
+import { isTxHash } from '@/app/lib/helpers';
 import PendingTransactionView from './pending-transaction-view';
 
 interface PageProps {
@@ -22,7 +23,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     : hash;
   const canonicalUrl = `https://zondscan.com/pending/tx/${hash}`;
   const title = `Pending Transaction ${shortHash} | ZondScan`;
-  const description = `Track QRL Zond pending transaction ${shortHash}: mempool status, ETA to inclusion, gas price vs median, and decoded calldata.`;
+  const description = `Track QRL 2.0 pending transaction ${shortHash}: mempool status, ETA to inclusion, gas price vs median, and decoded calldata.`;
 
   return {
     ...sharedMetadata,
@@ -49,8 +50,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 function validateTransactionHash(hash: string): boolean {
-  const hashRegex = /^0x[0-9a-fA-F]{64}$/;
-  return hashRegex.test(hash);
+  return isTxHash(hash);
 }
 
 async function getTransactionStatus(hash: string): Promise<{
@@ -77,11 +77,11 @@ async function getTransactionStatus(hash: string): Promise<{
       blockNumber: tx.blockNumber,
       targetContract: response.data.targetContract,
     };
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error fetching transaction status:', error);
-    
+
     // If we got a 404, check if it exists in regular transactions
-    if (error.response?.status === 404) {
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
       try {
         const txResponse = await axios.get(`${config.handlerUrl}/tx/${hash}`);
         if (txResponse.data?.response) {
@@ -94,7 +94,7 @@ async function getTransactionStatus(hash: string): Promise<{
               blockNumber: tx.blockNumber?.toString(),
               accessList: [],
               blockHash: null,
-              chainId: '0x7e7e', // Zond chainId
+              chainId: '0x539', // QRL testnet v2 chainId (1337)
               from: tx.from || '',
               gas: tx.gas || '0x0',
               gasPrice: tx.gasPrice || '0x0',
@@ -124,7 +124,7 @@ function ErrorCard({ title, children }: { title: string; children: React.ReactNo
     <div className="container mx-auto px-4">
       <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg mt-6">
         <h2 className="text-red-500 font-semibold mb-2">{title}</h2>
-        <p className="text-gray-300">{children}</p>
+        <p className="text-text-secondary">{children}</p>
       </div>
     </div>
   );

@@ -26,3 +26,18 @@ func EnvMongoURI() string {
 
 	return os.Getenv("MONGOURI")
 }
+
+// ValidateEnv fail-fasts on missing required configuration before the server
+// starts serving. Without this, a missing MONGOURI surfaces only as a late
+// log.Fatal inside ConnectDB, and a missing NODE_URL silently defaults to
+// localhost in db.NodeRPC, masking a misconfiguration in production. Call
+// this once early in main. EnvMongoURI() loads the .env file as a side
+// effect, so calling it first ensures NODE_URL is populated from .env too.
+func ValidateEnv() {
+	if EnvMongoURI() == "" {
+		log.Fatal("MONGOURI is not set; set it in the environment or .env before starting")
+	}
+	if os.Getenv("NODE_URL") == "" {
+		log.Fatal("NODE_URL is not set; set it in the environment or .env before starting")
+	}
+}

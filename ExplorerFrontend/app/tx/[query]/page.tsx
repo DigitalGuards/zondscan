@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import TransactionView from './transaction-view';
 import type { TransactionDetails } from '@/app/types';
 import { sharedMetadata } from '@/app/lib/seo/metaData';
+import { isTxHash } from '@/app/lib/helpers';
 import config from '../../../config';
 
 interface PageProps {
@@ -22,7 +23,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     : txHash;
   const canonicalUrl = `https://zondscan.com/tx/${txHash}`;
   const title = `Transaction ${shortHash} | ZondScan`;
-  const description = `View detailed information for QRL Zond transaction ${shortHash}. See from / to, value, gas, decoded events, and contract calls.`;
+  const description = `View detailed information for QRL 2.0 transaction ${shortHash}. See from / to, value, gas, decoded events, and contract calls.`;
 
   return {
     ...sharedMetadata,
@@ -70,8 +71,7 @@ function isEmptyTransaction(txData: MaybeTxRecord): boolean {
 
 async function getTransaction(txHash: string): Promise<TransactionDetails> {
   // Validate transaction hash format
-  const hashRegex = /^0x[0-9a-fA-F]{64}$/;
-  if (!hashRegex.test(txHash)) {
+  if (!isTxHash(txHash)) {
     throw new Error('Invalid transaction hash format');
   }
 
@@ -152,13 +152,12 @@ export default async function TransactionPage({ params }: PageProps): Promise<JS
   const resolvedParams = await params;
   const txHash = resolvedParams.query;
 
-  const hashRegex = /^0x[0-9a-fA-F]{64}$/;
-  if (!hashRegex.test(txHash)) {
+  if (!isTxHash(txHash)) {
     return (
       <div className="container mx-auto px-4">
         <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg mt-6">
           <h2 className="text-red-500 font-semibold mb-2">Invalid Transaction Hash</h2>
-          <p className="text-gray-300">
+          <p className="text-text-secondary">
             The provided transaction hash is not in the correct format.
             Transaction hashes should start with &apos;0x&apos; followed by 64 hexadecimal characters.
           </p>
@@ -186,10 +185,10 @@ export default async function TransactionPage({ params }: PageProps): Promise<JS
       <div className="container mx-auto px-4">
         <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg mt-6">
           <h2 className="text-red-500 font-semibold mb-2">Transaction Not Found</h2>
-          <p className="text-gray-300">
+          <p className="text-text-secondary">
             The transaction could not be found. This could mean:
           </p>
-          <ul className="list-disc ml-6 mt-2 text-gray-300">
+          <ul className="list-disc ml-6 mt-2 text-text-secondary">
             <li>The transaction hash is incorrect</li>
             <li>The transaction has not been mined yet</li>
             <li>The transaction was dropped from the network</li>

@@ -55,14 +55,14 @@ export default function WriteContract({ contractData }: WriteContractProps): JSX
 
   if (!contractData.verified) {
     return (
-      <div className="rounded-lg border border-border bg-card-gradient p-4 text-sm text-gray-300">
+      <div className="rounded-lg border border-border bg-card-gradient p-4 text-sm text-text-secondary">
         Verify this contract first to enable Write interactions.
       </div>
     );
   }
   if (writeFns.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-card-gradient p-4 text-sm text-gray-300">
+      <div className="rounded-lg border border-border bg-card-gradient p-4 text-sm text-text-secondary">
         This contract has no state-changing functions to call.
       </div>
     );
@@ -72,8 +72,8 @@ export default function WriteContract({ contractData }: WriteContractProps): JSX
     <div className="space-y-3 md:space-y-4">
       <div className="rounded-lg border border-border bg-card-gradient p-3 md:p-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
         <div>
-          <div className="text-xs md:text-sm font-medium text-gray-200">Wallet pairing</div>
-          <div className="text-xs text-gray-400 mt-0.5">
+          <div className="text-xs md:text-sm font-medium text-text-primary">Wallet pairing</div>
+          <div className="text-xs text-text-secondary mt-0.5">
             Connect MyQRLWallet to sign and broadcast state-changing calls.
           </div>
         </div>
@@ -169,21 +169,21 @@ function WriteFunctionCard({
         aria-expanded={open}
         className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left"
       >
-        <span className="font-mono text-xs md:text-sm text-gray-200 break-all">
+        <span className="font-mono text-xs md:text-sm text-text-primary break-all">
           {sig}
           {fn.stateMutability === 'payable' && (
             <span className="ml-2 text-[10px] text-amber-300 align-middle">payable</span>
           )}
         </span>
-        <span className="text-xs text-gray-500">{open ? '–' : '+'}</span>
+        <span className="text-xs text-text-muted">{open ? '–' : '+'}</span>
       </button>
       {open && (
         <div className="border-t border-border p-3 space-y-3">
           {fn.inputs.map((input, i) => (
             <div key={i}>
-              <div className="text-xs text-gray-400 mb-1">
+              <div className="text-xs text-text-secondary mb-1">
                 {input.name ? `${input.name} ` : ''}
-                <span className="font-mono text-gray-500">({input.type})</span>
+                <span className="font-mono text-text-muted">({input.type})</span>
               </div>
               <input
                 value={values[i] ?? ''}
@@ -196,8 +196,8 @@ function WriteFunctionCard({
 
           {fn.stateMutability === 'payable' && (
             <div>
-              <div className="text-xs text-gray-400 mb-1">
-                value <span className="font-mono text-gray-500">(QRL)</span>
+              <div className="text-xs text-text-secondary mb-1">
+                value <span className="font-mono text-text-muted">(Quanta)</span>
               </div>
               <input
                 value={value}
@@ -212,7 +212,7 @@ function WriteFunctionCard({
             type="button"
             onClick={onWrite}
             disabled={disabled}
-            className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-accent text-black text-xs font-medium hover:bg-accent-hover transition-colors disabled:opacity-50"
+            className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-accent text-background text-xs font-medium hover:bg-accent-hover transition-colors disabled:opacity-50"
           >
             {loading ? 'Awaiting wallet…' : account ? 'Write' : 'Connect wallet to write'}
           </button>

@@ -12,6 +12,16 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+// PingDatabase verifies the MongoDB connection is reachable, using the
+// supplied context for the deadline. Used by the /health readiness probe so
+// route handlers don't reach into the configs package directly.
+func PingDatabase(ctx context.Context) error {
+	if configs.DB == nil {
+		return fmt.Errorf("database not initialized")
+	}
+	return configs.DB.Ping(ctx, nil)
+}
+
 func ReturnSingleBlock(block uint64) (models.ZondUint64Version, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -45,7 +55,7 @@ func GetLatestBlockFromSyncState() (string, error) {
 		BlockNumber string `bson:"block_number"`
 	}
 
-	err := configs.GetCollection(configs.DB, "sync_state").FindOne(ctx, primitive.D{{Key: "_id", Value: "last_synced_block"}}).Decode(&result)
+	err := configs.SyncStateCollection.FindOne(ctx, primitive.D{{Key: "_id", Value: "last_synced_block"}}).Decode(&result)
 	if err != nil {
 		return "", fmt.Errorf("failed to get sync state: %v", err)
 	}
@@ -102,13 +112,13 @@ func ReturnLatestBlocks(page int, limit int) ([]models.Result, error) {
 }
 
 // CountBlocksNetwork returns the total number of blocks. Uses
-// EstimatedDocumentCount (metadata read) rather than CountDocuments({}),
-// which is O(rows) on the blocks collection.
+// countDocumentsResilient (fast metadata read with an exact-count fallback when
+// the metadata reads 0, which it currently does on this deployment).
 func CountBlocksNetwork() (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	count, err := configs.BlocksCollection.EstimatedDocumentCount(ctx)
+	count, err := countDocumentsResilient(ctx, configs.BlocksCollection)
 	if err != nil {
 		return 0, err
 	}
@@ -120,7 +130,12 @@ func ReturnBlockSizes() ([]primitive.M, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	opts := options.Find().SetSort(primitive.D{{Key: "timestamp", Value: 1}})
+	// Cap the result set: averageBlockSize grows without bound as the syncer
+	// appends time-series rows, and this feeds a chart that only renders a
+	// finite window. 2000 points is well past what any chart shows.
+	opts := options.Find().
+		SetSort(primitive.D{{Key: "timestamp", Value: 1}}).
+		SetLimit(2000)
 
 	cursor, err := configs.BlockSizesCollection.Find(ctx, primitive.D{}, opts)
 	if err != nil {

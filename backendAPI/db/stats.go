@@ -4,12 +4,14 @@ import (
 	"backendAPI/configs"
 	"backendAPI/models"
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -19,7 +21,11 @@ func ReturnTotalCirculatingSupply() string {
 
 	var result models.CirculatingSupply
 
-	err := configs.TotalCirculatingSupplyCollection.FindOne(ctx, primitive.D{}).Decode(&result)
+	// Pin the read to the syncer's well-known document. An unfiltered
+	// FindOne could return the bootstrap seed doc (circulating "0") even
+	// after the syncer had written a real total under _id "totalBalance".
+	filter := bson.M{"_id": "totalBalance"}
+	err := configs.TotalCirculatingSupplyCollection.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
 		log.Printf("error fetching circulating supply: %v", err)
 		return ""
@@ -36,6 +42,32 @@ func getCoinGeckoData() (*models.CoinGecko, error) {
 	var result models.CoinGecko
 	err := configs.CoinGeckoCollection.FindOne(ctx, primitive.D{}).Decode(&result)
 	return &result, err
+}
+
+// MarketSnapshot bundles the three CoinGecko-derived values so a caller that
+// needs all of them (e.g. /overview) can fetch the single coingecko document
+// once instead of issuing three separate FindOne reads via GetMarketCap /
+// GetCurrentPrice / GetCurrentVolume.
+type MarketSnapshot struct {
+	MarketCapUSD float64
+	PriceUSD     float64
+	VolumeUSD    float64
+}
+
+// GetMarketSnapshot reads the coingecko document once and returns all three
+// values. On error it logs and returns a zero snapshot, matching the
+// individual getters' fallback behaviour.
+func GetMarketSnapshot() MarketSnapshot {
+	data, err := getCoinGeckoData()
+	if err != nil {
+		log.Printf("error fetching market snapshot: %v", err)
+		return MarketSnapshot{}
+	}
+	return MarketSnapshot{
+		MarketCapUSD: data.MarketCapUSD,
+		PriceUSD:     data.PriceUSD,
+		VolumeUSD:    data.VolumeUSD,
+	}
 }
 
 func GetMarketCap() float64 {
@@ -64,6 +96,41 @@ func GetCurrentVolume() float64 {
 		return 0
 	}
 	return data.VolumeUSD
+}
+
+// GetPriceChange24h returns the percent change between the stored price
+// closest to 24 hours ago and the given current price. Returns 0 when the
+// current price is unknown or there is no history old enough to compare
+// against, callers treat 0 as "no change data".
+func GetPriceChange24h(currentPrice float64) float64 {
+	if currentPrice <= 0 {
+		return 0
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Snapshots are written every ~30 min, so the oldest document inside
+	// the trailing 24h window is the closest one to 24 hours ago.
+	since := time.Now().Add(-24 * time.Hour)
+	opts := options.FindOne().SetSort(bson.D{{Key: "timestamp", Value: 1}})
+
+	var then models.PriceHistory
+	err := configs.PriceHistoryCollection.FindOne(ctx,
+		bson.M{"timestamp": bson.M{"$gte": since}}, opts).Decode(&then)
+	if err != nil {
+		// An empty window is expected on fresh deployments; anything else
+		// is a real database problem worth surfacing.
+		if !errors.Is(err, mongo.ErrNoDocuments) {
+			log.Printf("error fetching 24h price baseline: %v", err)
+		}
+		return 0
+	}
+	if then.PriceUSD <= 0 {
+		return 0
+	}
+
+	return (currentPrice - then.PriceUSD) / then.PriceUSD * 100
 }
 
 // GetPriceHistory returns historical price data for the given duration
@@ -95,7 +162,7 @@ func GetPriceHistory(interval string) ([]models.PriceHistory, error) {
 		limit = 1440 // ~30 min intervals for 30 days
 	case "all":
 		since = time.Time{} // Beginning of time
-		limit = 0           // No limit
+		limit = 5000        // Hard cap so an unbounded scan can't grow without limit
 	default:
 		// Default to 24h
 		since = now.Add(-24 * time.Hour)

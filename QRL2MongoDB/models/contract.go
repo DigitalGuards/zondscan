@@ -40,7 +40,7 @@ type ResultContract struct {
 // The verification fields at the bottom are written **only** by the
 // backendAPI verify endpoint (backendAPI/db/contract.go:MarkContractVerified).
 // The syncer treats them as opaque pass-through state and must never write
-// into them, see db/contracts.go:StoreContract for the field-scoped $set
+// into them, see db/contracts_store.go:StoreContract for the field-scoped $set
 // that enforces this invariant.
 //
 // Verification fields are mirrored in backendAPI/models/contract.go with
@@ -58,14 +58,18 @@ type ContractInfo struct {
 	CreatorAddress      string `bson:"creatorAddress" json:"creatorAddress"`
 	CreationTransaction string `bson:"creationTransaction" json:"creationTransaction"`
 	CreationBlockNumber string `bson:"creationBlockNumber" json:"creationBlockNumber"`
-	UpdatedAt           string `bson:"updatedAt" json:"updatedAt"`
+	// GenesisContract marks contracts whose code already exists at block 0;
+	// they have no creation transaction anywhere on chain. Written by the
+	// reprocess backfill only; latches true (see db/contracts_store.go).
+	GenesisContract bool   `bson:"genesisContract,omitempty" json:"genesisContract,omitempty"`
+	UpdatedAt       string `bson:"updatedAt" json:"updatedAt"`
 	// CustomERC20 properties
 	MaxSupply       string `bson:"maxSupply,omitempty" json:"maxSupply,omitempty"`
 	MaxWalletAmount string `bson:"maxWalletAmount,omitempty" json:"maxWalletAmount,omitempty"`
 	MaxTxLimit      string `bson:"maxTxLimit,omitempty" json:"maxTxLimit,omitempty"`
 
 	// NFT / multi-token classification, written exclusively by the syncer
-	// (see db/contracts.go:syncerOwnedSet). `tokenStandard` is one of
+	// (see db/contracts_store.go:syncerOwnedSet). `tokenStandard` is one of
 	// "ERC-20" / "ERC-721" / "ERC-1155" or empty for unclassified contracts.
 	// `hasERC165` records whether supportsInterface returned a well-formed
 	// answer, once true we skip re-probing the ERC-165 path. `baseURI` is
@@ -80,7 +84,7 @@ type ContractInfo struct {
 	// OpenSea-convention contractURI() getter; everything else is populated
 	// by the background metadata fetcher service after it resolves the URI
 	// and parses the JSON. Empty strings on all fields are the "not fetched"
-	// signal, the merge in db/contracts.go preserves any previously
+	// signal, the merge in db/contracts_store.go preserves any previously
 	// populated value if a later probe fails (C5 promote-only invariant).
 	//
 	// `MetadataImage` is stored as the gateway-resolved URL so the frontend
@@ -95,6 +99,11 @@ type ContractInfo struct {
 	MetadataExternalURL string `bson:"metadataExternalURL,omitempty" json:"metadataExternalURL,omitempty"`
 	MetadataFetchedAt   string `bson:"metadataFetchedAt,omitempty" json:"metadataFetchedAt,omitempty"`
 	MetadataFetchError  string `bson:"metadataFetchError,omitempty" json:"metadataFetchError,omitempty"`
+
+	// Retry scheduling for the metadata fetcher, mirrors the per-token
+	// fields on TokenMetadata. Cleared on a successful fetch.
+	MetadataRetryCount  int    `bson:"metadataRetryCount,omitempty" json:"-"`
+	MetadataNextRetryAt string `bson:"metadataNextRetryAt,omitempty" json:"-"`
 
 	// Source-verification fields, mirror backendAPI/models/contract.go.
 	// Written exclusively by the backend verify endpoint; the syncer
@@ -122,28 +131,4 @@ type ContractInfo struct {
 
 	AIExplanationRegenCount       int    `bson:"aiExplanationRegenCount,omitempty" json:"aiExplanationRegenCount,omitempty"`
 	AIExplanationRegenWindowStart string `bson:"aiExplanationRegenWindowStart,omitempty" json:"aiExplanationRegenWindowStart,omitempty"`
-}
-
-// LogsResponse represents the response from qrl_getLogs
-type LogsResponse struct {
-	Jsonrpc string     `json:"jsonrpc"`
-	ID      int        `json:"id"`
-	Result  []LogEntry `json:"result"`
-	Error   *struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-	} `json:"error,omitempty"`
-}
-
-// LogEntry represents a single log entry from qrl_getLogs
-type LogEntry struct {
-	Address          string   `json:"address"`
-	Topics           []string `json:"topics"`
-	Data             string   `json:"data"`
-	BlockNumber      string   `json:"blockNumber"`
-	TransactionHash  string   `json:"transactionHash"`
-	TransactionIndex string   `json:"transactionIndex"`
-	BlockHash        string   `json:"blockHash"`
-	LogIndex         string   `json:"logIndex"`
-	Removed          bool     `json:"removed"`
 }

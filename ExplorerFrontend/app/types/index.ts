@@ -21,6 +21,11 @@ export {
   type BlocksResponse,
 } from './block';
 
+// Epoch types
+export {
+  type EpochInfo,
+} from './epoch';
+
 // Address types
 export {
   type ContractData,
@@ -43,7 +48,6 @@ export {
   type DownloadBtnProps,
   type DownloadBtnInternalProps,
   type TransactionsListProps,
-  type TransactionCardProps,
   type PaginationProps,
   type PageProps,
 } from './components';

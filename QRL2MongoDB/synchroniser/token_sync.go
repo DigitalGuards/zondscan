@@ -16,8 +16,8 @@ import (
 
 // TokenSyncConfig holds configuration for token sync operations
 type TokenSyncConfig struct {
-	BatchSize      int
-	BatchDelayMs   int
+	BatchSize       int
+	BatchDelayMs    int
 	QueryTimeoutSec int
 }
 
@@ -70,8 +70,8 @@ func getBlocksWithTransactions(fromBlock, toBlock string, timeoutSec int) ([]str
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 
-	fromInt := db.HexToInt64(fromBlock)
-	toInt := db.HexToInt64(toBlock)
+	fromInt := utils.HexToInt64(fromBlock)
+	toInt := utils.HexToInt64(toBlock)
 
 	filter := bson.M{
 		"result.transactions.0": bson.M{"$exists": true},
@@ -207,6 +207,20 @@ func InitializeTokenCollections() error {
 		initErrors = append(initErrors, err)
 	} else {
 		configs.Logger.Info("Successfully initialized token transfers collection")
+
+		// Self-applying, idempotent backfill of blockNumberInt on legacy rows.
+		// Runs synchronously AFTER the index exists so the numeric sorts (and
+		// the backend, which sorts on the same field) order the full history
+		// correctly before the sync loop starts. Bounded by batched bulk
+		// writes; a second startup is a no-op once complete. A failure here is
+		// non-fatal: log it and continue, the field still populates for new
+		// rows at write time and the next restart retries the remaining rows.
+		backfillCtx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		if err := db.BackfillTokenTransferBlockNumberInt(backfillCtx); err != nil {
+			configs.Logger.Error("tokenTransfers blockNumberInt backfill failed; will retry on next restart",
+				zap.Error(err))
+		}
+		cancel()
 	}
 
 	// Initialize token balances collection

@@ -28,12 +28,13 @@ type ValidatorResponse struct {
 
 // Validator represents a single validator in the API response
 type Validator struct {
-	Index        string `json:"index"`        // Validator index
-	Address      string `json:"address"`      // Public key in hex format
-	Status       string `json:"status"`       // active, pending, exited, slashed
-	Age          int64  `json:"age"`          // Age in epochs
-	StakedAmount string `json:"stakedAmount"` // Amount staked
-	IsActive     bool   `json:"isActive"`     // Whether the validator is currently active
+	Index                    string `json:"index"`                    // Validator index
+	Address                  string `json:"address"`                  // Public key in hex format
+	WithdrawalCredentialsHex string `json:"withdrawalCredentialsHex"` // Withdrawal credentials in hex format
+	Status                   string `json:"status"`                   // active, pending, exited, slashed
+	Age                      int64  `json:"age"`                      // Age in epochs
+	StakedAmount             string `json:"stakedAmount"`             // Amount staked
+	IsActive                 bool   `json:"isActive"`                 // Whether the validator is currently active
 }
 
 // EpochInfo represents the current epoch state

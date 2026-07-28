@@ -18,7 +18,7 @@ export default function VerifiedBadge({ size = 'md', title = 'Source verified' }
     <span
       title={title}
       aria-label={title}
-      className={`inline-flex items-center gap-1 rounded-full border border-green-500/40 bg-green-500/10 text-green-400 font-medium ${sizing}`}
+      className={`inline-flex items-center gap-1 rounded-full border border-success/40 bg-success/10 text-success font-medium ${sizing}`}
     >
       <svg
         className={size === 'sm' ? 'h-2.5 w-2.5' : 'h-3 w-3'}

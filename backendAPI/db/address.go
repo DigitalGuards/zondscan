@@ -8,13 +8,13 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"strconv"
 	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func ReturnSingleAddress(query string) (models.Address, error) {
@@ -55,36 +55,116 @@ func ReturnSingleAddress(query string) (models.Address, error) {
 	return result, nil
 }
 
-func ReturnRichlist() []models.Address {
+func ReturnRichlist() ([]models.RichlistEntry, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	var addresses []models.Address
 	defer cancel()
 
-	projection := bson.D{
-		{Key: "id", Value: 1},
-		{Key: "balance", Value: 1},
+	// Contract detection joins contractCode by address instead of trusting
+	// addresses.isContract (known-poisoned data). Both collections store
+	// canonical Q+lowercase addresses and contractCode has a unique index
+	// on address, so the equality lookup is safe. A row only counts as a
+	// contract when at least one joined doc carries real bytecode
+	// (non-empty and not "0x", which guards failed deploys).
+	pipeline := []bson.M{
+		{"$sort": bson.M{"balance": -1}},
+		{"$limit": 50},
+		{"$lookup": bson.M{
+			"from":         "contractCode",
+			"localField":   "id",
+			"foreignField": "address",
+			"as":           "contract",
+		}},
+		{"$project": bson.M{
+			"_id":     0,
+			"id":      1,
+			"balance": 1,
+			"isContract": bson.M{"$gt": []interface{}{
+				bson.M{"$size": bson.M{"$filter": bson.M{
+					"input": "$contract",
+					"as":    "c",
+					"cond": bson.M{"$not": bson.M{"$in": []interface{}{
+						bson.M{"$ifNull": []interface{}{"$$c.contractCode", ""}},
+						[]interface{}{"", "0x"},
+					}}},
+				}}},
+				0,
+			}},
+		}},
 	}
 
-	opts := options.Find().
-		SetProjection(projection).
-		SetSort(bson.D{{Key: "balance", Value: -1}}).
-		SetLimit(50)
-
-	results, err := configs.AddressesCollections.Find(ctx, bson.D{}, opts)
+	cursor, err := configs.AddressesCollections.Aggregate(ctx, pipeline)
 	if err != nil {
+		// Early return: proceeding onto the nil cursor used to panic on
+		// every request whenever Mongo errored here.
 		log.Printf("error querying richlist: %v", err)
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var entries []models.RichlistEntry
+	if err := cursor.All(ctx, &entries); err != nil {
+		log.Printf("error decoding richlist: %v", err)
+		return nil, err
 	}
 
-	defer results.Close(ctx)
-	for results.Next(ctx) {
-		var singleAddress models.Address
-		if err = results.Decode(&singleAddress); err != nil {
-			log.Printf("error decoding richlist address: %v", err)
+	// Percent-of-supply prefers the precalculated circulating total (written
+	// by the syncer every 30 min, shared with /overview) over summing the
+	// whole addresses collection, which is O(N) per cache window. The
+	// aggregation stays as the fallback for fresh deployments where the
+	// total has not been written yet; on error the column degrades to 0
+	// rather than failing the whole richlist.
+	var total float64
+	if circulating := ReturnTotalCirculatingSupply(); circulating != "" {
+		if parsed, parseErr := strconv.ParseFloat(circulating, 64); parseErr == nil {
+			total = parsed
 		}
-		addresses = append(addresses, singleAddress)
+	}
+	if total <= 0 {
+		var sumErr error
+		total, sumErr = totalAddressBalance(ctx)
+		if sumErr != nil {
+			log.Printf("error summing total balance for richlist: %v", sumErr)
+		}
 	}
 
-	return addresses
+	for i := range entries {
+		if total > 0 {
+			entries[i].SupplyPercent = entries[i].Balance / total * 100
+		}
+		// One index-backed FindOne per row; the /richlist route caches the
+		// result for 30 s, so this runs at most once per cache window.
+		entries[i].FirstSeen = FirstSeen(entries[i].ID)
+	}
+
+	return entries, nil
+}
+
+// totalAddressBalance sums every address balance, the denominator for the
+// richlist's percent-of-supply column.
+func totalAddressBalance(ctx context.Context) (float64, error) {
+	pipeline := []bson.M{
+		{"$group": bson.M{"_id": nil, "total": bson.M{"$sum": "$balance"}}},
+	}
+
+	cursor, err := configs.AddressesCollections.Aggregate(ctx, pipeline)
+	if err != nil {
+		return 0, err
+	}
+	defer cursor.Close(ctx)
+
+	var row struct {
+		Total float64 `bson:"total"`
+	}
+	if cursor.Next(ctx) {
+		if err := cursor.Decode(&row); err != nil {
+			return 0, err
+		}
+	}
+	if err := cursor.Err(); err != nil {
+		return 0, err
+	}
+
+	return row.Total, nil
 }
 
 func ReturnRankAddress(address string) (int64, error) {

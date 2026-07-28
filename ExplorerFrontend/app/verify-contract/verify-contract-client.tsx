@@ -7,9 +7,17 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import config from '../../config';
 
+interface CompilerBuild {
+  buildId: string;
+  language: string;
+  default?: boolean;
+}
+
 interface CompilerInfo {
   language: string;
   buildId: string;
+  default?: string;
+  compilers?: CompilerBuild[];
 }
 
 interface VerifyEnqueueResponse {
@@ -34,9 +42,11 @@ const COMMON_LICENSES = ['MIT', 'GPL-3.0', 'Apache-2.0', 'BSD-2-Clause', 'BSD-3-
 
 /**
  * Client-side verify-contract form. Posts to /contract/verify and polls
- * /contract/verify/:jobId until terminal. Compiler-version selector is
- * intentionally absent, the backend supports exactly one pinned build
- * (read-only display).
+ * /contract/verify/:jobId until terminal. The compiler-version selector is
+ * populated from /contract/compiler-info; the user picks which configured
+ * Hyperion build to compile against (defaulting to the backend's default
+ * build). The byte-match only succeeds against the exact build the contract
+ * was deployed with, so offering the real list is what lets authors verify.
  */
 export default function VerifyContractClient(): JSX.Element {
   const searchParams = useSearchParams();
@@ -54,22 +64,38 @@ export default function VerifyContractClient(): JSX.Element {
 
   const [compilerInfo, setCompilerInfo] = useState<CompilerInfo | null>(null);
   const [compilerErr, setCompilerErr] = useState<string | null>(null);
+  const [selectedBuild, setSelectedBuild] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [job, setJob] = useState<VerificationJob | null>(null);
   const [alreadyVerified, setAlreadyVerified] = useState<string | null>(null);
 
-  // Fetch the pinned compiler build once on mount. If the backend doesn't
-  // expose it (503), surface that as a banner, submitting in that state
-  // will just 503 from the backend.
+  // Fetch the available compiler builds once on mount and preselect the
+  // backend's default. If the backend doesn't expose them (503), surface
+  // that as a banner, submitting in that state will just 503 from the
+  // backend.
   useEffect(() => {
     let cancelled = false;
     axios.get<CompilerInfo>(`${config.handlerUrl}/contract/compiler-info`)
-      .then(r => { if (!cancelled) setCompilerInfo(r.data); })
+      .then(r => {
+        if (cancelled) return;
+        setCompilerInfo(r.data);
+        setSelectedBuild(r.data.default || r.data.buildId || '');
+      })
       .catch(e => { if (!cancelled) setCompilerErr(extractAxiosError(e)); });
     return () => { cancelled = true; };
   }, []);
+
+  // Available builds, tolerant of an older single-build backend that only
+  // returns { language, buildId } (no `compilers` array).
+  const compilerBuilds: CompilerBuild[] = useMemo(() => {
+    if (!compilerInfo) return [];
+    if (compilerInfo.compilers && compilerInfo.compilers.length > 0) {
+      return compilerInfo.compilers;
+    }
+    return [{ buildId: compilerInfo.buildId, language: compilerInfo.language, default: true }];
+  }, [compilerInfo]);
 
   const isTerminal = job?.status === 'success' || job?.status === 'failed';
 
@@ -122,6 +148,7 @@ export default function VerifyContractClient(): JSX.Element {
         address: address.trim(),
         sourceCode,
         contractName: contractName.trim(),
+        compilerVersion: selectedBuild || undefined,
         optimizerEnabled,
         // Pass the raw optimizerRuns through, 0 is a legitimate
         // configuration distinct from the default, so don't fall back
@@ -152,14 +179,8 @@ export default function VerifyContractClient(): JSX.Element {
         </div>
       );
     }
-    if (!compilerInfo) return null;
-    return (
-      <div className="rounded-lg border border-border bg-card-gradient p-3 text-xs md:text-sm text-gray-300">
-        <div className="text-gray-400">Pinned compiler</div>
-        <div className="font-mono break-all">{compilerInfo.language} {compilerInfo.buildId}</div>
-      </div>
-    );
-  }, [compilerErr, compilerInfo]);
+    return null;
+  }, [compilerErr]);
 
   return (
     <div className="space-y-3 md:space-y-4">
@@ -176,7 +197,7 @@ export default function VerifyContractClient(): JSX.Element {
         <div className={`rounded-lg border p-3 text-xs md:text-sm ${
           job.status === 'success' ? 'border-green-500/40 bg-green-500/10 text-green-300' :
           job.status === 'failed' ? 'border-red-500/40 bg-red-500/10 text-red-300' :
-          'border-border bg-card-gradient text-gray-300'
+          'border-border bg-card-gradient text-text-secondary'
         }`}>
           <div className="font-medium">
             {job.status === 'pending' && 'Queued…'}
@@ -204,6 +225,32 @@ export default function VerifyContractClient(): JSX.Element {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-3 md:space-y-4">
+        {compilerBuilds.length > 0 && (
+          <Field
+            label="Compiler"
+            hint="Pick the Hyperion build your contract was compiled with - the byte-match only succeeds against that exact build."
+          >
+            {compilerBuilds.length === 1 ? (
+              <div className="form-input font-mono text-xs break-all bg-transparent">
+                {compilerBuilds[0].language} {compilerBuilds[0].buildId}
+              </div>
+            ) : (
+              <select
+                value={selectedBuild}
+                onChange={e => setSelectedBuild(e.target.value)}
+                disabled={submitting}
+                className="form-input font-mono text-xs"
+              >
+                {compilerBuilds.map(b => (
+                  <option key={b.buildId} value={b.buildId}>
+                    {b.language} {b.buildId}{b.default ? ' (default)' : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+        )}
+
         <Field label="Contract address (Q…)">
           <input
             required
@@ -226,7 +273,7 @@ export default function VerifyContractClient(): JSX.Element {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
           <Field label="Optimizer">
-            <label className="flex items-center gap-2 text-sm text-gray-200">
+            <label className="flex items-center gap-2 text-sm text-text-primary">
               <input
                 type="checkbox"
                 checked={optimizerEnabled}
@@ -302,7 +349,7 @@ export default function VerifyContractClient(): JSX.Element {
         <button
           type="submit"
           disabled={submitting || (job?.status === 'pending' || job?.status === 'compiling')}
-          className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-accent text-black text-sm font-medium hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-accent text-background text-sm font-medium hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {submitting ? 'Submitting…' : 'Verify & Publish'}
         </button>
@@ -314,9 +361,9 @@ export default function VerifyContractClient(): JSX.Element {
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-xs md:text-sm text-gray-400 mb-1">{label}</div>
+      <div className="text-xs md:text-sm text-text-secondary mb-1">{label}</div>
       {children}
-      {hint && <div className="text-[11px] text-gray-500 mt-1">{hint}</div>}
+      {hint && <div className="text-[11px] text-text-muted mt-1">{hint}</div>}
     </div>
   );
 }

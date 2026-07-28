@@ -134,6 +134,7 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
       }
     },
     refetchInterval: 5000,
+    refetchIntervalInBackground: false,
     enabled: statusQuery.data?.status === 'pending',
   });
 
@@ -201,7 +202,7 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
       <div className="container mx-auto px-4">
         <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg mt-6">
           <h2 className="text-red-500 font-semibold mb-2">Transaction Not Found</h2>
-          <p className="text-gray-300">
+          <p className="text-text-secondary">
             This transaction is no longer in the mempool. It may have been dropped or replaced.
             Please check if a transaction with a higher gas price was submitted with the same nonce.
           </p>
@@ -211,21 +212,21 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
   }
 
   return (
-    <div className="p-4 sm:p-8 max-w-6xl mx-auto">
+    <div className="py-4 sm:py-6 lg:py-8">
       <Breadcrumbs items={[
         { label: 'Pending', href: '/pending/1' },
         { label: `${pendingTx.hash.slice(0, 10)}...${pendingTx.hash.slice(-6)}` },
       ]} />
 
       {/* Main Details Card */}
-      <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
+      <div className="card overflow-hidden mb-6">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-[#3d3d3d]">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border">
           <div className="flex items-center gap-3">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-[#ffa729]">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-accent">
               <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
             </svg>
-            <h1 className="text-xl sm:text-2xl font-bold text-[#ffa729]">Pending Transaction</h1>
+            <h1 className="section-title">Pending Transaction</h1>
             {decodedTransfer && (() => {
               const b = badgeForDecoded(decodedTransfer);
               return <Badge variant={b.variant}>{b.text}</Badge>;
@@ -238,7 +239,7 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
         </div>
 
         {/* Live status strip */}
-        <div className="px-4 sm:px-6 py-3 border-b border-[#3d3d3d] bg-[#1a1a1a]/40">
+        <div className="px-4 sm:px-6 py-3 border-b border-border bg-background/40">
           <div className="flex flex-wrap items-center gap-2 mb-1">
             <Badge variant="warning">Pending for {formatElapsed(elapsedSec)}</Badge>
             {etaRemaining !== null && (
@@ -253,7 +254,7 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
               <Badge variant={gasCompare.variant}>Gas: {gasCompare.label}</Badge>
             )}
           </div>
-          <p className="text-[11px] text-gray-500">
+          <p className="text-[11px] text-text-muted">
             Auto-refreshing every 5s, this page will navigate to the confirmed transaction once it&apos;s included in a block.
           </p>
         </div>
@@ -272,7 +273,7 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
           <DetailRow label="From" mono>
             <Link
               href={`/address/${pendingTx.from}`}
-              className="text-gray-200 hover:text-[#ffa729] transition-colors break-all"
+              className="text-text-primary hover:text-accent transition-colors break-all"
             >
               {pendingTx.from}
             </Link>
@@ -281,18 +282,18 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
             {pendingTx.to ? (
               <Link
                 href={`/address/${pendingTx.to}`}
-                className="text-gray-200 hover:text-[#ffa729] transition-colors break-all"
+                className="text-text-primary hover:text-accent transition-colors break-all"
               >
                 {pendingTx.to}
               </Link>
             ) : (
-              <span className="text-gray-400">Contract Creation</span>
+              <span className="text-text-secondary">Contract Creation</span>
             )}
-            {isTokenTransfer && <span className="text-xs text-gray-500 ml-2">(Contract)</span>}
+            {isTokenTransfer && <span className="text-xs text-text-muted ml-2">(Contract)</span>}
           </DetailRow>
           <DetailRow label="Value">
-            <span className="font-semibold text-[#ffa729]">{formattedValue}</span>
-            <span className="text-gray-500 ml-1">{unit}</span>
+            <span className="font-semibold text-accent">{formattedValue}</span>
+            <span className="text-text-muted ml-1">{unit}</span>
           </DetailRow>
           <DetailRow label="Gas Price">{formattedGasPrice} Shor</DetailRow>
           <DetailRow label="Gas Limit">{pendingTx.gas}</DetailRow>
@@ -309,13 +310,13 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
         const isApproval = decodedTransfer.methodName === 'setApprovalForAll';
         const isBatch = decodedTransfer.methodName === 'safeBatchTransferFrom';
         return (
-          <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
-            <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
+          <div className="card overflow-hidden mb-6">
+            <div className="px-4 sm:px-6 py-4 border-b border-border">
               <div className="flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#ffa729]">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-accent">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
                 </svg>
-                <h2 className="text-[15px] font-semibold text-[#ffa729]">{headerLabelFor(decodedTransfer)}</h2>
+                <h2 className="text-[15px] font-display font-semibold text-text-primary">{headerLabelFor(decodedTransfer)}</h2>
                 <Badge variant={b.variant}>{b.text}</Badge>
               </div>
             </div>
@@ -330,7 +331,7 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
                   <DetailRow label="Operator" mono>
                     <Link
                       href={`/address/${decodedTransfer.operator}`}
-                      className="text-[#ffa729] hover:text-[#ffb84d] transition-colors break-all"
+                      className="text-accent hover:text-accent-hover transition-colors break-all"
                     >
                       {decodedTransfer.operator}
                     </Link>
@@ -348,7 +349,7 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
                 <DetailRow label="From" mono>
                   <Link
                     href={`/address/${decodedTransfer.from}`}
-                    className="text-gray-200 hover:text-[#ffa729] transition-colors break-all"
+                    className="text-text-primary hover:text-accent transition-colors break-all"
                   >
                     {decodedTransfer.from}
                   </Link>
@@ -358,7 +359,7 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
                 <DetailRow label={decodedTransfer.from ? 'To' : 'Recipient'} mono>
                   <Link
                     href={`/address/${decodedTransfer.to}`}
-                    className="text-[#ffa729] hover:text-[#ffb84d] transition-colors break-all"
+                    className="text-accent hover:text-accent-hover transition-colors break-all"
                   >
                     {decodedTransfer.to}
                   </Link>
@@ -369,19 +370,19 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
               {decodedTransfer.standard === 'ERC-20' && decodedTransfer.amount && (
                 <DetailRow label="Amount">
                   <span className="font-semibold">{formatTokenAmount(decodedTransfer.amount, 18)}</span>
-                  <span className="text-gray-500 ml-2 text-xs">(raw: {decodedTransfer.amount}, assumes 18 decimals)</span>
+                  <span className="text-text-muted ml-2 text-xs">(raw: {decodedTransfer.amount}, assumes 18 decimals)</span>
                 </DetailRow>
               )}
 
               {/* ERC-721 / ERC-1155 single */}
               {!isBatch && decodedTransfer.tokenID && (
                 <DetailRow label="Token ID" mono>
-                  <span className="font-semibold text-white">#{decodedTransfer.tokenID}</span>
+                  <span className="font-semibold text-text-primary">#{decodedTransfer.tokenID}</span>
                 </DetailRow>
               )}
               {decodedTransfer.standard === 'ERC-1155' && !isBatch && decodedTransfer.value && (
                 <DetailRow label="Quantity">
-                  <span className="font-semibold text-white">
+                  <span className="font-semibold text-text-primary">
                     {(() => { try { return BigInt(decodedTransfer.value).toLocaleString('en-US'); } catch { return decodedTransfer.value; } })()}
                   </span>
                 </DetailRow>
@@ -392,9 +393,9 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
                 <DetailRow label="Batch">
                   <div className="flex flex-col gap-1 mt-1">
                     {decodedTransfer.ids.map((id, i) => (
-                      <div key={`${id}-${i}`} className="font-mono text-xs text-gray-200">
-                        <span className="text-[#ffa729]">#{id}</span>
-                        <span className="text-gray-500"> x </span>
+                      <div key={`${id}-${i}`} className="font-mono text-xs text-text-primary">
+                        <span className="text-accent">#{id}</span>
+                        <span className="text-text-muted"> x </span>
                         <span>{(() => { try { return BigInt(decodedTransfer.values![i]).toLocaleString('en-US'); } catch { return decodedTransfer.values![i]; } })()}</span>
                       </div>
                     ))}
@@ -402,7 +403,7 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
                 </DetailRow>
               )}
 
-              <p className="text-xs text-gray-500 mt-3">
+              <p className="text-xs text-text-muted mt-3">
                 {isApproval
                   ? 'Approval will take effect once the transaction is confirmed.'
                   : 'Token name and symbol will be available once the transaction is confirmed.'}
@@ -416,47 +417,47 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
           the well-known-token-selector path above). Same shape as the
           confirmed tx page's Input Data decoder section. */}
       {!decodedTransfer && decodedCall && (
-        <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden mb-6">
-          <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
+        <div className="card overflow-hidden mb-6">
+          <div className="px-4 sm:px-6 py-4 border-b border-border">
             <div className="flex items-center gap-2">
-              <h2 className="text-[15px] font-semibold text-[#ffa729]">Contract Call (Pending)</h2>
+              <h2 className="text-[15px] font-display font-semibold text-text-primary">Contract Call (Pending)</h2>
               <Badge variant="info">{decodedCall.name}</Badge>
               {targetContract?.contractName && (
-                <span className="text-xs text-gray-500 font-mono">via {targetContract.contractName}</span>
+                <span className="text-xs text-text-muted font-mono">via {targetContract.contractName}</span>
               )}
             </div>
           </div>
           <div className="p-4 sm:p-6">
-            <p className="text-xs text-gray-500 font-mono mb-2">{decodedCall.signature}</p>
+            <p className="text-xs text-text-muted font-mono mb-2">{decodedCall.signature}</p>
             <div className="space-y-1">
               {decodedCall.args.map((arg) => (
                 <div key={arg.label} className="text-xs flex flex-wrap items-start gap-2">
-                  <span className="text-gray-400 font-mono min-w-[80px]">{arg.label}:</span>
+                  <span className="text-text-secondary font-mono min-w-[80px]">{arg.label}:</span>
                   {arg.type === 'address' && arg.value ? (
-                    <Link href={`/address/${arg.value}`} className="text-gray-200 hover:text-[#ffa729] transition-colors break-all font-mono">
+                    <Link href={`/address/${arg.value}`} className="text-text-primary hover:text-accent transition-colors break-all font-mono">
                       {arg.value}
                     </Link>
                   ) : arg.type === 'bool' ? (
                     <Badge variant={arg.value === 'true' ? 'success' : 'error'}>{arg.value}</Badge>
                   ) : arg.type === 'uint256' ? (
-                    <span className="text-gray-200 font-mono break-all">
+                    <span className="text-text-primary font-mono break-all">
                       {(() => { try { return BigInt(arg.value || '0').toLocaleString('en-US'); } catch { return arg.value || ''; } })()}
                     </span>
                   ) : arg.type === 'uint256[]' ? (
-                    <span className="text-gray-200 font-mono break-all">
+                    <span className="text-text-primary font-mono break-all">
                       {arg.values && arg.values.length > 0
                         ? arg.values.map((v) => { try { return BigInt(v).toLocaleString('en-US'); } catch { return v; } }).join(', ')
                         : '[]'}
                     </span>
                   ) : arg.type === 'string' ? (
-                    <span className="text-gray-200 break-all">{arg.value}</span>
+                    <span className="text-text-primary break-all">{arg.value}</span>
                   ) : (
-                    <span className="text-gray-200 font-mono break-all">{arg.value}</span>
+                    <span className="text-text-primary font-mono break-all">{arg.value}</span>
                   )}
                 </div>
               ))}
             </div>
-            <p className="text-xs text-gray-500 mt-3">
+            <p className="text-xs text-text-muted mt-3">
               Decoded from the target contract&apos;s verified ABI. Final on-chain state lands once the transaction is confirmed.
             </p>
           </div>
@@ -465,15 +466,15 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
 
       {/* Input Data Section */}
       {pendingTx.input && pendingTx.input !== '0x' && (
-        <div className="rounded-xl bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] border border-[#3d3d3d] shadow-xl overflow-hidden">
-          <div className="px-4 sm:px-6 py-4 border-b border-[#3d3d3d]">
-            <h2 className="text-[15px] font-semibold text-[#ffa729]">
+        <div className="card overflow-hidden">
+          <div className="px-4 sm:px-6 py-4 border-b border-border">
+            <h2 className="text-[15px] font-display font-semibold text-text-primary">
               Input Data
-              {(isTokenTransfer || decodedCall) && <span className="text-xs text-gray-500 ml-2">(decoded above)</span>}
+              {(isTokenTransfer || decodedCall) && <span className="text-xs text-text-muted ml-2">(decoded above)</span>}
             </h2>
           </div>
           <div className="p-4 sm:p-6">
-            <p className="font-mono text-gray-300 break-all text-xs leading-relaxed">{pendingTx.input}</p>
+            <p className="font-mono text-text-secondary break-all text-xs leading-relaxed">{pendingTx.input}</p>
           </div>
         </div>
       )}

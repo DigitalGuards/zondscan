@@ -82,19 +82,38 @@ func UpdatePendingTransactionStatus(hash string, status string) error {
 	return nil
 }
 
-// CleanupOldPendingTransactions removes rows that haven't been seen recently ,
+// CleanupOldPendingTransactions removes rows that haven't been seen recently,
 // both genuinely-pending rows the node has forgotten about, and "mined"
 // tombstones that have aged out. The tombstones must be cleaned here too;
 // the per-status helpers (UpdatePendingTransactionsInBlock,
 // verifyPendingTransactions) intentionally leave them in place to block
 // stale mempool re-inserts.
-func CleanupOldPendingTransactions(maxAge time.Duration) error {
+//
+// Mined tombstones get the shorter minedMaxAge cutoff: once a tx is mined its
+// row only exists to block a stale mempool re-poll re-inserting it as
+// "pending". That race window is bounded by the mempool sync interval, so a
+// mined tombstone does not need the full pending maxAge to linger. Pending
+// rows keep the conservative maxAge so we never delete a row the node might
+// still surface. lastSeen is set at tombstone time and never refreshed (the
+// mempool no longer sees mined hashes), so it measures time-since-mined.
+func CleanupOldPendingTransactions(maxAge, minedMaxAge time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cutoff := time.Now().Add(-maxAge)
+	now := time.Now()
 	filter := bson.M{
-		"lastSeen": bson.M{"$lt": cutoff},
+		"$or": []bson.M{
+			// Mined tombstones aged past the shorter mined cutoff.
+			{
+				"status":   "mined",
+				"lastSeen": bson.M{"$lt": now.Add(-minedMaxAge)},
+			},
+			// Any non-mined (pending) row past the conservative pending cutoff.
+			{
+				"status":   bson.M{"$ne": "mined"},
+				"lastSeen": bson.M{"$lt": now.Add(-maxAge)},
+			},
+		},
 	}
 
 	_, err := configs.PendingTransactionsCollections.DeleteMany(ctx, filter)
@@ -132,13 +151,4 @@ func GetAllPendingTransactionHashes() ([]string, error) {
 	}
 
 	return hashes, nil
-}
-
-// DeletePendingTransaction removes a pending transaction by hash
-func DeletePendingTransaction(hash string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	_, err := configs.PendingTransactionsCollections.DeleteOne(ctx, bson.M{"_id": hash})
-	return err
 }

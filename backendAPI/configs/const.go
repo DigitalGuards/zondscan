@@ -1,29 +1,68 @@
 package configs
 
 import (
-	"os"
-
-	"github.com/go-playground/validator/v10"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-const QUANTA float64 = 1000000000000000000
+// Mongo collection names (database qrldata-z). Single source of truth for
+// the literals: bindCollections binds the handles below to these names,
+// and setup.go's index/seed maps reference them, so a rename can't drift
+// between the two.
+const (
+	transferCollName                     = "transfer"
+	transactionByAddressCollName         = "transactionByAddress"
+	internalTransactionByAddressCollName = "internalTransactionByAddress"
+	addressesCollName                    = "addresses"
+	blocksCollName                       = "blocks"
+	validatorsCollName                   = "validators"
+	contractCodeCollName                 = "contractCode"
+	contractVerificationsCollName        = "contractVerifications"
+	blockSizesCollName                   = "averageBlockSize"
+	totalCirculatingSupplyCollName       = "totalCirculatingSupply"
+	coinGeckoCollName                    = "coingecko"
+	walletCountCollName                  = "walletCount"
+	dailyTransactionsVolumeCollName      = "dailyTransactionsVolume"
+	epochInfoCollName                    = "epoch_info"
+	validatorHistoryCollName             = "validator_history"
+	priceHistoryCollName                 = "priceHistory"
+	tokenTransfersCollName               = "tokenTransfers"
+	tokenBalancesCollName                = "tokenBalances"
+	pendingTransactionsCollName          = "pending_transactions"
+	gasHistoryCollName                   = "gasHistory"
+	syncStateCollName                    = "sync_state"
+	tokenMetadataCollName                = "tokenMetadata"
+)
 
-var Url string = os.Getenv("NODE_URL")
-var TransferCollections *mongo.Collection = GetCollection(DB, "transfer")
-var TransactionByAddressCollection *mongo.Collection = GetCollection(DB, "transactionByAddress")
-var InternalTransactionByAddressCollection *mongo.Collection = GetCollection(DB, "internalTransactionByAddress")
-var AddressesCollections *mongo.Collection = GetCollection(DB, "addresses")
-var BlocksCollection *mongo.Collection = GetCollection(DB, "blocks")
-var ValidatorsCollections *mongo.Collection = GetCollection(DB, "validators")
-var ContractInfoCollection *mongo.Collection = GetCollection(DB, "contractCode")
-var ContractVerificationsCollection *mongo.Collection = GetCollection(DB, "contractVerifications")
-var BlockSizesCollection *mongo.Collection = GetCollection(DB, "averageBlockSize")
-var TotalCirculatingSupplyCollection *mongo.Collection = GetCollection(DB, "totalCirculatingSupply")
-var CoinGeckoCollection *mongo.Collection = GetCollection(DB, "coingecko")
-var WalletCountCollections *mongo.Collection = GetCollection(DB, "walletCount")
-var DailyTransactionsVolumeCollection *mongo.Collection = GetCollection(DB, "dailyTransactionsVolume")
-var EpochInfoCollection *mongo.Collection = GetCollection(DB, "epoch_info")
-var ValidatorHistoryCollection *mongo.Collection = GetCollection(DB, "validator_history")
-var PriceHistoryCollection *mongo.Collection = GetCollection(DB, "priceHistory")
-var Validate = validator.New()
+// Collection handles. These are populated by ConnectDB once the client is
+// confirmed live (see bindCollections), not at package-init time. Binding
+// them at declaration used to force a Mongo connect during package
+// initialization (the deleted per-call collection getter nil-guarded on DB
+// and auto-connected), which meant a Mongo outage log.Fatal'd before
+// main's panic recovery was installed and left the startup ordering
+// fragile. Every reader of these vars runs inside an HTTP handler, which
+// only executes after RequestHandler has called ConnectDB; until then the
+// handles are nil by design.
+var (
+	TransferCollections                    *mongo.Collection
+	TransactionByAddressCollection         *mongo.Collection
+	InternalTransactionByAddressCollection *mongo.Collection
+	AddressesCollections                   *mongo.Collection
+	BlocksCollection                       *mongo.Collection
+	ValidatorsCollections                  *mongo.Collection
+	ContractInfoCollection                 *mongo.Collection
+	ContractVerificationsCollection        *mongo.Collection
+	BlockSizesCollection                   *mongo.Collection
+	TotalCirculatingSupplyCollection       *mongo.Collection
+	CoinGeckoCollection                    *mongo.Collection
+	WalletCountCollections                 *mongo.Collection
+	DailyTransactionsVolumeCollection      *mongo.Collection
+	EpochInfoCollection                    *mongo.Collection
+	ValidatorHistoryCollection             *mongo.Collection
+	PriceHistoryCollection                 *mongo.Collection
+	TokenTransfersCollection               *mongo.Collection
+	TokenBalancesCollection                *mongo.Collection
+	PendingTransactionsCollection          *mongo.Collection
+	GasHistoryCollection                   *mongo.Collection
+	SyncStateCollection                    *mongo.Collection
+	TokenMetadataCollection                *mongo.Collection
+)

@@ -9,23 +9,30 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
 )
 
-// runPeriodicTask runs a task at regular intervals with panic recovery
-func runPeriodicTask(task func(), interval time.Duration, taskName string) {
+// runPeriodicTask runs a task at regular intervals with panic recovery.
+// The goroutine returns promptly once stopCh is closed so a graceful
+// shutdown does not start new work while in-flight DB ops are draining.
+func runPeriodicTask(task func(), interval time.Duration, taskName string, stopCh <-chan struct{}) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 				configs.Logger.Error("Recovered from panic in periodic task",
 					zap.String("task", taskName),
 					zap.Any("error", r))
-				// Restart the task after a short delay
-				time.Sleep(5 * time.Second)
-				runPeriodicTask(task, interval, taskName)
+				// Restart the task after a short delay, but exit promptly if a
+				// shutdown signal arrives during the wait instead of blocking
+				// the whole delay on time.Sleep.
+				select {
+				case <-stopCh:
+					return
+				case <-time.After(5 * time.Second):
+					runPeriodicTask(task, interval, taskName, stopCh)
+				}
 			}
 		}()
 
@@ -39,8 +46,15 @@ func runPeriodicTask(task func(), interval time.Duration, taskName string) {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
-		for range ticker.C {
-			runTaskWithRetry(task, taskName)
+		for {
+			select {
+			case <-ticker.C:
+				runTaskWithRetry(task, taskName)
+			case <-stopCh:
+				configs.Logger.Info("Stopping periodic task on shutdown signal",
+					zap.String("task", taskName))
+				return
+			}
 		}
 	}()
 }
@@ -83,15 +97,76 @@ func runTaskWithRetry(task func(), taskName string) {
 	}
 }
 
+// StartContractReprocessingJob starts a background job to periodically reprocess
+// incomplete contracts. The goroutine returns once stopCh is closed so a
+// graceful shutdown does not start a new reprocess pass while in-flight work
+// is draining.
+//
+// Scheduler owned by the synchroniser; the work function is
+// db.ReprocessIncompleteContracts. Semantics: run immediately, then every
+// hour, exiting on stopCh.
+func StartContractReprocessingJob(stopCh <-chan struct{}) {
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+
+		for {
+			configs.Logger.Info("Starting contract reprocessing job")
+
+			err := db.ReprocessIncompleteContracts()
+			if err != nil {
+				configs.Logger.Error("Contract reprocessing job failed", zap.Error(err))
+			}
+
+			// Wait for 1 hour before next run, or exit early on shutdown.
+			select {
+			case <-ticker.C:
+			case <-stopCh:
+				configs.Logger.Info("Stopping contract reprocessing job on shutdown signal")
+				return
+			}
+		}
+	}()
+}
+
+// StartWalletCountSync starts a goroutine that syncs wallet count every 4 hours.
+// The goroutine returns once stopCh is closed so a graceful shutdown does not
+// start a new count while in-flight work is draining.
+//
+// Scheduler owned by the synchroniser; the work function is
+// db.SyncWalletCount. Semantics: run immediately, then every 4 hours,
+// exiting on stopCh.
+func StartWalletCountSync(stopCh <-chan struct{}) {
+	configs.Logger.Info("Initializing wallet count sync service")
+	go func() {
+		ticker := time.NewTicker(4 * time.Hour)
+		defer ticker.Stop()
+
+		// Do an initial count immediately
+		configs.Logger.Info("Performing initial wallet count sync")
+		if err := db.SyncWalletCount(); err != nil {
+			configs.Logger.Error("Failed initial wallet count sync", zap.Error(err))
+		}
+
+		// Then sync every 4 hours
+		configs.Logger.Info("Starting periodic wallet count sync (every 4 hours)")
+		for {
+			select {
+			case <-ticker.C:
+				if err := db.SyncWalletCount(); err != nil {
+					configs.Logger.Error("Failed wallet count sync", zap.Error(err))
+				}
+			case <-stopCh:
+				configs.Logger.Info("Stopping wallet count sync on shutdown signal")
+				return
+			}
+		}
+	}()
+}
+
 // processBlockPeriodically checks for new blocks and processes them
 func processBlockPeriodically() {
 	configs.Logger.Info("Starting block processing check")
-
-	// Initialize collections if they don't exist
-	if !db.IsCollectionsExist() {
-		processInitialBlock()
-		return
-	}
 
 	// Process the latest block
 	latestBlock, err := rpc.GetLatestBlock()
@@ -100,12 +175,11 @@ func processBlockPeriodically() {
 		return
 	}
 
+	// Collections and the genesis block are guaranteed by Sync() before this
+	// loop starts, so no initialization branch is needed here. A sync state
+	// of "0x0" (fresh chain, only genesis stored) falls through to the
+	// normal path and starts processing at block 0x1.
 	lastProcessedBlock := db.GetLastKnownBlockNumber()
-	if lastProcessedBlock == "0x0" {
-		configs.Logger.Info("No blocks in database, initializing...")
-		processInitialBlock()
-		return
-	}
 
 	// Log both states to help diagnose issues
 	configs.Logger.Info("Block sync status",
@@ -118,28 +192,6 @@ func processBlockPeriodically() {
 			zap.String("latest_db", lastProcessedBlock),
 			zap.String("latest_node", latestBlock))
 		return
-	}
-
-	// Use the existing GetLastSyncedBlock function to get the last synced block
-	lastSyncedBlockObj, err := db.GetLastSyncedBlock()
-	if err != nil {
-		configs.Logger.Error("Failed to get last synced block", zap.Error(err))
-	} else if lastSyncedBlockObj != nil && lastSyncedBlockObj.Result.Number != "" {
-		// Compare with the current sync state
-		if utils.CompareHexNumbers(lastSyncedBlockObj.Result.Number, lastProcessedBlock) > 0 {
-			configs.Logger.Warn("Sync state mismatch detected - blocks exist but sync state is behind",
-				zap.String("sync_state", lastProcessedBlock),
-				zap.String("highest_block_found", lastSyncedBlockObj.Result.Number))
-
-			// Force update the sync state
-			forceUpdateSyncState(lastSyncedBlockObj.Result.Number)
-
-			// Update our local variable
-			lastProcessedBlock = lastSyncedBlockObj.Result.Number
-
-			configs.Logger.Info("Sync state updated to match actual database state",
-				zap.String("new_sync_state", lastProcessedBlock))
-		}
 	}
 
 	// Check if we're more than BatchSyncThreshold blocks behind
@@ -202,13 +254,31 @@ func processBlockPeriodically() {
 				continue
 			}
 
+			// processSubsequentBlocks returns the next block to process. On a
+			// clean success that is currentBlock+1. On a reorg or a
+			// missing-parent it returns an EARLIER block (the parent), having
+			// rolled back the stale data, so the loop must resume from there
+			// instead of blindly advancing +1. Detect the forward-success case
+			// by comparing the returned value to currentBlock+1.
+			expectedNext := utils.AddHexNumbers(currentBlock, "0x1")
+			if result != expectedNext {
+				// Rollback / re-sync requested: jump to the returned block. Do
+				// NOT run token processing or clear failure tracking for the
+				// current block; it was not advanced past.
+				configs.Logger.Warn("Re-sync point returned (rollback or missing parent), resuming from earlier block",
+					zap.String("from_block", currentBlock),
+					zap.String("resume_block", result))
+				currentBlock = result
+				continue
+			}
+
 			// Clear any previous failure tracking on success
 			clearFailedBlock(currentBlock)
 
 			ProcessTokenTransfersForBlock(currentBlock)
 
-			// Move to next block
-			currentBlock = utils.AddHexNumbers(currentBlock, "0x1")
+			// Move to next block (== result on the success path)
+			currentBlock = result
 		}
 
 		// Attempt to fill any failed blocks from this run
@@ -253,6 +323,11 @@ func updateDataPeriodically() {
 	configs.Logger.Info("Counting wallets...")
 	db.CountWallets()
 
+	// Update total circulating supply (writes the totalBalance document the
+	// backend's supply endpoint reads)
+	configs.Logger.Info("Updating total circulating supply...")
+	db.UpdateTotalBalance()
+
 	// Update transaction volume
 	configs.Logger.Info("Calculating daily transaction volume...")
 	db.GetDailyTransactionVolume()
@@ -273,39 +348,37 @@ func updateDataPeriodically() {
 	}
 }
 
-// singleBlockInsertion starts continuous block monitoring with periodic tasks
-func singleBlockInsertion() {
+// singleBlockInsertion starts continuous block monitoring with periodic tasks.
+// Each periodic goroutine watches stopCh so a graceful shutdown stops them
+// from starting new work; wg.Wait then returns once they have all exited,
+// which lets Sync() (and therefore main.go's doneCh) complete cleanly.
+func singleBlockInsertion(stopCh <-chan struct{}) {
 	configs.Logger.Info("Starting single block insertion process")
-
-	// Initialize collections if they don't exist
-	if !db.IsCollectionsExist() {
-		processInitialBlock()
-	}
 
 	// Create a wait group to keep the main goroutine alive
 	var wg sync.WaitGroup
 	wg.Add(4) // Block processing, data updates, validator updates, gap detection
 
-	// Define an initialization flag
-	var initialized int32
-	atomic.StoreInt32(&initialized, 0)
-
 	// Start periodic block processing task (every 30 seconds)
 	go func() {
 		defer wg.Done()
-		if atomic.CompareAndSwapInt32(&initialized, 0, 1) {
-			configs.Logger.Info("Starting periodic task",
-				zap.String("task", "block_processing"),
-				zap.Duration("interval", time.Second*30))
+		configs.Logger.Info("Starting periodic task",
+			zap.String("task", "block_processing"),
+			zap.Duration("interval", time.Second*30))
 
-			ticker := time.NewTicker(time.Second * 30)
-			defer ticker.Stop()
+		ticker := time.NewTicker(time.Second * 30)
+		defer ticker.Stop()
 
-			// Run immediately on start
-			processBlockPeriodically()
+		// Run immediately on start
+		processBlockPeriodically()
 
-			for range ticker.C {
+		for {
+			select {
+			case <-ticker.C:
 				processBlockPeriodically()
+			case <-stopCh:
+				configs.Logger.Info("Stopping block processing on shutdown signal")
+				return
 			}
 		}
 	}()
@@ -323,8 +396,14 @@ func singleBlockInsertion() {
 		// Run immediately on start
 		updateDataPeriodically()
 
-		for range ticker.C {
-			updateDataPeriodically()
+		for {
+			select {
+			case <-ticker.C:
+				updateDataPeriodically()
+			case <-stopCh:
+				configs.Logger.Info("Stopping data updates on shutdown signal")
+				return
+			}
 		}
 	}()
 
@@ -341,8 +420,14 @@ func singleBlockInsertion() {
 		// Run immediately on start
 		updateValidatorsPeriodically()
 
-		for range ticker.C {
-			updateValidatorsPeriodically()
+		for {
+			select {
+			case <-ticker.C:
+				updateValidatorsPeriodically()
+			case <-stopCh:
+				configs.Logger.Info("Stopping validator updates on shutdown signal")
+				return
+			}
 		}
 	}()
 
@@ -356,15 +441,27 @@ func singleBlockInsertion() {
 		ticker := time.NewTicker(time.Minute * 5)
 		defer ticker.Stop()
 
-		// Wait 1 minute before first run to let initial sync settle
-		time.Sleep(time.Minute)
+		// Wait 1 minute before first run to let initial sync settle, but bail
+		// out early if a shutdown arrives during that initial delay.
+		select {
+		case <-time.After(time.Minute):
+		case <-stopCh:
+			configs.Logger.Info("Stopping gap detection on shutdown signal")
+			return
+		}
 
-		for range ticker.C {
-			detectAndFillGapsPeriodically()
+		for {
+			select {
+			case <-ticker.C:
+				detectAndFillGapsPeriodically()
+			case <-stopCh:
+				configs.Logger.Info("Stopping gap detection on shutdown signal")
+				return
+			}
 		}
 	}()
 
-	// Keep the main goroutine alive
+	// Keep the main goroutine alive until every periodic task has stopped.
 	wg.Wait()
 }
 
@@ -388,11 +485,18 @@ func syncValidators() error {
 		}
 	}
 
-	// Get validators from beacon chain
-	err = rpc.GetValidators()
+	// Get validators from beacon chain and persist each page. Storage lives
+	// here rather than in rpc so the rpc package stays transport-only.
+	pages, err := rpc.GetValidators()
 	if err != nil {
 		configs.Logger.Error("Failed to get validators", zap.Error(err))
 		return err
+	}
+	for _, page := range pages {
+		if err := services.StoreValidators(page, currentEpoch); err != nil {
+			configs.Logger.Error("Failed to store validators", zap.Error(err))
+			return err
+		}
 	}
 
 	// Backfill any missing epoch history records

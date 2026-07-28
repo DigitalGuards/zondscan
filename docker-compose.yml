@@ -1,8 +1,26 @@
 services:
   mongodb:
-    image: mongo:7
+    # 8.2 matches prod (the explorer box runs 8.2 with data at FCV 8.2).
+    # NOTE: an existing local volume created by mongo:7 will not start under
+    # 8.2 (FCV too old); wipe it (docker volume rm zond-mongodb-data) and let
+    # the syncer re-sync, or step through mongo:8.0 + setFeatureCompatibilityVersion.
+    image: mongo:8.2
     container_name: zond-mongodb
     restart: unless-stopped
+    environment:
+      # REQUIRED on kernels 6.19+/7.0 with CET user shadow stack (Zen 4+/recent
+      # Intel): mongod 8.x's coroutine stack-pivot trips the hardware ROP
+      # protection and segfaults ~30s after start with no backtrace
+      # (SERVER-120238, took down the prod faucet/explorer for a week in July
+      # 2026).
+      # Side effect (deliberate): this override wipes the image's baked-in
+      # GLIBC_TUNABLES=glibc.pthread.rseq=0, so glibc keeps rseq and TCMalloc's
+      # per-CPU caches stay off. That costs some throughput but also dodges the
+      # separate TCMalloc/rseq crash on kernels 6.19+ (SERVER-121912):
+      # restoring rseq=0 alongside -SHSTK was tested on the prod box and mongod
+      # kept segfaulting. Once upstream ships a fixed TCMalloc, restore perf
+      # with GLIBC_TUNABLES=glibc.cpu.hwcaps=-SHSTK:glibc.pthread.rseq=0.
+      - GLIBC_TUNABLES=glibc.cpu.hwcaps=-SHSTK
     ports:
       - "27018:27017"  # Use 27018 externally to avoid conflict with local MongoDB
     volumes:

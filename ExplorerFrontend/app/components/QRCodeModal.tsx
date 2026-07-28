@@ -12,23 +12,25 @@ interface QRCodeModalProps {
 export default function QRCodeModal({ address, isOpen, onClose }: QRCodeModalProps): JSX.Element | null {
   if (!isOpen) return null;
 
-  // Generate the full zondscan URL
-  const zondscanUrl = `https://zondscan.com/address/${address.toLowerCase()}`;
+  // The QR encodes the bare address (explorer convention, wallet-scannable),
+  // not the page URL: wallets validate the payload as an address. Normalize
+  // the prefix to a capital Q since the route segment may be lowercased.
+  const qrAddress = address.replace(/^q/, 'Q');
 
   // Format address for display (first 6 and last 4 chars)
   const displayAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
 
-  return <ModalContent address={address} displayAddress={displayAddress} zondscanUrl={zondscanUrl} onClose={onClose} />;
+  return <ModalContent address={address} displayAddress={displayAddress} qrAddress={qrAddress} onClose={onClose} />;
 }
 
 interface ModalContentProps {
   address: string;
   displayAddress: string;
-  zondscanUrl: string;
+  qrAddress: string;
   onClose: () => void;
 }
 
-function ModalContent({ address, displayAddress, zondscanUrl, onClose }: ModalContentProps): JSX.Element {
+function ModalContent({ address, displayAddress, qrAddress, onClose }: ModalContentProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -95,7 +97,7 @@ function ModalContent({ address, displayAddress, zondscanUrl, onClose }: ModalCo
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
         onClick={onClose}
       />
 
@@ -105,14 +107,14 @@ function ModalContent({ address, displayAddress, zondscanUrl, onClose }: ModalCo
         role="dialog"
         aria-modal="true"
         aria-labelledby="qrcode-modal-title"
-        className="relative bg-card-gradient rounded-xl p-6 max-w-[340px] w-full mx-4 shadow-2xl border border-border"
+        className="relative card p-6 max-w-[340px] w-full mx-4"
       >
         {/* M4: Close button label */}
         <button
           ref={closeButtonRef}
           onClick={onClose}
           aria-label="Close QR code dialog"
-          className="absolute top-2 right-2 text-gray-400 hover:text-white"
+          className="absolute top-2 right-2 text-text-secondary hover:text-text-primary"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -124,13 +126,13 @@ function ModalContent({ address, displayAddress, zondscanUrl, onClose }: ModalCo
           <h3 id="qrcode-modal-title" className="text-lg font-medium text-accent mb-4">Scan Address</h3>
           <div className="bg-white p-4 rounded-lg inline-block mb-4">
             <QRCodeSVG
-              value={zondscanUrl}
+              value={qrAddress}
               size={240}
               level="H"
               includeMargin={true}
             />
           </div>
-          <div className="text-sm text-gray-300 mb-2">
+          <div className="text-sm text-text-secondary mb-2">
             <span className="inline-block">{displayAddress}</span>
             {/* M7: Replace title with aria-label */}
             <button
@@ -143,7 +145,7 @@ function ModalContent({ address, displayAddress, zondscanUrl, onClose }: ModalCo
               </svg>
             </button>
           </div>
-          <p className="text-xs text-gray-400">Scan to view on ZondScan</p>
+          <p className="text-xs text-text-secondary">Scan with a wallet to use this address</p>
         </div>
       </div>
     </div>

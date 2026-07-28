@@ -18,13 +18,13 @@ var (
 // routes are live; a non-nil error logs a warning and leaves the default
 // nil, the rest of the backend remains usable.
 func Init() error {
-	c, err := NewCompiler()
+	reg, err := NewRegistry()
 	if err != nil {
 		log.Printf("WARN: contract verification disabled, %v", err)
 		return err
 	}
 	defaultMu.Lock()
-	def = &Verifier{Compiler: c}
+	def = &Verifier{Registry: reg}
 	defaultMu.Unlock()
 	return nil
 }

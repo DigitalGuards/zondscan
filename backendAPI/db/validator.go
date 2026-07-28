@@ -2,12 +2,13 @@ package db
 
 import (
 	"backendAPI/configs"
+	"backendAPI/hexutil"
 	"backendAPI/models"
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
-	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -67,12 +68,13 @@ func ReturnValidators(pageToken string) (*models.ValidatorResponse, error) {
 		}
 
 		validators = append(validators, models.Validator{
-			Index:        d.ID,
-			Address:      d.PublicKeyHex,
-			Status:       status,
-			Age:          age,
-			StakedAmount: d.EffectiveBalance,
-			IsActive:     isActive,
+			Index:                    d.ID,
+			Address:                  d.PublicKeyHex,
+			WithdrawalCredentialsHex: d.WithdrawalCredentialsHex,
+			Status:                   status,
+			Age:                      age,
+			StakedAmount:             d.EffectiveBalance,
+			IsActive:                 isActive,
 		})
 
 		if balance, err := strconv.ParseInt(d.EffectiveBalance, 10, 64); err == nil {
@@ -89,13 +91,13 @@ func ReturnValidators(pageToken string) (*models.ValidatorResponse, error) {
 }
 
 // CountValidators returns the total validator count. Uses
-// EstimatedDocumentCount (metadata read) rather than CountDocuments({}),
-// which is O(rows) and ran on every /overview hit.
+// countDocumentsResilient (fast metadata read with an exact-count fallback when
+// the metadata reads 0, which it currently does on this deployment).
 func CountValidators() (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	count, err := configs.ValidatorsCollections.EstimatedDocumentCount(ctx)
+	count, err := countDocumentsResilient(ctx, configs.ValidatorsCollections)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count validators: %v", err)
 	}
@@ -103,9 +105,17 @@ func CountValidators() (int64, error) {
 }
 
 // HexToInt converts a hex string (with or without 0x prefix) to int64.
+// Parsing delegates to hexutil.ParseInt64 (unsigned-first, so block
+// numbers near 2^63 don't silently zero the epoch math downstream); the
+// sentinel semantics stay here: malformed input yields 0, while values
+// that fit uint64 but overflow int64 (hexutil.ErrRange) are clamped to
+// math.MaxInt64 so the result stays usable for the /128 epoch division
+// callers perform.
 func HexToInt(hexStr string) int64 {
-	hexStr = strings.TrimPrefix(hexStr, "0x")
-	num, _ := strconv.ParseInt(hexStr, 16, 64)
+	num, err := hexutil.ParseInt64(hexStr)
+	if err != nil && !errors.Is(err, hexutil.ErrRange) {
+		return 0
+	}
 	return num
 }
 
@@ -177,10 +187,16 @@ func GetValidatorHistory(limit int) (*models.ValidatorHistoryResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	findOpts := options.Find().SetSort(bson.D{{Key: "epoch", Value: -1}})
-	if limit > 0 {
-		findOpts.SetLimit(int64(limit))
+	// Cap an unbounded request so a limit=0 (or negative) caller can't force a
+	// full-collection scan of validator_history. Explicit small limits are
+	// honoured unchanged.
+	if limit <= 0 {
+		limit = 1000
 	}
+
+	findOpts := options.Find().
+		SetSort(bson.D{{Key: "epoch", Value: -1}}).
+		SetLimit(int64(limit))
 
 	cursor, err := configs.ValidatorHistoryCollection.Find(ctx, bson.M{}, findOpts)
 	if err != nil {
@@ -263,10 +279,10 @@ func GetEpochs(page, limit int) (*models.EpochsResponse, error) {
 	finalizedEpoch := parseEpoch(epochInfo.FinalizedEpoch)
 	justifiedEpoch := parseEpoch(epochInfo.JustifiedEpoch)
 
-	// Count total epoch records. EstimatedDocumentCount is metadata-based
-	// and accurate enough for "total pages" pagination since epoch records
-	// are append-only.
-	total, err := configs.ValidatorHistoryCollection.EstimatedDocumentCount(ctx)
+	// Count total epoch records for "total pages" pagination. Uses
+	// countDocumentsResilient: the fast metadata read collapses to 0 on this
+	// deployment, which would wrongly show a single page.
+	total, err := countDocumentsResilient(ctx, configs.ValidatorHistoryCollection)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count epochs: %v", err)
 	}
@@ -386,7 +402,7 @@ func GetEpochDetail(epochId string) (*models.EpochDetailResponse, error) {
 	blockMap := make(map[int64]models.EpochDetailBlock)
 	for cursor.Next(ctx) {
 		var doc struct {
-			BlockNumberInt int64        `bson:"blockNumberInt"`
+			BlockNumberInt int64         `bson:"blockNumberInt"`
 			Result         models.Result `bson:"result"`
 		}
 		if err := cursor.Decode(&doc); err != nil {
@@ -453,11 +469,11 @@ func GetValidatorStats() (*models.ValidatorStatsResponse, error) {
 	}
 	currentEpoch := HexToInt(latestBlock) / 128
 
-	// Check whether the collection has any documents at all. The
-	// EstimatedDocumentCount metadata can be 0 on a brand-new collection
-	// or briefly stale during heavy writes; the == 0 guard below handles
-	// both cases the same way.
-	totalCount, err := configs.ValidatorsCollections.EstimatedDocumentCount(ctx)
+	// Check whether the collection has any documents at all. Uses
+	// countDocumentsResilient because the EstimatedDocumentCount metadata reads
+	// 0 for populated collections on this deployment, which would wrongly short
+	// circuit to an empty stats response below.
+	totalCount, err := countDocumentsResilient(ctx, configs.ValidatorsCollections)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count validators: %v", err)
 	}
@@ -467,10 +483,14 @@ func GetValidatorStats() (*models.ValidatorStatsResponse, error) {
 		}, nil
 	}
 
-	// Use aggregation to compute per-status counts and total staked in one pass.
+	// Use a single aggregation to compute per-status counts and total staked.
 	// Status computation requires knowing currentEpoch, which MongoDB doesn't know,
 	// so we project the fields needed and compute buckets in a $group stage using
-	// $cond expressions that mirror getValidatorStatus logic.
+	// $cond expressions that mirror getValidatorStatus logic. A $facet then fans
+	// the same scanned documents into the status buckets and the balance sum so
+	// the whole thing is one cursor over the collection instead of two passes.
+	// $sum needs numeric input and balances are decimal strings, so the sum
+	// branch converts with $toLong inside the pipeline.
 	currentEpochStr := fmt.Sprintf("%d", currentEpoch)
 
 	pipeline := mongo.Pipeline{
@@ -481,8 +501,8 @@ func GetValidatorStats() (*models.ValidatorStatsResponse, error) {
 					"branches": []bson.M{
 						{
 							// slashed
-							"case":  bson.M{"$eq": []interface{}{"$slashed", true}},
-							"then":  "slashed",
+							"case": bson.M{"$eq": []interface{}{"$slashed", true}},
+							"then": "slashed",
 						},
 						{
 							// pending: activationEpoch > currentEpoch
@@ -502,11 +522,19 @@ func GetValidatorStats() (*models.ValidatorStatsResponse, error) {
 				},
 			},
 		}}},
-		bson.D{{Key: "$group", Value: bson.M{
-			"_id":          "$_computedStatus",
-			"count":        bson.M{"$sum": 1},
-			// We sum effective balance as strings; MongoDB can't do numeric sum on
-			// decimal-string fields, so we fall back to a cursor scan for totalStaked.
+		bson.D{{Key: "$facet", Value: bson.M{
+			"statusCounts": []bson.M{
+				{"$group": bson.M{
+					"_id":   "$_computedStatus",
+					"count": bson.M{"$sum": 1},
+				}},
+			},
+			"totals": []bson.M{
+				{"$group": bson.M{
+					"_id":         nil,
+					"totalStaked": bson.M{"$sum": bson.M{"$toLong": "$effectiveBalance"}},
+				}},
+			},
 		}}},
 	}
 
@@ -516,15 +544,26 @@ func GetValidatorStats() (*models.ValidatorStatsResponse, error) {
 	}
 	defer cursor.Close(ctx)
 
-	var activeCount, pendingCount, exitedCount, slashedCount int
-	for cursor.Next(ctx) {
-		var row struct {
+	var facetResult struct {
+		StatusCounts []struct {
 			ID    string `bson:"_id"`
 			Count int    `bson:"count"`
+		} `bson:"statusCounts"`
+		Totals []struct {
+			TotalStaked int64 `bson:"totalStaked"`
+		} `bson:"totals"`
+	}
+	if cursor.Next(ctx) {
+		if err := cursor.Decode(&facetResult); err != nil {
+			return nil, fmt.Errorf("failed to decode validator stats: %v", err)
 		}
-		if err := cursor.Decode(&row); err != nil {
-			continue
-		}
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("cursor error while reading validator stats: %v", err)
+	}
+
+	var activeCount, pendingCount, exitedCount, slashedCount int
+	for _, row := range facetResult.StatusCounts {
 		switch row.ID {
 		case "active":
 			activeCount = row.Count
@@ -536,33 +575,10 @@ func GetValidatorStats() (*models.ValidatorStatsResponse, error) {
 			slashedCount = row.Count
 		}
 	}
-	if err := cursor.Err(); err != nil {
-		return nil, fmt.Errorf("cursor error while reading validator stats: %v", err)
-	}
-
-	// Compute total staked via a second aggregation (sum of effectiveBalance).
-	// MongoDB $sum works on numeric types; balances are stored as decimal strings,
-	// so we convert with $toLong inside the pipeline.
-	sumPipeline := mongo.Pipeline{
-		bson.D{{Key: "$group", Value: bson.M{
-			"_id": nil,
-			"totalStaked": bson.M{"$sum": bson.M{"$toLong": "$effectiveBalance"}},
-		}}},
-	}
-	sumCursor, err := configs.ValidatorsCollections.Aggregate(ctx, sumPipeline)
-	if err != nil {
-		return nil, fmt.Errorf("failed to aggregate total staked: %v", err)
-	}
-	defer sumCursor.Close(ctx)
 
 	totalStaked := int64(0)
-	if sumCursor.Next(ctx) {
-		var sumRow struct {
-			TotalStaked int64 `bson:"totalStaked"`
-		}
-		if err := sumCursor.Decode(&sumRow); err == nil {
-			totalStaked = sumRow.TotalStaked
-		}
+	if len(facetResult.Totals) > 0 {
+		totalStaked = facetResult.Totals[0].TotalStaked
 	}
 
 	return &models.ValidatorStatsResponse{

@@ -8,12 +8,20 @@ import ReadContract from './ReadContract';
 import WriteContract from './WriteContract';
 import AiExplainCard from './AiExplainCard';
 import type { ContractData } from '../types/address';
+import { useUrlParam } from '../lib/use-url-param';
 
 interface ContractTabsProps {
   contractData: ContractData;
 }
 
-type TabKey = 'code' | 'read' | 'write';
+const TAB_KEYS = ['code', 'read', 'write'] as const;
+type TabKey = (typeof TAB_KEYS)[number];
+
+// ?ctab values outside the known set (hand-edited URLs) fall back to the
+// first tab.
+function parseTab(raw: string): TabKey {
+  return (TAB_KEYS as readonly string[]).includes(raw) ? (raw as TabKey) : 'code';
+}
 
 /**
  * Replacement for the old standalone ContractBytecode block on the address
@@ -27,7 +35,11 @@ type TabKey = 'code' | 'read' | 'write';
  *            session (M5).
  */
 export default function ContractTabs({ contractData }: ContractTabsProps): JSX.Element {
-  const [tab, setTab] = useState<TabKey>('code');
+  // URL-backed (?ctab) so browser Back restores the selected sub-tab.
+  // Distinct param from the page-level ?tab since both live on address
+  // pages; replace keeps in-page tab clicks out of browser history.
+  const [rawTab, setTab] = useUrlParam('ctab', 'code');
+  const tab = parseTab(rawTab);
 
   const parsedAbi = useMemo(() => {
     if (!contractData.abi) return null;
@@ -63,7 +75,7 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
       className={`px-3 md:px-4 py-2 text-xs md:text-sm border-b-2 -mb-px transition-colors ${
         active
           ? 'border-accent text-accent'
-          : 'border-transparent text-gray-400 hover:text-gray-200'
+          : 'border-transparent text-text-secondary hover:text-text-primary'
       }`}
     >
       {children}
@@ -77,16 +89,16 @@ function CodeTab({ contractData, parsedAbi }: { contractData: ContractData; pars
       <div className="space-y-3 md:space-y-4">
         <div className="rounded-lg border border-border bg-card-gradient p-3 md:p-4 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
           <div>
-            <div className="text-sm md:text-base font-medium text-gray-200">
+            <div className="text-sm md:text-base font-medium text-text-primary">
               This contract isn&apos;t verified yet
             </div>
-            <div className="text-xs md:text-sm text-gray-400 mt-0.5">
+            <div className="text-xs md:text-sm text-text-secondary mt-0.5">
               Upload the source to publish the contract&apos;s ABI and source code, enabling read / write interaction.
             </div>
           </div>
           <Link
             href={`/verify-contract?address=${contractData.address}`}
-            className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-accent text-black text-sm font-medium hover:bg-accent-hover transition-colors"
+            className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-accent text-background text-sm font-medium hover:bg-accent-hover transition-colors"
           >
             Verify &amp; Publish
           </Link>
@@ -109,19 +121,19 @@ function CodeTab({ contractData, parsedAbi }: { contractData: ContractData; pars
 
 function CompilerSettings({ contractData }: { contractData: ContractData }) {
   const rows: Array<[string, React.ReactNode]> = [
-    ['Contract name', contractData.contractName ?? ','],
-    ['Compiler', contractData.compilerVersion ?? ','],
+    ['Contract name', contractData.contractName ?? '…'],
+    ['Compiler', contractData.compilerVersion ?? '…'],
     ['Optimizer', contractData.optimizationEnabled ? `enabled (${contractData.optimizationRuns ?? 0} runs)` : 'disabled'],
-    ['EVM version', contractData.evmVersion ?? ','],
-    ['License', contractData.license ?? ','],
-    ['Verified at', contractData.verifiedAt ?? ','],
+    ['EVM version', contractData.evmVersion ?? '…'],
+    ['License', contractData.license ?? '…'],
+    ['Verified at', contractData.verifiedAt ?? '…'],
   ];
   return (
     <div className="rounded-lg border border-border bg-card-gradient p-3 md:p-4 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-xs md:text-sm">
       {rows.map(([label, value]) => (
         <div key={label}>
-          <div className="text-gray-400">{label}</div>
-          <div className="text-gray-200 font-mono break-all">{value}</div>
+          <div className="text-text-secondary">{label}</div>
+          <div className="text-text-primary font-mono break-all">{value}</div>
         </div>
       ))}
     </div>
@@ -134,13 +146,13 @@ function SourcePanel({ contractData }: { contractData: ContractData }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <div className="text-xs md:text-sm text-gray-400">Contract source</div>
+        <div className="text-xs md:text-sm text-text-secondary">Contract source</div>
         <div className="flex gap-2">
           <button
             type="button"
             onClick={() => setExpanded(e => !e)}
             aria-expanded={expanded}
-            className="inline-flex items-center px-3 py-1.5 rounded-lg bg-card-gradient border border-border hover:border-accent text-sm text-gray-300 hover:text-accent transition-colors"
+            className="inline-flex items-center px-3 py-1.5 rounded-lg bg-card-gradient border border-border hover:border-accent text-sm text-text-secondary hover:text-accent transition-colors"
           >
             {expanded ? 'Collapse' : 'Expand'}
           </button>
@@ -148,7 +160,7 @@ function SourcePanel({ contractData }: { contractData: ContractData }) {
         </div>
       </div>
       <pre
-        className={`rounded-lg bg-black/40 border border-border p-3 font-mono text-xs text-gray-300 overflow-x-auto whitespace-pre transition-[max-height] duration-200 ${
+        className={`rounded-lg bg-black/40 border border-border p-3 font-mono text-xs text-text-secondary overflow-x-auto whitespace-pre transition-[max-height] duration-200 ${
           expanded ? 'max-h-[36rem] overflow-y-auto' : 'max-h-24 overflow-hidden'
         }`}
       >
@@ -176,13 +188,13 @@ function AbiPanel({ abi, raw }: { abi: unknown | null; raw: string }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <div className="text-xs md:text-sm text-gray-400">Contract ABI</div>
+        <div className="text-xs md:text-sm text-text-secondary">Contract ABI</div>
         <div className="flex gap-2">
           <button
             type="button"
             onClick={() => setExpanded(e => !e)}
             aria-expanded={expanded}
-            className="inline-flex items-center px-3 py-1.5 rounded-lg bg-card-gradient border border-border hover:border-accent text-sm text-gray-300 hover:text-accent transition-colors"
+            className="inline-flex items-center px-3 py-1.5 rounded-lg bg-card-gradient border border-border hover:border-accent text-sm text-text-secondary hover:text-accent transition-colors"
           >
             {expanded ? 'Collapse' : 'Expand'}
           </button>
@@ -190,7 +202,7 @@ function AbiPanel({ abi, raw }: { abi: unknown | null; raw: string }) {
         </div>
       </div>
       <pre
-        className={`rounded-lg bg-black/40 border border-border p-3 font-mono text-xs text-gray-300 overflow-x-auto whitespace-pre transition-[max-height] duration-200 ${
+        className={`rounded-lg bg-black/40 border border-border p-3 font-mono text-xs text-text-secondary overflow-x-auto whitespace-pre transition-[max-height] duration-200 ${
           expanded ? 'max-h-[24rem] overflow-y-auto' : 'max-h-24 overflow-hidden'
         }`}
       >

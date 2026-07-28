@@ -38,13 +38,15 @@ async function fetchInitialData(page: number): Promise<PaginatedResponse> {
 export async function generateMetadata({ params }: { params: Promise<{ query: string }> }): Promise<Metadata> {
   const resolvedParams = await params;
   const pageNumber = resolvedParams.query || '1';
-  const canonicalUrl = `https://zondscan.com/pending`;
-  
+  // Self-referencing canonical: there is no /pending index route (only
+  // /pending/<page>), so each paginated page canonicalizes to itself.
+  const canonicalUrl = `https://zondscan.com/pending/${pageNumber}`;
+
   return {
     ...sharedMetadata,
     title: `Pending Transactions - Page ${pageNumber} | ZondScan`,
     description:
-      `View all pending transactions waiting to be included in the next block on the Zond blockchain network. Page ${pageNumber} of the mempool transactions list.`,
+      `View all pending transactions waiting to be included in the next block on the QRL 2.0 blockchain network. Page ${pageNumber} of the mempool transactions list.`,
     alternates: {
       ...sharedMetadata.alternates,
       canonical: canonicalUrl,
@@ -53,7 +55,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
       ...sharedMetadata.openGraph,
       title: `Pending Transactions - Page ${pageNumber} | ZondScan`,
       description:
-        `View all pending transactions waiting to be included in the next block on the Zond blockchain network. Page ${pageNumber} of the mempool transactions list.`,
+        `View all pending transactions waiting to be included in the next block on the QRL 2.0 blockchain network. Page ${pageNumber} of the mempool transactions list.`,
       url: canonicalUrl,
       siteName: 'ZondScan',
       type: 'website',
@@ -62,7 +64,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
       ...sharedMetadata.twitter,
       title: `Pending Transactions - Page ${pageNumber} | ZondScan`,
       description:
-        `View all pending transactions waiting to be included in the next block on the Zond blockchain network. Page ${pageNumber} of the mempool transactions list.`,
+        `View all pending transactions waiting to be included in the next block on the QRL 2.0 blockchain network. Page ${pageNumber} of the mempool transactions list.`,
     },
   };
 }

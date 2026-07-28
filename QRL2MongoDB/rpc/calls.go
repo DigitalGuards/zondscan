@@ -1,11 +1,10 @@
 package rpc
 
 import (
-	"QRL2MongoDB/configs"
 	"QRL2MongoDB/models"
-	"QRL2MongoDB/services"
 	"QRL2MongoDB/utils"
 	"QRL2MongoDB/validation"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,27 +19,8 @@ import (
 
 func GetLatestBlock() (string, error) {
 	var Zond models.RPC
-
-	group := models.JsonRPC{
-		Jsonrpc: "2.0",
-		Method:  "qrl_blockNumber",
-		Params:  []interface{}{},
-		ID:      1,
-	}
-	b, err := json.Marshal(group)
-	if err != nil {
-		zap.L().Info("Failed JSON marshal", zap.Error(err))
-		return "0x0", err
-	}
-
-	body, err := DoNodeRPC(b)
-	if err != nil {
+	if err := rpcCall("qrl_blockNumber", []interface{}{}, &Zond); err != nil {
 		zap.L().Error("Failed to get response from RPC call after retries/failover", zap.Error(err))
-		return "0x0", err
-	}
-
-	if err = json.Unmarshal(body, &Zond); err != nil {
-		zap.L().Info("Failed to unmarshal response", zap.Error(err))
 		return "0x0", err
 	}
 
@@ -58,27 +38,9 @@ func GetBlockByNumberMainnet(blockNumber string) (*models.ZondDatabaseBlock, err
 		return nil, fmt.Errorf("invalid block number format: %s", blockNumber)
 	}
 
-	group := models.JsonRPC{
-		Jsonrpc: "2.0",
-		Method:  "qrl_getBlockByNumber",
-		Params:  []interface{}{blockNumber, true},
-		ID:      1,
-	}
-	b, err := json.Marshal(group)
-	if err != nil {
-		zap.L().Info("Failed JSON marshal", zap.Error(err))
-		return nil, err
-	}
-
-	body, err := DoNodeRPC(b)
-	if err != nil {
-		zap.L().Info("Failed to get response from RPC call", zap.Error(err))
-		return nil, err
-	}
-
 	var block models.ZondDatabaseBlock
-	if err := json.Unmarshal(body, &block); err != nil {
-		zap.L().Info("Failed to unmarshal block", zap.Error(err))
+	if err := rpcCall("qrl_getBlockByNumber", []interface{}{blockNumber, true}, &block); err != nil {
+		zap.L().Info("Failed to get response from RPC call", zap.Error(err))
 		return nil, err
 	}
 
@@ -110,27 +72,9 @@ func GetContractAddress(txHash string) (string, string, error) {
 	if err := validation.ValidateHexString(txHash, validation.HashLength); err != nil {
 		return "", "", fmt.Errorf("invalid transaction hash: %v", err)
 	}
-	group := models.JsonRPC{
-		Jsonrpc: "2.0",
-		Method:  "qrl_getTransactionReceipt",
-		Params:  []interface{}{txHash},
-		ID:      1,
-	}
-	b, err := json.Marshal(group)
-	if err != nil {
-		zap.L().Info("Failed JSON marshal", zap.Error(err))
-		return "", "", err
-	}
-
-	body, err := DoNodeRPC(b)
-	if err != nil {
-		zap.L().Info("Failed to execute request", zap.Error(err))
-		return "", "", err
-	}
-
 	var ContractAddress models.Contract
-	if err := json.Unmarshal(body, &ContractAddress); err != nil {
-		zap.L().Info("Failed to unmarshal response", zap.Error(err))
+	if err := rpcCall("qrl_getTransactionReceipt", []interface{}{txHash}, &ContractAddress); err != nil {
+		zap.L().Info("Failed to execute request", zap.Error(err))
 		return "", "", err
 	}
 
@@ -177,9 +121,116 @@ type DebugTraceResult struct {
 	AddressFunctionIdentifier string
 	// AmountFunctionIdentifier is the transfer amount decoded from the transfer() input data.
 	AmountFunctionIdentifier uint64
+	// InternalCalls are the nested (depth >= 1) call frames worth persisting
+	// as internal transactions: value transfers executed by contract code and
+	// contract creations. The top-level frame is not included; it already
+	// exists as the outer transaction row.
+	InternalCalls []InternalCall
 	// Err is non-nil when the RPC call itself failed (network error, unmarshal error, etc.).
 	// A nil Err with empty TransactionType means the trace has no relevant call data.
 	Err error
+}
+
+// InternalCall is one nested callTracer frame, flattened for persistence in
+// the internalTransactionByAddress collection.
+type InternalCall struct {
+	// Type is the frame opcode (CALL, CALLCODE, CREATE, CREATE2, SELFDESTRUCT).
+	Type string
+	// From and To are Q-prefix addresses.
+	From string
+	To   string
+	// Input and Output are raw hex strings ("0x" when absent).
+	Input  string
+	Output string
+	// TraceAddress is the frame's position in the call tree, derived from
+	// child indices (callTracer itself does not emit it).
+	TraceAddress []int
+	// Value is the QRL amount moved by this frame (wei / QUANTA), matching
+	// the float schema of the existing collection.
+	Value float64
+	// Gas and GasUsed are raw hex strings ("0x0" when absent).
+	Gas     string
+	GasUsed string
+}
+
+// parseHexBig parses a 0x-prefixed hex quantity into a big.Int, or nil when
+// the input is empty or malformed.
+func parseHexBig(hexVal string) *big.Int {
+	if hexVal == "" || !validation.IsValidHexString(hexVal) {
+		return nil
+	}
+	v := new(big.Int)
+	if _, ok := v.SetString(strings.TrimPrefix(hexVal, "0x"), 16); !ok {
+		return nil
+	}
+	return v
+}
+
+// hexOrDefault returns the hex string unchanged, or def when empty.
+func hexOrDefault(hexVal string, def string) string {
+	if hexVal == "" {
+		return def
+	}
+	return hexVal
+}
+
+// flattenCalls walks a callTracer call tree depth-first and returns the
+// nested frames worth persisting as internal transactions: frames that move
+// value plus contract creations. Frames with a non-empty error are skipped
+// together with their whole subtree, a reverted frame's transfers never took
+// effect. path is the traceAddress prefix inherited from the parent frame.
+func flattenCalls(calls []models.Call, path []int) []InternalCall {
+	var out []InternalCall
+	for i, call := range calls {
+		if call.Error != "" {
+			continue
+		}
+
+		tracePath := make([]int, 0, len(path)+1)
+		tracePath = append(tracePath, path...)
+		tracePath = append(tracePath, i)
+
+		value := parseHexBig(call.Value)
+		hasValue := value != nil && value.Sign() > 0
+		if hasValue || strings.HasPrefix(call.Type, "CREATE") {
+			valueFloat := 0.0
+			if hasValue {
+				divisor := new(big.Float).SetFloat64(float64(utils.QUANTA))
+				quo := new(big.Float).Quo(new(big.Float).SetInt(value), divisor)
+				valueFloat, _ = quo.Float64()
+			}
+
+			from := call.From
+			if from != "" {
+				if err := validation.ValidateAddress(from); err != nil {
+					zap.L().Warn("Invalid from address in internal call frame", zap.Error(err))
+				}
+				from = validation.ConvertToQAddress(from)
+			}
+			to := call.To
+			if to != "" {
+				if err := validation.ValidateAddress(to); err != nil {
+					zap.L().Warn("Invalid to address in internal call frame", zap.Error(err))
+				}
+				to = validation.ConvertToQAddress(to)
+			}
+
+			out = append(out, InternalCall{
+				Type:         call.Type,
+				From:         from,
+				To:           to,
+				Input:        hexOrDefault(call.Input, "0x"),
+				Output:       hexOrDefault(call.Output, "0x"),
+				TraceAddress: tracePath,
+				Value:        valueFloat,
+				Gas:          hexOrDefault(call.Gas, "0x0"),
+				GasUsed:      hexOrDefault(call.GasUsed, "0x0"),
+			})
+		}
+
+		out = append(out, flattenCalls(call.Calls, tracePath)...)
+	}
+	return out
 }
 
 // emptyTrace returns a zero-value DebugTraceResult, optionally carrying an error.
@@ -231,7 +282,7 @@ func CallDebugTraceTransaction(hash string) DebugTraceResult {
 		zap.L().Error("No node endpoint configured for debug trace")
 		return emptyTrace(fmt.Errorf("no node endpoint configured"))
 	}
-	body, err := postWithRetry(primary, b, 1)
+	body, err := postWithRetry(context.Background(), primary, b, 1)
 	if err != nil {
 		zap.L().Error("Failed to execute request", zap.Error(err))
 		return emptyTrace(err)
@@ -242,7 +293,25 @@ func CallDebugTraceTransaction(hash string) DebugTraceResult {
 		return emptyTrace(err)
 	}
 
+	// Surface JSON-RPC errors instead of treating them as an empty trace;
+	// a non-archive node cannot trace old transactions ("historical state
+	// not available") and callers must be able to tell that apart from a
+	// transaction that genuinely has no internal calls.
+	if tracerResponse.Error != nil {
+		return emptyTrace(fmt.Errorf("debug_traceTransaction failed for %s: %s (code %d)",
+			hash, tracerResponse.Error.Message, tracerResponse.Error.Code))
+	}
+
 	var res DebugTraceResult
+
+	// Flatten the nested call frames before the legacy top-level gate below:
+	// a transaction whose top-level frame carries no interesting call data
+	// can still contain value-moving sub-frames (e.g. an HTLC claim paying
+	// out contract-held funds). A reverted top-level frame voids the whole
+	// tree, so nothing is collected in that case.
+	if tracerResponse.Result.Error == "" {
+		res.InternalCalls = flattenCalls(tracerResponse.Result.Calls, nil)
+	}
 
 	// Validate and parse gas values
 	if tracerResponse.Result.Gas != "" {
@@ -273,7 +342,7 @@ func CallDebugTraceTransaction(hash string) DebugTraceResult {
 			valueBigInt := new(big.Int)
 			valueBigInt.SetString(tracerResponse.Result.Value[2:], 16)
 
-			divisor := new(big.Float).SetFloat64(float64(configs.QUANTA))
+			divisor := new(big.Float).SetFloat64(float64(utils.QUANTA))
 			bigIntAsFloat := new(big.Float).SetInt(valueBigInt)
 			resultBigFloat := new(big.Float).Quo(bigIntAsFloat, divisor)
 			valueFloat64, _ := resultBigFloat.Float64()
@@ -294,7 +363,9 @@ func CallDebugTraceTransaction(hash string) DebugTraceResult {
 		tracerResponse.Result.Type == "CALL"
 
 	if !hasValidCallData {
-		return emptyTrace(nil)
+		// Keep the flattened sub-frames even when the legacy top-level
+		// fields stay empty; the caller persists them independently.
+		return DebugTraceResult{InternalCalls: res.InternalCalls}
 	}
 
 	// Validate addresses and convert to Q format
@@ -400,30 +471,11 @@ func GetBalance(address string) (string, error) {
 		return "", fmt.Errorf("invalid address format: %v", err)
 	}
 
-	group := models.JsonRPC{
-		Jsonrpc: "2.0",
-		Method:  "qrl_getBalance",
-		Params:  []interface{}{address, "latest"},
-		ID:      1,
-	}
-
-	b, err := json.Marshal(group)
-	if err != nil {
-		zap.L().Info("Failed JSON marshal", zap.Error(err))
-		return "", err
-	}
-
-	body, err := DoNodeRPC(b)
-	if err != nil {
-		zap.L().Info("Failed to execute request", zap.Error(err))
-		return "", err
-	}
-
 	var result struct {
 		Result string `json:"result"`
 	}
-	if err := json.Unmarshal(body, &result); err != nil {
-		zap.L().Info("Failed to unmarshal response", zap.Error(err))
+	if err := rpcCall("qrl_getBalance", []interface{}{address, "latest"}, &result); err != nil {
+		zap.L().Info("Failed to execute request", zap.Error(err))
 		return "", err
 	}
 
@@ -435,30 +487,31 @@ func GetBalance(address string) (string, error) {
 	return result.Result, nil
 }
 
-func GetValidators() error {
+// GetValidators fetches every page of validators from the beacon chain API
+// and returns the parsed pages. Persistence is the caller's concern
+// (synchroniser feeds the pages to services.StoreValidators); keeping this
+// function transport-only keeps rpc free of any db/services dependency.
+func GetValidators() ([]models.BeaconValidatorResponse, error) {
 	zap.L().Info("Starting GetValidators call to beacon chain API")
 
 	beaconchainURL := os.Getenv("BEACONCHAIN_API")
 	if beaconchainURL == "" {
-		return fmt.Errorf("BEACONCHAIN_API environment variable not set")
+		return nil, fmt.Errorf("BEACONCHAIN_API environment variable not set")
 	}
 
 	// Base URL for the validators endpoint
 	baseURL := strings.TrimRight(beaconchainURL, "/") + "/qrl/v1alpha1/validators"
 	client := GetHTTPClient()
 
-	// Get current epoch from latest block
-	latestBlock, err := GetLatestBlock()
-	if err != nil {
-		return fmt.Errorf("failed to get latest block: %v", err)
-	}
-	currentEpoch := strconv.FormatUint(uint64(utils.HexToInt(latestBlock).Int64()/128), 10)
-
 	pageToken := ""
-	maxPages := 3 // Configurable based on needs
-	currentPage := 0
+	// Safety ceiling against a misbehaving API that keeps returning page
+	// tokens, not an expected operating point. Pagination normally ends when
+	// NextPageToken comes back empty; the old cap of 3 silently truncated the
+	// validator set once it outgrew three pages.
+	const maxPages = 100
+	var pages []models.BeaconValidatorResponse
 
-	for currentPage < maxPages {
+	for {
 		requestURL := baseURL
 		if pageToken != "" {
 			requestURL += "?page_token=" + pageToken
@@ -466,51 +519,49 @@ func GetValidators() error {
 
 		req, err := http.NewRequest("GET", requestURL, nil)
 		if err != nil {
-			return fmt.Errorf("failed to create request: %v", err)
+			return nil, fmt.Errorf("failed to create request: %v", err)
 		}
 
 		resp, err := client.Do(req)
 		if err != nil {
-			return fmt.Errorf("failed to get response from beacon API: %v", err)
+			return nil, fmt.Errorf("failed to get response from beacon API: %v", err)
 		}
 
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
-			return fmt.Errorf("unexpected status code from beacon API: %d", resp.StatusCode)
+			return nil, fmt.Errorf("unexpected status code from beacon API: %d", resp.StatusCode)
 		}
 
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			return fmt.Errorf("failed to read response body: %v", err)
+			return nil, fmt.Errorf("failed to read response body: %v", err)
 		}
 
 		var beaconResponse models.BeaconValidatorResponse
 		err = json.Unmarshal(body, &beaconResponse)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal response: %v", err)
+			return nil, fmt.Errorf("failed to unmarshal response: %v", err)
 		}
 
-		// Store this page of validators using the validator service
-		err = services.StoreValidators(beaconResponse, currentEpoch)
-		if err != nil {
-			return fmt.Errorf("failed to store validators: %v", err)
-		}
-
-		currentPage++
+		pages = append(pages, beaconResponse)
 
 		// Check if there's a next page
 		if beaconResponse.NextPageToken == "" {
+			break
+		}
+		if len(pages) >= maxPages {
+			zap.L().Warn("Validator pagination hit safety ceiling, result truncated",
+				zap.Int("max_pages", maxPages))
 			break
 		}
 		pageToken = beaconResponse.NextPageToken
 	}
 
 	zap.L().Info("Completed fetching validators",
-		zap.Int("pages_processed", currentPage),
-		zap.String("current_epoch", currentEpoch))
+		zap.Int("pages_processed", len(pages)))
 
-	return nil
+	return pages, nil
 }
 
 // GetBeaconChainHead fetches the current chain head information from the beacon chain API
@@ -562,28 +613,16 @@ func GetCode(address string, blockNrOrHash string) (string, error) {
 		return "", fmt.Errorf("invalid address format: %v", err)
 	}
 
-	group := models.JsonRPC{
-		Jsonrpc: "2.0",
-		Method:  "qrl_getCode",
-		Params:  []interface{}{address, "latest"},
-		ID:      1,
-	}
-
-	b, err := json.Marshal(group)
-	if err != nil {
-		zap.L().Info("Failed JSON marshal", zap.Error(err))
-		return "", err
-	}
-
-	body, err := DoNodeRPC(b)
-	if err != nil {
-		zap.L().Info("Failed to execute request", zap.Error(err))
-		return "", err
+	// Honor the caller's block parameter. This used to hardcode "latest",
+	// which silently broke historical probes like the genesis-code check in
+	// ReprocessIncompleteContracts.
+	if blockNrOrHash == "" {
+		blockNrOrHash = "latest"
 	}
 
 	var GetCode models.GetCode
-	if err := json.Unmarshal(body, &GetCode); err != nil {
-		zap.L().Info("Failed to unmarshal response", zap.Error(err))
+	if err := rpcCall("qrl_getCode", []interface{}{address, blockNrOrHash}, &GetCode); err != nil {
+		zap.L().Info("Failed to execute request", zap.Error(err))
 		return "", err
 	}
 
@@ -615,28 +654,9 @@ func ZondGetBlockLogs(blockNumber string, topic0Filters []string) (*models.ZondL
 		filter["topics"] = [][]string{topic0Filters}
 	}
 
-	group := models.JsonRPC{
-		Jsonrpc: "2.0",
-		Method:  "qrl_getLogs",
-		Params:  []interface{}{filter},
-		ID:      1,
-	}
-
-	b, err := json.Marshal(group)
-	if err != nil {
-		zap.L().Info("Failed JSON marshal", zap.Error(err))
-		return nil, err
-	}
-
-	body, err := DoNodeRPC(b)
-	if err != nil {
-		zap.L().Info("Failed to get response from RPC call", zap.Error(err))
-		return nil, err
-	}
-
 	var responseData models.ZondLogsResponse
-	if err := json.Unmarshal(body, &responseData); err != nil {
-		zap.L().Info("Failed to unmarshal response", zap.Error(err))
+	if err := rpcCall("qrl_getLogs", []interface{}{filter}, &responseData); err != nil {
+		zap.L().Info("Failed to get response from RPC call", zap.Error(err))
 		return nil, err
 	}
 
@@ -652,28 +672,11 @@ func GetTxDetailsByHash(txHash string) (*models.TransactionResult, error) {
 		return nil, fmt.Errorf("invalid transaction hash: %v", err)
 	}
 
-	group := models.JsonRPC{
-		Jsonrpc: "2.0",
-		Method:  "qrl_getTransactionByHash",
-		Params:  []interface{}{txHash},
-		ID:      1,
-	}
-
-	b, err := json.Marshal(group)
-	if err != nil {
-		zap.L().Info("Failed JSON marshal", zap.Error(err))
-		return nil, err
-	}
-
-	body, err := DoNodeRPC(b)
-	if err != nil {
-		zap.L().Info("Failed to execute request", zap.Error(err))
-		return nil, err
-	}
-
+	// rpcCall also surfaces the JSON-RPC error member: previously a node
+	// error here was silently ignored and an empty Result returned.
 	var tx models.TransactionResponse
-	if err := json.Unmarshal(body, &tx); err != nil {
-		zap.L().Info("Failed to unmarshal transaction", zap.Error(err))
+	if err := rpcCall("qrl_getTransactionByHash", []interface{}{txHash}, &tx); err != nil {
+		zap.L().Info("Failed to execute request", zap.Error(err))
 		return nil, err
 	}
 

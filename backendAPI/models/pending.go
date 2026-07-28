@@ -45,8 +45,8 @@ func (p *PendingTransaction) MarshalJSON() ([]byte, error) {
 
 type PaginatedPendingTransactions struct {
 	Transactions []PendingTransaction `json:"transactions"`
-	Total       int                  `json:"total"`
-	Page        int                  `json:"page"`
-	Limit       int                  `json:"limit"`
-	TotalPages  int                  `json:"totalPages"`
+	Total        int                  `json:"total"`
+	Page         int                  `json:"page"`
+	Limit        int                  `json:"limit"`
+	TotalPages   int                  `json:"totalPages"`
 }

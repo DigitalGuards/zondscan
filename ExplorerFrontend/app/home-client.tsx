@@ -5,14 +5,24 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
-import { formatNumberWithCommas, timeAgo, formatStaked, formatGasPrice, truncateHash, formatAmount, formatAddress } from './lib/helpers';
+import { formatNumberWithCommas, timeAgo, formatStaked, formatGasPrice, truncateHash, formatAmount, formatAddress, NATIVE_UNIT } from './lib/helpers';
+import type { EpochInfo } from './types';
 import config from '../config.js';
 import SearchBar from './components/SearchBar';
 
 const Charts = dynamic(() => import('./components/Charts'), {
   loading: () => (
-    <div className="h-[400px] bg-[#1e1e1e] rounded-xl border border-[#2a2a2a] animate-pulse flex items-center justify-center">
-      <span className="text-gray-500">Loading chart...</span>
+    // Mirrors the rendered Charts card (header strip + 400px body) so the
+    // page doesn't reflow when the widget hydrates.
+    <div className="card overflow-hidden">
+      <div className="panel-header">
+        <div className="skeleton h-4 w-32" />
+      </div>
+      <div className="p-4">
+        <div className="h-[400px] mt-2 skeleton flex items-center justify-center">
+          <span className="text-text-muted text-sm">Loading chart...</span>
+        </div>
+      </div>
     </div>
   ),
   ssr: false,
@@ -20,24 +30,14 @@ const Charts = dynamic(() => import('./components/Charts'), {
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-interface EpochInfo {
-  headEpoch: string;
-  headSlot: string;
-  finalizedEpoch: string;
-  justifiedEpoch: string;
-  slotsPerEpoch: number;
-  secondsPerSlot: number;
-  slotInEpoch: number;
-  timeToNextEpoch: number;
-  updatedAt: number;
-}
-
 interface BlockResult {
   number: string;
   timestamp: string;
   hash: string;
   miner: string;
-  transactions: any[];
+  // Only `.length` is read on the home page; the per-tx shape varies by
+  // endpoint, so `unknown[]` keeps it honest without inventing a type.
+  transactions: unknown[];
 }
 
 interface TxResult {
@@ -59,6 +59,7 @@ interface HomeData {
   txs: TxResult[];
   totalStaked: string;
   marketCap: number;
+  circulating: string;
   avgGasPriceHex: string | null;
   loading: boolean;
   error: boolean;
@@ -139,41 +140,57 @@ const icons = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
     </svg>
   ),
+  circulating: (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+    </svg>
+  ),
 };
 
-// ── Stat Bar ─────────────────────────────────────────────────────────────────
+// ── Stat Cluster ─────────────────────────────────────────────────────────────
+
+interface Stat {
+  label: string;
+  value: string | number;
+  icon: React.ReactNode;
+  live?: boolean;
+}
 
 function StatBar({ data }: { data: HomeData }) {
-  const stats = [
-    { label: 'Epoch', value: data.epochInfo ? data.epochInfo.headEpoch : ',', icon: icons.epoch },
-    { label: 'Avg Gas Price', value: data.avgGasPriceHex ? `${formatGasPrice(data.avgGasPriceHex)} Shor` : ',', icon: icons.gas },
-    { label: 'Block Height', value: formatNumberWithCommas(data.blockHeight.toString()), icon: icons.block },
+  const stats: Stat[] = [
+    { label: 'Epoch', value: data.epochInfo ? data.epochInfo.headEpoch : '…', icon: icons.epoch },
+    { label: 'Avg Gas Price', value: data.avgGasPriceHex ? `${formatGasPrice(data.avgGasPriceHex)} Shor` : '…', icon: icons.gas },
+    { label: 'Block Height', value: formatNumberWithCommas(data.blockHeight.toString()), icon: icons.block, live: true },
     { label: 'Validators', value: formatNumberWithCommas(data.validatorCount.toString()), icon: icons.validators },
-    { label: 'Staked QRL', value: data.totalStaked !== '0' ? formatStaked(data.totalStaked) : ',', icon: icons.staked },
+    { label: `Staked ${NATIVE_UNIT}`, value: data.totalStaked !== '0' ? formatStaked(data.totalStaked) : '…', icon: icons.staked },
     { label: 'Transactions', value: formatNumberWithCommas(data.totalTransactions.toString()), icon: icons.transactions },
-    { label: 'Market Cap', value: data.marketCap > 0 ? '$' + formatNumberWithCommas(data.marketCap.toString()) : ',', icon: icons.marketCap },
+    { label: 'Market Cap', value: data.marketCap > 0 ? '$' + formatNumberWithCommas(data.marketCap.toString()) : '…', icon: icons.marketCap },
+    // Unit lives on the label line per the Quanta layout convention; the
+    // value stays a bare number so the 8-cell strip keeps its width budget.
+    { label: `Circulating ${NATIVE_UNIT}`, value: data.circulating !== '0' ? formatNumberWithCommas(data.circulating) : '…', icon: icons.circulating },
   ];
 
   return (
-    <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden">
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7">
-        {stats.map((stat, i) => (
+    // gap-px over a hairline backdrop draws uniform dividers at every
+    // breakpoint (the old per-index border logic left uneven seams at the
+    // sm 4-column layout).
+    <div className="rounded-2xl border border-border overflow-hidden bg-border/60 shadow-card">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-px">
+        {stats.map((stat) => (
           <div
             key={stat.label}
-            className={`px-4 py-4 sm:py-5 flex flex-col items-center justify-center text-center
-                        ${i < stats.length - 1 ? 'border-b lg:border-b-0 lg:border-r border-[#2a2a2a]' : ''}
-                        ${i % 2 === 0 && i < stats.length - 1 ? 'border-r sm:border-r border-[#2a2a2a]' : ''}
-                        `}
+            className="bg-background-secondary px-4 py-4 sm:py-5 flex flex-col items-center justify-center text-center"
           >
             {data.loading ? (
-              <div className="h-7 w-20 bg-[#2a2a2a] rounded animate-pulse" />
+              <div className="skeleton h-7 w-20" />
             ) : (
-              <span className="text-lg sm:text-xl font-semibold text-white tabular-nums">
+              <span className="font-display text-lg sm:text-xl font-semibold text-text-primary tabular-nums inline-flex items-center gap-2">
+                {stat.live && <span className="live-dot" aria-hidden="true" />}
                 {stat.value}
               </span>
             )}
-            <span className="flex items-center gap-1.5 text-[11px] text-gray-500 mt-1.5 uppercase tracking-wider">
-              <span className="text-gray-600">{stat.icon}</span>
+            <span className="flex items-center gap-1.5 text-[11px] text-text-muted mt-1.5 uppercase tracking-wider">
+              <span aria-hidden="true">{stat.icon}</span>
               {stat.label}
             </span>
           </div>
@@ -187,25 +204,30 @@ function StatBar({ data }: { data: HomeData }) {
 
 const TABLE_ROWS = 8;
 
-const ROW_CLASS = 'flex items-center gap-3 px-4 py-3 border-b border-[#2a2a2a] last:border-b-0 text-sm';
+const ROW_CLASS = 'flex items-center gap-3 px-4 py-3 border-b border-border last:border-b-0 text-sm';
 
-function TableHeader({ icon, title, viewAllHref }: { icon: React.ReactNode; title: string; viewAllHref: string }) {
+function TableHeader({ icon, title, viewAllHref, tone }: { icon: React.ReactNode; title: string; viewAllHref: string; tone: 'accent' | 'quantum' }) {
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2a2a]">
-      <h2 className="flex items-center gap-2 text-[15px] font-semibold text-[#ffa729]">
-        {icon}
+    <div className="panel-header">
+      <h2 className="flex items-center gap-2.5 text-[15px] font-display font-semibold text-text-primary">
+        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-lg ${tone === 'accent' ? 'bg-accent/10 text-accent' : 'bg-quantum/10 text-quantum'}`}>
+          {icon}
+        </span>
         {title}
       </h2>
-      <Link href={viewAllHref} className="text-xs text-[#ffa729] hover:text-[#ffb954] hover:underline transition-colors">
+      <Link href={viewAllHref} className="text-xs link-accent hover:underline">
         View all &rarr;
       </Link>
     </div>
   );
 }
 
-function RowIcon({ children }: { children: React.ReactNode }) {
+function RowIcon({ children, tone }: { children: React.ReactNode; tone: 'accent' | 'quantum' }) {
   return (
-    <div className="flex-shrink-0 w-8 h-8 rounded-md bg-[#2a2a2a] flex items-center justify-center text-gray-400">
+    <div className={`flex-shrink-0 w-8 h-8 rounded-lg border flex items-center justify-center
+                     ${tone === 'accent'
+                       ? 'bg-accent/[0.07] border-accent/10 text-accent/80'
+                       : 'bg-quantum/[0.07] border-quantum/10 text-quantum/80'}`}>
       {children}
     </div>
   );
@@ -213,7 +235,7 @@ function RowIcon({ children }: { children: React.ReactNode }) {
 
 function ValueBadge({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-[#2a2a2a] border border-[#3a3a3a] text-[11px] text-gray-300 tabular-nums">
+    <span className="chip num text-[11px]">
       {children}
     </span>
   );
@@ -222,16 +244,16 @@ function ValueBadge({ children }: { children: React.ReactNode }) {
 function SkeletonRow() {
   return (
     <div className={ROW_CLASS}>
-      <div className="flex-shrink-0 w-8 h-8 rounded-md bg-[#2a2a2a] animate-pulse" />
+      <div className="flex-shrink-0 w-8 h-8 rounded-lg skeleton" />
       <div className="flex-1 min-w-0 space-y-1.5">
-        <div className="h-3.5 w-24 bg-[#2a2a2a] rounded animate-pulse" />
-        <div className="h-3 w-16 bg-[#2a2a2a] rounded animate-pulse" />
+        <div className="skeleton h-3.5 w-24" />
+        <div className="skeleton h-3 w-16" />
       </div>
       <div className="flex-1 min-w-0 space-y-1.5 hidden sm:block">
-        <div className="h-3 w-28 bg-[#2a2a2a] rounded animate-pulse" />
-        <div className="h-3 w-28 bg-[#2a2a2a] rounded animate-pulse" />
+        <div className="skeleton h-3 w-28" />
+        <div className="skeleton h-3 w-28" />
       </div>
-      <div className="h-5 w-16 bg-[#2a2a2a] rounded animate-pulse" />
+      <div className="skeleton h-5 w-16" />
     </div>
   );
 }
@@ -244,8 +266,8 @@ function getEpochFromBlock(blockNumber: number): number {
 
 function BlockTable({ blocks, loading }: { blocks: BlockResult[]; loading: boolean }) {
   return (
-    <section aria-label="Latest blocks" className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden">
-      <TableHeader icon={icons.block} title="Latest Blocks" viewAllHref="/blocks/1" />
+    <section aria-label="Latest blocks" className="card overflow-hidden">
+      <TableHeader icon={icons.block} title="Latest Blocks" viewAllHref="/blocks/1" tone="accent" />
       <div>
         {loading
           ? Array.from({ length: TABLE_ROWS }).map((_, i) => <SkeletonRow key={i} />)
@@ -257,36 +279,36 @@ function BlockTable({ blocks, loading }: { blocks: BlockResult[]; loading: boole
               const miner = block.miner ? formatAddress(block.miner) : '';
 
               return (
-                <div key={`${block.number}-${idx}`} className={`${ROW_CLASS} hover:bg-[#252525] transition-colors`}>
-                  <RowIcon>{icons.block}</RowIcon>
+                <div key={`${block.number}-${idx}`} className={`${ROW_CLASS} hover:bg-surface transition-colors`}>
+                  <RowIcon tone="accent">{icons.block}</RowIcon>
 
                   <div className="flex-1 min-w-0">
                     <Link
                       href={`/block/${blockNum}`}
-                      className="block text-[#ffa729] hover:text-[#ffb954] hover:underline font-medium tabular-nums truncate"
+                      className="block link-accent hover:underline font-medium num truncate"
                     >
                       {formatNumberWithCommas(blockNum.toString())}
                     </Link>
-                    <span className="text-[11px] text-gray-500 tabular-nums">{timeAgo(timestamp)}</span>
+                    <span className="text-[11px] text-text-muted tabular-nums">{timeAgo(timestamp)}</span>
                   </div>
 
                   <div className="flex-1 min-w-0 hidden sm:block">
                     {miner ? (
                       <div className="flex items-center gap-1 text-[12px] truncate">
-                        <span className="text-gray-500">Miner</span>
+                        <span className="text-text-muted">Miner</span>
                         <Link
                           href={`/address/${miner}`}
-                          className="text-gray-300 hover:text-[#ffa729] hover:underline font-mono truncate"
+                          className="text-text-secondary hover:text-accent hover:underline font-mono truncate"
                         >
                           {truncateHash(miner, 8, 6)}
                         </Link>
                       </div>
                     ) : null}
-                    <div className="text-[11px] text-gray-500 tabular-nums">
-                      <Link href={`/block/${blockNum}`} className="hover:text-[#ffa729] hover:underline">
+                    <div className="text-[11px] text-text-muted tabular-nums">
+                      <Link href={`/block/${blockNum}`} className="hover:text-accent hover:underline">
                         {txCount} txn{txCount === 1 ? '' : 's'}
                       </Link>
-                      <span className="text-gray-600"> · epoch {formatNumberWithCommas(epoch.toString())}</span>
+                      <span className="text-text-muted/70"> · epoch {formatNumberWithCommas(epoch.toString())}</span>
                     </div>
                   </div>
 
@@ -305,8 +327,8 @@ function BlockTable({ blocks, loading }: { blocks: BlockResult[]; loading: boole
 
 function TransactionTable({ txs, loading }: { txs: TxResult[]; loading: boolean }) {
   return (
-    <section aria-label="Latest transactions" className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden">
-      <TableHeader icon={icons.transactions} title="Latest Transactions" viewAllHref="/transactions/1" />
+    <section aria-label="Latest transactions" className="card overflow-hidden">
+      <TableHeader icon={icons.transactions} title="Latest Transactions" viewAllHref="/transactions/1" tone="quantum" />
       <div>
         {loading
           ? Array.from({ length: TABLE_ROWS }).map((_, i) => <SkeletonRow key={i} />)
@@ -317,41 +339,41 @@ function TransactionTable({ txs, loading }: { txs: TxResult[]; loading: boolean 
               const [amount, unit] = formatAmount(tx.Amount);
 
               return (
-                <div key={`${tx.TxHash}-${idx}`} className={`${ROW_CLASS} hover:bg-[#252525] transition-colors`}>
-                  <RowIcon>{icons.transactions}</RowIcon>
+                <div key={`${tx.TxHash}-${idx}`} className={`${ROW_CLASS} hover:bg-surface transition-colors`}>
+                  <RowIcon tone="quantum">{icons.transactions}</RowIcon>
 
                   <div className="flex-1 min-w-0">
                     <Link
                       href={`/tx/${tx.TxHash}`}
-                      className="block text-[#ffa729] hover:text-[#ffb954] hover:underline font-mono text-[13px] truncate"
+                      className="block link-accent hover:underline font-mono text-[13px] truncate"
                     >
                       {truncateHash(tx.TxHash, 10, 6)}
                     </Link>
-                    <span className="text-[11px] text-gray-500 tabular-nums">{timeAgo(timestamp)}</span>
+                    <span className="text-[11px] text-text-muted tabular-nums">{timeAgo(timestamp)}</span>
                   </div>
 
                   <div className="flex-1 min-w-0 hidden sm:block">
                     <div className="flex items-center gap-1 text-[12px] truncate">
-                      <span className="text-gray-500 w-8 flex-shrink-0">From</span>
+                      <span className="text-text-muted w-8 flex-shrink-0">From</span>
                       {from ? (
-                        <Link href={`/address/${from}`} className="text-gray-300 hover:text-[#ffa729] hover:underline font-mono truncate">
+                        <Link href={`/address/${from}`} className="text-text-secondary hover:text-accent hover:underline font-mono truncate">
                           {truncateHash(from, 8, 6)}
                         </Link>
-                      ) : <span className="text-gray-600">,</span>}
+                      ) : <span className="text-text-muted">…</span>}
                     </div>
                     <div className="flex items-center gap-1 text-[12px] truncate">
-                      <span className="text-gray-500 w-8 flex-shrink-0">To</span>
+                      <span className="text-text-muted w-8 flex-shrink-0">To</span>
                       {to ? (
-                        <Link href={`/address/${to}`} className="text-gray-300 hover:text-[#ffa729] hover:underline font-mono truncate">
+                        <Link href={`/address/${to}`} className="text-text-secondary hover:text-accent hover:underline font-mono truncate">
                           {truncateHash(to, 8, 6)}
                         </Link>
-                      ) : <span className="text-gray-600">,</span>}
+                      ) : <span className="text-text-muted">…</span>}
                     </div>
                   </div>
 
                   <div className="flex-shrink-0">
                     <ValueBadge>
-                      {amount} <span className="text-gray-500 ml-0.5">{unit}</span>
+                      {amount} <span className="text-text-muted ml-0.5">{unit}</span>
                     </ValueBadge>
                   </div>
                 </div>
@@ -364,7 +386,7 @@ function TransactionTable({ txs, loading }: { txs: TxResult[]; loading: boolean 
 
 // ── Main Component ───────────────────────────────────────────────────────────
 
-export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.Element {
+export default function HomeClient(): JSX.Element {
   const [data, setData] = React.useState<HomeData>({
     blockHeight: 0,
     totalTransactions: 0,
@@ -374,6 +396,7 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
     txs: [],
     totalStaked: '0',
     marketCap: 0,
+    circulating: '0',
     avgGasPriceHex: null,
     loading: true,
     error: false,
@@ -402,6 +425,7 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
           next.validatorCount = overviewRes.value.data.validatorCount || 0;
           next.dataInitialized = overviewRes.value.data.status?.dataInitialized ?? false;
           next.marketCap = overviewRes.value.data.marketcap || 0;
+          next.circulating = String(overviewRes.value.data.circulating || '0');
         }
         if (latestBlockRes.status === 'fulfilled') {
           next.blockHeight = latestBlockRes.value.data.blockNumber || 0;
@@ -456,42 +480,56 @@ export default function HomeClient({ pageTitle }: { pageTitle: string }): JSX.El
   });
 
   return (
-    <main className="px-4 lg:px-8 pt-4 lg:pt-6" aria-labelledby="home-heading">
+    <main className="page-content pt-6 lg:pt-10" aria-labelledby="home-heading">
       <div className="max-w-6xl mx-auto">
-        {/* Search Bar */}
-        <h1 id="home-heading" className="text-base sm:text-lg font-semibold mb-2 text-white">{pageTitle}</h1>
-        <div className="mb-6">
-          <SearchBar />
-        </div>
-
-        {/* Init Warning */}
-        {!data.loading && !data.dataInitialized && (
-          <div
-            role="status"
-            className="mb-4 px-3 py-2.5 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 text-xs sm:text-sm flex items-center gap-2"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Initializing explorer data... This may take a few minutes.
+        {/* Entrance stagger runs once on mount; the 30s polling below only
+            swaps row contents inside stable sections, so it never
+            re-triggers the animation. */}
+        <div className="stagger-children">
+          <div className="text-center mb-8 lg:mb-10">
+            <p className="eyebrow mb-3">ZondScan · QRL 2.0 · Zond Network</p>
+            <h1
+              id="home-heading"
+              className="font-display text-3xl sm:text-4xl lg:text-5xl font-semibold tracking-tight text-text-primary"
+            >
+              Explore the <span className="text-gradient-accent">post-quantum</span> chain
+            </h1>
           </div>
-        )}
 
-        {/* Stats Bar */}
-        <section aria-label="Network stats" className="mb-6">
-          <StatBar data={data} />
-        </section>
+          {/* Search Bar */}
+          <div className="mb-8 max-w-3xl mx-auto">
+            <SearchBar />
+          </div>
 
-        {/* Side-by-Side Tables */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-          <BlockTable blocks={data.blocks} loading={data.loading} />
-          <TransactionTable txs={data.txs} loading={data.loading} />
+          {/* Init Warning */}
+          {!data.loading && !data.dataInitialized && (
+            <div
+              role="status"
+              className="mb-4 px-3 py-2.5 rounded-xl bg-warning/10 border border-warning/25 text-warning text-xs sm:text-sm flex items-center gap-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Initializing explorer data... This may take a few minutes.
+            </div>
+          )}
+
+          {/* Stats Cluster */}
+          <section aria-label="Network stats" className="mb-6">
+            <StatBar data={data} />
+          </section>
+
+          {/* Side-by-Side Tables */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5 mb-6">
+            <BlockTable blocks={data.blocks} loading={data.loading} />
+            <TransactionTable txs={data.txs} loading={data.loading} />
+          </div>
+
+          {/* TradingView Chart */}
+          <section aria-label="Price chart" className="mb-2">
+            <Charts />
+          </section>
         </div>
-
-        {/* TradingView Chart */}
-        <section aria-label="Price chart" className="mb-2">
-          <Charts />
-        </section>
       </div>
     </main>
   );

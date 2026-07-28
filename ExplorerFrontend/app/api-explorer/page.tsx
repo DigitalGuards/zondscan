@@ -4,22 +4,22 @@ import ApiExplorerClient from './api-explorer-client';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'API Explorer | QRL Explorer',
-  description: 'Explore the free Zondscan REST API. Access blockchain data, transactions, blocks, addresses, validators, and token information for the QRL Zond network.',
+  title: 'API Explorer | ZondScan',
+  description: 'Explore the free Zondscan REST API. Access blockchain data, transactions, blocks, addresses, validators, and token information for the QRL 2.0 network.',
   alternates: {
     ...sharedMetadata.alternates,
     canonical: 'https://zondscan.com/api-explorer',
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'API Explorer | QRL Explorer',
-    description: 'Explore the free Zondscan REST API. Access blockchain data, transactions, blocks, addresses, validators, and token information for the QRL Zond network.',
+    title: 'API Explorer | ZondScan',
+    description: 'Explore the free Zondscan REST API. Access blockchain data, transactions, blocks, addresses, validators, and token information for the QRL 2.0 network.',
     url: 'https://zondscan.com/api-explorer',
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'API Explorer | QRL Explorer',
-    description: 'Explore the free Zondscan REST API. Access blockchain data, transactions, blocks, addresses, validators, and token information for the QRL Zond network.',
+    title: 'API Explorer | ZondScan',
+    description: 'Explore the free Zondscan REST API. Access blockchain data, transactions, blocks, addresses, validators, and token information for the QRL 2.0 network.',
   },
 };
 

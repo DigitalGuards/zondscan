@@ -2,50 +2,128 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ────────────────────────────────────────────────────────────────────────────
+   ZondScan design system: "Quantum Observatory"
+
+   One deep blue-black canvas with faint amber/teal atmosphere, translucent
+   panels with hairline borders, a single amber accent, and mono data type.
+   Every surface derives from these tokens; components must not hardcode hex.
+   ──────────────────────────────────────────────────────────────────────────── */
+
 @theme {
-  --color-background: #1a1a1a;
-  --color-background-secondary: #2d2d2d;
-  --color-background-tertiary: #1f1f1f;
+  /* Canvas */
+  --color-background: #0b0d13;
+  --color-background-secondary: #12151d;
+  --color-background-tertiary: #0e1118;
 
-  --color-border: #3d3d3d;
-  --color-border-hover: #4d4d4d;
+  /* Elevation via stacked translucency: nested surfaces brighten naturally */
+  --color-surface: rgba(255, 255, 255, 0.03);
+  --color-surface-2: rgba(255, 255, 255, 0.055);
+  --color-surface-3: rgba(255, 255, 255, 0.09);
 
+  /* Hairlines */
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-hover: rgba(255, 255, 255, 0.16);
+
+  /* Brand accent (QRL amber) */
   --color-accent: #ffa729;
-  --color-accent-hover: #ffb954;
-  --color-accent-dark: #ff9709;
+  --color-accent-hover: #ffbc57;
+  --color-accent-dark: #f29414;
 
-  --color-text-primary: #ffffff;
-  --color-text-secondary: #a0aec0;
-  --color-text-muted: #9ca3af;
+  /* Secondary "quantum" accent for charts, gradients, live signals */
+  --color-quantum: #2ee6c8;
 
-  --color-primary-dark: #1a1a1a;
+  /* Text. Muted sits at ~4.9:1 on the canvas: keep it above 4.5:1 so
+     11px uppercase labels (table headers, eyebrows) stay WCAG AA legal. */
+  --color-text-primary: #e9ecf2;
+  --color-text-secondary: #9aa3b2;
+  --color-text-muted: #79839b;
 
-  --color-secondary-dark: #2d2d2d;
+  /* Status */
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-error: #f87171;
+  --color-info: #60a5fa;
 
+  /* Legacy aliases still referenced by a few utility classes */
+  --color-primary-dark: #0b0d13;
+  --color-secondary-dark: #12151d;
+
+  /* Gradients are now whisper-subtle: surfaces blend, they don't box */
   --background-image-card-gradient: linear-gradient(
-    to bottom right,
-    #2d2d2d,
-    #1f1f1f
+    180deg,
+    rgba(255, 255, 255, 0.045),
+    rgba(255, 255, 255, 0.02)
   );
   --background-image-sidebar-gradient: linear-gradient(
     to bottom,
-    #1a1a1a,
-    #1a1a1a,
-    #1f1f1f
+    rgba(255, 255, 255, 0.02),
+    rgba(255, 255, 255, 0)
   );
 
+  /* Shadow language: soft ambient drop + machined top edge highlight */
   --shadow-card:
-    0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.15);
-  --shadow-sidebar: 4px 0 24px rgba(0, 0, 0, 0.2);
+    0 1px 0 0 rgba(255, 255, 255, 0.04) inset,
+    0 12px 32px -16px rgba(0, 0, 0, 0.5);
+  --shadow-card-hover:
+    0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
+    0 16px 40px -16px rgba(0, 0, 0, 0.55),
+    0 0 24px -8px rgba(255, 167, 41, 0.12);
+  --shadow-sidebar: 8px 0 32px -12px rgba(0, 0, 0, 0.55);
+  --shadow-glow-accent: 0 0 28px -6px rgba(255, 167, 41, 0.4);
+
+  /* Typography: Chakra Petch display / IBM Plex Sans body / IBM Plex Mono data.
+     The --font-zs-* vars are injected on <html> by next/font in layout.tsx. */
+  --font-sans:
+    var(--font-zs-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono:
+    var(--font-zs-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-display:
+    var(--font-zs-display), var(--font-zs-sans), ui-sans-serif, sans-serif;
+
+  /* Motion */
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --animate-rise: rise 0.5s var(--ease-out-soft) both;
+  --animate-shimmer: shimmer 1.8s linear infinite;
+  --animate-pulse-dot: pulse-dot 2.4s ease-in-out infinite;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes shimmer {
+    from {
+      background-position: -200% 0;
+    }
+    to {
+      background-position: 200% 0;
+    }
+  }
+
+  @keyframes pulse-dot {
+    0%,
+    100% {
+      opacity: 1;
+      box-shadow: 0 0 0 0 rgba(46, 230, 200, 0.45);
+    }
+    50% {
+      opacity: 0.75;
+      box-shadow: 0 0 0 5px rgba(46, 230, 200, 0);
+    }
+  }
 }
 
 /*
-  The default border color has changed to `currentcolor` in Tailwind CSS v4,
-  so we've added these compatibility styles to make sure everything still
-  looks the same as it did with Tailwind CSS v3.
-
-  If we ever want to remove these styles, we need to add an explicit border
-  color utility to any element that depends on these defaults.
+  Tailwind v4 sets default border color to `currentcolor`; pin it to the
+  hairline token so bare `border` utilities blend instead of shouting.
 */
 @layer base {
   *,
@@ -53,226 +131,370 @@
   ::before,
   ::backdrop,
   ::file-selector-button {
-    border-color: var(--color-gray-200, currentcolor);
+    border-color: var(--color-border);
   }
 }
 
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html {
+    background-color: var(--color-background);
+  }
+
+  body {
+    @apply bg-background text-text-primary font-sans antialiased;
+    /* Base vertical wash so the canvas isn't one flat slab */
+    background-image: linear-gradient(180deg, #0c0e15 0%, #0b0d13 40%, #0a0c11 100%);
+    background-attachment: fixed;
+  }
+
+  /* Atmosphere: fixed glow field behind everything. Amber breathes from the
+     top-left (brand), quantum teal answers from the bottom-right. Kept at
+     whisper opacity so data stays legible; the grain layer above prevents
+     gradient banding. */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse 70% 45% at 12% -8%, rgba(255, 167, 41, 0.075), transparent 62%),
+      radial-gradient(ellipse 55% 40% at 92% 112%, rgba(46, 230, 200, 0.055), transparent 62%),
+      radial-gradient(ellipse 45% 30% at 78% 12%, rgba(96, 125, 255, 0.05), transparent 58%);
+  }
+
+  /* Texture: film grain + dot lattice, masked to fade out below the fold.
+     The lattice reads as "instrument graph paper" behind the hero. */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E"),
+      radial-gradient(rgba(255, 255, 255, 0.055) 1px, transparent 1px);
+    background-size: 160px 160px, 26px 26px;
+    opacity: 0.55;
+    mask-image: radial-gradient(ellipse 120% 70% at 50% 0%, black 30%, transparent 75%);
+    -webkit-mask-image: radial-gradient(
+      ellipse 120% 70% at 50% 0%,
+      black 30%,
+      transparent 75%
+    );
+  }
+
+  /* Keyboard focus: one global, on-brand ring. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: rgba(255, 167, 41, 0.28);
+    color: #fff;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* ── Surfaces ──────────────────────────────────────────────────────────────── */
+
 @utility card {
-  /* Card components */
-  @apply bg-card-gradient rounded-xl border border-border shadow-card;
+  /* Primary panel: translucent, hairline, machined top edge */
+  @apply bg-card-gradient rounded-2xl border border-border shadow-card;
 }
 
 @utility card-simple {
-  @apply bg-background-secondary rounded-xl border border-border;
+  @apply bg-surface rounded-2xl border border-border;
+}
+
+@utility card-hover {
+  /* Interactive panel affordance */
+  @apply transition-all duration-300 hover:border-border-hover hover:shadow-card-hover hover:-translate-y-px;
 }
 
 @utility stats-card {
-  /* Stats card used on home page */
-  @apply bg-card-gradient rounded-xl border border-border p-4 md:p-6
-           hover:border-accent/50 transition-all duration-300;
+  @apply bg-card-gradient rounded-2xl border border-border p-4 md:p-6
+           shadow-card transition-all duration-300
+           hover:border-accent/30 hover:shadow-card-hover;
 }
 
+@utility panel-header {
+  /* Header strip inside a card (title row above a table/list) */
+  @apply flex items-center justify-between px-4 py-3 border-b border-border;
+}
+
+@utility well {
+  /* Recessed area inside a card: code, raw data, input backdrops */
+  @apply bg-background-tertiary/80 rounded-xl border border-border;
+}
+
+@utility chip {
+  /* Small inline data capsule */
+  @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md
+           bg-surface-2 border border-border text-xs text-text-secondary;
+}
+
+/* ── Typography helpers ────────────────────────────────────────────────────── */
+
+@utility section-title {
+  @apply font-display text-xl md:text-2xl font-semibold text-text-primary tracking-tight;
+}
+
+@utility eyebrow {
+  /* Small-caps kicker above titles / nav group labels */
+  @apply text-[11px] font-medium uppercase tracking-[0.14em] text-text-muted;
+}
+
+@utility text-gradient-accent {
+  background-image: linear-gradient(
+    100deg,
+    var(--color-accent) 0%,
+    #ffd58a 55%,
+    var(--color-accent-hover) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility num {
+  /* Numeric data: mono, aligned columns */
+  @apply font-mono tabular-nums;
+}
+
+/* ── Controls ──────────────────────────────────────────────────────────────── */
+
 @utility nav-link {
-  /* Navigation link */
-  @apply text-gray-300 hover:text-accent transition-colors;
+  @apply text-text-secondary hover:text-accent transition-colors;
 }
 
 @utility btn-primary {
-  /* Primary button */
-  @apply bg-accent text-white px-4 py-2 rounded-lg
-           hover:bg-accent-dark transition-colors;
+  @apply bg-accent text-background font-semibold px-4 py-2 rounded-lg
+           hover:bg-accent-hover hover:shadow-glow-accent
+           active:scale-[0.98]
+           disabled:opacity-50 disabled:hover:bg-accent disabled:hover:shadow-none
+           transition-all duration-200;
 }
 
 @utility btn-secondary {
-  /* Secondary/outline button */
-  @apply bg-card-gradient text-white px-4 py-2 rounded-lg
-           border border-border hover:border-accent
-           disabled:opacity-50 disabled:hover:border-border
-           transition-all duration-300;
+  @apply bg-surface-2 text-text-primary px-4 py-2 rounded-lg
+           border border-border hover:border-accent/50 hover:bg-surface-3
+           disabled:opacity-50 disabled:hover:border-border disabled:hover:bg-surface-2
+           transition-all duration-200;
 }
 
 @utility input {
-  /* Form input */
-  @apply bg-background-secondary text-text-primary
+  @apply bg-background-tertiary/80 text-text-primary
            border border-border rounded-lg px-4 py-2
            hover:border-border-hover
            focus:ring-1 focus:ring-accent focus:border-accent
-           placeholder-gray-500 outline-hidden transition-colors;
+           placeholder-text-muted outline-hidden transition-colors;
 }
 
-/* Tailwind v4 doesn't ship @tailwindcss/forms, so add explicit utilities for
-   the form controls used by the verify / read / write flows. Without these,
-   the bare `<input>` and `<textarea>` elements render with no background,
-   no border, and the parent card bleeds through them, the boxes look
-   "edgeless" and hard to target.
-   Styling mirrors the dapp-example page on zondscan.com/dapp-example so the
-   verify / read / write surfaces feel consistent with the wallet-pairing
-   demo: dark page-bg fill (one tier darker than the surrounding card) with
-   a visible outline. We use `border-border` (#3d3d3d) to match the card's
-   own outer border, `border-background-secondary` would dissolve into
-   `card-simple`'s solid #2d2d2d background. */
+/* Bare <input>/<textarea> styling for verify / read / write contract flows.
+   Recessed well + visible hairline so the boxes are targetable on the
+   translucent cards. */
 @utility form-input {
-  @apply block w-full bg-background text-gray-200
+  @apply block w-full bg-background-tertiary/80 text-text-primary
            border border-border rounded-md
            px-3 py-2.5 text-sm
            focus:outline-none focus:border-accent
-           placeholder-gray-500 transition-colors;
+           placeholder-text-muted transition-colors;
 }
 
-/* Native checkboxes can't be styled with text-color / bg-color directly
-   without `appearance: none`. CSS `accent-color` is the right knob ,
-   browsers paint the box fill and the check mark with this token. We
-   keep the border for the unchecked state. */
+/* Native checkboxes: accent-color paints box + check, border covers the
+   unchecked state. */
 @utility form-checkbox {
-  @apply h-4 w-4 rounded border border-border bg-background
+  @apply h-4 w-4 rounded border border-border bg-background-tertiary
            accent-accent
            focus:outline-none focus:border-accent
            transition-colors;
 }
 
+/* ── Tables ────────────────────────────────────────────────────────────────── */
+
 @utility table-header {
-  /* Table styles */
-  @apply px-3 md:px-6 py-3 md:py-4 text-left text-xs md:text-sm
-           font-medium text-accent;
+  @apply px-3 md:px-6 py-3 text-left text-[11px] font-medium uppercase
+           tracking-[0.12em] text-text-muted whitespace-nowrap;
 }
 
 @utility table-cell {
-  @apply px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-gray-300;
+  @apply px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-text-secondary;
 }
 
 @utility table-row {
-  @apply border-b border-border hover:bg-accent/5 transition-colors;
+  @apply border-b border-border last:border-b-0 hover:bg-surface transition-colors;
 }
 
 @utility link-accent {
-  /* Link styles */
   @apply text-accent hover:text-accent-hover transition-colors;
 }
 
+/* ── Layout ────────────────────────────────────────────────────────────────── */
+
 @utility page-container {
-  /* Page container */
   @apply w-full min-h-screen;
 }
 
 @utility page-content {
-  /* Shared by every <route>/layout.tsx wrapper. Bumped from 1200 → 1536
-     so detail pages can use the full breadth of widescreen monitors and
-     list/index pages get a consistent gutter. Inner views may further
-     constrain with `detail-content` (same cap) for uniform pillarboxing. */
-  @apply max-w-screen-2xl mx-auto px-4;
+  /* Shared by every <route>/layout.tsx wrapper. 1536px cap so detail pages
+     use widescreen breadth while keeping a consistent gutter. */
+  @apply max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8;
 }
 
-/* Vertical spacing for tx / address / contract detail content. Width
-   and horizontal centring come from `page-content` (every
-   <route>/layout.tsx already wraps in it), adding max-width / mx-auto
-   here would be redundant, and horizontal padding would stack on top
-   of page-content's px-4 and produce a wider gutter on detail pages
-   than on index pages (breadcrumb misalignment when navigating). Just
-   the per-breakpoint vertical rhythm lives here. */
+/* Vertical rhythm for tx / address / contract detail content. Width and
+   centring come from page-content; only per-breakpoint vertical spacing
+   lives here (see layout wrappers). */
 @utility detail-content {
   @apply py-3 md:py-6 lg:py-8;
 }
 
-@utility section-title {
-  /* Section header */
-  @apply text-xl md:text-2xl font-bold text-accent;
-}
-
+/* Legacy flex layout (still referenced by a few older views) */
 @utility flex-container {
-  /* Flex containers (legacy support) */
   @apply flex flex-row text-center w-full max-w-full
-           bg-background-secondary rounded-lg shadow-lg;
+           bg-surface rounded-lg;
 }
 
 @utility flex-item-left {
-  @apply flex flex-col p-4 flex-[25%]
-           bg-background-secondary rounded-lg;
+  @apply flex flex-col p-4 flex-[25%] rounded-lg;
 }
 
 @utility flex-item-center {
-  @apply p-4 flex-[50%] overflow-hidden
-           bg-background-secondary rounded-lg;
+  @apply p-4 flex-[50%] overflow-hidden rounded-lg;
 }
 
 @utility flex-item-right {
-  @apply p-4 flex-[25%]
-           bg-background-secondary rounded-lg;
+  @apply p-4 flex-[25%] rounded-lg;
 }
+
+/* ── Feedback / loading ────────────────────────────────────────────────────── */
 
 @utility skeleton {
-  /* Skeleton loading animation */
-  @apply bg-gray-700 animate-pulse rounded-sm;
+  /* Branded shimmer sweep instead of a flat gray pulse */
+  @apply rounded-md;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.05) 40%,
+    rgba(255, 255, 255, 0.11) 50%,
+    rgba(255, 255, 255, 0.05) 60%
+  );
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
 }
 
-/* Custom scrollbar for dark mode */
+@utility live-dot {
+  /* Pulsing "receiving data" indicator */
+  @apply inline-block w-1.5 h-1.5 rounded-full bg-quantum;
+  animation: var(--animate-pulse-dot);
+}
+
+/* ── Motion helpers ────────────────────────────────────────────────────────── */
+
+@utility animate-rise {
+  animation: var(--animate-rise);
+}
+
+@utility stagger-children {
+  /* Staggered entrance for direct children (first 12) */
+  > * {
+    animation: var(--animate-rise);
+  }
+  > *:nth-child(1) {
+    animation-delay: 0ms;
+  }
+  > *:nth-child(2) {
+    animation-delay: 45ms;
+  }
+  > *:nth-child(3) {
+    animation-delay: 90ms;
+  }
+  > *:nth-child(4) {
+    animation-delay: 135ms;
+  }
+  > *:nth-child(5) {
+    animation-delay: 180ms;
+  }
+  > *:nth-child(6) {
+    animation-delay: 225ms;
+  }
+  > *:nth-child(7) {
+    animation-delay: 270ms;
+  }
+  > *:nth-child(8) {
+    animation-delay: 315ms;
+  }
+  > *:nth-child(9) {
+    animation-delay: 360ms;
+  }
+  > *:nth-child(10) {
+    animation-delay: 405ms;
+  }
+  > *:nth-child(11) {
+    animation-delay: 450ms;
+  }
+  > *:nth-child(12) {
+    animation-delay: 495ms;
+  }
+}
+
+/* ── Scrollbars ────────────────────────────────────────────────────────────── */
+
 @utility scrollbar-dark {
-  scrollbar-color: #2d2d2d #1a1a1a;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
 
   &::-webkit-scrollbar {
     @apply w-3;
   }
 
   &::-webkit-scrollbar-track {
-    @apply bg-background;
+    background: transparent;
   }
 
   &::-webkit-scrollbar-thumb {
-    @apply bg-background-secondary rounded-md border-2 border-background;
+    background: rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
   }
 }
 
-@layer base {
-  body {
-    @apply bg-background text-text-primary;
-  }
-}
-
-@layer utilities {
-  /* Default dark theme */
-  :root {
-    color-scheme: dark;
-  }
-}
-
-/* Accessibility: visible keyboard-focus indicators across all interactive
-   elements inside .detail-content. Without this, the dark theme's hover-only
-   color shift was invisible to keyboard users tabbing through the page.
-   We use :focus-visible (not :focus) so mouse clicks don't trigger the ring,
-   only true keyboard traversal does. The 2 px outline + offset keeps the
-   ring legible against the dark gradient backgrounds the panels use. */
-.detail-content a:focus-visible,
-.detail-content button:focus-visible {
-  outline: 2px solid #ffa729;
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-/* Custom Scrollbar Styles */
 * {
-  /* For Firefox */
+  /* Firefox */
   scrollbar-width: thin;
-  scrollbar-color: #2d2d2d #1a1a1a;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
 }
 
-/* For Chrome, Safari, and Opera */
+/* Chrome, Safari, Opera */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #1a1a1a;
-  border-radius: 4px;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2d2d2d;
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 4px;
-  border: 2px solid #1a1a1a;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3d3d3d;
+  background: rgba(255, 255, 255, 0.2);
 }
 
 /* Hide scrollbar utilities */
@@ -285,7 +507,8 @@
   scrollbar-width: none;
 }
 
-/* Responsive Design */
+/* ── Responsive legacy helpers ─────────────────────────────────────────────── */
+
 @media (min-width: 250px) and (max-width: 1000px) {
   .flex-container {
     @apply flex-col;

@@ -16,23 +16,23 @@ export default function ContractDisplay({ contractCode }: ContractDisplayProps):
   const creatorAddress = formatAddress(rawCreatorAddress);
   
   return (
-    <div className="rounded-xl bg-[#2d2d2d] border border-[#3d3d3d] p-4 md:p-6 space-y-4">
-      <h3 className="text-lg font-semibold text-[#ffa729]">Contract Information</h3>
+    <div className="rounded-xl bg-surface-2 border border-border p-4 md:p-6 space-y-4">
+      <h3 className="font-display text-lg font-semibold text-text-primary">Contract Information</h3>
       
       <div className="space-y-3">
         {/* Creator Address */}
         <div>
-          <div className="text-sm text-gray-400 mb-1">Creator Address</div>
+          <div className="text-sm text-text-secondary mb-1">Creator Address</div>
           <div className="flex items-center space-x-2">
-            <span className="text-sm font-mono text-gray-300 break-all">{creatorAddress}</span>
+            <span className="text-sm font-mono text-text-secondary break-all">{creatorAddress}</span>
             <CopyButton value={creatorAddress} label="Copy address" />
           </div>
         </div>
 
         {/* Contract Size */}
         <div>
-          <div className="text-sm text-gray-400 mb-1">Contract Size</div>
-          <div className="text-sm text-gray-300">
+          <div className="text-sm text-text-secondary mb-1">Contract Size</div>
+          <div className="text-sm text-text-secondary">
             {Math.ceil(contractCode.contractCode.length * 3 / 4)} bytes
           </div>
         </div>

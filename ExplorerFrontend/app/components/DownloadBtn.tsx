@@ -1,3 +1,6 @@
+'use client';
+
+import { useState } from 'react';
 import { formatTimestamp, normalizeHexString, formatAddress } from '../lib/helpers';
 import type { MouseEvent } from 'react';
 import type { DownloadBtnProps, DownloadBtnInternalProps } from '@/app/types';
@@ -27,10 +30,28 @@ function downloadCSV(data: Record<string, string | number>[], fileName: string):
   URL.revokeObjectURL(link.href);
 }
 
-export function DownloadBtn({ data = [], fileName }: DownloadBtnProps): JSX.Element {
-  const handleDownload = (e: MouseEvent<HTMLButtonElement>): void => {
+export function DownloadBtn({ data = [], fileName, getData }: DownloadBtnProps): JSX.Element {
+  // Guards double-clicks while a getData provider is fetching the full
+  // history; also swaps the label so the wait is visible.
+  const [busy, setBusy] = useState(false);
+
+  const handleDownload = async (e: MouseEvent<HTMLButtonElement>): Promise<void> => {
     e.preventDefault();
-    const datas = data?.length ? data : [];
+    if (busy) return;
+
+    let datas = data?.length ? data : [];
+    if (getData) {
+      setBusy(true);
+      try {
+        datas = await getData();
+      } catch (error) {
+        console.error('Failed to fetch rows for download:', error);
+        window.alert('Failed to download the full history. Please try again.');
+        return;
+      } finally {
+        setBusy(false);
+      }
+    }
 
     const convertedData = datas.map(item => {
       const convertedItem: Record<string, string | number> = {};
@@ -71,18 +92,35 @@ export function DownloadBtn({ data = [], fileName }: DownloadBtnProps): JSX.Elem
   return (
     <button
       type="button"
-      className="px-4 py-2 text-sm font-medium rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] hover:text-white transition-colors"
-      onClick={handleDownload}
+      className="px-4 py-2 text-sm font-medium rounded-lg bg-surface-2 text-text-secondary border border-border hover:border-accent hover:text-text-primary transition-colors disabled:opacity-60"
+      onClick={(e) => { void handleDownload(e); }}
+      disabled={busy}
     >
-      Download
+      {busy ? 'Preparing...' : 'Download'}
     </button>
   );
 }
 
-export function DownloadBtnInternal({ data = [], fileName }: DownloadBtnInternalProps): JSX.Element {
-  const handleDownload = (e: MouseEvent<HTMLButtonElement>): void => {
+export function DownloadBtnInternal({ data = [], fileName, getData }: DownloadBtnInternalProps): JSX.Element {
+  const [busy, setBusy] = useState(false);
+
+  const handleDownload = async (e: MouseEvent<HTMLButtonElement>): Promise<void> => {
     e.preventDefault();
-    const datas = data?.length ? data : [];
+    if (busy) return;
+
+    let datas = data?.length ? data : [];
+    if (getData) {
+      setBusy(true);
+      try {
+        datas = await getData();
+      } catch (error) {
+        console.error('Failed to fetch rows for download:', error);
+        window.alert('Failed to download the full history. Please try again.');
+        return;
+      } finally {
+        setBusy(false);
+      }
+    }
 
     const skipKeys = new Set([
       'ID', 'CallType', 'Calls', 'TraceAdd', 'Address',
@@ -127,10 +165,11 @@ export function DownloadBtnInternal({ data = [], fileName }: DownloadBtnInternal
   return (
     <button
       type="button"
-      className="px-4 py-2 text-sm font-medium rounded-lg bg-[#2d2d2d] text-gray-300 border border-[#3d3d3d] hover:border-[#ffa729] hover:text-white transition-colors"
-      onClick={handleDownload}
+      className="px-4 py-2 text-sm font-medium rounded-lg bg-surface-2 text-text-secondary border border-border hover:border-accent hover:text-text-primary transition-colors disabled:opacity-60"
+      onClick={(e) => { void handleDownload(e); }}
+      disabled={busy}
     >
-      Download
+      {busy ? 'Preparing...' : 'Download'}
     </button>
   );
 }

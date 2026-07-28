@@ -36,10 +36,14 @@ export default function sitemap(): MetadataRoute.Sitemap {
     entry('/epochs/1', 'hourly', 0.7),
     entry('/gas', 'hourly', 0.7),
     entry('/richlist', 'daily', 0.6),
+    entry('/faucet', 'monthly', 0.6),
     entry('/converter', 'yearly', 0.5),
     entry('/api-explorer', 'monthly', 0.5),
     entry('/verify-contract', 'monthly', 0.5),
     entry('/checker', 'monthly', 0.4),
     entry('/faq', 'monthly', 0.4),
+    // Static bundle from the @qrlwallet/connect repo, served from
+    // public/dapp-example/ (see next.config.js rewrite).
+    entry('/dapp-example', 'monthly', 0.4),
   ];
 }

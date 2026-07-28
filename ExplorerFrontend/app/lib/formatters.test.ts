@@ -20,6 +20,8 @@ import {
   qNormaliseAbiValue,
   formatNumberWithCommas,
   normalizeHexString,
+  convertUnits,
+  withdrawalCredentialsToAddress,
 } from './helpers';
 
 // ─── hex parsers ─────────────────────────────────────────────────────────
@@ -79,18 +81,18 @@ describe('formatBigGas', () => {
 });
 
 describe('formatStaked', () => {
-  it('converts Shor (1e9) to QRL with trailing zeros stripped', () => {
-    expect(formatStaked('1000000000')).toBe('1 QRL');
-    expect(formatStaked('1500000000')).toBe('1.5 QRL');
+  it('converts Shor (1e9) to Quanta with trailing zeros stripped', () => {
+    expect(formatStaked('1000000000')).toBe('1 Quanta');
+    expect(formatStaked('1500000000')).toBe('1.5 Quanta');
   });
 
   it('handles whole-billion balances cleanly', () => {
-    expect(formatStaked('32000000000')).toBe('32 QRL');
+    expect(formatStaked('32000000000')).toBe('32 Quanta');
   });
 
-  it('returns "0 QRL" for empty / malformed input', () => {
-    expect(formatStaked('')).toBe('0 QRL');
-    expect(formatStaked('not-a-number')).toBe('0 QRL');
+  it('returns "0 Quanta" for empty / malformed input', () => {
+    expect(formatStaked('')).toBe('0 Quanta');
+    expect(formatStaked('not-a-number')).toBe('0 Quanta');
   });
 });
 
@@ -316,5 +318,74 @@ describe('normalizeHexString', () => {
     expect(normalizeHexString('')).toBe('');
     expect(normalizeHexString(null)).toBe('');
     expect(normalizeHexString(undefined)).toBe('');
+  });
+});
+
+// ─── unit conversion (Quanta / Shor / Planck) ────────────────────────────
+
+describe('convertUnits', () => {
+  it('converts Quanta to Shor (10^9)', () => {
+    expect(convertUnits('1', 'Quanta', 'Shor')).toBe('1000000000');
+  });
+
+  it('converts Shor to Quanta', () => {
+    expect(convertUnits('1', 'Shor', 'Quanta')).toBe('0.000000001');
+  });
+
+  it('converts Quanta to Planck (10^18)', () => {
+    expect(convertUnits('1', 'Quanta', 'Planck')).toBe('1000000000000000000');
+  });
+
+  it('converts fractional Shor to Planck', () => {
+    expect(convertUnits('1.5', 'Shor', 'Planck')).toBe('1500000000');
+  });
+
+  it('converts Planck to Quanta', () => {
+    expect(convertUnits('1', 'Planck', 'Quanta')).toBe('0.000000000000000001');
+  });
+
+  it('rejects fractional Planck (indivisible base unit)', () => {
+    expect(convertUnits('0.5', 'Planck', 'Quanta')).toBeNull();
+  });
+
+  it('rejects Shor input with more than 9 decimal places', () => {
+    expect(convertUnits('1.0123456789', 'Shor', 'Planck')).toBeNull();
+  });
+
+  it('rejects non-decimal input', () => {
+    expect(convertUnits('1e5', 'Quanta', 'Shor')).toBeNull();
+    expect(convertUnits('1.2.3', 'Quanta', 'Shor')).toBeNull();
+    expect(convertUnits('', 'Quanta', 'Shor')).toBeNull();
+  });
+
+  it('round-trips Quanta -> Planck -> Quanta exactly', () => {
+    const planck = convertUnits('123.456789', 'Quanta', 'Planck');
+    expect(planck).toBe('123456789000000000000');
+    expect(convertUnits(planck ?? '', 'Planck', 'Quanta')).toBe('123.456789');
+  });
+});
+
+// ─── beacon withdrawal credentials ───────────────────────────────────────
+
+describe('withdrawalCredentialsToAddress', () => {
+  // Live sample from the validators API (0x00 prefix + 11 zero bytes +
+  // 20-byte execution address).
+  const creds = '000000000000000000000000c0e6dd0e844e0048dcb0bd3fdcc44a970beca38d';
+  const address = 'Qc0e6dd0e844e0048dcb0bd3fdcc44a970beca38d';
+
+  it('decodes zero-prefixed credentials to the Q address', () => {
+    expect(withdrawalCredentialsToAddress(creds)).toBe(address);
+  });
+
+  it('accepts a 0x-prefixed input', () => {
+    expect(withdrawalCredentialsToAddress(`0x${creds}`)).toBe(address);
+  });
+
+  it('returns null when the prefix bytes are non-zero', () => {
+    expect(withdrawalCredentialsToAddress(`01${creds.slice(2)}`)).toBeNull();
+  });
+
+  it('returns null on wrong-length input', () => {
+    expect(withdrawalCredentialsToAddress(creds.slice(2))).toBeNull();
   });
 });

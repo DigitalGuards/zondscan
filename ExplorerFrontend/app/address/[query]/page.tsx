@@ -4,6 +4,7 @@ import TokenContractView from "./token-contract-view";
 import { sharedMetadata } from '../../lib/seo/metaData';
 import type { AddressData } from "@/app/types";
 import { decodeToHex, formatAddress } from '../../lib/helpers';
+import config from '../../../config';
 
 interface PageProps {
     params: Promise<{ query: string }>;
@@ -18,7 +19,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     return {
         ...sharedMetadata,
         title: `Address ${address} | ZondScan`,
-        description: `View details for Zond address ${address}. See balance, transactions, and other blockchain data.`,
+        description: `View details for QRL address ${address}. See balance, transactions, and other blockchain data.`,
         alternates: {
           ...sharedMetadata.alternates,
           canonical: canonicalUrl,
@@ -26,7 +27,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
         openGraph: {
           ...sharedMetadata.openGraph,
           title: `Address ${address} | ZondScan`,
-          description: `View details for Zond address ${address}. See balance, transactions, and other blockchain data.`,
+          description: `View details for QRL address ${address}. See balance, transactions, and other blockchain data.`,
           url: canonicalUrl,
           siteName: 'ZondScan',
           type: 'website',
@@ -34,14 +35,14 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
         twitter: {
           ...sharedMetadata.twitter,
           title: `Address ${address} | ZondScan`,
-          description: `View details for Zond address ${address}. See balance, transactions, and other blockchain data.`,
+          description: `View details for QRL address ${address}. See balance, transactions, and other blockchain data.`,
         },
       };
     }
 
 async function fetchAddressData(address: string): Promise<AddressData | null> {
     try {
-        const handlerUrl = process.env.HANDLER_URL || 'http://127.0.0.1:8080';
+        const handlerUrl = config.handlerUrl;
         // 10 s ISR, address-page contents are dominated by recent tx
         // history, which refreshes on the same chain-block cadence.
         // Eliminates the per-pageview backend fanout this endpoint causes.
@@ -93,12 +94,16 @@ export default async function Page({ params }: PageProps): Promise<JSX.Element> 
         ? 'Q' + resolvedParams.query.slice(1)
         : resolvedParams.query;
     const addressData = await fetchAddressData(address);
-    const handlerUrl = process.env.NEXT_PUBLIC_HANDLER_URL || process.env.HANDLER_URL || 'http://127.0.0.1:8080';
+    // config.handlerUrl is string | undefined (resolved from env). The
+    // TokenContractView prop is a strict string and the env var is always
+    // set in every deployed environment, so coerce to '' as a type-safe
+    // last resort rather than reintroducing a hardcoded backend port.
+    const handlerUrl = config.handlerUrl ?? '';
 
     if (!addressData) {
         return (
             <main>
-                <div className="text-center p-8 text-red-400">Failed to load address data</div>
+                <div className="text-center p-8 text-error">Failed to load address data</div>
             </main>
         );
     }

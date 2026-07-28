@@ -2,7 +2,6 @@ package configs
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -20,7 +19,17 @@ var dbOnce sync.Once
 // It uses a sync.Once to ensure the connection is only established once
 func ConnectDB() *mongo.Client {
 	dbOnce.Do(func() {
-		client, err := mongo.NewClient(options.Client().ApplyURI(EnvMongoURI()))
+		// Conservative connection-pool defaults so a burst of concurrent HTTP
+		// handlers doesn't exhaust or thrash Mongo connections. The driver's
+		// zero-value pool is effectively unbounded, which lets a traffic spike
+		// open an unbounded number of sockets.
+		clientOpts := options.Client().
+			ApplyURI(EnvMongoURI()).
+			SetMaxPoolSize(100).
+			SetMinPoolSize(5).
+			SetMaxConnIdleTime(60 * time.Second)
+
+		client, err := mongo.NewClient(clientOpts)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -38,7 +47,7 @@ func ConnectDB() *mongo.Client {
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println("Connected to MongoDB")
+		log.Println("Connected to MongoDB")
 
 		// Initialize collections with validators and indexes
 		db := client.Database("qrldata-z")
@@ -51,9 +60,43 @@ func ConnectDB() *mongo.Client {
 
 		// Set the global DB variable
 		DB = client
+
+		// Bind the package-level collection handles now that the client is
+		// confirmed live. Doing this here (rather than at package-var
+		// declaration time) removes the nil-client window: every reader runs
+		// inside an HTTP handler, which only executes after this point.
+		bindCollections(client)
 	})
 
 	return DB
+}
+
+// bindCollections wires the package-level *mongo.Collection handles to the
+// live client. Called once from ConnectDB after the ping succeeds.
+func bindCollections(client *mongo.Client) {
+	db := client.Database("qrldata-z")
+	TransferCollections = db.Collection(transferCollName)
+	TransactionByAddressCollection = db.Collection(transactionByAddressCollName)
+	InternalTransactionByAddressCollection = db.Collection(internalTransactionByAddressCollName)
+	AddressesCollections = db.Collection(addressesCollName)
+	BlocksCollection = db.Collection(blocksCollName)
+	ValidatorsCollections = db.Collection(validatorsCollName)
+	ContractInfoCollection = db.Collection(contractCodeCollName)
+	ContractVerificationsCollection = db.Collection(contractVerificationsCollName)
+	BlockSizesCollection = db.Collection(blockSizesCollName)
+	TotalCirculatingSupplyCollection = db.Collection(totalCirculatingSupplyCollName)
+	CoinGeckoCollection = db.Collection(coinGeckoCollName)
+	WalletCountCollections = db.Collection(walletCountCollName)
+	DailyTransactionsVolumeCollection = db.Collection(dailyTransactionsVolumeCollName)
+	EpochInfoCollection = db.Collection(epochInfoCollName)
+	ValidatorHistoryCollection = db.Collection(validatorHistoryCollName)
+	PriceHistoryCollection = db.Collection(priceHistoryCollName)
+	TokenTransfersCollection = db.Collection(tokenTransfersCollName)
+	TokenBalancesCollection = db.Collection(tokenBalancesCollName)
+	PendingTransactionsCollection = db.Collection(pendingTransactionsCollName)
+	GasHistoryCollection = db.Collection(gasHistoryCollName)
+	SyncStateCollection = db.Collection(syncStateCollName)
+	TokenMetadataCollection = db.Collection(tokenMetadataCollName)
 }
 
 func createIndexes(db *mongo.Database) {
@@ -73,6 +116,15 @@ func createIndexes(db *mongo.Database) {
 				{Key: "result.hash", Value: 1},
 			},
 			Options: options.Index().SetName("result_hash"),
+		},
+		{
+			// Backs the $elemMatch tx-by-hash lookup in ReturnSingleTransfer,
+			// which scans blocks for a transaction whose hash matches the
+			// query. Without this the lookup is a full collection scan.
+			Keys: bson.D{
+				{Key: "result.transactions.hash", Value: 1},
+			},
+			Options: options.Index().SetName("result_transactions_hash"),
 		},
 	}
 
@@ -114,7 +166,12 @@ func createIndexes(db *mongo.Database) {
 		},
 	}
 
-	// internalTransactionByAddress collection indexes
+	// internalTransactionByAddress collection indexes.
+	// The compound (from|to, blockTimestamp desc) pair backs the $or+sort in
+	// ReturnAllInternalTransactionsByAddress; the hash index backs the
+	// per-tx lookups in GetInternalTransactionsByTxHash and
+	// CountInternalTxsByTxHashes. The legacy single-field from/to indexes
+	// are kept so existing query plans don't regress.
 	internalTransactionsIndexes := []mongo.IndexModel{
 		{
 			Keys:    bson.D{{Key: "from", Value: 1}},
@@ -124,6 +181,24 @@ func createIndexes(db *mongo.Database) {
 			Keys:    bson.D{{Key: "to", Value: 1}},
 			Options: options.Index().SetName("internal_to"),
 		},
+		{
+			Keys: bson.D{
+				{Key: "from", Value: 1},
+				{Key: "blockTimestamp", Value: -1},
+			},
+			Options: options.Index().SetName("internal_from_blocktimestamp_desc"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "to", Value: 1},
+				{Key: "blockTimestamp", Value: -1},
+			},
+			Options: options.Index().SetName("internal_to_blocktimestamp_desc"),
+		},
+		{
+			Keys:    bson.D{{Key: "hash", Value: 1}},
+			Options: options.Index().SetName("internal_hash"),
+		},
 	}
 
 	// contractCode collection indexes
@@ -132,6 +207,14 @@ func createIndexes(db *mongo.Database) {
 			Keys:    bson.D{{Key: "address", Value: 1}},
 			Options: options.Index().SetName("contract_address_unique").SetUnique(true),
 		},
+		{
+			// Backs GetContractByCreationTx (the /tx/:hash "contract created"
+			// lookup). Sparse because most contractCode rows have no
+			// creationTransaction field, so the index only holds the rows that
+			// do, keeping it small.
+			Keys:    bson.D{{Key: "creationTransaction", Value: 1}},
+			Options: options.Index().SetName("contract_creation_tx").SetSparse(true),
+		},
 	}
 
 	// transfer collection indexes
@@ -139,6 +222,71 @@ func createIndexes(db *mongo.Database) {
 		{
 			Keys:    bson.D{{Key: "txHash", Value: 1}},
 			Options: options.Index().SetName("transfer_txhash_unique").SetUnique(true),
+		},
+	}
+
+	// tokenTransfers collection indexes.
+	// The (contractAddress, blockNumberInt desc) compound backs the per-contract
+	// transfer feed in GetTokenTransfers; the (from|to, blockNumberInt desc) pair
+	// backs the by-holder $or+sort in GetTokenTransfersByAddress; the txHash
+	// index backs the per-tx lookups in GetTokenTransfersByTxHash and
+	// CountTokenTransfersByTxHashes.
+	//
+	// The compound sorts run on the numeric blockNumberInt field (true chain
+	// order) rather than the hex string blockNumber (lexicographic). The index
+	// names carry an _int suffix so they are created fresh on DBs that still
+	// hold the older blockNumber-keyed indexes (the existence check is by name;
+	// the legacy token_*_block_desc indexes become redundant and can be dropped
+	// manually).
+	tokenTransfersIndexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				{Key: "contractAddress", Value: 1},
+				{Key: "blockNumberInt", Value: -1},
+			},
+			Options: options.Index().SetName("token_contract_block_int_desc"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "from", Value: 1},
+				{Key: "blockNumberInt", Value: -1},
+			},
+			Options: options.Index().SetName("token_from_block_int_desc"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "to", Value: 1},
+				{Key: "blockNumberInt", Value: -1},
+			},
+			Options: options.Index().SetName("token_to_block_int_desc"),
+		},
+		{
+			Keys:    bson.D{{Key: "txHash", Value: 1}},
+			Options: options.Index().SetName("token_txhash"),
+		},
+	}
+
+	// tokenBalances collection indexes.
+	// holderAddress backs the per-wallet balance reads (GetTokenBalancesByAddress,
+	// GetNFTBalancesByAddress) and the by-holder $group in GetTokenHolders.
+	// contractAddress backs the per-contract reads (GetTokenHolders /
+	// GetTokenInfo holder count). The (contractAddress, tokenID) compound backs
+	// the tokenID-scoped holders path and the GetTokenIDs distinct-id aggregation.
+	tokenBalancesIndexes := []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "holderAddress", Value: 1}},
+			Options: options.Index().SetName("token_balances_holder"),
+		},
+		{
+			Keys:    bson.D{{Key: "contractAddress", Value: 1}},
+			Options: options.Index().SetName("token_balances_contract"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "contractAddress", Value: 1},
+				{Key: "tokenID", Value: 1},
+			},
+			Options: options.Index().SetName("token_balances_contract_tokenid"),
 		},
 	}
 
@@ -160,13 +308,15 @@ func createIndexes(db *mongo.Database) {
 
 	// Map of collection name -> indexes to create
 	collections := map[string][]mongo.IndexModel{
-		"blocks":                       blocksIndexes,
-		"transactionByAddress":         transactionsIndexes,
-		"addresses":                    addressesIndexes,
-		"internalTransactionByAddress": internalTransactionsIndexes,
-		"contractCode":                 contractCodeIndexes,
-		"transfer":                     transferIndexes,
-		"validators":                   validatorsIndexes,
+		blocksCollName:                       blocksIndexes,
+		transactionByAddressCollName:         transactionsIndexes,
+		addressesCollName:                    addressesIndexes,
+		internalTransactionByAddressCollName: internalTransactionsIndexes,
+		contractCodeCollName:                 contractCodeIndexes,
+		transferCollName:                     transferIndexes,
+		validatorsCollName:                   validatorsIndexes,
+		tokenTransfersCollName:               tokenTransfersIndexes,
+		tokenBalancesCollName:                tokenBalancesIndexes,
 	}
 
 	for collName, indexes := range collections {
@@ -256,7 +406,7 @@ func initializeCollections(db *mongo.Database) {
 	ctx := context.Background()
 
 	// Initialize WalletCount collection with fallback data
-	_, err := db.Collection("walletCount").UpdateOne(
+	_, err := db.Collection(walletCountCollName).UpdateOne(
 		ctx,
 		bson.M{"_id": "current_count"},
 		bson.M{"$setOnInsert": bson.M{"count": int64(0)}},
@@ -267,7 +417,7 @@ func initializeCollections(db *mongo.Database) {
 	}
 
 	// Initialize dailyTransactionsVolume collection with fallback data
-	_, err = db.Collection("dailyTransactionsVolume").UpdateOne(
+	_, err = db.Collection(dailyTransactionsVolumeCollName).UpdateOne(
 		ctx,
 		bson.M{},
 		bson.M{"$setOnInsert": bson.M{"volume": int64(0)}},
@@ -277,10 +427,13 @@ func initializeCollections(db *mongo.Database) {
 		log.Printf("Warning: Failed to initialize dailyTransactionsVolume collection: %v", err)
 	}
 
-	// Initialize totalCirculatingSupply collection with fallback data
-	_, err = db.Collection("totalCirculatingSupply").UpdateOne(
+	// Initialize totalCirculatingSupply collection with fallback data.
+	// Keyed to the syncer's well-known _id so the seed and the syncer's
+	// writer share one document; an unkeyed upsert used to insert a
+	// random-_id doc the reader could pick up forever.
+	_, err = db.Collection(totalCirculatingSupplyCollName).UpdateOne(
 		ctx,
-		bson.M{},
+		bson.M{"_id": "totalBalance"},
 		bson.M{"$setOnInsert": bson.M{"circulating": "0"}},
 		options.Update().SetUpsert(true),
 	)
@@ -289,7 +442,7 @@ func initializeCollections(db *mongo.Database) {
 	}
 
 	// Initialize CoinGecko collection with fallback data
-	_, err = db.Collection("coingecko").UpdateOne(
+	_, err = db.Collection(coinGeckoCollName).UpdateOne(
 		ctx,
 		bson.M{},
 		bson.M{"$setOnInsert": bson.M{
@@ -302,14 +455,4 @@ func initializeCollections(db *mongo.Database) {
 	if err != nil {
 		log.Printf("Warning: Failed to initialize CoinGecko collection: %v", err)
 	}
-}
-
-// Getting database collections
-func GetCollection(client *mongo.Client, collectionName string) *mongo.Collection {
-	// Ensure DB is initialized
-	if client == nil {
-		client = ConnectDB()
-	}
-	collection := client.Database("qrldata-z").Collection(collectionName)
-	return collection
 }

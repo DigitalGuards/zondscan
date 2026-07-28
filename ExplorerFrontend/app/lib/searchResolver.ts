@@ -16,13 +16,15 @@
  * generic "Invalid input".
  */
 
+import { TX_HASH_RE } from './helpers';
+
 export type SearchResolution =
   | { path: string }
   | { error: string };
 
 const RE_DECIMAL = /^[0-9]+$/;
 const RE_HEX_BLOCK = /^0x[0-9a-fA-F]{1,16}$/;
-const RE_TX_HASH = /^0x[0-9a-fA-F]{64}$/;
+const RE_TX_HASH = TX_HASH_RE;
 const RE_BARE_TX_HASH = /^[0-9a-fA-F]{64}$/;
 const RE_Q_ADDR = /^[Qq][0-9a-fA-F]{40}$/;
 const RE_HEX_ADDR = /^0x[0-9a-fA-F]{40}$/;

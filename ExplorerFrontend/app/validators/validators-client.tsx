@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import config from '../../config';
+import type { EpochInfo } from '../types';
 import EpochInfoPanel from './components/EpochInfoPanel';
 import ValidatorStatsCards from './components/ValidatorStatsCards';
 import ValidatorStatusChart from './components/ValidatorStatusChart';
@@ -11,23 +12,12 @@ import ValidatorTable from './components/ValidatorTable';
 
 interface Validator {
   index: string;
-  address: string;
+  publicKeyHex: string;
+  withdrawalCredentialsHex?: string;
   status: string;
   age: number;
   stakedAmount: string;
   isActive: boolean;
-}
-
-interface EpochInfo {
-  headEpoch: string;
-  headSlot: string;
-  finalizedEpoch: string;
-  justifiedEpoch: string;
-  slotsPerEpoch: number;
-  secondsPerSlot: number;
-  slotInEpoch: number;
-  timeToNextEpoch: number;
-  updatedAt: number;
 }
 
 interface ValidatorStats {
@@ -112,10 +102,13 @@ export default function ValidatorsWrapper(): JSX.Element {
         axios.get(`${config.handlerUrl}/validators/history?limit=100`).catch((err) => { console.error('Failed to fetch validator history:', err); return { data: { history: [] } }; }),
       ]);
 
-      // Process validators - add Q prefix to addresses
+      // The API's `address` field carries the validator's raw ML-DSA-87
+      // public key hex, not an account address. Surface it as publicKeyHex
+      // (no Q prefix) and pass withdrawalCredentialsHex through when the
+      // backend provides it (absent on older cached responses).
       const processedValidators = (validatorsRes.data.validators || []).map((v: any) => ({
         ...v,
-        address: v.address.startsWith('Q') ? v.address : 'Q' + v.address,
+        publicKeyHex: v.address ?? '',
       }));
 
       setValidators(processedValidators);
@@ -144,13 +137,13 @@ export default function ValidatorsWrapper(): JSX.Element {
 
   if (error && !validators.length) {
     return (
-      <div className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8 overflow-x-hidden">
+      <div className="page-content py-4 sm:py-6 lg:py-8 overflow-x-hidden">
         <div className="bg-red-900/20 border border-red-800 rounded-xl p-6 text-center">
-          <h2 className="text-xl font-semibold text-red-400 mb-2">Error</h2>
-          <p className="text-gray-400">{error}</p>
+          <h2 className="text-xl font-semibold text-error mb-2">Error</h2>
+          <p className="text-text-secondary">{error}</p>
           <button
             onClick={fetchData}
-            className="mt-4 px-4 py-2 bg-[#2d2d2d] border border-[#3d3d3d] rounded-lg text-gray-300 hover:border-[#ffa729]"
+            className="mt-4 px-4 py-2 bg-surface-2 border border-border rounded-lg text-text-secondary hover:border-accent"
           >
             Retry
           </button>
@@ -160,12 +153,12 @@ export default function ValidatorsWrapper(): JSX.Element {
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8 overflow-x-hidden">
+    <div className="page-content py-4 sm:py-6 lg:py-8 overflow-x-hidden">
       {/* Page Header */}
       <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-[#ffa729] mb-2">Validators</h1>
-        <p className="text-gray-400">
-          View all validators on the QRL Zond network
+        <h1 className="section-title mb-2">Validators</h1>
+        <p className="text-text-secondary">
+          View all validators on the QRL 2.0 network
         </p>
       </div>
 
@@ -178,12 +171,12 @@ export default function ValidatorsWrapper(): JSX.Element {
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6">
         {/* Status Distribution Chart */}
-        <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-3 sm:p-4">
-          <h3 className="text-base sm:text-lg font-semibold text-[#ffa729] mb-3 sm:mb-4">Status Distribution</h3>
+        <div className="card p-3 sm:p-4">
+          <h3 className="text-base sm:font-display text-lg font-semibold text-text-primary mb-3 sm:mb-4">Status Distribution</h3>
           <div className="flex justify-center overflow-hidden">
             {loading ? (
               <div role="status" className="h-[250px] sm:h-[300px] flex items-center justify-center">
-                <div className="animate-pulse text-gray-500">Loading chart...</div>
+                <div className="animate-pulse text-text-muted">Loading chart...</div>
               </div>
             ) : (
               <ValidatorStatusChart
@@ -199,12 +192,12 @@ export default function ValidatorsWrapper(): JSX.Element {
         </div>
 
         {/* Total Staked Chart */}
-        <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-3 sm:p-4 overflow-hidden">
-          <h3 className="text-base sm:text-lg font-semibold text-[#ffa729] mb-3 sm:mb-4">Total Staked Over Time</h3>
+        <div className="card p-3 sm:p-4 overflow-hidden">
+          <h3 className="text-base sm:font-display text-lg font-semibold text-text-primary mb-3 sm:mb-4">Total Staked Over Time</h3>
           <div className="overflow-x-auto">
             {loading ? (
               <div role="status" className="h-[250px] sm:h-[300px] flex items-center justify-center">
-                <div className="animate-pulse text-gray-500">Loading chart...</div>
+                <div className="animate-pulse text-text-muted">Loading chart...</div>
               </div>
             ) : (
               <ValidatorHistoryChart
@@ -219,12 +212,12 @@ export default function ValidatorsWrapper(): JSX.Element {
       </div>
 
       {/* Validator Count History */}
-      <div className="bg-gradient-to-br from-[#2d2d2d] to-[#1f1f1f] rounded-xl border border-[#3d3d3d] p-3 sm:p-4 mb-6 overflow-hidden">
-        <h3 className="text-base sm:text-lg font-semibold text-[#ffa729] mb-3 sm:mb-4">Validator Count Over Time</h3>
+      <div className="card p-3 sm:p-4 mb-6 overflow-hidden">
+        <h3 className="text-base sm:font-display text-lg font-semibold text-text-primary mb-3 sm:mb-4">Validator Count Over Time</h3>
         <div className="overflow-x-auto">
           {loading ? (
             <div role="status" className="h-[200px] sm:h-[250px] flex items-center justify-center">
-              <div className="animate-pulse text-gray-500">Loading chart...</div>
+              <div className="animate-pulse text-text-muted">Loading chart...</div>
             </div>
           ) : (
             <ValidatorHistoryChart
@@ -239,7 +232,7 @@ export default function ValidatorsWrapper(): JSX.Element {
 
       {/* Validators Table */}
       <div className="mb-6">
-        <h3 className="text-lg font-semibold text-[#ffa729] mb-4">All Validators</h3>
+        <h3 className="font-display text-lg font-semibold text-text-primary mb-4">All Validators</h3>
         <ValidatorTable validators={validators} loading={loading} />
       </div>
     </div>

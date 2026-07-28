@@ -1,10 +1,19 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
+import { palette } from '../lib/theme';
+
+interface TradingViewWidgetConstructor {
+  new (config: Record<string, unknown>): unknown;
+}
+
+interface TradingViewNamespace {
+  widget: TradingViewWidgetConstructor;
+}
 
 declare global {
   interface Window {
-    TradingView: any;
+    TradingView?: TradingViewNamespace;
   }
 }
 
@@ -24,7 +33,9 @@ export default function TradingViewWidget(): JSX.Element {
           theme: 'dark',
           style: '1',
           locale: 'en',
-          toolbar_bg: '#1f1f1f',
+          toolbar_bg: palette.backgroundSecondary,
+          backgroundColor: palette.background,
+          gridColor: 'rgba(255, 255, 255, 0.06)',
           enable_publishing: false,
           hide_side_toolbar: false,
           allow_symbol_change: false,

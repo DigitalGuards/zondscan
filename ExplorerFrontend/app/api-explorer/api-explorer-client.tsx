@@ -254,14 +254,14 @@ const endpointGroups: EndpointGroup[] = [
       {
         method: 'GET',
         path: '/contract/compiler-info',
-        description: 'Returns the language and pinned Hyperion build id the verifier is willing to accept. Use this to confirm the explorer can verify against your hypc version before you POST a job. Returns 503 when the verifier is not configured on this deployment.',
+        description: 'Returns every Hyperion build the verifier can compile against: { language, buildId, default, compilers: [{ buildId, language, default }] }. The top-level buildId/language mirror the default build. Use this to pick a compilerVersion before you POST a job. Returns 503 when the verifier is not configured on this deployment.',
         example: '/contract/compiler-info',
       },
       {
         method: 'POST',
         path: '/contract/verify',
-        description: 'Enqueues a verification job for a deployed contract. The endpoint compiles the supplied source via the pinned hypc runner, compares the deployed-bytecode (Solidity-style CBOR metadata trailer stripped on both sides) and on success writes the verified source + ABI back onto the contract document. Rate-limited per IP. Max body 1 MiB. Returns { jobId, status, address } synchronously; poll /contract/verify/:jobId for the terminal state.',
-        params: 'JSON body, required: address, sourceCode, contractName. Optional: compilerVersion, optimizerEnabled, optimizerRuns, evmVersion, constructorArguments, libraries, imports, license. Example body: {"address":"Q…","sourceCode":"...","contractName":"Foo"}',
+        description: 'Enqueues a verification job for a deployed contract. The endpoint compiles the supplied source via the selected hypc build (compilerVersion; the default build is used when omitted), compares the deployed-bytecode (Solidity-style CBOR metadata trailer stripped on both sides) and on success writes the verified source + ABI back onto the contract document. An unknown compilerVersion returns 400 with the supportedBuilds list. Rate-limited per IP. Max body 1 MiB. Returns { jobId, status, address } synchronously; poll /contract/verify/:jobId for the terminal state.',
+        params: 'JSON body, required: address, sourceCode, contractName. Optional: compilerVersion (one of /contract/compiler-info buildIds; defaults to the default build), optimizerEnabled, optimizerRuns, evmVersion, constructorArguments, libraries, imports, license. Example body: {"address":"Q…","sourceCode":"...","contractName":"Foo"}',
         example: '/contract/verify',
       },
       {
@@ -299,21 +299,21 @@ import MethodBadge from '../components/MethodBadge'
 
 export default function ApiExplorerClient(): JSX.Element {
   return (
-    <div className="min-h-screen bg-[#1a1a1a] text-gray-300 p-4 md:p-8">
+    <div className="min-h-screen bg-background text-text-secondary p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-2xl md:text-3xl font-bold mb-2 text-[#ffa729]">
+        <h1 className="section-title mb-2">
           API Explorer
         </h1>
-        <p className="text-gray-400 mb-2">
-          The Zondscan API provides free, open access to QRL Zond blockchain data. No API key required.
+        <p className="text-text-secondary mb-2">
+          The Zondscan API provides free, open access to QRL 2.0 blockchain data. No API key required.
         </p>
-        <p className="text-gray-500 text-sm mb-8">
+        <p className="text-text-muted text-sm mb-8">
           As the world transitions to post-quantum cryptography, we believe blockchain data should remain freely accessible to everyone. This API will always be free to use.
         </p>
 
-        <div className="bg-[#2d2d2d] rounded-lg p-4 mb-8">
-          <h2 className="text-sm font-semibold text-gray-400 mb-2">Base URL</h2>
-          <code className="text-[#ffa729] text-sm font-mono break-all">{BASE_URL}</code>
+        <div className="bg-surface-2 rounded-lg p-4 mb-8">
+          <h2 className="text-sm font-semibold text-text-secondary mb-2">Base URL</h2>
+          <code className="text-accent text-sm font-mono break-all">{BASE_URL}</code>
         </div>
 
         <div className="space-y-4">
@@ -321,40 +321,40 @@ export default function ApiExplorerClient(): JSX.Element {
             <Disclosure as="div" key={groupIndex}>
               {({ open }) => (
                 <>
-                  <Disclosure.Button className="flex w-full items-center justify-between px-4 py-3 bg-[#2d2d2d] rounded-lg text-left hover:bg-[#333] transition-colors">
-                    <span className="text-sm md:text-base font-semibold text-[#ffa729]">
+                  <Disclosure.Button className="flex w-full items-center justify-between px-4 py-3 bg-surface-2 rounded-lg text-left hover:bg-[#333] transition-colors">
+                    <span className="font-display text-sm md:text-base font-semibold text-text-primary">
                       {group.category}
-                      <span className="ml-2 text-xs text-gray-500 font-normal">
+                      <span className="ml-2 text-xs text-text-muted font-normal">
                         ({group.endpoints.length} endpoint{group.endpoints.length !== 1 ? 's' : ''})
                       </span>
                     </span>
                     <ChevronDownIcon
-                      className={(open ? 'rotate-180' : '') + ' h-5 w-5 text-[#ffa729] transition-transform duration-200'}
+                      className={(open ? 'rotate-180' : '') + ' h-5 w-5 text-accent transition-transform duration-200'}
                     />
                   </Disclosure.Button>
                   <Disclosure.Panel className="mt-1 space-y-2">
                     {group.endpoints.map((endpoint, endpointIndex) => (
                       <div
                         key={endpointIndex}
-                        className="bg-[#262626] rounded-lg p-4 border border-[#3d3d3d]"
+                        className="bg-surface-2 rounded-lg p-4 border border-border"
                       >
                         <div className="flex items-center gap-3 mb-2">
                           <MethodBadge method={endpoint.method} />
-                          <code className="text-sm font-mono text-gray-200 break-all">
+                          <code className="text-sm font-mono text-text-primary break-all">
                             {endpoint.path}
                           </code>
                         </div>
-                        <p className="text-sm text-gray-400 mb-2">{endpoint.description}</p>
+                        <p className="text-sm text-text-secondary mb-2">{endpoint.description}</p>
                         {endpoint.params && (
                           <div className="mb-2">
-                            <span className="text-xs font-semibold text-gray-500 uppercase">Parameters: </span>
-                            <span className="text-xs text-gray-400">{endpoint.params}</span>
+                            <span className="text-xs font-semibold text-text-muted uppercase">Parameters: </span>
+                            <span className="text-xs text-text-secondary">{endpoint.params}</span>
                           </div>
                         )}
                         {endpoint.example && (
-                          <div className="mt-2 bg-[#1a1a1a] rounded px-3 py-2 border border-[#3d3d3d]">
-                            <span className="text-xs font-semibold text-gray-500 uppercase block mb-1">Example</span>
-                            <code className="text-xs font-mono text-green-400 break-all">
+                          <div className="mt-2 bg-background rounded px-3 py-2 border border-border">
+                            <span className="text-xs font-semibold text-text-muted uppercase block mb-1">Example</span>
+                            <code className="text-xs font-mono text-success break-all">
                               {BASE_URL}{endpoint.example}
                             </code>
                           </div>
@@ -368,13 +368,13 @@ export default function ApiExplorerClient(): JSX.Element {
           ))}
         </div>
 
-        <div className="mt-8 bg-[#2d2d2d] rounded-lg p-4 border border-[#3d3d3d]">
-          <h2 className="text-sm font-semibold text-[#ffa729] mb-2">Notes</h2>
-          <ul className="text-sm text-gray-400 space-y-1 list-disc list-inside">
+        <div className="mt-8 bg-surface-2 rounded-lg p-4 border border-border">
+          <h2 className="font-display text-sm font-semibold text-text-primary mb-2">Notes</h2>
+          <ul className="text-sm text-text-secondary space-y-1 list-disc list-inside">
             <li>All responses are returned in JSON format</li>
             <li>Numeric blockchain values (balances, block numbers) are typically hex-encoded with a 0x prefix</li>
-            <li>Pagination uses <code className="text-gray-300">page</code> and <code className="text-gray-300">limit</code> query parameters (max limit: 100)</li>
-            <li>Addresses are Q-prefixed (canonical QRL 2.0 form), e.g. <code className="text-gray-300">Q6153d37fa4da7193e6219dcbd2bbe62fa12905b1</code></li>
+            <li>Pagination uses <code className="text-text-secondary">page</code> and <code className="text-text-secondary">limit</code> query parameters (max limit: 100)</li>
+            <li>Addresses are Q-prefixed (canonical QRL 2.0 form), e.g. <code className="text-text-secondary">Q6153d37fa4da7193e6219dcbd2bbe62fa12905b1</code></li>
             <li>No authentication or API key is required</li>
             <li>Rate limiting may apply to prevent abuse</li>
           </ul>

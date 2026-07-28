@@ -4,34 +4,34 @@ import ConverterClient from './converter-client';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'Quanta to Shor Converter | QRL Explorer',
+  title: 'QRL Unit Converter: Quanta, Shor, Planck | ZondScan',
   description:
-    'Convert Quanta to Shor quickly and accurately using our conversion tool. Get real-time conversion rates and insights on the QRL network.',
+    'Convert between QRL units with exact precision: 1 Quanta = 10^9 Shor = 10^18 Planck. Free unit conversion tool on the ZondScan explorer.',
   alternates: {
     ...sharedMetadata.alternates,
     canonical: 'https://zondscan.com/converter',
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'Quanta to Shor Converter | QRL Explorer',
+    title: 'QRL Unit Converter: Quanta, Shor, Planck | ZondScan',
     description:
-      'Convert Quanta to Shor quickly and accurately using our conversion tool. Get real-time conversion rates and insights on the QRL network.',
+      'Convert between QRL units with exact precision: 1 Quanta = 10^9 Shor = 10^18 Planck. Free unit conversion tool on the ZondScan explorer.',
     url: 'https://zondscan.com/converter',
     siteName: 'ZondScan',
     type: 'website',
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'Quanta to Shor Converter | QRL Explorer',
+    title: 'QRL Unit Converter: Quanta, Shor, Planck | ZondScan',
     description:
-      'Convert Quanta to Shor quickly and accurately using our conversion tool. Get real-time conversion rates and insights on the QRL network.',
+      'Convert between QRL units with exact precision: 1 Quanta = 10^9 Shor = 10^18 Planck. Free unit conversion tool on the ZondScan explorer.',
   },
 };
 
-export default function QuantaToShorPage(): JSX.Element {
+export default function UnitConverterPage(): JSX.Element {
   return (
     <main aria-labelledby="converter-heading">
-      <h1 id="converter-heading" className="sr-only">Quanta to Shor Converter</h1>
+      <h1 id="converter-heading" className="sr-only">QRL Unit Converter</h1>
       <ConverterClient />
     </main>
   );

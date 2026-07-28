@@ -1,0 +1,10 @@
+# zondscan.com security contact, per RFC 9116.
+# Provided by DigitalGuards (KvK 91987482).
+
+Contact: mailto:security@digitalguards.nl
+Encryption: https://zondscan.com/pgp-key.txt
+# PGP key fingerprint: EAE7 9D7C 2805 9C17 4870  13CB BE48 C074 FFF0 495D
+Expires: 2027-07-12T00:00:00.000Z
+Preferred-Languages: en, nl
+Canonical: https://zondscan.com/.well-known/security.txt
+Policy: https://qrlwallet.com/security

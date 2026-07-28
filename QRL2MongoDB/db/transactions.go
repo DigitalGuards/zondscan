@@ -4,10 +4,13 @@ import (
 	"QRL2MongoDB/configs"
 	"QRL2MongoDB/models"
 	"QRL2MongoDB/rpc"
+	"QRL2MongoDB/utils"
 	"QRL2MongoDB/validation"
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -176,70 +179,11 @@ func processTokenContract(targetAddress string, txHash string, blockNumber strin
 		zap.String("name", contract.Name),
 		zap.String("symbol", contract.Symbol))
 
-	// Get transaction details
-	txDetails, err := rpc.GetTxDetailsByHash(txHash)
-	if err != nil {
-		configs.Logger.Error("Failed to get transaction details",
-			zap.String("txHash", txHash),
-			zap.Error(err))
-		return
-	}
+	// The former "direct transfer call" calldata-decode branch was deleted:
+	// its decoder could never produce a sender address, so the branch was
+	// unreachable dead code. Transfer detection relies on receipt logs.
 
-	// First check direct transfer calls
-	from, recipient, amount := rpc.DecodeTransferEvent(txDetails.Input)
-	if from != "" && recipient != "" && amount != "" {
-		configs.Logger.Info("Found direct token transfer",
-			zap.String("contract", targetAddress),
-			zap.String("from", from),
-			zap.String("to", recipient),
-			zap.String("amount", amount))
-
-		// Idempotent: the direct-calldata path uses logIndex="" (there's
-		// no originating log) and tokenID="" (ERC-20 only). The unique
-		// tuple for replay-detection is (txHash, contractAddress, "", "").
-		exists, err := TokenTransferExists(txHash, targetAddress, "", "")
-		if err == nil && exists {
-			configs.Logger.Debug("Skipping duplicate direct token transfer",
-				zap.String("txHash", txHash),
-				zap.String("contract", targetAddress))
-		} else {
-			// Store token transfer
-			transfer := models.TokenTransfer{
-				ContractAddress: targetAddress,
-				From:            from,
-				To:              recipient,
-				Amount:          amount,
-				BlockNumber:     blockNumber,
-				TxHash:          txHash,
-				Timestamp:       blockTimestamp,
-				TokenSymbol:     contract.Symbol,
-				TokenDecimals:   contract.Decimals,
-				TokenName:       contract.Name,
-				TransferType:    "direct",
-			}
-			if err := StoreTokenTransfer(transfer); err != nil {
-				configs.Logger.Error("Failed to store token transfer",
-					zap.String("txHash", txHash),
-					zap.Error(err))
-			}
-
-			// Update token balances
-			if err := StoreTokenBalance(targetAddress, from, amount, blockNumber); err != nil {
-				configs.Logger.Error("Failed to store token balance for sender",
-					zap.String("contract", targetAddress),
-					zap.String("holder", from),
-					zap.Error(err))
-			}
-			if err := StoreTokenBalance(targetAddress, recipient, amount, blockNumber); err != nil {
-				configs.Logger.Error("Failed to store token balance for recipient",
-					zap.String("contract", targetAddress),
-					zap.String("holder", recipient),
-					zap.Error(err))
-			}
-		}
-	}
-
-	// Then check transfer events in logs
+	// Check transfer events in logs
 	receipt, err := rpc.GetTransactionReceipt(txHash)
 	if err != nil {
 		configs.Logger.Error("Failed to get transaction receipt",
@@ -324,64 +268,67 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 	nonce := tx.Nonce
 	txType := tx.Type
 
-	// Convert value to float64 for display
+	// Convert value to float64 for display. Guard against empty/short
+	// values, slicing [2:] on those panics; treat too-short as zero.
 	value := new(big.Int)
-	value.SetString(tx.Value[2:], 16)
-	divisor := new(big.Float).SetFloat64(float64(configs.QUANTA))
+	if len(tx.Value) > 2 {
+		if _, ok := value.SetString(tx.Value[2:], 16); !ok {
+			value.SetInt64(0)
+		}
+	}
+	divisor := new(big.Float).SetFloat64(float64(utils.QUANTA))
 	bigIntAsFloat := new(big.Float).SetInt(value)
 	resultBigFloat := new(big.Float).Quo(bigIntAsFloat, divisor)
 	valueFloat64, _ := resultBigFloat.Float64()
 
-	hashmap := map[string]string{"from": tx.From, "to": tx.To}
-
-	for _, address := range hashmap {
-		if address != "" {
-			responseBalance, err := rpc.GetBalance(address)
-			if err != nil {
-				configs.Logger.Warn("Failed to do rpc request: ", zap.Error(err))
-				continue
-			}
-
-			getBalanceResult := new(big.Int)
-			if responseBalance != "" && len(responseBalance) > 2 {
-				getBalanceResult.SetString(responseBalance[2:], 16)
-			} else {
-				configs.Logger.Warn("Invalid balance response", zap.String("balance", responseBalance))
-				continue
-			}
-
-			divisor := new(big.Float).SetFloat64(float64(configs.QUANTA))
-			bigIntAsFloat := new(big.Float).SetInt(getBalanceResult)
-			resultBigFloat := new(big.Float).Quo(bigIntAsFloat, divisor)
-			resultFloat64, _ := resultBigFloat.Float64()
-
-			UpsertTransactions(address, resultFloat64, isContract)
-		}
+	// Per-role address upserts. The old map iteration passed the RECIPIENT's
+	// isContract flag to both parties, so any EOA that ever sent a tx to a
+	// contract got a sticky isContract=true addresses row (UpsertTransactions
+	// never demotes true). Senders are always EOAs on Zond: contract-originated
+	// value moves are internal txs handled separately, so the sender is
+	// upserted with isContract=false and only the recipient carries the
+	// computed flag.
+	if from != "" {
+		upsertAddressBalance(from, false)
+	}
+	if to != "" {
+		upsertAddressBalance(to, isContract)
+	}
+	// Contract creation (to == ""): register the freshly created contract's
+	// addresses row immediately with isContract=true instead of waiting for
+	// its first inbound transaction.
+	if contractAddress != "" {
+		upsertAddressBalance(contractAddress, true)
 	}
 
 	trace := rpc.CallDebugTraceTransaction(tx.Hash)
-	if trace.TransactionType == "CALL" || trace.TraceAddress != nil {
-		InternalTransactionByAddressCollection(
-			trace.TransactionType,
-			trace.CallType,
-			txHash,
-			trace.From,
-			trace.To,
-			fmt.Sprintf("0x%x", trace.Input),
-			fmt.Sprintf("0x%x", trace.Output),
-			trace.TraceAddress,
-			float64(trace.Value),
-			fmt.Sprintf("0x%x", trace.Gas),
-			fmt.Sprintf("0x%x", trace.GasUsed),
-			trace.AddressFunctionIdentifier,
-			fmt.Sprintf("0x%x", trace.AmountFunctionIdentifier),
-			blockTimestamp,
-		)
+	if trace.Err != nil {
+		configs.Logger.Warn("Debug trace failed; internal calls for this tx will be missing",
+			zap.String("txHash", txHash), zap.Error(trace.Err))
+	}
+	// Persist the nested (depth >= 1) call frames: value moved by contract
+	// code rather than by the outer transaction itself, e.g. an HTLC claim
+	// paying out contract-held funds. The top-level frame is intentionally
+	// not stored; it would only duplicate the transactionByAddress row.
+	if err := StoreInternalCalls(trace.InternalCalls, txHash, blockTimestamp, blockNumber); err != nil {
+		configs.Logger.Error("Failed to store internal calls",
+			zap.String("txHash", txHash), zap.Error(err))
 	}
 
-	// Calculate fees using hex strings
+	// Register contracts created by nested CREATE/CREATE2 frames (factory
+	// deployments). Only effective when debug tracing is enabled: with
+	// ENABLE_DEBUG_TRACE unset the trace carries no internal calls and this
+	// is a no-op, matching how traces are gated everywhere else.
+	storeInternalContractCreations(trace.InternalCalls, from, txHash, blockNumber, statusTx)
+
+	// Calculate fees using hex strings. Guard against empty/short
+	// gasPrice, slicing [2:] on those panics; treat too-short as zero.
 	gasPriceBig := new(big.Int)
-	gasPriceBig.SetString(gasPrice[2:], 16)
+	if len(gasPrice) > 2 {
+		if _, ok := gasPriceBig.SetString(gasPrice[2:], 16); !ok {
+			gasPriceBig.SetInt64(0)
+		}
+	}
 
 	gasUsedBig := new(big.Int)
 	// If trace.GasUsed is 0, try to use gasUsed from the transaction receipt
@@ -411,20 +358,24 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 
 	feesBig := new(big.Int).Mul(gasPriceBig, gasUsedBig)
 
-	divisor = new(big.Float).SetFloat64(float64(configs.QUANTA))
+	// Ensure fees are never zero for successful transactions. Apply the
+	// minimal-fee floor to the wei integer (0.000001 QRL = 1e12 wei) so the
+	// exact paidFeesWei string and the legacy paidFees float stay consistent.
+	if feesBig.Sign() == 0 && statusTx == "0x1" {
+		configs.Logger.Warn("Calculated fees is zero for a successful transaction, using minimal fee",
+			zap.String("txHash", txHash))
+		feesBig = big.NewInt(1_000_000_000_000)
+	}
+
+	// Legacy float fields, kept for backward-compatible numeric queries (e.g.
+	// amount $gt 0). The exact, drift-free value travels alongside them as the
+	// amountWei / paidFeesWei base-10 integer strings (value and feesBig).
+	divisor = new(big.Float).SetFloat64(float64(utils.QUANTA))
 	feesFloat := new(big.Float).SetInt(feesBig)
 	feesResult := new(big.Float).Quo(feesFloat, divisor)
 	fees, _ := feesResult.Float64()
 
-	// Ensure fees are never zero for successful transactions
-	if fees == 0 && statusTx == "0x1" {
-		configs.Logger.Warn("Calculated fees is zero for a successful transaction, using minimal fee",
-			zap.String("txHash", txHash))
-		// Set a minimal fee value rather than zero
-		fees = 0.000001
-	}
-
-	TransactionByAddressCollection(blockTimestamp, txType, from, to, txHash, valueFloat64, fees, blockNumber)
+	TransactionByAddressCollection(blockTimestamp, txType, from, to, txHash, valueFloat64, fees, blockNumber, value.String(), feesBig.String())
 	TransferCollection(blockNumber, blockTimestamp, from, to, txHash, pk, signature, nonce, valueFloat64, data, contractAddress, statusTx, size, fees)
 }
 
@@ -477,7 +428,39 @@ func TransferCollection(blockNumber string, blockTimestamp string, from string, 
 	return result, err
 }
 
-func InternalTransactionByAddressCollection(transactionType string, callType string, hash string, from string, to string, input string, output string, traceAddress []int, value float64, gas string, gasUsed string, addressFunctionIdentifier string, amountFunctionIdentifier string, blockTimestamp string) (*mongo.InsertOneResult, error) {
+// StoreInternalCalls persists each flattened nested call frame of one
+// transaction as an internalTransactionByAddress row. Shared by the live
+// sync path (processTransactions) and the historical backfill command.
+// A failed insert does not stop the remaining frames; all failures are
+// joined into the returned error.
+func StoreInternalCalls(calls []rpc.InternalCall, txHash string, blockTimestamp string, blockNumber string) error {
+	var errs []error
+	for _, call := range calls {
+		_, err := InternalTransactionByAddressCollection(
+			call.Type,
+			strings.ToLower(call.Type),
+			txHash,
+			call.From,
+			call.To,
+			call.Input,
+			call.Output,
+			call.TraceAddress,
+			call.Value,
+			call.Gas,
+			call.GasUsed,
+			"",
+			"0x0",
+			blockTimestamp,
+			blockNumber,
+		)
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func InternalTransactionByAddressCollection(transactionType string, callType string, hash string, from string, to string, input string, output string, traceAddress []int, value float64, gas string, gasUsed string, addressFunctionIdentifier string, amountFunctionIdentifier string, blockTimestamp string, blockNumber string) (*mongo.InsertOneResult, error) {
 	// Normalize addresses to canonical Q-prefix form
 	if from != "" {
 		from = validation.ConvertToQAddress(from)
@@ -489,6 +472,8 @@ func InternalTransactionByAddressCollection(transactionType string, callType str
 		addressFunctionIdentifier = validation.ConvertToQAddress(addressFunctionIdentifier)
 	}
 
+	// blockNumber (raw hex string) lets Rollback delete this row on a reorg via
+	// the same $in companionFilter used for the other append-only collections.
 	doc := bson.D{
 		{Key: "type", Value: transactionType},
 		{Key: "callType", Value: callType},
@@ -504,6 +489,7 @@ func InternalTransactionByAddressCollection(transactionType string, callType str
 		{Key: "addressFunctionIdentifier", Value: addressFunctionIdentifier},
 		{Key: "amountFunctionIdentifier", Value: amountFunctionIdentifier},
 		{Key: "blockTimestamp", Value: blockTimestamp},
+		{Key: "blockNumber", Value: blockNumber},
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -518,7 +504,11 @@ func InternalTransactionByAddressCollection(transactionType string, callType str
 	return result, nil
 }
 
-func TransactionByAddressCollection(timeStamp string, txType string, from string, to string, hash string, amount float64, paidFees float64, blockNumber string) (*mongo.InsertOneResult, error) {
+// TransactionByAddressCollection persists a per-address transaction row.
+// amount/paidFees are the legacy float64 columns (kept for backward-compatible
+// numeric queries); amountWei/paidFeesWei are the exact base-10 wei integer
+// strings the API uses to render QRL without float64 precision drift.
+func TransactionByAddressCollection(timeStamp string, txType string, from string, to string, hash string, amount float64, paidFees float64, blockNumber string, amountWei string, paidFeesWei string) (*mongo.InsertOneResult, error) {
 	// Normalize addresses to canonical Q-prefix form
 	from = validation.ConvertToQAddress(from)
 	if to != "" {
@@ -532,7 +522,9 @@ func TransactionByAddressCollection(timeStamp string, txType string, from string
 		{Key: "txHash", Value: hash},
 		{Key: "timeStamp", Value: timeStamp},
 		{Key: "amount", Value: amount},
+		{Key: "amountWei", Value: amountWei},
 		{Key: "paidFees", Value: paidFees},
+		{Key: "paidFeesWei", Value: paidFeesWei},
 		{Key: "blockNumber", Value: blockNumber},
 	}
 
@@ -545,6 +537,33 @@ func TransactionByAddressCollection(timeStamp string, txType string, from string
 	}
 
 	return result, err
+}
+
+// upsertAddressBalance fetches the current balance of one address via RPC and
+// upserts its addresses row with the given contract flag. Failures are logged
+// and swallowed: a missed balance refresh self-heals on the address's next
+// transaction.
+func upsertAddressBalance(address string, isContract bool) {
+	responseBalance, err := rpc.GetBalance(address)
+	if err != nil {
+		configs.Logger.Warn("Failed to do rpc request: ", zap.Error(err))
+		return
+	}
+
+	getBalanceResult := new(big.Int)
+	if responseBalance != "" && len(responseBalance) > 2 {
+		getBalanceResult.SetString(responseBalance[2:], 16)
+	} else {
+		configs.Logger.Warn("Invalid balance response", zap.String("balance", responseBalance))
+		return
+	}
+
+	divisor := new(big.Float).SetFloat64(float64(utils.QUANTA))
+	bigIntAsFloat := new(big.Float).SetInt(getBalanceResult)
+	resultBigFloat := new(big.Float).Quo(bigIntAsFloat, divisor)
+	resultFloat64, _ := resultBigFloat.Float64()
+
+	UpsertTransactions(address, resultFloat64, isContract)
 }
 
 func UpsertTransactions(address string, value float64, isContract bool) (*mongo.UpdateResult, error) {
@@ -613,6 +632,7 @@ func UpsertTransactions(address string, value float64, isContract bool) (*mongo.
 }
 
 func GetContractByAddress(address string) *models.ContractInfo {
+	address = validation.ConvertToQAddress(address)
 	collection := configs.GetCollection(configs.DB, "contractCode")
 	var contract models.ContractInfo
 
@@ -624,43 +644,4 @@ func GetContractByAddress(address string) *models.ContractInfo {
 		return nil
 	}
 	return &contract
-}
-
-// InitializePendingTokenContractsCollection ensures the pending token contracts collection is set up with proper indexes.
-// Uses CreateMany which is a no-op for indexes that already exist, avoiding destructive DropAll.
-func InitializePendingTokenContractsCollection() error {
-	collection := configs.GetCollection(configs.DB, "pending_token_contracts")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	configs.Logger.Info("Initializing pending_token_contracts collection and indexes")
-
-	// Create indexes for pending token contracts collection.
-	// CreateMany is a no-op if the index already exists, so this is safe to call on restart.
-	indexes := []mongo.IndexModel{
-		{
-			Keys: bson.D{
-				{Key: "contractAddress", Value: 1},
-				{Key: "txHash", Value: 1},
-			},
-			Options: options.Index().SetName("contract_tx_idx").SetUnique(true),
-		},
-		{
-			Keys: bson.D{
-				{Key: "processed", Value: 1},
-			},
-			Options: options.Index().SetName("processed_idx"),
-		},
-	}
-
-	_, err := collection.Indexes().CreateMany(ctx, indexes)
-	if err != nil {
-		configs.Logger.Error("Failed to create indexes for pending token contracts",
-			zap.Error(err))
-		return err
-	}
-
-	configs.Logger.Info("Successfully initialized pending_token_contracts collection and indexes")
-	return nil
 }
