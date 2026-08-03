@@ -194,3 +194,46 @@ if mongosh --quiet --eval 'db.runCommand({ping:1}).ok' qrldata-z 2>/dev/null | g
 else
     check_debounced "mongodb" 2 "fail" "**MongoDB** not responding" ""
 fi
+
+# --- nginx service ---
+# Every check above probes an app directly on loopback, so all of them stay
+# green when nginx itself is down and nothing is actually reachable from the
+# internet. That is exactly what happened on 2026-07-28: a DNS blip during an
+# unattended-upgrades restart failed the config test, nginx stayed dead for 9h,
+# and this monitor never said a word. Watch the reverse proxy explicitly.
+if systemctl is-active --quiet nginx; then
+    check_debounced "nginx-service" 2 "pass" "" "nginx is running again"
+else
+    check_debounced "nginx-service" 2 "fail" "**nginx** is not running (every site on this host is down)" ""
+fi
+
+# --- nginx TLS termination ---
+# Pinned to loopback so this tests our own vhost + cert, not Cloudflare's edge.
+# -k because the origin cert is a Cloudflare Origin CA cert, which the system
+# trust store deliberately does not chain to.
+HTTP_CODE=$(curl -sk --max-time 8 -o /dev/null -w "%{http_code}" \
+    --resolve zondscan.com:443:127.0.0.1 https://zondscan.com/)
+if [ "$HTTP_CODE" = "200" ]; then
+    check_debounced "nginx-tls" 2 "pass" "" "nginx TLS is serving again"
+else
+    check_debounced "nginx-tls" 2 "fail" "**nginx TLS** not serving zondscan.com on :443 (HTTP $HTTP_CODE)" ""
+fi
+
+# --- Origin cert expiry ---
+# Cloudflare Origin CA certs are long-lived with no renewal infra, so a silent
+# expiry is a guaranteed future outage that nobody is watching for. Warn early,
+# once per cert, at 30 days remaining.
+#
+# Set MONITOR_SSL_DIR to the directory holding per-site <name>/cert.pub. Left
+# unset the check is skipped, which keeps deployment-specific paths out of this
+# repo.
+for CERT_FILE in "${MONITOR_SSL_DIR:-/nonexistent}"/*/cert.pub; do
+    [ -f "$CERT_FILE" ] || continue
+    CERT_NAME=$(basename "$(dirname "$CERT_FILE")")
+    if ! openssl x509 -in "$CERT_FILE" -noout -checkend 2592000 >/dev/null 2>&1; then
+        CERT_END=$(openssl x509 -in "$CERT_FILE" -noout -enddate 2>/dev/null | cut -d= -f2)
+        alert "cert-expiry-$CERT_NAME" "**Origin cert** ($CERT_NAME) expires within 30 days ($CERT_END)"
+    else
+        resolve "cert-expiry-$CERT_NAME" "Origin cert ($CERT_NAME) renewed"
+    fi
+done
