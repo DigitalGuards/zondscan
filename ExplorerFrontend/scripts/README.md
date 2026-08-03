@@ -20,7 +20,7 @@ Stages the [QRL Connect](https://github.com/DigitalGuards/myqrlwallet-connect) t
    └──────────────┘
 ```
 
-The hosted `/dapp-example` is a live demo of that protocol: a dApp that generates a QR code, walks through the SYN/SYNACK/ACK handshake, and exercises `qrl_sendTransaction` / `personal_sign` / read-only RPC calls, all while streaming every event to an on-page log so developers can see the wire format. Deep architecture lives in the connect repo's [`CLAUDE.md`](https://github.com/DigitalGuards/myqrlwallet-connect/blob/dev/CLAUDE.md) and [`example/README.md`](https://github.com/DigitalGuards/myqrlwallet-connect/blob/dev/example/README.md).
+The hosted `/dapp-example` is a live demo of that protocol: a dApp that generates a QR code, walks through the SYN/SYNACK/ACK handshake, and exercises `qrl_sendTransaction` / `personal_sign` / read-only RPC calls, all while streaming every event to an on-page log so developers can see the wire format. Deep architecture lives in the connect repo's [`example/README.md`](https://github.com/DigitalGuards/myqrlwallet-connect/blob/main/example/README.md).
 
 ### What the script does
 
@@ -36,7 +36,7 @@ A Next.js rewrite in `next.config.js` maps `/dapp-example` (no trailing slash) t
 | Variable              | Default                                                       | Purpose                                    |
 | --------------------- | ------------------------------------------------------------- | ------------------------------------------ |
 | `QRL_CONNECT_REPO`    | `https://github.com/DigitalGuards/myqrlwallet-connect.git`    | Alternate remote.                          |
-| `QRL_CONNECT_REF`     | `dev`                                                         | Branch or tag to clone. Pin to a tag for stable deploys. |
+| `QRL_CONNECT_REF`     | `main`                                                        | Branch or tag to clone. Pin to a tag for stable deploys. |
 | `QRL_CONNECT_LOCAL`   | _(unset)_                                                     | Absolute path to a local connect checkout. Rsyncs instead of cloning, useful when developing against uncommitted SDK changes. |
 | `SKIP_DAPP_EXAMPLE`   | `0`                                                           | Set to `1` to bypass entirely (fast local builds). |
 
