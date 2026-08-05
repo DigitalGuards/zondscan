@@ -38,6 +38,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: API docs drift check
+        run: node scripts/check-api-docs-drift.mjs
+
       - name: Build
         run: npm run build
 
