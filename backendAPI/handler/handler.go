@@ -6,12 +6,12 @@ import (
 	"backendAPI/routes"
 	"backendAPI/verification"
 	"log"
+	"net/http"
 	"os"
 	"runtime/debug"
 	"strings"
 	"time"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -26,6 +26,72 @@ func recoveryMiddleware() gin.HandlerFunc {
 				})
 			}
 		}()
+		c.Next()
+	}
+}
+
+// corsMiddleware implements the method-split CORS policy: GET (and HEAD)
+// requests are served with a wildcard allow-origin, POST requests only
+// echo origins on the allowlist. Browser extensions send
+// Origin: chrome-extension://<install-id>; the id is per-install so it
+// cannot be allowlisted by value, a scheme-level allowance adds no
+// exposure beyond what a no-Origin client (curl) already gets because
+// credentials are never allowed and the POST endpoints carry their own
+// per-IP rate limits.
+func corsMiddleware(postAllowOrigins []string) gin.HandlerFunc {
+	postOriginAllowed := func(origin string) bool {
+		lower := strings.ToLower(origin)
+		for _, scheme := range []string{
+			"chrome-extension://",
+			"moz-extension://",
+			"safari-web-extension://",
+		} {
+			if strings.HasPrefix(lower, scheme) {
+				return true
+			}
+		}
+		for _, allowed := range postAllowOrigins {
+			if strings.EqualFold(allowed, origin) {
+				return true
+			}
+		}
+		return false
+	}
+	return func(c *gin.Context) {
+		// Responses differ per Origin (POST allowlist echoes it back), so
+		// caches must key on it unconditionally: a shared cache that stored
+		// a no-Origin response without Vary would serve it, ACAO-less, to
+		// later browser CORS requests.
+		c.Header("Vary", "Origin")
+		origin := c.Request.Header.Get("Origin")
+		if origin == "" {
+			c.Next()
+			return
+		}
+
+		// For preflights the method being authorized is in the
+		// Access-Control-Request-Method header, the request itself is OPTIONS.
+		effectiveMethod := c.Request.Method
+		if effectiveMethod == http.MethodOptions {
+			effectiveMethod = c.Request.Header.Get("Access-Control-Request-Method")
+		}
+		switch effectiveMethod {
+		case http.MethodGet, http.MethodHead:
+			c.Header("Access-Control-Allow-Origin", "*")
+		default:
+			if postOriginAllowed(origin) {
+				c.Header("Access-Control-Allow-Origin", origin)
+			}
+		}
+		c.Header("Access-Control-Expose-Headers", "Content-Length")
+
+		if c.Request.Method == http.MethodOptions {
+			c.Header("Access-Control-Allow-Methods", "GET, POST")
+			c.Header("Access-Control-Allow-Headers", "Origin, Content-Length, Content-Type, Authorization")
+			c.Header("Access-Control-Max-Age", "43200")
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
 		c.Next()
 	}
 }
@@ -83,52 +149,30 @@ func RequestHandler() {
 	router.Use(recoveryMiddleware()) // Custom recovery middleware
 	router.Use(monitorMiddleware())  // Request monitoring middleware
 
-	// CORS, scope to the explorer's own origins. POST endpoints
-	// (/contract/verify, /contract/call, /contract/explain) are not safe
-	// to expose to arbitrary web origins: a third-party page could fire
-	// off Anthropic-billed explain calls under the visitor's IP. The
-	// wildcard `Access-Control-Allow-Origin: *` is preserved only when
-	// CORS_ALLOW_ORIGINS is unset, so operators who explicitly want a
-	// fully open API can opt back in via env.
-	allowOrigins := []string{
+	// CORS is split by method. GET endpoints are the public read API and
+	// are open to every origin (`Access-Control-Allow-Origin: *`), which
+	// is what makes the "free public API, no key" promise real for
+	// browser-based dApps. POST endpoints stay scoped to the explorer's
+	// own origins: /contract/explain is Anthropic-billed and
+	// /contract/verify + /contract/call are abuse-sensitive, so a
+	// third-party page must never be able to fire them under each
+	// visitor's IP. Operators can extend the POST allowlist via the
+	// CORS_ALLOW_ORIGINS env var (comma-separated origins). Credentials
+	// are never allowed in either mode.
+	postAllowOrigins := []string{
 		"https://zondscan.com",
 		"https://www.zondscan.com",
 	}
 	if env := os.Getenv("CORS_ALLOW_ORIGINS"); env != "" {
-		allowOrigins = nil
+		postAllowOrigins = nil
 		for _, o := range strings.Split(env, ",") {
 			if o = strings.TrimSpace(o); o != "" {
-				allowOrigins = append(allowOrigins, o)
+				postAllowOrigins = append(postAllowOrigins, o)
 			}
 		}
 	}
-	router.Use(cors.New(cors.Config{
-		AllowOrigins: allowOrigins,
-		// Browser extensions send Origin: chrome-extension://<install-id>;
-		// the id is per-install so it cannot be allowlisted by value. A
-		// scheme-level allowance adds no exposure beyond what a no-Origin
-		// client (curl) already gets: AllowCredentials stays false and the
-		// abuse-sensitive POST endpoints have their own rate limits.
-		AllowOriginFunc: func(origin string) bool {
-			lower := strings.ToLower(origin)
-			for _, scheme := range []string{
-				"chrome-extension://",
-				"moz-extension://",
-				"safari-web-extension://",
-			} {
-				if strings.HasPrefix(lower, scheme) {
-					return true
-				}
-			}
-			return false
-		},
-		AllowMethods:     []string{"GET", "POST"},
-		AllowHeaders:     []string{"Origin", "Content-Length", "Content-Type", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: false,
-		MaxAge:           12 * time.Hour,
-	}))
-	log.Printf("CORS allow-origins: %v", allowOrigins)
+	router.Use(corsMiddleware(postAllowOrigins))
+	log.Printf("CORS: GET open to all origins; POST allowlist: %v", postAllowOrigins)
 
 	// Initialize MongoDB connection with additional error handling
 	log.Println("Initializing MongoDB connection...")
