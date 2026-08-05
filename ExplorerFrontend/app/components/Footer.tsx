@@ -46,6 +46,8 @@ export default function Footer(): JSX.Element {
           <div>
             <h3 className="eyebrow mb-4">Resources</h3>
             <ul className="space-y-2 text-sm text-text-secondary">
+              <li><Link href="/learn" className="hover:text-accent transition-colors">Learn</Link></li>
+              <li><Link href="/api-explorer" className="hover:text-accent transition-colors">API Docs</Link></li>
               <li><Link href="https://docs.theqrl.org" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition-colors">QRL Docs</Link></li>
               <li><Link href="https://github.com/theQRL" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition-colors">GitHub</Link></li>
               <li><Link href="https://myqrlwallet.com" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition-colors">MyQRLWallet Ecosystem</Link></li>

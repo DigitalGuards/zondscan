@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import AnimatedLogo from './AnimatedLogo'
 import {
+  AcademicCapIcon,
   Bars3Icon,
   XMarkIcon,
   QuestionMarkCircleIcon,
@@ -67,12 +68,18 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    label: 'Learn',
+    items: [
+      { name: 'Learn', href: '/learn', icon: AcademicCapIcon },
+      { name: 'FAQ', href: '/faq', icon: QuestionMarkCircleIcon },
+    ],
+  },
+  {
     label: 'Ecosystem',
     items: [
       { name: 'MyQRLWallet', href: 'https://myqrlwallet.com', icon: WalletIcon, external: true },
       { name: 'dApp Example', href: '/dapp-example/', icon: CubeTransparentIcon },
       { name: 'API Explorer', href: '/api-explorer', icon: CodeBracketIcon },
-      { name: 'FAQ', href: '/faq', icon: QuestionMarkCircleIcon },
     ],
   },
 ]
@@ -88,6 +95,8 @@ function isActive(pathname: string, href: string): boolean {
   if (href.startsWith('/epochs') && pathname.startsWith('/epochs/')) return true
   if (href.startsWith('/transactions') && pathname.startsWith('/tx/')) return true
   if (href === '/contracts' && pathname.startsWith('/contracts')) return true
+  // Article pages (/learn/<slug>) highlight the Learn hub item
+  if (href === '/learn' && pathname.startsWith('/learn/')) return true
   return false
 }
 

@@ -1,4 +1,5 @@
 import type { MetadataRoute } from 'next';
+import { learnArticles } from './learn/articles';
 
 /**
  * Sitemap for ZondScan. Lists the static routes that have meaningful
@@ -35,6 +36,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     entry('/pending/1', 'always', 0.7),
     entry('/epochs/1', 'hourly', 0.7),
     entry('/gas', 'hourly', 0.7),
+    entry('/learn', 'weekly', 0.7),
     entry('/richlist', 'daily', 0.6),
     entry('/faucet', 'monthly', 0.6),
     entry('/converter', 'yearly', 0.5),
@@ -45,5 +47,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     // Static bundle from the @qrlwallet/connect repo, served from
     // public/dapp-example/ (see next.config.js rewrite).
     entry('/dapp-example', 'monthly', 0.4),
+    // Learn articles: one row per registry entry; the registry
+    // (app/learn/articles.ts) is the source of truth for slugs.
+    ...learnArticles.map((article) => entry(`/learn/${article.slug}`, 'monthly', 0.6)),
   ];
 }
