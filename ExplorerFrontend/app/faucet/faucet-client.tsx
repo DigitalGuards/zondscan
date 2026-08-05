@@ -138,7 +138,7 @@ export default function FaucetClient(): JSX.Element {
       // addresses are Q-prefixed, so point the user at that specifically.
       setError(
         /^0x/i.test(cleanAddress)
-          ? 'QRL addresses start with “Q”, not “0x”. Paste your Q… wallet address.'
+          ? 'QRL addresses start with “Q”. The “0x” prefix belongs to block and transaction hashes; paste your Q… wallet address.'
           : 'Enter a valid QRL address (Q… followed by 40 hex characters).',
       );
       setIsLoading(false);
@@ -286,7 +286,7 @@ export default function FaucetClient(): JSX.Element {
                     Sending...
                   </div>
                 ) : (
-                  'Request testnet QRL'
+                  `Request testnet ${NATIVE_UNIT}`
                 )}
               </button>
             </form>

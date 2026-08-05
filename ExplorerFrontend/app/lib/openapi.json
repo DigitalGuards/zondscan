@@ -1,0 +1,2375 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ZondScan Public API",
+    "version": "1.0.0",
+    "description": "ZondScan is the block explorer for the QRL 2.0 (Zond) public testnet. This API is free to use: no API key, no signup. All data reflects the QRL 2.0 testnet, and testnet coins have no monetary value.\n\nCORS: GET endpoints respond with Access-Control-Allow-Origin: * and can be called directly from any web page. POST endpoints allow cross-origin browser access only from the explorer's own origins and from browser-extension origins, so browser apps hosted elsewhere should treat POST endpoints as server-side calls.\n\nPagination: list endpoints take page and limit query parameters, and limit is capped at 100 items. Most list endpoints number pages from 1; the contract and token list endpoints number pages from 0. Each operation documents its own defaults.\n\nNumeric encoding: on-chain quantities (block fields, gas values, raw transaction values) are 0x-prefixed hexadecimal strings. Indexed aggregates are decimal strings or JSON numbers. Coin amounts are denominated in Quanta (1 Quanta = 10^9 Shor = 10^18 Planck); fields carrying exact amounts use decimal strings.\n\nCaching and limits: hot endpoints are cached server side for 5 to 30 seconds, noted per operation. The three POST contract endpoints carry per-IP rate limits and return 429 with body {\"error\": \"rate limit exceeded\"} when exhausted."
+  },
+  "servers": [{ "url": "https://zondscan.com" }],
+  "tags": [
+    { "name": "Status", "description": "Service health." },
+    { "name": "Overview & Market", "description": "Network overview and QRL market data." },
+    { "name": "Blocks", "description": "Block lists, block details, and block size history." },
+    { "name": "Transactions & Mempool", "description": "Confirmed transactions, the latest-transactions feed, and pending mempool transactions." },
+    { "name": "Addresses", "description": "Address details, balances, per-address history, and wallet statistics." },
+    { "name": "Tokens & NFTs", "description": "Deployed contracts, token summaries, holders, transfers, and NFT metadata." },
+    { "name": "Validators & Epochs", "description": "Proof of stake validator set and beacon chain epoch data." },
+    { "name": "Gas", "description": "Gas price snapshots and history." },
+    { "name": "Contract Verification", "description": "Source verification for deployed contracts (Hyperion compiler)." },
+    { "name": "Contract Interaction", "description": "Read calls against known contracts and AI explanations of verified source." },
+    { "name": "Faucet & Site", "description": "Endpoints served by the explorer web app itself: search redirect and the testnet faucet." }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "tags": ["Status"],
+        "operationId": "getHealth",
+        "summary": "Service health check",
+        "description": "Pings the database with a 3 second budget. Returns 200 when the API can reach its data store and 503 when it cannot.",
+        "responses": {
+          "200": {
+            "description": "Service is healthy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "status": { "type": "string", "const": "ok" } },
+                  "required": ["status"]
+                },
+                "example": { "status": "ok" }
+              }
+            }
+          },
+          "503": {
+            "description": "Database unreachable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "const": "error" },
+                    "error": { "type": "string" }
+                  }
+                },
+                "example": { "status": "error", "error": "database unreachable" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/overview": {
+      "get": {
+        "tags": ["Overview & Market"],
+        "operationId": "getOverview",
+        "summary": "Network and market overview",
+        "description": "Homepage hero data: market figures, wallet count, circulating supply, daily volume, validator count, and contract count in one call. Cached server side for 10 seconds.",
+        "responses": {
+          "200": {
+            "description": "Aggregated overview.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "marketcap": { "type": "number", "description": "Market capitalization in USD." },
+                    "currentPrice": { "type": "number", "description": "Spot price in USD." },
+                    "priceChange24h": { "type": "number", "description": "24 hour price change in percent." },
+                    "countwallets": { "type": "integer", "description": "Number of indexed wallet addresses." },
+                    "circulating": { "type": "string", "description": "Circulating supply in Quanta as a decimal string." },
+                    "volume": { "type": "number", "description": "Daily on-chain transferred volume." },
+                    "tradingVolume": { "type": "number", "description": "24 hour trading volume in USD." },
+                    "validatorCount": { "type": "integer" },
+                    "contractCount": { "type": "integer" },
+                    "status": {
+                      "type": "object",
+                      "properties": {
+                        "syncing": { "type": "boolean" },
+                        "dataInitialized": { "type": "boolean", "description": "False while the indexer has not yet written its first market and supply samples." }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "marketcap": 32500000,
+                  "currentPrice": 0.42,
+                  "priceChange24h": -1.8,
+                  "countwallets": 10412,
+                  "circulating": "65000000",
+                  "volume": 1532,
+                  "tradingVolume": 210034,
+                  "validatorCount": 128,
+                  "contractCount": 342,
+                  "status": { "syncing": true, "dataInitialized": true }
+                }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/price-history": {
+      "get": {
+        "tags": ["Overview & Market"],
+        "operationId": "getPriceHistory",
+        "summary": "Historical price samples",
+        "description": "Price, market cap, and volume snapshots for charts and wallet apps.",
+        "parameters": [
+          {
+            "name": "interval",
+            "in": "query",
+            "description": "Time window for the returned samples.",
+            "schema": { "type": "string", "enum": ["4h", "12h", "24h", "7d", "30d", "all"], "default": "24h" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Price history for the requested interval.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "timestamp": { "type": "string", "description": "RFC 3339 timestamp." },
+                          "priceUSD": { "type": "number" },
+                          "marketCapUSD": { "type": "number" },
+                          "volumeUSD": { "type": "number" }
+                        }
+                      }
+                    },
+                    "interval": { "type": "string" },
+                    "count": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid interval value.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/latestblock": {
+      "get": {
+        "tags": ["Blocks"],
+        "operationId": "getLatestBlock",
+        "summary": "Latest indexed block height",
+        "description": "Returns the latest synced block number as a decimal integer, plus the current QRL/USD price so fee displays need no second request. Cached server side for 5 seconds.",
+        "responses": {
+          "200": {
+            "description": "Latest block height and spot price.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "blockNumber": { "type": "integer" },
+                    "qrlUsdPrice": { "type": "number" }
+                  }
+                },
+                "example": { "blockNumber": 148512, "qrlUsdPrice": 0.42 }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/blocks": {
+      "get": {
+        "tags": ["Blocks"],
+        "operationId": "getBlocks",
+        "summary": "Paginated block list",
+        "description": "Newest blocks first, with a per-block activity rollup (token transfers and internal calls). The reported total is capped at 300 pages worth of blocks. Cached server side for 10 seconds.",
+        "parameters": [
+          { "name": "page", "in": "query", "description": "Page number, starting at 1.", "schema": { "type": "integer", "default": 1, "minimum": 1 } },
+          { "name": "limit", "in": "query", "description": "Blocks per page. Capped at 100.", "schema": { "type": "integer", "default": 5, "maximum": 100 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of blocks.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "blocks": { "type": "array", "items": { "$ref": "#/components/schemas/BlockResult" } },
+                    "total": { "type": "integer", "description": "Total block count, capped at 300 pages at the current limit." },
+                    "blockActivity": {
+                      "type": "object",
+                      "description": "Map keyed by the block's 0x-prefixed hex number. Present only for blocks with token or internal-call activity.",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "tokenTransfers": { "type": "integer" },
+                          "internalCalls": { "type": "integer" }
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "blocks": [
+                    {
+                      "number": "0x24420",
+                      "hash": "0x8a4f0c2b7d1e5f3a9c6b8d0e2f4a6c8e0b2d4f6a8c0e2b4d6f8a0c2e4b6d8f0a",
+                      "parentHash": "0x7b3e0d1a6c0d4e2f8b5a7c9d1e3f5a7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c",
+                      "timestamp": "0x6a743280",
+                      "gasUsed": "0x5208",
+                      "gasLimit": "0x1c9c380",
+                      "baseFeePerGas": "0x3b9aca00",
+                      "miner": "Q20d20b8026b8f02540249f42acbd6181dc4a0a48",
+                      "size": "0x2d0",
+                      "transactions": []
+                    }
+                  ],
+                  "total": 1500,
+                  "blockActivity": { "0x24420": { "tokenTransfers": 2, "internalCalls": 1 } }
+                }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/block/{query}": {
+      "get": {
+        "tags": ["Blocks"],
+        "operationId": "getBlock",
+        "summary": "Block detail",
+        "description": "Fetches one block by number, in decimal or 0x-prefixed hex form, plus per-transaction activity counts.",
+        "parameters": [
+          { "name": "query", "in": "path", "required": true, "description": "Block number as a decimal integer or 0x-prefixed hex string.", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Block detail with per-transaction activity map.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "block": {
+                      "type": "object",
+                      "properties": {
+                        "jsonrpc": { "type": "string" },
+                        "id": { "type": "integer" },
+                        "result": { "$ref": "#/components/schemas/BlockResult" }
+                      }
+                    },
+                    "txActivity": {
+                      "type": "object",
+                      "description": "Map keyed by transaction hash. Present only for transactions with token or internal-call activity.",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "tokenTransfers": { "type": "integer" },
+                          "internalCalls": { "type": "integer" }
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "block": {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "result": {
+                      "number": "0x24420",
+                      "hash": "0x8a4f0c2b7d1e5f3a9c6b8d0e2f4a6c8e0b2d4f6a8c0e2b4d6f8a0c2e4b6d8f0a",
+                      "timestamp": "0x6a743280",
+                      "gasUsed": "0x5208",
+                      "gasLimit": "0x1c9c380",
+                      "transactions": []
+                    }
+                  },
+                  "txActivity": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid block number format.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "404": {
+            "description": "Block not found.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/api/blocksizes": {
+      "get": {
+        "tags": ["Blocks"],
+        "operationId": "getBlockSizes",
+        "summary": "Block size time series",
+        "description": "Precomputed block size samples for charts, sorted by timestamp ascending and capped at 2000 points. Cached server side for 30 seconds.",
+        "responses": {
+          "200": {
+            "description": "Block size samples.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "response": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "description": "One sample per block. blockNumber, timestamp, and size are 0x-prefixed hex strings; transactionCount is an integer.",
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/txs": {
+      "get": {
+        "tags": ["Transactions & Mempool"],
+        "operationId": "getTxs",
+        "summary": "Paginated network transaction list",
+        "description": "Network-wide confirmed transactions, newest first, with the total count and the latest block height for confirmation math. Cached server side for 10 seconds.",
+        "parameters": [
+          { "name": "page", "in": "query", "description": "Page number, starting at 1.", "schema": { "type": "integer", "default": 1, "minimum": 1 } },
+          { "name": "limit", "in": "query", "description": "Items per page. Capped at 100.", "schema": { "type": "integer", "default": 10, "maximum": 100 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of transactions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "txs": { "type": "array", "items": { "$ref": "#/components/schemas/TransactionByAddress" } },
+                    "total": { "type": "integer" },
+                    "latestBlock": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/transactions": {
+      "get": {
+        "tags": ["Transactions & Mempool"],
+        "operationId": "getLatestTransactions",
+        "summary": "Latest transactions feed",
+        "description": "Fixed-size feed of the most recent confirmed transactions, used by the homepage. Cached server side for 5 seconds.",
+        "responses": {
+          "200": {
+            "description": "Latest transactions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "response": { "type": "array", "items": { "$ref": "#/components/schemas/TransactionByAddress" } }
+                  }
+                }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/tx/{query}": {
+      "get": {
+        "tags": ["Transactions & Mempool"],
+        "operationId": "getTransaction",
+        "summary": "Transaction detail",
+        "description": "Full detail for one confirmed transaction: transfer record, live receipt status and event logs, calldata, token transfers, internal calls, and contract metadata for decoding. This endpoint is deliberately uncached so a newly mined transaction shows its true confirmation count immediately.",
+        "parameters": [
+          { "name": "query", "in": "path", "required": true, "description": "Transaction hash: 0x followed by 64 hex characters.", "schema": { "type": "string", "pattern": "^0x[0-9a-fA-F]{64}$" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Transaction detail. Optional fields appear only when the transaction has the corresponding data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "response": { "$ref": "#/components/schemas/Transfer" },
+                    "latestBlock": { "type": "integer", "description": "Latest indexed block height as a decimal integer." },
+                    "receiptStatus": { "type": "string", "description": "EVM receipt status: 0x1 success, 0x0 reverted. Absent when the receipt fetch failed." },
+                    "logs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "address": { "type": "string" },
+                          "topics": { "type": "array", "items": { "type": "string" } },
+                          "data": { "type": "string" },
+                          "logIndex": { "type": "string" },
+                          "removed": { "type": "boolean" },
+                          "contract": { "$ref": "#/components/schemas/ContractMeta" }
+                        }
+                      }
+                    },
+                    "input": { "type": "string", "description": "Transaction calldata as a 0x-prefixed hex string. Present for contract calls." },
+                    "targetContract": { "$ref": "#/components/schemas/ContractMeta" },
+                    "contractCreated": {
+                      "type": "object",
+                      "properties": {
+                        "address": { "type": "string" },
+                        "isToken": { "type": "boolean" },
+                        "name": { "type": "string" },
+                        "symbol": { "type": "string" },
+                        "decimals": { "type": "integer" },
+                        "tokenStandard": { "type": "string" }
+                      }
+                    },
+                    "tokenTransfers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "contractAddress": { "type": "string" },
+                          "from": { "type": "string" },
+                          "to": { "type": "string" },
+                          "amount": { "type": "string" },
+                          "tokenName": { "type": "string" },
+                          "tokenSymbol": { "type": "string" },
+                          "tokenDecimals": { "type": "integer" },
+                          "tokenStandard": { "type": "string" },
+                          "tokenID": { "type": "string" },
+                          "logIndex": { "type": "string" }
+                        }
+                      }
+                    },
+                    "internalTransactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": { "type": "string" },
+                          "callType": { "type": "string" },
+                          "from": { "type": "string" },
+                          "to": { "type": "string" },
+                          "input": { "type": "string" },
+                          "output": { "type": "string" },
+                          "value": { "type": "string" },
+                          "gas": { "type": "string" },
+                          "gasUsed": { "type": "string" },
+                          "traceAddress": { "type": "array", "items": { "type": "integer" } }
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "response": {
+                    "ID": "665f1c2ab3d4e5f60718293a",
+                    "BlockNumber": "0x24420",
+                    "BlockTimestamp": "0x6a743280",
+                    "From": "Q20d20b8026b8f02540249f42acbd6181dc4a0a48",
+                    "To": "Q105c1fdb2a1b03f8b256d6a0b7a0da2a30653d19",
+                    "TxHash": "0x9c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d",
+                    "Value": "0x2386f26fc10000",
+                    "GasUsed": "0x5208",
+                    "GasPrice": "0x3b9aca00",
+                    "Nonce": "0x4",
+                    "Size": "0x2d0"
+                  },
+                  "latestBlock": 148512,
+                  "receiptStatus": "0x1"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid transaction hash format.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "404": {
+            "description": "Transaction not found.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/coinbase/{query}": {
+      "get": {
+        "tags": ["Transactions & Mempool"],
+        "operationId": "getCoinbaseTransaction",
+        "summary": "Raw transfer record lookup",
+        "description": "Returns the stored transfer record for one transaction hash. A missing transaction still returns 200 with an empty record; this preserves the endpoint's historical behavior.",
+        "parameters": [
+          { "name": "query", "in": "path", "required": true, "description": "Transaction hash: 0x followed by 64 hex characters.", "schema": { "type": "string", "pattern": "^0x[0-9a-fA-F]{64}$" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Transfer record, empty when the hash is unknown.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "response": { "$ref": "#/components/schemas/Transfer" } }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid transaction hash format.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/pending-transactions": {
+      "get": {
+        "tags": ["Transactions & Mempool"],
+        "operationId": "getPendingTransactions",
+        "summary": "Paginated mempool transactions",
+        "description": "Transactions currently observed in the mempool. Cached server side for 5 seconds, matching mempool turnover.",
+        "parameters": [
+          { "name": "page", "in": "query", "description": "Page number, starting at 1.", "schema": { "type": "integer", "default": 1, "minimum": 1 } },
+          { "name": "limit", "in": "query", "description": "Items per page. Capped at 100.", "schema": { "type": "integer", "default": 10, "maximum": 100 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of pending transactions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "transactions": { "type": "array", "items": { "$ref": "#/components/schemas/PendingTransaction" } },
+                    "total": { "type": "integer" },
+                    "page": { "type": "integer" },
+                    "limit": { "type": "integer" },
+                    "totalPages": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/pending-transaction/{hash}": {
+      "get": {
+        "tags": ["Transactions & Mempool"],
+        "operationId": "getPendingTransaction",
+        "summary": "Pending transaction detail",
+        "description": "Detail for one mempool transaction, including verified-contract metadata for the recipient when available. Returns 404 once the transaction has been mined or dropped; clients then fetch /api/tx/{hash} for the confirmed payload.",
+        "parameters": [
+          { "name": "hash", "in": "path", "required": true, "description": "Transaction hash: 0x followed by 64 hex characters.", "schema": { "type": "string", "pattern": "^0x[0-9a-fA-F]{64}$" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pending transaction detail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "transaction": { "$ref": "#/components/schemas/PendingTransaction" },
+                    "targetContract": { "$ref": "#/components/schemas/ContractMeta" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid transaction hash format.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "404": {
+            "description": "Transaction has been mined, dropped, or was never seen. The body's status field is \"mined\" when the transaction confirmed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "status": { "type": "string" },
+                    "details": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/pending-tx-eta/{hash}": {
+      "get": {
+        "tags": ["Transactions & Mempool"],
+        "operationId": "getPendingTxEta",
+        "summary": "Inclusion ETA for a pending transaction",
+        "description": "Best-effort estimate of when a pending transaction will be included, derived from recent block statistics and the gas queued ahead of it in the mempool. Cached server side for 5 seconds.",
+        "parameters": [
+          { "name": "hash", "in": "path", "required": true, "description": "Transaction hash: 0x followed by 64 hex characters.", "schema": { "type": "string", "pattern": "^0x[0-9a-fA-F]{64}$" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "ETA and the supporting numbers.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "etaSec": { "type": "number", "description": "Estimated seconds until inclusion, at minimum one average block time." },
+                    "avgBlockTimeSec": { "type": "number" },
+                    "avgGasUsedHex": { "type": "string", "description": "0x-prefixed hex." },
+                    "pendingCount": { "type": "integer" },
+                    "gasAheadHex": { "type": "string", "description": "0x-prefixed hex sum of gas queued at a higher or equal gas price." },
+                    "medianGasPriceHex": { "type": "string", "description": "0x-prefixed hex." },
+                    "yourGasPriceHex": { "type": "string", "description": "0x-prefixed hex gas price of the queried transaction." }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid transaction hash format.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "404": {
+            "description": "The transaction is no longer pending.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/address/aggregate/{query}": {
+      "get": {
+        "tags": ["Addresses"],
+        "operationId": "getAddressAggregate",
+        "summary": "Address detail aggregation",
+        "description": "Everything the address page needs in one call: balance record, transaction counts, activity range, richlist rank, paginated transaction and internal-transaction lists, and contract metadata when the address is a contract. Cached server side for 10 seconds.",
+        "parameters": [
+          { "name": "query", "in": "path", "required": true, "description": "Address: Q or 0x followed by 40 hex characters.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{40}$" } },
+          { "name": "page", "in": "query", "description": "Page number for the transaction lists, starting at 1.", "schema": { "type": "integer", "default": 1, "minimum": 1 } },
+          { "name": "limit", "in": "query", "description": "Items per page. Capped at 100.", "schema": { "type": "integer", "default": 10, "maximum": 100 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aggregated address detail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "address": {
+                      "type": "object",
+                      "description": "Indexed balance record. balance is a JSON number denominated in Quanta.",
+                      "properties": {
+                        "ObjectId": { "type": "string" },
+                        "id": { "type": "string" },
+                        "balance": { "type": "number" },
+                        "nonce": { "type": "integer" }
+                      }
+                    },
+                    "transactions_count": { "type": "integer" },
+                    "internal_transactions_count": { "type": "integer" },
+                    "first_seen": { "type": "integer", "description": "Unix timestamp of the first indexed activity, 0 when none." },
+                    "last_seen": { "type": "integer", "description": "Unix timestamp of the latest indexed activity, 0 when none." },
+                    "rank": { "type": "integer", "description": "Richlist rank by balance." },
+                    "transactions_by_address": { "type": "array", "items": { "$ref": "#/components/schemas/TransactionByAddress" } },
+                    "internal_transactions_by_address": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "Type": { "type": "string" },
+                          "CallType": { "type": "string" },
+                          "Hash": { "type": "string" },
+                          "From": { "type": "string" },
+                          "To": { "type": "string" },
+                          "Input": { "type": "string" },
+                          "Output": { "type": "string" },
+                          "Value": { "type": "string" },
+                          "Gas": { "type": "string" },
+                          "GasUsed": { "type": "string" },
+                          "AddressFunctionIdentifier": { "type": "string" },
+                          "AmountFunctionIdentifier": { "type": "string" },
+                          "BlockTimestamp": { "type": "string" },
+                          "TraceAddress": { "type": "array", "items": { "type": "integer" } }
+                        }
+                      }
+                    },
+                    "contract_code": { "type": "object", "description": "Contract record when the address is a contract, empty otherwise.", "additionalProperties": true },
+                    "latestBlock": { "type": "integer" },
+                    "page": { "type": "integer" },
+                    "limit": { "type": "integer" }
+                  }
+                },
+                "example": {
+                  "address": { "ObjectId": "665f1c2ab3d4e5f60718293a", "id": "Q20d20b8026b8f02540249f42acbd6181dc4a0a48", "balance": 12.5, "nonce": 3 },
+                  "transactions_count": 2,
+                  "internal_transactions_count": 0,
+                  "first_seen": 1782300000,
+                  "last_seen": 1786000000,
+                  "rank": 57,
+                  "transactions_by_address": [
+                    {
+                      "InOut": 1,
+                      "TxType": "transfer",
+                      "Address": "Q20d20b8026b8f02540249f42acbd6181dc4a0a48",
+                      "From": "Q20d20b8026b8f02540249f42acbd6181dc4a0a48",
+                      "To": "Q105c1fdb2a1b03f8b256d6a0b7a0da2a30653d19",
+                      "TxHash": "0x9c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d",
+                      "TimeStamp": "1786000000",
+                      "Amount": "3.300000000000000000",
+                      "PaidFees": "0.000021000000000000",
+                      "BlockNumber": "148512"
+                    }
+                  ],
+                  "internal_transactions_by_address": [],
+                  "contract_code": {},
+                  "latestBlock": 148512,
+                  "page": 1,
+                  "limit": 10
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid address format.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/address/{address}/transactions": {
+      "get": {
+        "tags": ["Addresses"],
+        "operationId": "getAddressTransactions",
+        "summary": "Non-zero transactions for an address",
+        "description": "Paginated list of value-moving transactions touching the address.",
+        "parameters": [
+          { "name": "address", "in": "path", "required": true, "description": "Address: Q or 0x followed by 40 hex characters.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{40}$" } },
+          { "name": "page", "in": "query", "description": "Page number, starting at 1.", "schema": { "type": "integer", "default": 1, "minimum": 1 } },
+          { "name": "limit", "in": "query", "description": "Items per page. Capped at 100.", "schema": { "type": "integer", "default": 5, "maximum": 100 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of transactions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "transactions": { "type": "array", "items": { "$ref": "#/components/schemas/TransactionByAddress" } },
+                    "total": { "type": "integer" },
+                    "page": { "type": "integer" },
+                    "limit": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid address format.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/address/{address}/token-transfers": {
+      "get": {
+        "tags": ["Addresses"],
+        "operationId": "getAddressTokenTransfers",
+        "summary": "Token transfers touching an address",
+        "description": "Token and NFT transfer events where the address is sender or recipient, across every contract.",
+        "parameters": [
+          { "name": "address", "in": "path", "required": true, "description": "Address: Q or 0x followed by 40 hex characters.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{40}$" } },
+          { "name": "page", "in": "query", "description": "Page number, starting at 1.", "schema": { "type": "integer", "default": 1, "minimum": 1 } },
+          { "name": "limit", "in": "query", "description": "Items per page. Capped at 100.", "schema": { "type": "integer", "default": 5, "maximum": 100 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of token transfers.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "address": { "type": "string" },
+                    "transfers": { "type": "array", "items": { "$ref": "#/components/schemas/TokenTransfer" } },
+                    "total": { "type": "integer" },
+                    "page": { "type": "integer" },
+                    "limit": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid address format.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/address/{address}/tokens": {
+      "get": {
+        "tags": ["Addresses"],
+        "operationId": "getAddressTokens",
+        "summary": "Token balances for an address",
+        "description": "All indexed token holdings for a wallet. By default every standard is returned (ERC-20 plus per-id ERC-721 and ERC-1155 rows); use the standard filter to scope to one.",
+        "parameters": [
+          { "name": "address", "in": "path", "required": true, "description": "Address: Q or 0x followed by 40 hex characters.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{40}$" } },
+          { "name": "standard", "in": "query", "description": "Scope the response to one token standard.", "schema": { "type": "string", "enum": ["ERC-20", "ERC-721", "ERC-1155"] } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Token balances.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "address": { "type": "string" },
+                    "tokens": { "type": "array", "items": { "$ref": "#/components/schemas/TokenBalance" } },
+                    "count": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid address or standard value.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/address/{address}/nfts": {
+      "get": {
+        "tags": ["Addresses"],
+        "operationId": "getAddressNfts",
+        "summary": "NFT holdings for an address",
+        "description": "Per (contract, tokenID) NFT holdings joined with collection metadata and per-token off-chain metadata (name, image, attributes) in one call. Covers ERC-721 and ERC-1155.",
+        "parameters": [
+          { "name": "address", "in": "path", "required": true, "description": "Address: Q or 0x followed by 40 hex characters.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{40}$" } },
+          { "name": "standard", "in": "query", "description": "Scope the response to one NFT standard.", "schema": { "type": "string", "enum": ["ERC-721", "ERC-1155"] } }
+        ],
+        "responses": {
+          "200": {
+            "description": "NFT holdings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "address": { "type": "string" },
+                    "nfts": { "type": "array", "items": { "$ref": "#/components/schemas/NFTBalance" } },
+                    "count": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid address or standard value.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/richlist": {
+      "get": {
+        "tags": ["Addresses"],
+        "operationId": "getRichlist",
+        "summary": "Top addresses by balance",
+        "description": "Wallet ranking by indexed balance, with contract flag, first-seen timestamp, and supply share per row. Cached server side for 30 seconds.",
+        "responses": {
+          "200": {
+            "description": "Richlist rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "richlist": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string", "description": "Q-prefixed address." },
+                          "balance": { "type": "number", "description": "Balance denominated in Quanta." },
+                          "isContract": { "type": "boolean" },
+                          "firstSeen": { "type": "integer", "description": "Unix timestamp." },
+                          "supplyPercent": { "type": "number" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/walletdistribution/{query}": {
+      "get": {
+        "tags": ["Addresses"],
+        "operationId": "getWalletDistribution",
+        "summary": "Count addresses above a balance threshold",
+        "description": "Returns the number of indexed addresses whose balance exceeds a threshold derived from the supplied value. The value is scaled by 10^12 before comparison against the indexed balance.",
+        "parameters": [
+          { "name": "query", "in": "path", "required": true, "description": "Threshold value as a decimal integer.", "schema": { "type": "string", "pattern": "^[0-9]+$" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching address count.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "response": { "type": "integer" } }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Value is invalid as a decimal integer.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/getBalance": {
+      "post": {
+        "tags": ["Addresses"],
+        "operationId": "postGetBalance",
+        "summary": "Live balance lookup via the node",
+        "description": "Form-encoded balance lookup proxied to the node's qrl_getBalance. Always returns 200: on success balance is a JSON number denominated in Quanta, and on failure balance is an error message string. Because POST endpoints carry a restricted CORS policy, cross-origin browser apps should use GET /api/address/aggregate/{address} instead; it is open to every origin and includes the indexed balance.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": { "address": { "type": "string", "description": "Q or 0x prefixed address." } },
+                "required": ["address"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Balance in Quanta as a number, or an error message string in the same field.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "balance": { "oneOf": [{ "type": "number" }, { "type": "string" }] }
+                  }
+                },
+                "example": { "balance": 12.5 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/contracts": {
+      "get": {
+        "tags": ["Tokens & NFTs"],
+        "operationId": "getContracts",
+        "summary": "Paginated contract list",
+        "description": "Deployed contracts with optional search and filters. Pagination is 0-indexed on this endpoint.",
+        "parameters": [
+          { "name": "page", "in": "query", "description": "Page number, starting at 0.", "schema": { "type": "integer", "default": 0, "minimum": 0 } },
+          { "name": "limit", "in": "query", "description": "Items per page. Capped at 100.", "schema": { "type": "integer", "default": 10, "maximum": 100 } },
+          { "name": "search", "in": "query", "description": "Free-text filter over contract fields.", "schema": { "type": "string" } },
+          { "name": "isToken", "in": "query", "description": "Filter to token contracts (true) or non-token contracts (any other value).", "schema": { "type": "string" } },
+          { "name": "standard", "in": "query", "description": "Filter by token standard.", "schema": { "type": "string", "enum": ["ERC-20", "ERC-721", "ERC-1155"] } }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of contracts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "response": { "type": "array", "items": { "$ref": "#/components/schemas/ContractInfo" } },
+                    "total": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid standard value.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/contracts/counts": {
+      "get": {
+        "tags": ["Tokens & NFTs"],
+        "operationId": "getContractCounts",
+        "summary": "Contract counts by standard",
+        "description": "Counts of deployed contracts bucketed by token standard, plus an \"other\" bucket for non-token contracts. Cached server side for 30 seconds.",
+        "responses": {
+          "200": {
+            "description": "Per-standard counts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "erc20": { "type": "integer" },
+                    "erc721": { "type": "integer" },
+                    "erc1155": { "type": "integer" },
+                    "other": { "type": "integer" }
+                  }
+                },
+                "example": { "erc20": 120, "erc721": 34, "erc1155": 12, "other": 176 }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/token/{address}/info": {
+      "get": {
+        "tags": ["Tokens & NFTs"],
+        "operationId": "getTokenInfo",
+        "summary": "Token summary",
+        "description": "Summary statistics for one token contract: identity, supply, holder count, transfer count, and creation provenance.",
+        "parameters": [
+          { "name": "address", "in": "path", "required": true, "description": "Contract address: Q or 0x followed by 40 hex characters.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{40}$" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Token summary.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contractAddress": { "type": "string" },
+                    "name": { "type": "string" },
+                    "symbol": { "type": "string" },
+                    "decimals": { "type": "integer" },
+                    "totalSupply": { "type": "string", "description": "Raw supply as a decimal string, before dividing by decimals." },
+                    "holderCount": { "type": "integer" },
+                    "transferCount": { "type": "integer" },
+                    "creatorAddress": { "type": "string" },
+                    "creationTxHash": { "type": "string" },
+                    "creationBlock": { "type": "string", "description": "0x-prefixed hex block number." },
+                    "genesisContract": { "type": "boolean", "description": "True for contracts baked into the genesis allocation." }
+                  }
+                },
+                "example": {
+                  "contractAddress": "Q30b4e6b5d1a2c3f4e5d6a7b8c9d0e1f2a3b4c5d6",
+                  "name": "Example Token",
+                  "symbol": "EXT",
+                  "decimals": 18,
+                  "totalSupply": "1000000000000000000000000",
+                  "holderCount": 42,
+                  "transferCount": 310,
+                  "creatorAddress": "Q20d20b8026b8f02540249f42acbd6181dc4a0a48",
+                  "creationTxHash": "0x9c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d",
+                  "creationBlock": "0x1a2b3"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid address format.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "404": {
+            "description": "Token not found.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/api/token/{address}/holders": {
+      "get": {
+        "tags": ["Tokens & NFTs"],
+        "operationId": "getTokenHolders",
+        "summary": "Token holders",
+        "description": "Holders of a token contract. For NFT contracts an optional tokenID filter scopes to holders of one id; without it holders are aggregated across all ids. Pagination is 0-indexed on this endpoint.",
+        "parameters": [
+          { "name": "address", "in": "path", "required": true, "description": "Contract address: Q or 0x followed by 40 hex characters.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{40}$" } },
+          { "name": "tokenID", "in": "query", "description": "Filter holders to one NFT token id (decimal string).", "schema": { "type": "string" } },
+          { "name": "page", "in": "query", "description": "Page number, starting at 0.", "schema": { "type": "integer", "default": 0, "minimum": 0 } },
+          { "name": "limit", "in": "query", "description": "Items per page. Capped at 100.", "schema": { "type": "integer", "default": 25, "maximum": 100 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of holders.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contractAddress": { "type": "string" },
+                    "holders": { "type": "array", "items": { "$ref": "#/components/schemas/TokenBalance" } },
+                    "totalHolders": { "type": "integer" },
+                    "page": { "type": "integer" },
+                    "limit": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid address format.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/token/{address}/tokens": {
+      "get": {
+        "tags": ["Tokens & NFTs"],
+        "operationId": "getTokenIds",
+        "summary": "Minted token ids on an NFT contract",
+        "description": "Distinct token ids minted on an NFT contract with per-id holder counts and, when fetched, off-chain metadata (name, image, description). Returns an empty list for ERC-20 contracts. Pagination is 0-indexed on this endpoint.",
+        "parameters": [
+          { "name": "address", "in": "path", "required": true, "description": "Contract address: Q or 0x followed by 40 hex characters.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{40}$" } },
+          { "name": "page", "in": "query", "description": "Page number, starting at 0.", "schema": { "type": "integer", "default": 0, "minimum": 0 } },
+          { "name": "limit", "in": "query", "description": "Items per page. Capped at 100.", "schema": { "type": "integer", "default": 25, "maximum": 100 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of token ids.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contractAddress": { "type": "string" },
+                    "tokens": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "tokenID": { "type": "string" },
+                          "holderCount": { "type": "integer" },
+                          "tokenStandard": { "type": "string" },
+                          "blockNumber": { "type": "string" },
+                          "updatedAt": { "type": "string" },
+                          "name": { "type": "string" },
+                          "description": { "type": "string" },
+                          "image": { "type": "string" }
+                        }
+                      }
+                    },
+                    "totalTokenIDs": { "type": "integer" },
+                    "page": { "type": "integer" },
+                    "limit": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid address format.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/token/{address}/transfers": {
+      "get": {
+        "tags": ["Tokens & NFTs"],
+        "operationId": "getTokenTransfers",
+        "summary": "Transfers of one token contract",
+        "description": "Transfer events emitted by one token contract, newest first. Pagination is 0-indexed on this endpoint.",
+        "parameters": [
+          { "name": "address", "in": "path", "required": true, "description": "Contract address: Q or 0x followed by 40 hex characters.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{40}$" } },
+          { "name": "page", "in": "query", "description": "Page number, starting at 0.", "schema": { "type": "integer", "default": 0, "minimum": 0 } },
+          { "name": "limit", "in": "query", "description": "Items per page. Capped at 100.", "schema": { "type": "integer", "default": 25, "maximum": 100 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of transfers.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contractAddress": { "type": "string" },
+                    "transfers": { "type": "array", "items": { "$ref": "#/components/schemas/TokenTransfer" } },
+                    "totalTransfers": { "type": "integer" },
+                    "page": { "type": "integer" },
+                    "limit": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid address format.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/token/{address}/{id}": {
+      "get": {
+        "tags": ["Tokens & NFTs"],
+        "operationId": "getTokenMetadata",
+        "summary": "Per-token NFT metadata",
+        "description": "Full off-chain metadata for one (contract, tokenID) pair, including OpenSea-style attributes. The id must be a decimal integer; the concrete sibling segments (info, holders, tokens, transfers) take priority over this route.",
+        "parameters": [
+          { "name": "address", "in": "path", "required": true, "description": "Contract address: Q or 0x followed by 40 hex characters.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{40}$" } },
+          { "name": "id", "in": "path", "required": true, "description": "Token id as a decimal integer, at most 80 characters.", "schema": { "type": "string", "pattern": "^[0-9]+$" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Token metadata document.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contractAddress": { "type": "string" },
+                    "tokenID": { "type": "string" },
+                    "tokenStandard": { "type": "string" },
+                    "uri": { "type": "string" },
+                    "name": { "type": "string" },
+                    "description": { "type": "string" },
+                    "image": { "type": "string" },
+                    "externalURL": { "type": "string" },
+                    "attributes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "trait_type": { "type": "string" },
+                          "value": { "type": "string" },
+                          "display_type": { "type": "string" }
+                        }
+                      }
+                    },
+                    "fetchedAt": { "type": "string" },
+                    "fetchError": { "type": "string" },
+                    "updatedAt": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid address or token id.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "404": {
+            "description": "No metadata stub exists for this token.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/validators": {
+      "get": {
+        "tags": ["Validators & Epochs"],
+        "operationId": "getValidators",
+        "summary": "Validator set",
+        "description": "The full validator set with per-validator status, age, and stake, plus the current epoch and the total staked amount. Cached server side for 30 seconds.",
+        "parameters": [
+          { "name": "page_token", "in": "query", "description": "Reserved for future server-side pagination. The full set is returned today.", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Validator set.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "validators": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "index": { "type": "string", "description": "Validator index as a decimal string." },
+                          "address": { "type": "string", "description": "Validator public key as unprefixed hex: ML-DSA-87, 5184 hex characters. Examples are truncated for readability." },
+                          "withdrawalCredentialsHex": { "type": "string" },
+                          "status": { "type": "string", "enum": ["active", "pending", "exited", "slashed"] },
+                          "age": { "type": "integer", "description": "Age in epochs." },
+                          "stakedAmount": { "type": "string", "description": "Effective balance as a decimal string, as reported by the beacon chain." },
+                          "isActive": { "type": "boolean" }
+                        }
+                      }
+                    },
+                    "validatorCount": { "type": "integer" },
+                    "epoch": { "type": "string", "description": "Current epoch as a decimal string." },
+                    "totalStaked": { "type": "string", "description": "Sum of effective balances as a decimal string." }
+                  }
+                },
+                "example": {
+                  "validators": [
+                    {
+                      "index": "1",
+                      "address": "93f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1",
+                      "withdrawalCredentialsHex": "0100000000000000000000004a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b",
+                      "status": "active",
+                      "age": 1042,
+                      "stakedAmount": "40000000000000",
+                      "isActive": true
+                    }
+                  ],
+                  "validatorCount": 1,
+                  "epoch": "1160",
+                  "totalStaked": "40000000000000"
+                }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/validators/history": {
+      "get": {
+        "tags": ["Validators & Epochs"],
+        "operationId": "getValidatorsHistory",
+        "summary": "Validator count history",
+        "description": "Per-epoch historical validator counts for charts.",
+        "parameters": [
+          { "name": "limit", "in": "query", "description": "Number of history records. Capped at 100.", "schema": { "type": "integer", "default": 100, "maximum": 100 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "History records.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "history": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "_id": { "type": "string" },
+                          "epoch": { "type": "string" },
+                          "timestamp": { "type": "integer" },
+                          "validatorsCount": { "type": "integer" },
+                          "activeCount": { "type": "integer" },
+                          "pendingCount": { "type": "integer" },
+                          "exitedCount": { "type": "integer" },
+                          "slashedCount": { "type": "integer" },
+                          "totalStaked": { "type": "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/validators/stats": {
+      "get": {
+        "tags": ["Validators & Epochs"],
+        "operationId": "getValidatorsStats",
+        "summary": "Aggregated validator statistics",
+        "description": "Totals across the validator set: counts per status, total staked, and the current epoch.",
+        "responses": {
+          "200": {
+            "description": "Validator statistics.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "totalValidators": { "type": "integer" },
+                    "activeCount": { "type": "integer" },
+                    "pendingCount": { "type": "integer" },
+                    "exitedCount": { "type": "integer" },
+                    "slashedCount": { "type": "integer" },
+                    "totalStaked": { "type": "string" },
+                    "currentEpoch": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/validator/{id}": {
+      "get": {
+        "tags": ["Validators & Epochs"],
+        "operationId": "getValidator",
+        "summary": "Validator detail",
+        "description": "Detail for one validator, addressed by decimal index.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "description": "Validator index as a decimal integer.", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Validator detail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "index": { "type": "string" },
+                    "publicKeyHex": { "type": "string" },
+                    "withdrawalCredentialsHex": { "type": "string" },
+                    "effectiveBalance": { "type": "string" },
+                    "slashed": { "type": "boolean" },
+                    "activationEligibilityEpoch": { "type": "string" },
+                    "activationEpoch": { "type": "string" },
+                    "exitEpoch": { "type": "string" },
+                    "withdrawableEpoch": { "type": "string" },
+                    "status": { "type": "string" },
+                    "age": { "type": "integer" },
+                    "currentEpoch": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid validator id format.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "404": {
+            "description": "Validator not found.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/api/epochs": {
+      "get": {
+        "tags": ["Validators & Epochs"],
+        "operationId": "getEpochs",
+        "summary": "Paginated epoch list",
+        "description": "Beacon chain epochs, newest first, with per-epoch validator counts and finality status.",
+        "parameters": [
+          { "name": "page", "in": "query", "description": "Page number, starting at 1.", "schema": { "type": "integer", "default": 1, "minimum": 1 } },
+          { "name": "limit", "in": "query", "description": "Items per page. Capped at 100.", "schema": { "type": "integer", "default": 15, "maximum": 100 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of epochs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "epochs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "epoch": { "type": "string" },
+                          "timestamp": { "type": "integer" },
+                          "status": { "type": "string", "enum": ["finalized", "justified", "pending"] },
+                          "validatorsCount": { "type": "integer" },
+                          "activeCount": { "type": "integer" },
+                          "totalStaked": { "type": "string" }
+                        }
+                      }
+                    },
+                    "total": { "type": "integer" },
+                    "finalizedEpoch": { "type": "string" },
+                    "justifiedEpoch": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/epoch": {
+      "get": {
+        "tags": ["Validators & Epochs"],
+        "operationId": "getCurrentEpoch",
+        "summary": "Current epoch information",
+        "description": "Head, finalized, and justified epoch state plus slot timing for the beacon chain.",
+        "responses": {
+          "200": {
+            "description": "Current epoch state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "headEpoch": { "type": "string" },
+                    "headSlot": { "type": "string" },
+                    "finalizedEpoch": { "type": "string" },
+                    "justifiedEpoch": { "type": "string" },
+                    "slotsPerEpoch": { "type": "integer" },
+                    "secondsPerSlot": { "type": "integer" },
+                    "slotInEpoch": { "type": "integer" },
+                    "timeToNextEpoch": { "type": "integer", "description": "Seconds until the next epoch." },
+                    "updatedAt": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/epoch/{id}": {
+      "get": {
+        "tags": ["Validators & Epochs"],
+        "operationId": "getEpoch",
+        "summary": "Epoch detail",
+        "description": "Per-slot breakdown of one epoch: proposed and missed slots, proposers, and validator statistics at that epoch.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "description": "Epoch number as a decimal integer.", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Epoch detail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "epoch": { "type": "string" },
+                    "timestamp": { "type": "integer" },
+                    "status": { "type": "string" },
+                    "validatorsCount": { "type": "integer" },
+                    "activeCount": { "type": "integer" },
+                    "pendingCount": { "type": "integer" },
+                    "exitedCount": { "type": "integer" },
+                    "slashedCount": { "type": "integer" },
+                    "totalStaked": { "type": "string" },
+                    "startSlot": { "type": "integer" },
+                    "endSlot": { "type": "integer" },
+                    "blocks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "slot": { "type": "integer" },
+                          "status": { "type": "string", "enum": ["proposed", "missed"] },
+                          "timestamp": { "type": "string" },
+                          "proposer": { "type": "string" },
+                          "transactions": { "type": "integer" },
+                          "gasUsed": { "type": "string" },
+                          "blockHash": { "type": "string" }
+                        }
+                      }
+                    },
+                    "finalizedEpoch": { "type": "string" },
+                    "justifiedEpoch": { "type": "string" },
+                    "headEpoch": { "type": "string" },
+                    "proposedCount": { "type": "integer" },
+                    "missedCount": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The epoch is invalid or has not yet occurred.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/gas/summary": {
+      "get": {
+        "tags": ["Gas"],
+        "operationId": "getGasSummary",
+        "summary": "Live gas snapshot",
+        "description": "Headline gas price plus block and mempool statistics and a gas price histogram. Gas values are 0x-prefixed hex strings. Cached server side for 5 seconds.",
+        "responses": {
+          "200": {
+            "description": "Gas snapshot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "avgGasPriceHex": { "type": "string", "description": "Headline gas price: median over recent transfers, 0x-prefixed hex." },
+                    "recentTxMedianHex": { "type": "string" },
+                    "recentTxSampleSize": { "type": "integer" },
+                    "recentMedianGasPriceHex": { "type": "string", "description": "Median over the last 30 blocks." },
+                    "mempoolMedianGasPriceHex": { "type": "string" },
+                    "recentTxCount": { "type": "integer" },
+                    "qrlUsdPrice": { "type": "number" },
+                    "avgGasUsedHex": { "type": "string" },
+                    "avgGasLimitHex": { "type": "string" },
+                    "avgBlockTimeSec": { "type": "number" },
+                    "pendingCount": { "type": "integer" },
+                    "lastBlockNumberHex": { "type": "string" },
+                    "lastGasUsedHex": { "type": "string" },
+                    "lastGasLimitHex": { "type": "string" },
+                    "gasPriceHistogram": { "type": "array", "items": { "type": "object", "additionalProperties": true } }
+                  }
+                },
+                "example": {
+                  "avgGasPriceHex": "0x3b9aca00",
+                  "recentTxMedianHex": "0x3b9aca00",
+                  "recentTxSampleSize": 20,
+                  "recentMedianGasPriceHex": "0x3b9aca00",
+                  "mempoolMedianGasPriceHex": "0x0",
+                  "recentTxCount": 14,
+                  "qrlUsdPrice": 0.42,
+                  "avgGasUsedHex": "0x5208",
+                  "avgGasLimitHex": "0x1c9c380",
+                  "avgBlockTimeSec": 15.2,
+                  "pendingCount": 0,
+                  "lastBlockNumberHex": "0x24420",
+                  "lastGasUsedHex": "0x5208",
+                  "lastGasLimitHex": "0x1c9c380",
+                  "gasPriceHistogram": []
+                }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/gas/history": {
+      "get": {
+        "tags": ["Gas"],
+        "operationId": "getGasHistory",
+        "summary": "Gas usage time series",
+        "description": "Per-block gas history for the last 24 hours, or hourly buckets for the 7 day range. Unrecognized range values fall back to 24h. Cached server side for 30 seconds.",
+        "parameters": [
+          { "name": "range", "in": "query", "description": "Time range for the series.", "schema": { "type": "string", "enum": ["24h", "7d"], "default": "24h" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Gas history rows, oldest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "range": { "type": "string" },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "blockNumber": { "type": "integer" },
+                          "timestamp": { "type": "integer", "description": "Unix seconds." },
+                          "gasUsed": { "type": "string", "description": "0x-prefixed hex." },
+                          "gasLimit": { "type": "string", "description": "0x-prefixed hex." },
+                          "baseFeePerGas": { "type": "string", "description": "0x-prefixed hex." },
+                          "txCount": { "type": "integer" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/contract/verify": {
+      "post": {
+        "tags": ["Contract Verification"],
+        "operationId": "verifyContract",
+        "summary": "Submit contract source for verification",
+        "description": "Enqueues an async source-verification job compiled with the Hyperion toolchain. Request bodies are capped at 1 MiB. Rate limited per IP: bucket of 5 requests, refilling 5 per minute. Poll GET /api/contract/verify/{jobId} for the outcome.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "address": { "type": "string", "description": "Canonical Q-prefixed contract address (uppercase Q plus 40 hex characters)." },
+                  "sourceCode": { "type": "string" },
+                  "contractName": { "type": "string" },
+                  "compilerVersion": { "type": "string", "description": "Build id from /api/contract/compiler-info. Empty selects the default build." },
+                  "optimizerEnabled": { "type": "boolean" },
+                  "optimizerRuns": { "type": "integer" },
+                  "evmVersion": { "type": "string" },
+                  "constructorArguments": { "type": "string" },
+                  "libraries": { "type": "object", "additionalProperties": { "type": "string" } },
+                  "imports": { "type": "object", "additionalProperties": { "type": "string" } },
+                  "license": { "type": "string" }
+                },
+                "required": ["address", "sourceCode", "contractName"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Job accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jobId": { "type": "string" },
+                    "status": { "type": "string" },
+                    "address": { "type": "string" }
+                  }
+                },
+                "example": { "jobId": "9f2c4a6e8b0d1f3a", "status": "pending", "address": "Q30b4e6b5d1a2c3f4e5d6a7b8c9d0e1f2a3b4c5d6" }
+              }
+            }
+          },
+          "200": {
+            "description": "The contract is already verified; no new job was created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "alreadyVerified": { "type": "boolean" },
+                    "address": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body, invalid address, missing required fields, or unsupported compilerVersion (the body lists supported builds).",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "409": {
+            "description": "A verification job is already in flight for this address.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": {
+            "description": "Contract verification is not configured on this deployment.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/api/contract/verify/{jobId}": {
+      "get": {
+        "tags": ["Contract Verification"],
+        "operationId": "getVerificationJob",
+        "summary": "Verification job status",
+        "description": "Returns the verification job document. Status moves through pending, compiling, and then success or failed.",
+        "parameters": [
+          { "name": "jobId", "in": "path", "required": true, "description": "Job id returned by POST /api/contract/verify.", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job document.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jobId": { "type": "string" },
+                    "address": { "type": "string" },
+                    "status": { "type": "string", "enum": ["pending", "compiling", "success", "failed"] },
+                    "error": { "type": "string" },
+                    "createdAt": { "type": "string" },
+                    "updatedAt": { "type": "string" },
+                    "payload": { "type": "object", "description": "Echo of the submitted request.", "additionalProperties": true },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "abi": { "type": "string" },
+                        "bytecodeHash": { "type": "string" },
+                        "verifiedAt": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job not found.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/contract/compiler-info": {
+      "get": {
+        "tags": ["Contract Verification"],
+        "operationId": "getCompilerInfo",
+        "summary": "Available compiler builds",
+        "description": "Lists every selectable Hyperion compiler build and identifies the default. Use a listed buildId as the compilerVersion in verify submissions.",
+        "responses": {
+          "200": {
+            "description": "Compiler registry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "language": { "type": "string" },
+                    "buildId": { "type": "string" },
+                    "default": { "type": "string" },
+                    "compilers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "buildId": { "type": "string" },
+                          "language": { "type": "string" },
+                          "default": { "type": "boolean" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Contract verification is not configured on this deployment.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/api/contract/call": {
+      "post": {
+        "tags": ["Contract Interaction"],
+        "operationId": "callContract",
+        "summary": "Read-only contract call",
+        "description": "Typed proxy for qrl_call against the latest block, scoped to addresses the explorer knows as contracts. Calldata is capped at 8 KiB of hex, request bodies at 32 KiB, gas at 50 million, and each call at an 8 second timeout. Rate limited per IP: bucket of 60 requests, refilling 60 per minute.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "to": { "type": "string", "description": "Canonical Q-prefixed contract address." },
+                  "data": { "type": "string", "description": "ABI-encoded calldata: 0x-prefixed, even-length, lowercase hex. 0x alone is allowed for zero-argument functions." }
+                },
+                "required": ["to", "data"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Call result. A reverted execution also returns 200, with reverted true and the upstream error message.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": { "result": { "type": "string", "description": "Return data as a 0x-prefixed hex string." } },
+                      "required": ["result"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": { "type": "string" },
+                        "code": { "type": "integer" },
+                        "data": {},
+                        "reverted": { "type": "boolean", "const": true }
+                      },
+                      "required": ["error", "reverted"]
+                    }
+                  ]
+                },
+                "example": { "result": "0x0000000000000000000000000000000000000000000000000000000000000012" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body, address, or calldata encoding.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "404": {
+            "description": "The to address is unknown as a contract to the explorer.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "413": {
+            "description": "Calldata exceeds the size cap.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "502": {
+            "description": "The node call failed or returned an undecodable response.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/api/contract/explain/{address}": {
+      "post": {
+        "tags": ["Contract Interaction"],
+        "operationId": "explainContract",
+        "summary": "AI explanation of a verified contract",
+        "description": "Generates or returns a cached plain-language explanation of a verified contract's source. Only verified contracts can be analyzed. Rate limited per IP: bucket of 10 requests, refilling 4 per minute. Regeneration is capped at 5 per contract per 7 day window.",
+        "parameters": [
+          { "name": "address", "in": "path", "required": true, "description": "Canonical Q-prefixed contract address.", "schema": { "type": "string" } },
+          { "name": "regenerate", "in": "query", "description": "Set to 1 or true to force a fresh explanation instead of the cached one.", "schema": { "type": "string", "enum": ["1", "true"] } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Explanation, fresh or cached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "address": { "type": "string" },
+                    "explanation": { "type": "string" },
+                    "generatedAt": { "type": "string" },
+                    "model": { "type": "string" },
+                    "cached": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid address format.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "403": {
+            "description": "The contract exists and is unverified, so it cannot be analyzed.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "404": {
+            "description": "The address is unknown as a contract.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "429": {
+            "description": "Per-IP rate limit exceeded, or the per-contract regeneration cap (5 per 7 day window) was reached.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "502": {
+            "description": "The explanation provider failed; retry shortly.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "503": {
+            "description": "The AI explainer is not configured on this deployment.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/search": {
+      "get": {
+        "tags": ["Faucet & Site"],
+        "operationId": "searchRedirect",
+        "summary": "Search redirect",
+        "description": "Resolves a free-form query (address, transaction hash, or block number) and responds with a 302 redirect to the matching explorer page. Unresolvable queries redirect to the homepage. Served by the explorer web app.",
+        "parameters": [
+          { "name": "q", "in": "query", "description": "Address (Q or 0x plus 40 hex), transaction hash (64 hex, 0x optional), or block number (decimal or 0x hex).", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect to the resolved detail page, or to the homepage when the query cannot be resolved.",
+            "headers": {
+              "Location": { "description": "Absolute URL of the matching page on https://zondscan.com.", "schema": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
+    "/faucet/claim": {
+      "get": {
+        "tags": ["Faucet & Site"],
+        "operationId": "getFaucetStatus",
+        "summary": "Faucet status",
+        "description": "Public faucet configuration so clients can render the claim form or a disabled state. Served by the explorer web app.",
+        "responses": {
+          "200": {
+            "description": "Faucet configuration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "configured": { "type": "boolean" },
+                    "captchaEnabled": { "type": "boolean" },
+                    "dripQuanta": { "type": "string", "description": "Whole-Quanta amount sent per successful claim, as a decimal string." },
+                    "cooldownHours": { "type": "integer", "description": "Cooldown window in hours, enforced per address and per IP." }
+                  }
+                },
+                "example": { "configured": true, "captchaEnabled": true, "dripQuanta": "10", "cooldownHours": 24 }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Faucet & Site"],
+        "operationId": "claimFaucet",
+        "summary": "Claim testnet Quanta",
+        "description": "Sends a drip of testnet Quanta to the given address. Gated by a Cloudflare Turnstile captcha token, a per-address and per-IP cooldown (default 24 hours), and an optional rolling 24 hour global cap on total dripped Quanta. Testnet coins have no monetary value. Served by the explorer web app.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "address": { "type": "string", "description": "Q-prefixed recipient address (Q plus 40 hex characters)." },
+                  "turnstileToken": { "type": "string", "description": "Cloudflare Turnstile response token." }
+                },
+                "required": ["address"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Drip broadcast.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "txHash": { "type": "string" },
+                    "amount": { "type": "string", "description": "Amount sent, in whole Quanta as a decimal string." },
+                    "to": { "type": "string" },
+                    "explorerUrl": { "type": "string", "description": "Relative explorer path for the broadcast transaction." }
+                  }
+                },
+                "example": {
+                  "txHash": "0x9c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d",
+                  "amount": "10",
+                  "to": "Q20d20b8026b8f02540249f42acbd6181dc4a0a48",
+                  "explorerUrl": "/tx/0x9c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body, invalid address, or failed captcha verification.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "429": {
+            "description": "Cooldown active for this address or IP. The body carries retryAfterSeconds and the response sets a Retry-After header.",
+            "headers": {
+              "Retry-After": { "description": "Seconds until the cooldown expires.", "schema": { "type": "string" } }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "retryAfterSeconds": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "502": {
+            "description": "The signed transaction could not be broadcast.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "503": {
+            "description": "Faucet unavailable: unconfigured, captcha missing in production, out of funds, or the daily cap was reached.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "responses": {
+      "InternalError": {
+        "description": "Internal server error.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "RateLimited": {
+        "description": "Per-IP rate limit exceeded.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "error": "rate limit exceeded" }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": { "error": { "type": "string" } },
+        "required": ["error"]
+      },
+      "BlockResult": {
+        "type": "object",
+        "description": "One execution-layer block. All numeric fields are 0x-prefixed hex strings.",
+        "properties": {
+          "baseFeePerGas": { "type": "string" },
+          "gasLimit": { "type": "string" },
+          "gasUsed": { "type": "string" },
+          "hash": { "type": "string" },
+          "number": { "type": "string" },
+          "parentHash": { "type": "string" },
+          "receiptsRoot": { "type": "string" },
+          "stateRoot": { "type": "string" },
+          "timestamp": { "type": "string" },
+          "transactions": { "type": "array", "items": { "$ref": "#/components/schemas/BlockTransaction" } },
+          "transactionsRoot": { "type": "string" },
+          "extraData": { "type": "string" },
+          "logsBloom": { "type": "string" },
+          "miner": { "type": "string" },
+          "size": { "type": "string" },
+          "prevRandao": { "type": "string" },
+          "withdrawals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "index": { "type": "string" },
+                "validatorIndex": { "type": "string" },
+                "address": { "type": "string" },
+                "amount": { "type": "string" }
+              }
+            }
+          },
+          "withdrawalsRoot": { "type": "string" }
+        }
+      },
+      "BlockTransaction": {
+        "type": "object",
+        "description": "A transaction as embedded in a block document. Numeric fields are 0x-prefixed hex strings. The signature and publicKey fields carry the ML-DSA-87 signature material.",
+        "properties": {
+          "blockHash": { "type": "string" },
+          "blockNumber": { "type": "string" },
+          "from": { "type": "string" },
+          "gas": { "type": "string" },
+          "gasPrice": { "type": "string" },
+          "hash": { "type": "string" },
+          "nonce": { "type": "string" },
+          "to": { "type": "string" },
+          "transactionIndex": { "type": "string" },
+          "type": { "type": "string" },
+          "value": { "type": "string" },
+          "chainId": { "type": "string" },
+          "signature": { "type": "string" },
+          "publicKey": { "type": "string" },
+          "data": { "type": "string" },
+          "status": { "type": "string" }
+        }
+      },
+      "Transfer": {
+        "type": "object",
+        "description": "Stored transfer record for one transaction. BlockNumber, BlockTimestamp, Value, GasUsed, GasPrice, Nonce, and Size are 0x-prefixed hex strings. Signature is the transaction's ML-DSA-87 signature and Pk is the signer's public key.",
+        "properties": {
+          "ID": { "type": "string", "description": "Internal record id." },
+          "BlockNumber": { "type": "string" },
+          "BlockTimestamp": { "type": "string" },
+          "From": { "type": "string" },
+          "To": { "type": "string" },
+          "TxHash": { "type": "string" },
+          "Value": { "type": "string" },
+          "GasUsed": { "type": "string", "description": "Actual gas consumed when the receipt is available, the gas limit otherwise." },
+          "GasPrice": { "type": "string" },
+          "Nonce": { "type": "string" },
+          "Signature": { "type": "string" },
+          "Pk": { "type": "string" },
+          "Size": { "type": "string" },
+          "Input": { "type": "string", "description": "Calldata as a 0x-prefixed hex string. Present for contract calls." }
+        }
+      },
+      "TransactionByAddress": {
+        "type": "object",
+        "description": "One indexed transaction row. Amount and PaidFees are exact decimal strings denominated in Quanta with 18 fractional digits. BlockNumber and TimeStamp are decimal strings.",
+        "properties": {
+          "ID": { "type": "string", "description": "Internal record id." },
+          "InOut": { "type": "integer", "description": "Direction flag relative to the indexed address." },
+          "TxType": { "type": "string" },
+          "Address": { "type": "string" },
+          "From": { "type": "string" },
+          "To": { "type": "string" },
+          "TxHash": { "type": "string" },
+          "TimeStamp": { "type": "string" },
+          "Amount": { "type": "string" },
+          "PaidFees": { "type": "string" },
+          "BlockNumber": { "type": "string" }
+        }
+      },
+      "PendingTransaction": {
+        "type": "object",
+        "description": "A mempool transaction. Gas, value, and nonce fields are 0x-prefixed hex strings; lastSeen and createdAt are Unix timestamps.",
+        "properties": {
+          "accessList": { "type": "array", "items": {} },
+          "blockHash": {},
+          "blockNumber": {},
+          "chainId": { "type": "string" },
+          "from": { "type": "string" },
+          "gas": { "type": "string" },
+          "gasPrice": { "type": "string" },
+          "hash": { "type": "string" },
+          "input": { "type": "string" },
+          "maxFeePerGas": { "type": "string" },
+          "maxPriorityFeePerGas": { "type": "string" },
+          "nonce": { "type": "string" },
+          "publicKey": { "type": "string" },
+          "to": { "type": "string" },
+          "transactionIndex": {},
+          "type": { "type": "string" },
+          "value": { "type": "string" },
+          "status": { "type": "string", "enum": ["pending", "mined", "dropped"] },
+          "lastSeen": { "type": "integer" },
+          "createdAt": { "type": "integer" }
+        }
+      },
+      "TokenTransfer": {
+        "type": "object",
+        "description": "One token transfer event. amount is a raw decimal string, before dividing by tokenDecimals.",
+        "properties": {
+          "contractAddress": { "type": "string" },
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "amount": { "type": "string" },
+          "blockNumber": { "type": "string", "description": "0x-prefixed hex." },
+          "blockNumberInt": { "type": "integer" },
+          "txHash": { "type": "string" },
+          "logIndex": { "type": "string" },
+          "timestamp": { "type": "string" },
+          "tokenSymbol": { "type": "string" },
+          "tokenDecimals": { "type": "integer" },
+          "tokenName": { "type": "string" },
+          "transferType": { "type": "string" },
+          "tokenStandard": { "type": "string" },
+          "tokenID": { "type": "string" }
+        }
+      },
+      "TokenBalance": {
+        "type": "object",
+        "description": "One token holding. balance is a raw decimal string, before dividing by decimals. NFT rows carry tokenID and tokenStandard.",
+        "properties": {
+          "contractAddress": { "type": "string" },
+          "holderAddress": { "type": "string" },
+          "balance": { "type": "string" },
+          "blockNumber": { "type": "string" },
+          "updatedAt": { "type": "string" },
+          "tokenID": { "type": "string" },
+          "tokenStandard": { "type": "string" },
+          "name": { "type": "string" },
+          "symbol": { "type": "string" },
+          "decimals": { "type": "integer" }
+        }
+      },
+      "NFTBalance": {
+        "type": "object",
+        "description": "One NFT holding joined with collection and per-token metadata.",
+        "properties": {
+          "contractAddress": { "type": "string" },
+          "holderAddress": { "type": "string" },
+          "tokenID": { "type": "string" },
+          "tokenStandard": { "type": "string" },
+          "balance": { "type": "string" },
+          "blockNumber": { "type": "string" },
+          "updatedAt": { "type": "string" },
+          "collectionName": { "type": "string" },
+          "collectionSymbol": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "image": { "type": "string" },
+          "externalURL": { "type": "string" },
+          "attributes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "trait_type": { "type": "string" },
+                "value": { "type": "string" },
+                "display_type": { "type": "string" }
+              }
+            }
+          }
+        }
+      },
+      "ContractMeta": {
+        "type": "object",
+        "description": "Compact contract metadata attached to logs and call targets. The abi field is present only for verified contracts.",
+        "properties": {
+          "name": { "type": "string" },
+          "symbol": { "type": "string" },
+          "tokenStandard": { "type": "string" },
+          "verified": { "type": "boolean" },
+          "contractName": { "type": "string" },
+          "abi": { "type": "string" }
+        }
+      },
+      "ContractInfo": {
+        "type": "object",
+        "description": "A contract record. Verified contracts additionally carry source, ABI, and compiler settings; token contracts carry name, symbol, decimals, and standard.",
+        "properties": {
+          "creatorAddress": { "type": "string" },
+          "address": { "type": "string", "description": "Canonical Q-prefixed contract address." },
+          "contractCode": { "type": "string" },
+          "creationTransaction": { "type": "string" },
+          "creationBlockNumber": { "type": "string" },
+          "isToken": { "type": "boolean" },
+          "status": { "type": "string" },
+          "decimals": { "type": "integer" },
+          "name": { "type": "string" },
+          "symbol": { "type": "string" },
+          "totalSupply": { "type": "string" },
+          "updatedAt": { "type": "string" },
+          "tokenStandard": { "type": "string" },
+          "genesisContract": { "type": "boolean" },
+          "verified": { "type": "boolean" }
+        },
+        "additionalProperties": true
+      }
+    }
+  }
+}

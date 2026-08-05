@@ -42,7 +42,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "jest"
+    "test": "jest",
+    "check:api-drift": "node scripts/check-api-docs-drift.mjs"
   },
   "overrides": {
     "minimatch": {
