@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -104,5 +105,20 @@ func TestValidateDebugTraceEndpointSkipsProbeWhenDisabled(t *testing.T) {
 
 	if err := ValidateDebugTraceEndpoint(t.Context()); err != nil {
 		t.Fatalf("disabled tracing should not probe an endpoint: %v", err)
+	}
+}
+
+func TestRedactTraceTransportError(t *testing.T) {
+	endpoint := "https://wallet-user:secret@example.invalid/rpc?token=api-key#private"
+	transportErr := errors.New(`Post "https://wallet-user:secret@example.invalid/rpc?token=api-key#private": connection refused`)
+
+	redacted := redactTraceTransportError(endpoint, transportErr).Error()
+	for _, secret := range []string{"wallet-user", "secret", "api-key", "private"} {
+		if strings.Contains(redacted, secret) {
+			t.Errorf("transport error leaked %q: %s", secret, redacted)
+		}
+	}
+	if !strings.Contains(redacted, "[trace endpoint]") {
+		t.Errorf("expected endpoint placeholder, got %q", redacted)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"QRL2MongoDB/models"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -54,13 +55,13 @@ func traceRPC(ctx context.Context, request []byte) ([]byte, error) {
 			if requestErr == nil {
 				return returnBody, nil
 			}
-			lastErr = requestErr
+			lastErr = redactTraceTransportError(endpoint, requestErr)
 		case "ws", "wss":
 			returnBody, requestErr := traceRPCWebSocket(ctx, endpoint, request)
 			if requestErr == nil {
 				return returnBody, nil
 			}
-			lastErr = requestErr
+			lastErr = redactTraceTransportError(endpoint, requestErr)
 		default:
 			return nil, fmt.Errorf("unsupported trace endpoint scheme %q", parsed.Scheme)
 		}
@@ -76,6 +77,32 @@ func traceRPC(ctx context.Context, request []byte) ([]byte, error) {
 	}
 
 	return nil, fmt.Errorf("trace endpoint failed after %d attempts: %w", traceRPCRetries, lastErr)
+}
+
+// redactTraceTransportError removes the configured endpoint, credentials, and
+// query string from transport errors before they reach logs. Go HTTP and
+// WebSocket errors often include the request URL.
+func redactTraceTransportError(endpoint string, err error) error {
+	if err == nil {
+		return nil
+	}
+	message := err.Error()
+	parsed, parseErr := url.Parse(endpoint)
+	if parseErr != nil {
+		return errors.New("trace transport failed")
+	}
+
+	message = strings.ReplaceAll(message, endpoint, "[trace endpoint]")
+	if parsed.User != nil {
+		message = strings.ReplaceAll(message, parsed.User.String(), "[credentials]")
+	}
+	if parsed.RawQuery != "" {
+		message = strings.ReplaceAll(message, parsed.RawQuery, "[query]")
+	}
+	if parsed.Fragment != "" {
+		message = strings.ReplaceAll(message, parsed.Fragment, "[fragment]")
+	}
+	return errors.New(message)
 }
 
 func traceRPCWebSocket(ctx context.Context, endpoint string, request []byte) ([]byte, error) {
