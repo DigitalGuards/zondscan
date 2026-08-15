@@ -49,6 +49,16 @@ func main() {
 	// Fail fast before any sync work if required env vars are missing.
 	validateEnv()
 
+	// Internal calls can only be recovered while the execution state for a
+	// block is still available. Verify the dedicated trace transport before
+	// indexing starts so a missing debug module cannot create a silent gap.
+	traceProbeCtx, cancelTraceProbe := context.WithTimeout(context.Background(), 10*time.Second)
+	traceProbeErr := rpc.ValidateDebugTraceEndpoint(traceProbeCtx)
+	cancelTraceProbe()
+	if traceProbeErr != nil {
+		configs.Logger.Fatal("Internal transaction tracing is enabled but unavailable", zap.Error(traceProbeErr))
+	}
+
 	configs.Logger.Info("Connecting to MongoDB and RPC node...")
 
 	// Connect explicitly: nothing connects at import time anymore, and a

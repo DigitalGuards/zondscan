@@ -3,6 +3,7 @@ module QRL2MongoDB
 go 1.25.0
 
 require (
+	github.com/gorilla/websocket v1.5.3
 	github.com/joho/godotenv v1.5.1
 	go.mongodb.org/mongo-driver v1.17.7
 	go.uber.org/zap v1.26.0
