@@ -240,8 +240,10 @@ func emptyTrace(err error) DebugTraceResult {
 
 // CallDebugTraceTransaction calls debug_traceTransaction and returns the parsed
 // result as a DebugTraceResult struct.
-// On Testnet V2+, debug_ APIs are not available. Set ENABLE_DEBUG_TRACE=true to
-// re-enable if the node supports it.
+// Public Testnet V2 endpoints commonly omit debug_ APIs. Set
+// ENABLE_DEBUG_TRACE=true and point TRACE_NODE_URL at a private debug-enabled
+// HTTP or WebSocket endpoint. TRACE_NODE_URL falls back to the primary NODE_URL
+// for backwards compatibility.
 func CallDebugTraceTransaction(hash string) DebugTraceResult {
 	// Skip debug tracing when disabled (default for V2 nodes without debug_ API)
 	if os.Getenv("ENABLE_DEBUG_TRACE") != "true" {
@@ -274,15 +276,9 @@ func CallDebugTraceTransaction(hash string) DebugTraceResult {
 		return emptyTrace(err)
 	}
 
-	// debug_traceTransaction is a primary-only method, public/foundation nodes
-	// don't expose the debug_ namespace. Pin to the primary URL so we don't
-	// surface a misleading "method not found" by failing over.
-	primary := Endpoints().PrimaryURL()
-	if primary == "" {
-		zap.L().Error("No node endpoint configured for debug trace")
-		return emptyTrace(fmt.Errorf("no node endpoint configured"))
-	}
-	body, err := postWithRetry(context.Background(), primary, b, 1)
+	traceCtx, cancel := context.WithTimeout(context.Background(), traceRPCTimeout)
+	defer cancel()
+	body, err := traceRPC(traceCtx, b)
 	if err != nil {
 		zap.L().Error("Failed to execute request", zap.Error(err))
 		return emptyTrace(err)

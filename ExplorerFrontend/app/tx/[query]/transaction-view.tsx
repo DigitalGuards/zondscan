@@ -171,14 +171,13 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
         className="card overflow-hidden mb-6"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border">
+        <div className="flex items-center p-4 sm:p-6 border-b border-border">
           <div className="flex items-center gap-3">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-accent" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
             </svg>
             <h1 id="tx-detail-heading" className="section-title">Transaction Details</h1>
           </div>
-          <Badge variant={badgeVariant} size="md" dot>{effectiveStatus.text}</Badge>
         </div>
 
         {/* Content */}
