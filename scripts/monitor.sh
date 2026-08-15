@@ -131,14 +131,19 @@ else
     fi
 
     # --- Syncer behind node ---
-    SYNCER_BLOCK=$(mongosh --quiet --eval 'db.blocks.find().sort({number:-1}).limit(1).toArray()[0]?.number || 0' qrldata-z 2>/dev/null)
-    if [ -n "$SYNCER_BLOCK" ] && [ "$SYNCER_BLOCK" != "0" ]; then
+    # blockNumberInt is a BSON Long. Convert it to a plain decimal so Bash
+    # arithmetic can compare the indexed height with the node height.
+    SYNCER_BLOCK=$(mongosh --quiet --eval 'const row=db.blocks.find({blockNumberInt:{$exists:true}}, {_id:0,blockNumberInt:1}).sort({blockNumberInt:-1}).limit(1).toArray()[0]; print(row ? Number(row.blockNumberInt) : 0)' qrldata-z 2>/dev/null)
+    if [[ "$SYNCER_BLOCK" =~ ^[0-9]+$ ]] && [ "$SYNCER_BLOCK" != "0" ]; then
+        check_debounced "syncer-height-unavailable" 2 "pass" "" "Syncer height query is working again"
         SYNCER_BEHIND=$((NODE_BLOCK - SYNCER_BLOCK))
         if [ "$SYNCER_BEHIND" -gt 50 ]; then
             alert "syncer-behind" "**Syncer** is $SYNCER_BEHIND blocks behind node (syncer: $SYNCER_BLOCK, node: $NODE_BLOCK)"
         else
             resolve "syncer-behind" "Syncer caught up (block $SYNCER_BLOCK)"
         fi
+    else
+        check_debounced "syncer-height-unavailable" 2 "fail" "**Syncer height query** returned no usable block number" ""
     fi
 
     # --- One-shot sync completion: notify + restart zondscan ---
