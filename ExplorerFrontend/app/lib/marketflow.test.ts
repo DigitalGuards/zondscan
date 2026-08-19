@@ -1,4 +1,5 @@
 import {
+  axisLabelPlacement,
   columnLabelPlacement,
   coverageNotice,
   flowBaselineY,
@@ -101,6 +102,41 @@ describe('niceFlowScale', () => {
         expect(y).toBeLessThanOrEqual(plotHeight);
       }
     }
+  });
+});
+
+describe('axisLabelPlacement', () => {
+  const plotWidth = 340;
+
+  it('keeps a label centred on its own band when it fits', () => {
+    // Five wide bands: every label has room, so none should be pulled to an
+    // edge. Anchoring by index instead detaches the first and last labels
+    // from the columns they name.
+    const bandWidth = plotWidth / 5;
+    expect(axisLabelPlacement(bandWidth / 2, 6, plotWidth)).toEqual({
+      x: bandWidth / 2,
+      anchor: 'middle',
+    });
+    expect(axisLabelPlacement(plotWidth - bandWidth / 2, 6, plotWidth)).toEqual({
+      x: plotWidth - bandWidth / 2,
+      anchor: 'middle',
+    });
+  });
+
+  it('anchors to the edge only when the centred text would spill out', () => {
+    // 24 narrow bands: the first band's centre is a few pixels in, so a
+    // centred label would run back over the y-axis ticks.
+    const bandWidth = plotWidth / 24;
+    expect(axisLabelPlacement(bandWidth / 2, 5, plotWidth)).toEqual({ x: 0, anchor: 'start' });
+    expect(axisLabelPlacement(plotWidth - bandWidth / 2, 5, plotWidth)).toEqual({
+      x: plotWidth,
+      anchor: 'end',
+    });
+  });
+
+  it('treats a longer label as needing more room', () => {
+    expect(axisLabelPlacement(20, 4, plotWidth).anchor).toBe('middle');
+    expect(axisLabelPlacement(20, 12, plotWidth).anchor).toBe('start');
   });
 });
 

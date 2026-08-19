@@ -379,7 +379,7 @@ function MarketArena({
         alt=""
         fill
         priority
-        sizes="(min-width: 1280px) 70vw, 100vw"
+        sizes="100vw"
         className="object-cover"
       />
       <div className="absolute inset-0 bg-gradient-to-b from-background/5 via-transparent to-background/20" />
@@ -617,7 +617,7 @@ function DepthLadder({
       <div className="px-4 py-2">
         <table className="w-full table-fixed" aria-label="MEXC QRL USDT order book levels">
           <thead>
-            <tr className="text-[10px] uppercase tracking-wider text-text-muted">
+            <tr className="text-[11px] font-medium uppercase tracking-[0.12em] text-text-muted">
               {/* Horizontal padding mirrors the body cells so each right-aligned
                   header sits exactly over its column of values. */}
               <th className="py-1.5 pr-3 text-left font-medium">Price</th>
@@ -651,7 +651,7 @@ function RecentTrades({ trades }: { trades: MarketTrade[] }): JSX.Element {
       <div className="overflow-x-auto px-4 py-2">
         <table className="w-full min-w-[330px] font-mono text-xs" aria-label="Recent QRL USDT trades">
           <thead>
-            <tr className="text-[10px] uppercase tracking-wider text-text-muted">
+            <tr className="text-[11px] font-medium uppercase tracking-[0.12em] text-text-muted">
               <th className="py-1.5 text-left font-medium">UTC</th>
               <th className="py-1.5 text-left font-medium">Side</th>
               <th className="py-1.5 text-right font-medium">Price</th>
@@ -832,7 +832,7 @@ export default function OrderBookClient(): JSX.Element {
 
   return (
     <div className="page-content py-4 sm:py-6 lg:py-8">
-      <header className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2.5">
             <h2 className="section-title">QRL Order Book Arena</h2>
@@ -862,7 +862,7 @@ export default function OrderBookClient(): JSX.Element {
         </div>
       )}
 
-      <section className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Market summary">
+      <section className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Market summary">
         <StatCard
           label="Last trade"
           value={`${formatMarketPrice(stats.last)} USDT`}
@@ -888,8 +888,11 @@ export default function OrderBookClient(): JSX.Element {
         />
       </section>
 
-      <section className="card mb-4 overflow-hidden p-2 sm:p-3" aria-labelledby="arena-heading">
-        <div className="flex flex-col gap-3 px-1 pb-3 sm:flex-row sm:items-center sm:justify-between">
+      <section className="card mb-6 overflow-hidden p-0" aria-labelledby="arena-heading">
+        {/* Same header strip as every other card on the page: bordered,
+            px-4 py-3. Kept as a responsive flex rather than the panel-header
+            utility because the controls stack under the title on mobile. */}
+        <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 id="arena-heading" className="font-display text-sm font-semibold text-text-primary">
               Live market drive
@@ -940,7 +943,7 @@ export default function OrderBookClient(): JSX.Element {
             <button
               type="button"
               onClick={() => setMotionEnabled((enabled) => !enabled)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-2 text-[11px] font-medium text-text-secondary hover:text-text-primary"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[11px] font-medium text-text-secondary hover:text-text-primary"
               aria-pressed={!motionEnabled}
             >
               {motionEnabled ? <PauseIcon className="h-3.5 w-3.5" /> : <PlayIcon className="h-3.5 w-3.5" />}
@@ -949,30 +952,32 @@ export default function OrderBookClient(): JSX.Element {
           </div>
         </div>
 
-        <MarketArena
-          bids={bids}
-          asks={asks}
-          currentPrice={stats.last}
-          game={game}
-          motionEnabled={motionEnabled}
-        />
+        <div className="p-3 sm:p-4">
+          <MarketArena
+            bids={bids}
+            asks={asks}
+            currentPrice={stats.last}
+            game={game}
+            motionEnabled={motionEnabled}
+          />
 
-        <div className="grid gap-3 px-1 pt-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
-          <div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-medium text-success">Bids within {stats.bandPercent}%</span>
-              <span className="font-mono text-text-primary">{formatQrlQuantity(stats.bidQuantityInBand)} QRL</span>
+          <div className="grid gap-3 pt-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+            <div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-medium text-success">Bids within {stats.bandPercent}%</span>
+                <span className="font-mono text-text-primary">{formatQrlQuantity(stats.bidQuantityInBand)} QRL</span>
+              </div>
             </div>
-          </div>
-          <div className="hidden h-5 w-px bg-border sm:block" />
-          <div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-medium text-error">Asks within {stats.bandPercent}%</span>
-              <span className="font-mono text-text-primary">{formatQrlQuantity(stats.askQuantityInBand)} QRL</span>
+            <div className="hidden h-5 w-px bg-border sm:block" />
+            <div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-medium text-error">Asks within {stats.bandPercent}%</span>
+                <span className="font-mono text-text-primary">{formatQrlQuantity(stats.askQuantityInBand)} QRL</span>
+              </div>
             </div>
-          </div>
-          <div className="sm:col-span-3 h-2 overflow-hidden rounded-full bg-surface-3" aria-label={`${bidShare.toFixed(0)} percent bid depth inside the selected band`}>
-            <div className="h-full bg-success transition-[width] duration-500" style={{ width: `${bidShare}%` }} />
+            <div className="sm:col-span-3 h-2 overflow-hidden rounded-full bg-surface-3" aria-label={`${bidShare.toFixed(0)} percent bid depth inside the selected band`}>
+              <div className="h-full bg-success transition-[width] duration-500" style={{ width: `${bidShare}%` }} />
+            </div>
           </div>
         </div>
       </section>
@@ -991,11 +996,11 @@ export default function OrderBookClient(): JSX.Element {
         </div>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-6">
         <FundFlowPanel />
       </div>
 
-      <aside className="mt-4 rounded-xl border border-border bg-surface px-4 py-3 text-xs leading-relaxed text-text-muted">
+      <aside className="mt-6 rounded-xl border border-border bg-surface px-4 py-3 text-xs leading-relaxed text-text-muted">
         Public MEXC spot L2 data, aggregated by price. One arena squirrel represents one selected price bucket and its total visible QRL quantity. Resting orders can change or disappear at any time, so displayed depth is not guaranteed executable liquidity. The arena is a visualization of one centralized venue and does not represent the QRL network mempool. Fund-flow rollups are built from collected public executions and start accumulating when collection begins, so they cannot be backfilled.
       </aside>
     </div>

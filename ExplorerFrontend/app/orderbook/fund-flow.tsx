@@ -1,11 +1,13 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useParentSize } from '@visx/responsive';
 import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import config from '../../config';
 import { palette } from '../lib/theme';
 import {
+  axisLabelPlacement,
   columnLabelPlacement,
   columnPath,
   coverageNotice,
@@ -26,10 +28,14 @@ import {
   type MarketFundFlowResponse,
 } from '../lib/marketflow';
 
-const CHART_WIDTH = 720;
+// The chart renders in pixel space: the SVG viewport and its viewBox are the
+// measured width, so one unit is one pixel. A fixed viewBox scaled by w-full
+// instead ties height AND type size to the container's width, which made the
+// two charts render at different heights and different label sizes purely
+// because one sits in a half-width grid column.
 const CHART_HEIGHT = 220;
 const PADDING = { top: 16, right: 12, bottom: 22, left: 46 };
-const PLOT_WIDTH = CHART_WIDTH - PADDING.left - PADDING.right;
+const MIN_PLOT_WIDTH = 120;
 const PLOT_HEIGHT = CHART_HEIGHT - PADDING.top - PADDING.bottom;
 
 // Marks stay thin and the band's leftover width is air, so columns never
@@ -61,6 +67,10 @@ function DivergingColumnChart({
   valueUnit: string;
 }): JSX.Element {
   const [active, setActive] = useState<number | null>(null);
+  const { parentRef, width } = useParentSize({ debounceTime: 40 });
+
+  const chartWidth = Math.max(MIN_PLOT_WIDTH + PADDING.left + PADDING.right, width);
+  const plotWidth = chartWidth - PADDING.left - PADDING.right;
 
   const scale: FlowScale = useMemo(
     () => niceFlowScale(points.map((point) => point.value)),
@@ -68,17 +78,18 @@ function DivergingColumnChart({
   );
   const baseline = flowBaselineY(scale, PLOT_HEIGHT);
   const ticks = flowTicks(scale);
-  const bandWidth = points.length > 0 ? PLOT_WIDTH / points.length : PLOT_WIDTH;
+  const bandWidth = points.length > 0 ? plotWidth / points.length : plotWidth;
   const barWidth = Math.max(3, Math.min(MAX_BAR_WIDTH, bandWidth - BAR_GAP));
   const labelEvery = points.length <= 6 ? 1 : Math.ceil(points.length / 6);
   const emphasised = new Set(emphasise);
   const activePoint = active === null ? null : points[active];
 
   return (
-    <div className="relative">
+    <div ref={parentRef} className="relative mt-2 w-full" style={{ height: CHART_HEIGHT }}>
       <svg
-        viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-        className="w-full"
+        width={chartWidth}
+        height={CHART_HEIGHT}
+        viewBox={`0 0 ${chartWidth} ${CHART_HEIGHT}`}
         role="group"
         aria-label={title}
       >
@@ -90,7 +101,7 @@ function DivergingColumnChart({
               <g key={tick}>
                 <line
                   x1={0}
-                  x2={PLOT_WIDTH}
+                  x2={plotWidth}
                   y1={tickY}
                   y2={tickY}
                   stroke={tick === 0 ? ZERO_LINE_COLOR : GRID_COLOR}
@@ -170,22 +181,17 @@ function DivergingColumnChart({
 
           {points.map((point, index) => {
             if (index % labelEvery !== 0) return null;
-            // Anchor the edge labels inward. Centred, the first one runs
-            // back over the y-axis ticks and the last one past the plot.
-            const isFirst = index === 0;
-            const isLast = index >= points.length - labelEvery;
+            const placement = axisLabelPlacement(
+              index * bandWidth + bandWidth / 2,
+              point.label.length,
+              plotWidth,
+            );
             return (
               <text
                 key={`label:${point.time}`}
-                x={
-                  isFirst
-                    ? 0
-                    : isLast
-                      ? PLOT_WIDTH
-                      : index * bandWidth + bandWidth / 2
-                }
+                x={placement.x}
                 y={PLOT_HEIGHT + 14}
-                textAnchor={isFirst ? 'start' : isLast ? 'end' : 'middle'}
+                textAnchor={placement.anchor}
                 fill={palette.textMuted}
                 fontSize={10}
                 fontFamily="IBM Plex Mono, ui-monospace, monospace"
@@ -201,8 +207,10 @@ function DivergingColumnChart({
         <div
           className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-lg border border-border bg-background/95 px-2.5 py-1.5 text-xs shadow-lg backdrop-blur-sm"
           style={{
-            left: `${((PADDING.left + (active as number) * bandWidth + bandWidth / 2) / CHART_WIDTH) * 100}%`,
-            top: `${((PADDING.top + baseline) / CHART_HEIGHT) * 100}%`,
+            // Pixel space, same as the SVG, so the tooltip tracks its column
+            // exactly at any container width.
+            left: PADDING.left + (active as number) * bandWidth + bandWidth / 2,
+            top: PADDING.top + baseline,
           }}
           role="status"
         >
@@ -294,7 +302,7 @@ export default function FundFlowPanel(): JSX.Element {
   if (query.isError) {
     return (
       <section className="card p-6 text-center" aria-label="Fund flow">
-        <h2 className="font-display text-lg font-semibold text-text-primary">Fund flow unavailable</h2>
+        <h2 className="font-display text-xl font-semibold text-text-primary">Fund flow unavailable</h2>
         <p className="mt-2 text-sm text-text-secondary">
           ZondScan could not load the collected trade rollup.
         </p>
@@ -356,17 +364,17 @@ export default function FundFlowPanel(): JSX.Element {
               </select>
             </label>
           )}
-          <div className="flex items-center gap-1" role="group" aria-label="Rollup window">
+          <div className="inline-flex rounded-lg border border-border bg-surface p-0.5" role="group" aria-label="Rollup window">
             {data.windows.map((option) => (
               <button
                 key={option}
                 type="button"
                 onClick={() => setWindowId(option)}
                 aria-pressed={option === data.window}
-                className={`rounded-md px-2 py-1 font-mono text-xs transition-colors ${
+                className={`rounded-md px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
                   option === data.window
-                    ? 'bg-surface-2 text-text-primary'
-                    : 'text-text-muted hover:text-text-secondary'
+                    ? 'bg-surface-3 text-text-primary'
+                    : 'text-text-muted hover:text-text-primary'
                 }`}
               >
                 {formatWindowLabel(option)}
@@ -390,7 +398,7 @@ export default function FundFlowPanel(): JSX.Element {
             <div className="flex items-baseline justify-between gap-3">
               <h3 className="eyebrow">Net inflow, {formatWindowLabel(data.window)}</h3>
               <p
-                className={`font-display text-xl font-semibold ${
+                className={`num text-lg sm:text-xl font-medium ${
                   data.totals.netQuantity >= 0 ? 'text-success' : 'text-error'
                 }`}
               >
@@ -400,7 +408,7 @@ export default function FundFlowPanel(): JSX.Element {
 
             <table className="mt-3 w-full table-fixed">
               <thead>
-                <tr className="text-[10px] uppercase tracking-wider text-text-muted">
+                <tr className="text-[11px] font-medium uppercase tracking-[0.12em] text-text-muted">
                   <th className="py-1.5 pr-2 text-left font-medium">Size band</th>
                   <th className="py-1.5 px-2 text-right font-medium">Buy</th>
                   <th className="py-1.5 px-2 text-right font-medium">Sell</th>

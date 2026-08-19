@@ -195,6 +195,35 @@ export function flowTicks(scale: FlowScale): number[] {
   return ticks.sort((a, b) => b - a);
 }
 
+export interface AxisLabelPlacement {
+  x: number;
+  anchor: 'start' | 'middle' | 'end';
+}
+
+/** Approximate half-width of a monospace label, for overflow tests. */
+const MONO_CHAR_WIDTH = 6;
+
+/**
+ * Places an axis label under its band.
+ *
+ * The label stays centred on its own band, which is what ties it to its
+ * column, and only shifts to an edge anchor when the centred text would
+ * actually spill outside the plot. Anchoring by index instead detaches the
+ * first and last labels from their columns whenever bands are wide, which is
+ * every low-count chart such as the five daily bars.
+ */
+export function axisLabelPlacement(
+  centerX: number,
+  labelLength: number,
+  plotWidth: number,
+  charWidth = MONO_CHAR_WIDTH,
+): AxisLabelPlacement {
+  const halfText = (labelLength * charWidth) / 2;
+  if (centerX - halfText < 0) return { x: 0, anchor: 'start' };
+  if (centerX + halfText > plotWidth) return { x: plotWidth, anchor: 'end' };
+  return { x: centerX, anchor: 'middle' };
+}
+
 export interface ColumnLabelPlacement {
   y: number;
   /** True when the label sits on the fill and needs ink that clears it. */
