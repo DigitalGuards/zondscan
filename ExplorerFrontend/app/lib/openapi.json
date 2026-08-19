@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "ZondScan Public API",
-    "version": "1.0.0",
-    "description": "ZondScan is the block explorer for the QRL 2.0 (Zond) public testnet. This API is free to use: no API key, no signup. All data reflects the QRL 2.0 testnet, and testnet coins have no monetary value.\n\nCORS: GET endpoints respond with Access-Control-Allow-Origin: * and can be called directly from any web page. POST endpoints allow cross-origin browser access only from the explorer's own origins and from browser-extension origins, so browser apps hosted elsewhere should treat POST endpoints as server-side calls.\n\nPagination: list endpoints take page and limit query parameters, and limit is capped at 100 items. Most list endpoints number pages from 1; the contract and token list endpoints number pages from 0. Each operation documents its own defaults.\n\nNumeric encoding: on-chain quantities (block fields, gas values, raw transaction values) are 0x-prefixed hexadecimal strings. Indexed aggregates are decimal strings or JSON numbers. Coin amounts are denominated in Quanta (1 Quanta = 10^9 Shor = 10^18 Planck); fields carrying exact amounts use decimal strings.\n\nCaching and limits: hot endpoints are cached server side for 5 to 30 seconds, noted per operation. The three POST contract endpoints carry per-IP rate limits and return 429 with body {\"error\": \"rate limit exceeded\"} when exhausted."
+    "version": "1.1.0",
+    "description": "ZondScan is the block explorer for the QRL 2.0 (Zond) public testnet. This API is free to use: no API key, no signup. On-chain data reflects the QRL 2.0 testnet, and testnet coins have no monetary value. The market order-book endpoint serves public QRL/USDT spot data from MEXC.\n\nCORS: GET endpoints respond with Access-Control-Allow-Origin: * and can be called directly from any web page. POST endpoints allow cross-origin browser access only from the explorer's own origins and from browser-extension origins, so browser apps hosted elsewhere should treat POST endpoints as server-side calls.\n\nPagination: list endpoints take page and limit query parameters, and limit is capped at 100 items. Most list endpoints number pages from 1; the contract and token list endpoints number pages from 0. Each operation documents its own defaults.\n\nNumeric encoding: on-chain quantities (block fields, gas values, raw transaction values) are 0x-prefixed hexadecimal strings. Indexed aggregates are decimal strings or JSON numbers. Coin amounts are denominated in Quanta (1 Quanta = 10^9 Shor = 10^18 Planck); fields carrying exact amounts use decimal strings.\n\nCaching and limits: hot endpoints are cached server side for 3 to 30 seconds, noted per operation. The three POST contract endpoints carry per-IP rate limits and return 429 with body {\"error\": \"rate limit exceeded\"} when exhausted."
   },
   "servers": [{ "url": "https://zondscan.com" }],
   "tags": [
@@ -153,6 +153,67 @@
           "400": {
             "description": "Invalid interval value.",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/market/orderbook": {
+      "get": {
+        "tags": ["Overview & Market"],
+        "operationId": "getMarketOrderBook",
+        "summary": "Live QRL/USDT order book",
+        "description": "Returns a server-side snapshot of the fixed MEXC QRLUSDT spot market: up to 100 bid levels, 100 ask levels, 100 recent trades, and 24-hour ticker data. Successful snapshots and upstream failures are cached for 3 seconds, limiting MEXC request bursts during rate limits or outages. This public endpoint requires no MEXC API key and accepts no venue, symbol, or upstream URL parameters.",
+        "responses": {
+          "200": {
+            "description": "Normalized MEXC QRLUSDT market snapshot.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MarketOrderBook" },
+                "example": {
+                  "venue": "MEXC",
+                  "symbol": "QRLUSDT",
+                  "fetchedAt": "2026-08-09T12:14:58.123Z",
+                  "lastUpdateId": 905062254,
+                  "bids": [{ "price": "0.75744", "quantity": "2.17" }],
+                  "asks": [{ "price": "0.76112", "quantity": "2.2" }],
+                  "recentTrades": [
+                    {
+                      "id": "synthetic-8aa7a9881988250bd4110726-0",
+                      "price": "0.76117",
+                      "quantity": "11.52",
+                      "quoteQuantity": "8.7686784",
+                      "time": 1786290460978,
+                      "aggressorSide": "buy"
+                    }
+                  ],
+                  "ticker": {
+                    "high": "0.80336",
+                    "low": "0.7271",
+                    "last": "0.76117",
+                    "change": "-0.00088",
+                    "changePercent": "-0.0011",
+                    "baseVolume": "16478.3",
+                    "quoteVolume": "12623.92215"
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "MEXC returned an invalid response or could not be reached within the request budget.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before ZondScan will attempt another MEXC fetch.",
+                "schema": { "type": "integer", "const": 3 }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "market data temporarily unavailable" }
+              }
+            }
           },
           "500": { "$ref": "#/components/responses/InternalError" }
         }
@@ -2148,6 +2209,74 @@
         "type": "object",
         "properties": { "error": { "type": "string" } },
         "required": ["error"]
+      },
+      "MarketPriceLevel": {
+        "type": "object",
+        "description": "One aggregated order-book price level. Decimal strings preserve exact values without floating-point conversion.",
+        "properties": {
+          "price": { "type": "string", "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" },
+          "quantity": { "type": "string", "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" }
+        },
+        "required": ["price", "quantity"],
+        "additionalProperties": false
+      },
+      "MarketTrade": {
+        "type": "object",
+        "description": "One recent MEXC public trade. The API synthesizes a stable id when MEXC returns null. aggressorSide is the taker side inferred from isBuyerMaker.",
+        "properties": {
+          "id": { "type": "string" },
+          "price": { "type": "string", "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" },
+          "quantity": { "type": "string", "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" },
+          "quoteQuantity": { "type": "string", "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" },
+          "time": { "type": "integer", "format": "int64", "description": "Unix timestamp in milliseconds." },
+          "aggressorSide": { "type": "string", "enum": ["buy", "sell"] }
+        },
+        "required": ["id", "price", "quantity", "quoteQuantity", "time", "aggressorSide"],
+        "additionalProperties": false
+      },
+      "MarketTicker": {
+        "type": "object",
+        "description": "Normalized decimal-string fields from MEXC's 24-hour ticker.",
+        "properties": {
+          "high": { "type": "string" },
+          "low": { "type": "string" },
+          "last": { "type": "string" },
+          "change": { "type": "string", "description": "Absolute 24-hour price change." },
+          "changePercent": { "type": "string", "description": "MEXC's raw 24-hour change rate. Multiply by 100 for percent units." },
+          "baseVolume": { "type": "string", "description": "24-hour QRL volume." },
+          "quoteVolume": { "type": ["string", "null"], "description": "24-hour USDT volume. MEXC can return null." }
+        },
+        "required": ["high", "low", "last", "change", "changePercent", "baseVolume", "quoteVolume"],
+        "additionalProperties": false
+      },
+      "MarketOrderBook": {
+        "type": "object",
+        "properties": {
+          "venue": { "type": "string", "const": "MEXC" },
+          "symbol": { "type": "string", "const": "QRLUSDT" },
+          "fetchedAt": { "type": "string", "format": "date-time" },
+          "lastUpdateId": { "type": "integer", "format": "int64", "minimum": 0 },
+          "bids": {
+            "type": "array",
+            "maxItems": 100,
+            "description": "Bid levels in MEXC order, highest price first.",
+            "items": { "$ref": "#/components/schemas/MarketPriceLevel" }
+          },
+          "asks": {
+            "type": "array",
+            "maxItems": 100,
+            "description": "Ask levels in MEXC order, lowest price first.",
+            "items": { "$ref": "#/components/schemas/MarketPriceLevel" }
+          },
+          "recentTrades": {
+            "type": "array",
+            "maxItems": 100,
+            "items": { "$ref": "#/components/schemas/MarketTrade" }
+          },
+          "ticker": { "$ref": "#/components/schemas/MarketTicker" }
+        },
+        "required": ["venue", "symbol", "fetchedAt", "lastUpdateId", "bids", "asks", "recentTrades", "ticker"],
+        "additionalProperties": false
       },
       "BlockResult": {
         "type": "object",

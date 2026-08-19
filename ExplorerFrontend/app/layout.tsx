@@ -223,6 +223,12 @@ const structuredData = {
         },
         {
           '@type': 'WebPage',
+          name: 'QRL Order Book Arena',
+          description: 'Live visualization of the MEXC QRL/USDT spot order book',
+          url: 'https://zondscan.com/orderbook',
+        },
+        {
+          '@type': 'WebPage',
           name: 'Verify Contract',
           description: 'Publish verified smart contract source code',
           url: 'https://zondscan.com/verify-contract',
@@ -239,14 +245,16 @@ interface RootLayoutProps {
 export default function RootLayout({ children }: RootLayoutProps): JSX.Element {
   return (
     <html lang="en" className={`dark ${displayFont.variable} ${sansFont.variable} ${monoFont.variable}`}>
-      <head>
+      <body className="min-h-screen bg-background text-text-secondary">
+        {/* Keep JSON-LD in the rendered body. Next's metadata pipeline owns
+            <head>, and mixing a manual head child into that stream can cause
+            a React hydration mismatch in development. Search engines accept
+            structured data in either document section. */}
         <script
           id="schema-org"
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
-      </head>
-      <body className="min-h-screen bg-background text-text-secondary">
         <Providers>
           <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-accent focus:text-background focus:rounded-lg focus:text-sm focus:font-medium">
             Skip to main content

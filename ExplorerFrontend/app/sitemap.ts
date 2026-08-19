@@ -36,6 +36,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     entry('/pending/1', 'always', 0.7),
     entry('/epochs/1', 'hourly', 0.7),
     entry('/gas', 'hourly', 0.7),
+    entry('/orderbook', 'always', 0.7),
     entry('/learn', 'weekly', 0.7),
     entry('/richlist', 'daily', 0.6),
     entry('/faucet', 'monthly', 0.6),
