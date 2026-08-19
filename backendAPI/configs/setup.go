@@ -58,6 +58,12 @@ func ConnectDB() *mongo.Client {
 		// Initialize collections with fallback data if they don't exist yet
 		initializeCollections(db)
 
+		// Market trade storage is created explicitly. createIndexes above
+		// skips collections that do not exist yet, so a collection first
+		// written at runtime would otherwise run unindexed until some later
+		// restart happened to find it populated.
+		ensureMarketTradesCollection(db)
+
 		// Set the global DB variable
 		DB = client
 
@@ -97,6 +103,55 @@ func bindCollections(client *mongo.Client) {
 	GasHistoryCollection = db.Collection(gasHistoryCollName)
 	SyncStateCollection = db.Collection(syncStateCollName)
 	TokenMetadataCollection = db.Collection(tokenMetadataCollName)
+	MarketTradesCollection = db.Collection(marketTradesCollName)
+}
+
+// marketTradesRetention bounds how long collected venue trades are kept.
+// The longest chart the API serves is five days, so this leaves ample slack
+// while keeping the collection from growing without limit. Changing it here
+// does not retune an existing deployment: Mongo caches the TTL index's
+// expiry, and lowering it later needs a collMod on the live index.
+const marketTradesRetention = 45 * 24 * time.Hour
+
+// ensureMarketTradesCollection creates the market trade collection and its
+// indexes up front. Creating it eagerly (rather than letting the first
+// insert do it) is what allows the index build to happen on an empty
+// collection at startup instead of on a populated one under load.
+func ensureMarketTradesCollection(db *mongo.Database) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	exists, err := collectionExists(db, marketTradesCollName)
+	if err != nil {
+		log.Printf("Warning: could not check for %s collection: %v", marketTradesCollName, err)
+		return
+	}
+	if !exists {
+		if err := db.CreateCollection(ctx, marketTradesCollName); err != nil {
+			// A concurrent creator winning the race is not an error worth
+			// aborting on; the index build below still runs.
+			log.Printf("Note: creating %s collection: %v", marketTradesCollName, err)
+		}
+	}
+
+	indexes := []mongo.IndexModel{
+		{
+			// Serves both the windowed rollups and the coverage probe.
+			Keys:    bson.D{{Key: "venue", Value: 1}, {Key: "at", Value: -1}},
+			Options: options.Index().SetName("market_trades_venue_at_idx"),
+		},
+		{
+			Keys: bson.D{{Key: "at", Value: 1}},
+			Options: options.Index().
+				SetName("market_trades_ttl_idx").
+				SetExpireAfterSeconds(int32(marketTradesRetention.Seconds())),
+		},
+	}
+	if _, err := db.Collection(marketTradesCollName).Indexes().CreateMany(ctx, indexes); err != nil {
+		log.Printf("Warning: could not create indexes for %s: %v", marketTradesCollName, err)
+		return
+	}
+	log.Printf("Market trade collection ready (retention %s)", marketTradesRetention)
 }
 
 func createIndexes(db *mongo.Database) {

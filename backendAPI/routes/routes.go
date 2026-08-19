@@ -37,6 +37,7 @@ import (
 //	gas:summary                5s  /gas/summary              live gas snapshot
 //	gas:history:<range>       30s  /gas/history              precomputed time series; 30s is fine
 //	market:orderbook           3s  /market/orderbook         MEXC snapshot or short failure backoff
+//	market:fundflow:<v>:<w>   30s  /market/fundflow          stored-trade rollup per venue+window
 //
 // Staleness contract:
 //   - Endpoints embedding `latestBlock` carry the cache window as their
@@ -117,6 +118,7 @@ func UserRoute(router *gin.Engine) {
 	router.GET("/overview", handleOverview)
 	router.GET("/price-history", handlePriceHistory)
 	router.GET("/market/orderbook", handleMarketOrderBook)
+	router.GET("/market/fundflow", handleMarketFundFlow)
 	router.POST("/getBalance", handleGetBalance)
 	router.GET("/txs", handleTxs)
 	router.GET("/walletdistribution/:query", handleWalletDistribution)

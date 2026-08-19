@@ -10,6 +10,7 @@ import {
   PlayIcon,
 } from '@heroicons/react/24/outline';
 import config from '../../config';
+import FundFlowPanel from './fund-flow';
 import { palette } from '../lib/theme';
 import {
   buildHistoricalPlays,
@@ -990,8 +991,12 @@ export default function OrderBookClient(): JSX.Element {
         </div>
       </div>
 
+      <div className="mt-4">
+        <FundFlowPanel />
+      </div>
+
       <aside className="mt-4 rounded-xl border border-border bg-surface px-4 py-3 text-xs leading-relaxed text-text-muted">
-        Public MEXC spot L2 data, aggregated by price. One arena squirrel represents one selected price bucket and its total visible QRL quantity. Resting orders can change or disappear at any time, so displayed depth is not guaranteed executable liquidity. The arena is a visualization of one centralized venue and does not represent the QRL network mempool.
+        Public MEXC spot L2 data, aggregated by price. One arena squirrel represents one selected price bucket and its total visible QRL quantity. Resting orders can change or disappear at any time, so displayed depth is not guaranteed executable liquidity. The arena is a visualization of one centralized venue and does not represent the QRL network mempool. Fund-flow rollups are built from collected public executions and start accumulating when collection begins, so they cannot be backfilled.
       </aside>
     </div>
   );

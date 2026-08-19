@@ -200,6 +200,13 @@ func RequestHandler() {
 		log.Println("Contract AI explainer ready")
 	}
 
+	// Start the market trade collector. The fund-flow rollups read stored
+	// trades, and venues expose no historical tape, so this must run
+	// continuously rather than on request: nothing else writes the history
+	// those endpoints read. A failure here leaves the rollups empty and
+	// every other route unaffected, so it never blocks startup.
+	startMarketCollector()
+
 	// Configure routes
 	log.Println("Configuring API routes...")
 	routes.UserRoute(router)

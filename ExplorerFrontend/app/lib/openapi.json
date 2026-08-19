@@ -219,6 +219,96 @@
         }
       }
     },
+    "/api/market/fundflow": {
+      "get": {
+        "tags": ["Overview & Market"],
+        "operationId": "getMarketFundFlow",
+        "summary": "Collected fund flow by trade size",
+        "description": "Rolls up publicly collected venue executions into buy and sell volume per trade-size band, a net-inflow series across the selected window, and five days of daily net inflow. Size bands are ZondScan's own classification by quote notional and are reported in the response so clients can label them with real numbers; no venue publishes this split. Venues expose no historical trade tape, so this history accumulates forward from the moment collection starts and cannot be backfilled. The coverage object states how much of the requested window is actually backed by stored trades. Results are cached for 30 seconds per venue and window.",
+        "parameters": [
+          {
+            "name": "venue",
+            "in": "query",
+            "required": false,
+            "description": "Venue id to roll up. Defaults to the first configured venue.",
+            "schema": { "type": "string", "default": "mexc" }
+          },
+          {
+            "name": "window",
+            "in": "query",
+            "required": false,
+            "description": "Rollup window.",
+            "schema": { "type": "string", "enum": ["15m", "30m", "1h", "2h", "4h", "1d"], "default": "1d" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fund-flow rollup for the requested venue and window.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MarketFundFlow" },
+                "example": {
+                  "venue": { "id": "mexc", "name": "MEXC", "symbol": "QRLUSDT", "quoteAsset": "USDT" },
+                  "venues": [{ "id": "mexc", "name": "MEXC", "symbol": "QRLUSDT", "quoteAsset": "USDT" }],
+                  "window": "1d",
+                  "windows": ["15m", "30m", "1h", "2h", "4h", "1d"],
+                  "windowStart": 1787054541000,
+                  "windowEnd": 1787140941000,
+                  "seriesStepMs": 3600000,
+                  "bands": { "mediumFrom": 10, "largeFrom": 100, "quoteAsset": "USDT" },
+                  "buckets": [
+                    {
+                      "bucket": "large",
+                      "buyQuantity": 1566.72,
+                      "sellQuantity": 565.36,
+                      "netQuantity": 1001.36,
+                      "buyQuote": 1284.71,
+                      "sellQuote": 463.59,
+                      "netQuote": 821.12,
+                      "buyTradeCount": 6,
+                      "sellTradeCount": 3
+                    }
+                  ],
+                  "totals": {
+                    "bucket": "total",
+                    "buyQuantity": 2376.53,
+                    "sellQuantity": 2757.33,
+                    "netQuantity": -380.8,
+                    "buyQuote": 1948.75,
+                    "sellQuote": 2261.03,
+                    "netQuote": -312.28,
+                    "buyTradeCount": 85,
+                    "sellTradeCount": 116
+                  },
+                  "series": [
+                    { "time": 1787137341000, "buyQuantity": 41.88, "sellQuantity": 0, "netQuantity": 41.88 }
+                  ],
+                  "daily": [
+                    { "time": 1787011200000, "buyQuantity": 1204.5, "sellQuantity": 1560.25, "netQuantity": -355.75 }
+                  ],
+                  "coverage": {
+                    "firstTradeAt": 1787109737460,
+                    "lastTradeAt": 1787140595875,
+                    "tradeCount": 201,
+                    "complete": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown venue or window.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "invalid window; expected one of 15m, 30m, 1h, 2h, 4h, 1d" }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
     "/api/latestblock": {
       "get": {
         "tags": ["Blocks"],
@@ -2277,6 +2367,98 @@
         },
         "required": ["venue", "symbol", "fetchedAt", "lastUpdateId", "bids", "asks", "recentTrades", "ticker"],
         "additionalProperties": false
+      },
+      "MarketVenue": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "Stable venue key accepted by the venue query parameter." },
+          "name": { "type": "string" },
+          "symbol": { "type": "string" },
+          "quoteAsset": { "type": "string" }
+        },
+        "required": ["id", "name", "symbol", "quoteAsset"]
+      },
+      "MarketSizeBands": {
+        "type": "object",
+        "description": "ZondScan's own trade-size thresholds in quote notional, reported so clients can label bands with real numbers.",
+        "properties": {
+          "mediumFrom": { "type": "number", "description": "Inclusive floor of the medium band." },
+          "largeFrom": { "type": "number", "description": "Inclusive floor of the large band." },
+          "quoteAsset": { "type": "string" }
+        },
+        "required": ["mediumFrom", "largeFrom", "quoteAsset"]
+      },
+      "MarketFlowBucket": {
+        "type": "object",
+        "description": "Buy and sell split for one size band. Quantities are in the base asset (QRL); quote values are in the venue quote asset.",
+        "properties": {
+          "bucket": { "type": "string", "enum": ["large", "medium", "small", "total"] },
+          "buyQuantity": { "type": "number" },
+          "sellQuantity": { "type": "number" },
+          "netQuantity": { "type": "number", "description": "buyQuantity minus sellQuantity." },
+          "buyQuote": { "type": "number" },
+          "sellQuote": { "type": "number" },
+          "netQuote": { "type": "number" },
+          "buyTradeCount": { "type": "integer" },
+          "sellTradeCount": { "type": "integer" }
+        },
+        "required": ["bucket", "buyQuantity", "sellQuantity", "netQuantity", "buyQuote", "sellQuote", "netQuote", "buyTradeCount", "sellTradeCount"]
+      },
+      "MarketFlowPoint": {
+        "type": "object",
+        "properties": {
+          "time": { "type": "integer", "description": "Inclusive start of the step, as Unix milliseconds." },
+          "buyQuantity": { "type": "number" },
+          "sellQuantity": { "type": "number" },
+          "netQuantity": { "type": "number" }
+        },
+        "required": ["time", "buyQuantity", "sellQuantity", "netQuantity"]
+      },
+      "MarketFlowCoverage": {
+        "type": "object",
+        "description": "How much of the requested window is backed by collected trades. This API cannot backfill, so a window can legitimately be only partly covered.",
+        "properties": {
+          "firstTradeAt": { "type": ["integer", "null"], "description": "Timestamp of the oldest stored trade for this venue." },
+          "lastTradeAt": { "type": ["integer", "null"] },
+          "tradeCount": { "type": "integer" },
+          "complete": { "type": "boolean", "description": "True when collection began at or before the window start." }
+        },
+        "required": ["firstTradeAt", "lastTradeAt", "tradeCount", "complete"]
+      },
+      "MarketFundFlow": {
+        "type": "object",
+        "properties": {
+          "venue": { "$ref": "#/components/schemas/MarketVenue" },
+          "venues": {
+            "type": "array",
+            "description": "Every configured venue, so a client can offer a venue switcher.",
+            "items": { "$ref": "#/components/schemas/MarketVenue" }
+          },
+          "window": { "type": "string" },
+          "windows": { "type": "array", "items": { "type": "string" } },
+          "windowStart": { "type": "integer" },
+          "windowEnd": { "type": "integer" },
+          "seriesStepMs": { "type": "integer", "description": "Width of one series step in milliseconds." },
+          "bands": { "$ref": "#/components/schemas/MarketSizeBands" },
+          "buckets": {
+            "type": "array",
+            "description": "One entry per size band, largest first, zero-filled when a band saw no trades.",
+            "items": { "$ref": "#/components/schemas/MarketFlowBucket" }
+          },
+          "totals": { "$ref": "#/components/schemas/MarketFlowBucket" },
+          "series": {
+            "type": "array",
+            "description": "Net inflow per step across the window, zero-filled.",
+            "items": { "$ref": "#/components/schemas/MarketFlowPoint" }
+          },
+          "daily": {
+            "type": "array",
+            "description": "Net inflow per UTC day for the last five days.",
+            "items": { "$ref": "#/components/schemas/MarketFlowPoint" }
+          },
+          "coverage": { "$ref": "#/components/schemas/MarketFlowCoverage" }
+        },
+        "required": ["venue", "venues", "window", "windows", "windowStart", "windowEnd", "seriesStepMs", "bands", "buckets", "totals", "series", "daily", "coverage"]
       },
       "BlockResult": {
         "type": "object",

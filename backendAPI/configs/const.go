@@ -31,6 +31,7 @@ const (
 	gasHistoryCollName                   = "gasHistory"
 	syncStateCollName                    = "sync_state"
 	tokenMetadataCollName                = "tokenMetadata"
+	marketTradesCollName                 = "marketTrades"
 )
 
 // Collection handles. These are populated by ConnectDB once the client is
@@ -65,4 +66,5 @@ var (
 	GasHistoryCollection                   *mongo.Collection
 	SyncStateCollection                    *mongo.Collection
 	TokenMetadataCollection                *mongo.Collection
+	MarketTradesCollection                 *mongo.Collection
 )
