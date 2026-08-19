@@ -23,6 +23,13 @@ const GasHistoryCollection = "gasHistory"
 // rehydrated from `blocks` if needed.
 const GasHistoryRetention = 7 * 24 * time.Hour
 
+// gasHistoryScanLimit caps how many blocks one run pulls. It is sized to
+// cover GasHistoryRetention at the network's current 60 s slot time
+// (7 d ≈ 10 080 blocks) so a cold start fills the whole 7-day view in one
+// pass. If slot time drops, a cold start covers proportionally less history
+// and the rest fills in over subsequent runs.
+const gasHistoryScanLimit = 12000
+
 // gasHistoryRow is the bson shape written to the collection. `_id` is the
 // block number (int64) so re-runs of the periodic task are idempotent.
 type gasHistoryRow struct {
@@ -61,9 +68,19 @@ func UpdateGasHistory() error {
 		}
 	}
 
-	// Scan new blocks newest→oldest? No, oldest→newest, capped, so we don't
-	// blow memory if the syncer has just caught up from a deep backfill. The
-	// retention sweep below will trim any historical excess.
+	// Scan newest→oldest, capped, so a run never has to hold the whole chain
+	// in memory.
+	//
+	// Oldest-first deadlocks on a long chain. Starting from an empty
+	// collection it would take the lowest block numbers, which on a chain
+	// with months of history are far older than GasHistoryRetention. The
+	// sweep at the end of this function then deletes every row the same run
+	// just wrote, the highwater returns to -1, and the next run repeats the
+	// identical batch forever, so the collection never holds anything and
+	// the /gas charts stay empty. Taking the newest blocks keeps written
+	// rows inside the retention window, which is what lets the highwater
+	// advance.
+	//
 	// Block documents store these fields in lowercase BSON (gasused, gaslimit,
 	// basefeepergas), both the projection paths and the local struct tags
 	// below need to match that exactly.
@@ -77,8 +94,8 @@ func UpdateGasHistory() error {
 			"result.basefeepergas":     1,
 			"result.transactions.hash": 1,
 		}).
-		SetSort(bson.M{"blockNumberInt": 1}).
-		SetLimit(5000)
+		SetSort(bson.M{"blockNumberInt": -1}).
+		SetLimit(gasHistoryScanLimit)
 
 	cur, err := configs.BlocksCollections.Find(ctx, bson.M{"blockNumberInt": bson.M{"$gt": highwater}}, blockOpts)
 	if err != nil {
