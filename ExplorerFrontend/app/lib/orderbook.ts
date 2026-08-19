@@ -1,6 +1,6 @@
 export type MarketSide = 'buy' | 'sell';
 
-export const PRICE_GROUPINGS = ['0.00001', '0.0001', '0.001', '0.01'] as const;
+export const PRICE_GROUPINGS = ['0.00001', '0.0001', '0.001', '0.01', '0.1'] as const;
 
 export type PriceGrouping = (typeof PRICE_GROUPINGS)[number];
 

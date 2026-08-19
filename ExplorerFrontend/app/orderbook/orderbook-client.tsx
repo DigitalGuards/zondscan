@@ -36,7 +36,14 @@ import {
 
 const FIELD_WIDTH = 1000;
 const FIELD_HEIGHT = 563;
+// Markers on the arena field. Deliberately separate from the ladder's row
+// count: the field crowds long before a table does, so showing more depth
+// must not mean showing more squirrels.
 const MAX_VISIBLE_LEVELS = 14;
+
+// Rows per side in the depth ladder.
+const LADDER_ROW_OPTIONS = [12, 25, 50] as const;
+const DEFAULT_LADDER_ROWS = 12;
 
 interface ArenaGameState {
   responseKey: string;
@@ -545,15 +552,20 @@ function DepthLadder({
   midpoint,
   grouping,
   onGroupingChange,
+  rowsPerSide,
+  onRowsChange,
 }: {
   bids: LadderLevel[];
   asks: LadderLevel[];
   midpoint: number;
   grouping: PriceGrouping;
   onGroupingChange: (grouping: PriceGrouping) => void;
+  rowsPerSide: number;
+  onRowsChange: (rows: number) => void;
 }): JSX.Element {
-  const displayBids = bids.slice(0, 12);
-  const displayAsks = asks.slice(0, 12);
+  // Already limited to `rows` per side upstream, where the grouping runs.
+  const displayBids = bids;
+  const displayAsks = asks;
   const maxCumulative = Math.max(
     displayBids[displayBids.length - 1]?.cumulativeQuantity ?? 0,
     displayAsks[displayAsks.length - 1]?.cumulativeQuantity ?? 0,
@@ -599,21 +611,38 @@ function DepthLadder({
           <h3 className="font-display text-sm font-semibold text-text-primary">Grouped depth ladder</h3>
           <p className="text-xs text-text-muted mt-0.5">MEXC levels combined into price buckets</p>
         </div>
-        <label className="flex shrink-0 items-center gap-2 text-xs text-text-muted">
-          <span className="hidden sm:inline">Group</span>
-          <select
-            value={grouping}
-            onChange={(event) => onGroupingChange(event.target.value as PriceGrouping)}
-            className="rounded-md border border-border bg-surface-2 px-2 py-1.5 font-mono text-xs text-text-primary outline-none focus:border-accent"
-            aria-label="Price grouping in USDT"
-          >
-            {PRICE_GROUPINGS.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="flex shrink-0 items-center gap-3">
+          <label className="flex items-center gap-2 text-xs text-text-muted">
+            <span className="hidden sm:inline">Group</span>
+            <select
+              value={grouping}
+              onChange={(event) => onGroupingChange(event.target.value as PriceGrouping)}
+              className="rounded-md border border-border bg-surface-2 px-2 py-1.5 font-mono text-xs text-text-primary outline-none focus:border-accent"
+              aria-label="Price grouping in USDT"
+            >
+              {PRICE_GROUPINGS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-xs text-text-muted">
+            <span className="hidden sm:inline">Rows</span>
+            <select
+              value={rowsPerSide}
+              onChange={(event) => onRowsChange(Number(event.target.value))}
+              className="rounded-md border border-border bg-surface-2 px-2 py-1.5 font-mono text-xs text-text-primary outline-none focus:border-accent"
+              aria-label="Ladder rows per side"
+            >
+              {LADDER_ROW_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </div>
       <div className="px-4 py-2">
         <table className="w-full table-fixed" aria-label="MEXC QRL USDT order book levels">
@@ -751,6 +780,7 @@ export default function OrderBookClient(): JSX.Element {
   const [playWindowMs, setPlayWindowMs] = useState(30_000);
   const [scaleMultiplier, setScaleMultiplier] = useState(1);
   const [priceGrouping, setPriceGrouping] = useState<PriceGrouping>('0.01');
+  const [ladderRows, setLadderRows] = useState<number>(DEFAULT_LADDER_ROWS);
   const [game, setGame] = useState<ArenaGameState>(newGameState);
 
   const orderBookQuery = useQuery<MarketOrderBookResponse>({
@@ -791,6 +821,17 @@ export default function OrderBookClient(): JSX.Element {
         ? buildGroupedLadder(data.asks, 'sell', priceGrouping, MAX_VISIBLE_LEVELS)
         : [],
     [data, priceGrouping],
+  );
+
+  // The ladder is built separately from the arena's levels so it can run
+  // deeper into the book without adding markers to the field.
+  const ladderBids = useMemo(
+    () => (data ? buildGroupedLadder(data.bids, 'buy', priceGrouping, ladderRows) : []),
+    [data, priceGrouping, ladderRows],
+  );
+  const ladderAsks = useMemo(
+    () => (data ? buildGroupedLadder(data.asks, 'sell', priceGrouping, ladderRows) : []),
+    [data, priceGrouping, ladderRows],
   );
 
   if (data) {
@@ -985,11 +1026,13 @@ export default function OrderBookClient(): JSX.Element {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
         <DepthLadder
-          bids={bids}
-          asks={asks}
+          bids={ladderBids}
+          asks={ladderAsks}
           midpoint={stats.midpoint}
           grouping={priceGrouping}
           onGroupingChange={setPriceGrouping}
+          rowsPerSide={ladderRows}
+          onRowsChange={setLadderRows}
         />
         <PlayFeed plays={game.plays} />
         <div className="xl:col-span-2">

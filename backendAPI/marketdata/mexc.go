@@ -39,8 +39,20 @@ const (
 	mexcTradesPath = "/api/v3/trades"
 	mexcTickerPath = "/api/v3/ticker/24hr"
 
-	marketDataLimit      = 100
-	maxDepthBodyBytes    = 128 << 10
+	marketDataLimit = 100
+
+	// depthLimit is how many price levels per side the order-book view
+	// fetches. 100 showed only about 10 grouped buckets a side at the 0.01
+	// grouping, which is less than the ladder can display, so the view was
+	// truncating the book rather than the book being that shallow. QRLUSDT
+	// currently rests around 340 bids and 1025 asks in total, so 500 covers
+	// the entire bid side and the part of the ask side anyone reads. The far
+	// tail is parasitic anyway (a bid near zero, asks into the millions), and
+	// the ladder walks outward from the touch, so that tail only surfaces if
+	// a reader asks for enough rows to reach it.
+	depthLimit = 500
+
+	maxDepthBodyBytes    = 512 << 10
 	maxTradesBodyBytes   = 256 << 10
 	maxTickerBodyBytes   = 32 << 10
 	maxDecimalCharacters = 128
@@ -223,7 +235,7 @@ func (c *MEXCClient) FetchOrderBook(ctx context.Context) (OrderBookSnapshot, err
 
 	g, fetchCtx := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		return c.fetchJSON(fetchCtx, mexcDepthPath, marketDataLimit, maxDepthBodyBytes, &depth)
+		return c.fetchJSON(fetchCtx, mexcDepthPath, depthLimit, maxDepthBodyBytes, &depth)
 	})
 	g.Go(func() error {
 		return c.fetchJSON(fetchCtx, mexcTradesPath, marketDataLimit, maxTradesBodyBytes, &trades)
@@ -241,11 +253,11 @@ func (c *MEXCClient) FetchOrderBook(ctx context.Context) (OrderBookSnapshot, err
 		return OrderBookSnapshot{}, errors.New("MEXC trades response must be an array")
 	}
 
-	bids, err := normalizeLevels("bids", depth.Bids, true)
+	bids, err := normalizeLevels("bids", depth.Bids, true, depthLimit)
 	if err != nil {
 		return OrderBookSnapshot{}, err
 	}
-	asks, err := normalizeLevels("asks", depth.Asks, false)
+	asks, err := normalizeLevels("asks", depth.Asks, false, depthLimit)
 	if err != nil {
 		return OrderBookSnapshot{}, err
 	}
@@ -318,9 +330,9 @@ func (c *MEXCClient) fetchJSON(
 	return nil
 }
 
-func normalizeLevels(name string, raw [][]string, descending bool) ([]PriceLevel, error) {
-	if len(raw) > marketDataLimit {
-		return nil, fmt.Errorf("MEXC %s response exceeds %d levels", name, marketDataLimit)
+func normalizeLevels(name string, raw [][]string, descending bool, maxLevels int) ([]PriceLevel, error) {
+	if len(raw) > maxLevels {
+		return nil, fmt.Errorf("MEXC %s response exceeds %d levels", name, maxLevels)
 	}
 	levels := make([]PriceLevel, 0, len(raw))
 	seenPrices := make(map[string]struct{}, len(raw))

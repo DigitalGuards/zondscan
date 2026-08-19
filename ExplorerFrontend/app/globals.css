@@ -280,6 +280,17 @@
 
 /* ── Controls ──────────────────────────────────────────────────────────────── */
 
+/* A native <select> popup is drawn by the operating system on its own light
+   surface, so the options never inherit the dark theme the closed control
+   wears. Left alone, the site's near-white text renders on a white popup and
+   the list is close to unreadable. These two properties are the part of a
+   native option list that is reliably stylable, so every select on the site
+   gets them rather than each page rediscovering the problem. */
+select option {
+  background-color: var(--color-background-secondary);
+  color: var(--color-text-primary);
+}
+
 @utility nav-link {
   @apply text-text-secondary hover:text-accent transition-colors;
 }

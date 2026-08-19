@@ -29,8 +29,8 @@ func TestMEXCClientFetchOrderBook(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/v3/depth":
-			if got := r.URL.Query().Get("limit"); got != "100" {
-				t.Errorf("depth limit = %q, want 100", got)
+			if got := r.URL.Query().Get("limit"); got != "500" {
+				t.Errorf("depth limit = %q, want 500", got)
 			}
 			fmt.Fprint(w, `{
                     "lastUpdateId":42,
@@ -184,10 +184,15 @@ func TestMEXCClientRejectsInvalidUpstreamResponses(t *testing.T) {
 			name:    "too many levels",
 			badPath: "/api/v3/depth",
 			badResponse: func(w http.ResponseWriter) {
-				levels := strings.TrimSuffix(strings.Repeat(`["0.75","1"],`, marketDataLimit+1), ",")
-				fmt.Fprintf(w, `{"lastUpdateId":42,"bids":[%s],"asks":[]}`, levels)
+				// Distinct prices, so the level cap is what rejects this
+				// rather than the duplicate-price check firing first.
+				levels := make([]string, 0, depthLimit+1)
+				for i := 0; i <= depthLimit; i++ {
+					levels = append(levels, fmt.Sprintf(`["0.%05d","1"]`, i+1))
+				}
+				fmt.Fprintf(w, `{"lastUpdateId":42,"bids":[%s],"asks":[]}`, strings.Join(levels, ","))
 			},
-			wantError: "exceeds 100 levels",
+			wantError: "exceeds 500 levels",
 		},
 		{
 			name:    "duplicate normalized level",

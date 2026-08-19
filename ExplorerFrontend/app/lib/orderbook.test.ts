@@ -51,7 +51,7 @@ describe('order-book calculations', () => {
   });
 
   it('offers the same broad price groupings as the exchange ladder', () => {
-    expect(PRICE_GROUPINGS).toEqual(['0.00001', '0.0001', '0.001', '0.01']);
+    expect(PRICE_GROUPINGS).toEqual(['0.00001', '0.0001', '0.001', '0.01', '0.1']);
   });
 
   it('rounds asks up and aggregates their quantity and original notional', () => {
@@ -69,6 +69,35 @@ describe('order-book calculations', () => {
     expect(asks.map((level) => level.quantity)).toEqual([5, 4]);
     expect(asks[0].notional).toBeCloseTo(0.77644 * 2 + 0.77996 * 3);
     expect(asks.map((level) => level.cumulativeQuantity)).toEqual([5, 9]);
+  });
+
+  it('groups at the coarsest 0.1 bucket in both directions', () => {
+    // The widest grouping only became useful once the backend fetched a
+    // deeper book, so it needs the same rounding guarantee as the rest: a
+    // grouped level must never imply a better executable price than exists.
+    const asks = buildGroupedLadder(
+      [
+        { price: '0.84881', quantity: '2' },
+        { price: '0.90001', quantity: '4' },
+        { price: '0.92', quantity: '3' },
+      ],
+      'sell',
+      '0.1',
+    );
+    expect(asks.map((level) => level.raw.price)).toEqual(['0.9', '1.0']);
+    expect(asks.map((level) => level.quantity)).toEqual([2, 7]);
+
+    const bids = buildGroupedLadder(
+      [
+        { price: '0.84324', quantity: '5' },
+        { price: '0.81', quantity: '1' },
+        { price: '0.75', quantity: '6' },
+      ],
+      'buy',
+      '0.1',
+    );
+    expect(bids.map((level) => level.raw.price)).toEqual(['0.8', '0.7']);
+    expect(bids.map((level) => level.quantity)).toEqual([6, 6]);
   });
 
   it('rounds bids down using decimal-safe buckets', () => {

@@ -2348,14 +2348,14 @@
           "lastUpdateId": { "type": "integer", "format": "int64", "minimum": 0 },
           "bids": {
             "type": "array",
-            "maxItems": 100,
-            "description": "Bid levels in MEXC order, highest price first.",
+            "maxItems": 500,
+            "description": "Bid levels in MEXC order, highest price first. Up to 500 per side; QRLUSDT's resting bid book is smaller than that, so this side is usually complete.",
             "items": { "$ref": "#/components/schemas/MarketPriceLevel" }
           },
           "asks": {
             "type": "array",
-            "maxItems": 100,
-            "description": "Ask levels in MEXC order, lowest price first.",
+            "maxItems": 500,
+            "description": "Ask levels in MEXC order, lowest price first. Up to 500 per side.",
             "items": { "$ref": "#/components/schemas/MarketPriceLevel" }
           },
           "recentTrades": {
