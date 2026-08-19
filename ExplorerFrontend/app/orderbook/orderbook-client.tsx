@@ -85,6 +85,19 @@ const numeric = (value: string | number | null | undefined): number => {
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
 
+/**
+ * Stable per-bucket seed for staggering the arena's idle animation. Keyed off
+ * the price so a bucket's timing survives a change in its rank; anything
+ * derived from array position would be rewritten under a running animation.
+ */
+function seedFromPrice(price: string): number {
+  let seed = 0;
+  for (let index = 0; index < price.length; index += 1) {
+    seed = (seed * 31 + price.charCodeAt(index)) % 100_003;
+  }
+  return seed;
+}
+
 function responseIdentity(data: MarketOrderBookResponse): string {
   const newestTrade = [...data.recentTrades].sort((a, b) => b.time - a.time)[0];
   return [data.fetchedAt, data.lastUpdateId, newestTrade ? marketTradeKey(newestTrade) : 'empty'].join(':');
@@ -280,6 +293,7 @@ function ArenaMarker({
   yardValue,
   scale,
   isBest,
+  motionEnabled,
 }: {
   level: LadderLevel;
   side: MarketSide;
@@ -289,6 +303,7 @@ function ArenaMarker({
   yardValue: number;
   scale: number;
   isBest: boolean;
+  motionEnabled: boolean;
 }): JSX.Element | null {
   const position = priceToFieldPosition(
     level.price,
@@ -299,55 +314,93 @@ function ArenaMarker({
   if (position <= 2 || position >= 98) return null;
   const x = levelX(position, index, side);
   const y = fieldY(position);
-  const radius = 12 * scale;
+  // Geometry is drawn at a fixed base size and scaled through the CSS
+  // transform below. Sizing via attributes instead would snap between polls,
+  // because an attribute change is not something CSS can transition.
+  const radius = 12;
   const spriteSize = radius * 3.8;
+  const halo = radius + (isBest ? 4 : 2);
   const label = `${side === 'buy' ? 'Bid' : 'Ask'} price bucket at ${formatMarketPrice(level.price)} USDT, ${formatQrlQuantity(level.quantity)} QRL`;
+  // Desynchronise the idle loop so the field breathes instead of pulsing in
+  // lockstep. Seeded from the price rather than the array index: a bucket
+  // keeps its React key across polls, so its animation keeps running, and
+  // rewriting delay/duration mid-flight (which an index does whenever a
+  // bucket's rank shifts) reinterprets elapsed time against the new duration
+  // and jumps the marker a frame.
+  const priceSeed = seedFromPrice(level.raw.price);
+  const idleDelay = (priceSeed % 1600) / 1000;
+  const idleDuration = 2.6 + (priceSeed % 9) / 10;
   return (
     <g
-      transform={`translate(${x.toFixed(2)} ${y.toFixed(2)})`}
+      style={{
+        transform: `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) scale(${scale.toFixed(3)})`,
+        // SVG elements default to transform-box: view-box with a 50% 50%
+        // origin, which resolves to the centre of the viewBox rather than the
+        // element. Translate alone does not care, but scale does: left at the
+        // default every marker would grow towards the middle of the field.
+        transformOrigin: '0 0',
+        transition: motionEnabled
+          ? 'transform 900ms cubic-bezier(0.16, 1, 0.3, 1)'
+          : 'none',
+      }}
       role="img"
       aria-label={label}
       tabIndex={0}
       className="cursor-help outline-none"
     >
       <title>{label}</title>
-      {side === 'buy' ? (
-        <>
-          <circle
-            r={radius + (isBest ? 4 : 2)}
-            fill="url(#bid-halo)"
-            opacity={isBest ? 0.95 : 0.72}
-          />
-          <image
-            href="/orderbook/bid-squirrel.webp"
-            x={-spriteSize / 2}
-            y={-spriteSize * 0.56}
-            width={spriteSize}
-            height={spriteSize}
-            preserveAspectRatio="xMidYMid meet"
-          />
-        </>
-      ) : (
-        <>
-          <rect
-            x={-radius - (isBest ? 4 : 2)}
-            y={-radius - (isBest ? 4 : 2)}
-            width={(radius + (isBest ? 4 : 2)) * 2}
-            height={(radius + (isBest ? 4 : 2)) * 2}
-            rx={radius * 0.62}
-            fill="url(#ask-halo)"
-            opacity={isBest ? 0.95 : 0.72}
-          />
-          <image
-            href="/orderbook/ask-squirrel.webp"
-            x={-spriteSize / 2}
-            y={-spriteSize * 0.56}
-            width={spriteSize}
-            height={spriteSize}
-            preserveAspectRatio="xMidYMid meet"
-          />
-        </>
-      )}
+      {/* Stagger the entrance so the first paint arrives as a sweep rather
+          than 28 markers appearing on the same frame. Capped so a marker
+          that mounts mid-session is not left invisible for long. */}
+      <g
+        className={motionEnabled ? 'arena-enter' : undefined}
+        style={
+          motionEnabled ? { animationDelay: `${Math.min(index, 13) * 28}ms` } : undefined
+        }
+      >
+        <g
+          className={motionEnabled ? 'arena-idle' : undefined}
+          style={
+            motionEnabled
+              ? { animationDelay: `${idleDelay}s`, animationDuration: `${idleDuration}s` }
+              : undefined
+          }
+        >
+          {side === 'buy' ? (
+            <>
+              <circle r={halo} fill="url(#bid-halo)" opacity={isBest ? 0.95 : 0.72} />
+              <image
+                href="/orderbook/bid-squirrel.webp"
+                x={-spriteSize / 2}
+                y={-spriteSize * 0.56}
+                width={spriteSize}
+                height={spriteSize}
+                preserveAspectRatio="xMidYMid meet"
+              />
+            </>
+          ) : (
+            <>
+              <rect
+                x={-halo}
+                y={-halo}
+                width={halo * 2}
+                height={halo * 2}
+                rx={radius * 0.62}
+                fill="url(#ask-halo)"
+                opacity={isBest ? 0.95 : 0.72}
+              />
+              <image
+                href="/orderbook/ask-squirrel.webp"
+                x={-spriteSize / 2}
+                y={-spriteSize * 0.56}
+                width={spriteSize}
+                height={spriteSize}
+                preserveAspectRatio="xMidYMid meet"
+              />
+            </>
+          )}
+        </g>
+      </g>
     </g>
   );
 }
@@ -368,6 +421,7 @@ function MarketArena({
   const quantities = [...bids, ...asks].map((level) => level.quantity);
   const currentY = fieldY(game.fieldPosition);
   const previousY = fieldY(game.previousPosition);
+  const latestPlay = game.plays[0];
   const currentHalfWidth = fieldHalfWidth(game.fieldPosition);
   const furthestVisiblePrice = Math.max(
     ...bids.map((level) => Math.abs(level.price - currentPrice)),
@@ -466,6 +520,7 @@ function MarketArena({
             yardValue={bookYardValue}
             scale={markerScale(level.quantity, quantities)}
             isBest={index === 0}
+            motionEnabled={motionEnabled}
           />
         ))}
         {bids.map((level, index) => (
@@ -479,6 +534,7 @@ function MarketArena({
             yardValue={bookYardValue}
             scale={markerScale(level.quantity, quantities)}
             isBest={index === 0}
+            motionEnabled={motionEnabled}
           />
         ))}
 
@@ -494,6 +550,26 @@ function MarketArena({
           <title>
             {`Last trade ${formatMarketPrice(currentPrice)} USDT at field position ${game.fieldPosition.toFixed(1)}`}
           </title>
+          {/* Impact ripple. Keyed on the newest play so React remounts it per
+              play, which is what restarts the animation; a CSS animation on a
+              persistent element would only ever run once. */}
+          {motionEnabled && latestPlay && (
+            <circle
+              key={latestPlay.id}
+              r="12"
+              fill="none"
+              stroke={
+                latestPlay.direction === 'flat'
+                  ? palette.textMuted
+                  : latestPlay.direction === 'bears'
+                    ? palette.error
+                    : palette.success
+              }
+              strokeWidth="2"
+              className="arena-ripple"
+              aria-hidden="true"
+            />
+          )}
           <rect
             x="-12"
             y="-12"
@@ -986,7 +1062,7 @@ export default function OrderBookClient(): JSX.Element {
               type="button"
               onClick={() => setMotionEnabled((enabled) => !enabled)}
               className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[11px] font-medium text-text-secondary hover:text-text-primary"
-              aria-pressed={!motionEnabled}
+              aria-pressed={motionEnabled}
             >
               {motionEnabled ? <PauseIcon className="h-3.5 w-3.5" /> : <PlayIcon className="h-3.5 w-3.5" />}
               Motion {motionEnabled ? 'on' : 'off'}

@@ -88,6 +88,45 @@
   --animate-shimmer: shimmer 1.8s linear infinite;
   --animate-pulse-dot: pulse-dot 2.4s ease-in-out infinite;
 
+  /* Arena motion. The order book updates every 3 s, so without an idle
+     animation the field is frozen between polls and then jumps. Each layer
+     animates a different property, so they compose instead of overwriting
+     each other: position transitions on the outer group, opacity fades on
+     the middle one, and the idle bob owns transform on the inner one. */
+  --animate-arena-enter: arena-enter 0.42s var(--ease-out-soft) both;
+  --animate-arena-idle: arena-idle 3s ease-in-out infinite;
+  --animate-arena-ripple: arena-ripple 1.1s var(--ease-out-soft) forwards;
+
+  @keyframes arena-enter {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes arena-idle {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-2.5px);
+    }
+  }
+
+  @keyframes arena-ripple {
+    from {
+      opacity: 0.55;
+      transform: scale(0.6);
+    }
+    to {
+      opacity: 0;
+      transform: scale(3.2);
+    }
+  }
+
   @keyframes rise {
     from {
       opacity: 0;
@@ -419,6 +458,21 @@ select option {
 
 @utility animate-rise {
   animation: var(--animate-rise);
+}
+
+@utility arena-enter {
+  animation: var(--animate-arena-enter);
+}
+
+@utility arena-idle {
+  animation: var(--animate-arena-idle);
+}
+
+@utility arena-ripple {
+  /* Scales about its own centre. Without this the SVG default origin (the
+     centre of the viewBox) would fling the ripple across the field. */
+  transform-origin: 0 0;
+  animation: var(--animate-arena-ripple);
 }
 
 @utility stagger-children {
