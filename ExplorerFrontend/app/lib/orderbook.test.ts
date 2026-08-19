@@ -1,5 +1,7 @@
 import {
   buildHistoricalPlays,
+  formatQrlQuantity,
+  formatQrlTradeSize,
   buildGroupedLadder,
   buildLadder,
   calculateBookStats,
@@ -146,5 +148,57 @@ describe('order-book calculations', () => {
     expect(plays[0].yards).toBeCloseTo(-3);
     expect(plays[1].quantity).toBe(3);
     expect(plays[1].executionCount).toBe(2);
+  });
+});
+
+describe('formatQrlQuantity', () => {
+  it('renders a whole number at every size a bucket realistically takes', () => {
+    // Reported from the live ladder: one sub-100 bucket grew two decimals
+    // while its neighbours stayed whole, so the column read as broken.
+    expect(formatQrlQuantity(13.93)).toBe('14');
+    expect(formatQrlQuantity(92.06)).toBe('92');
+    expect(formatQrlQuantity(377)).toBe('377');
+    expect(formatQrlQuantity(1152.4)).toBe('1,152');
+    expect(formatQrlQuantity(13454)).toBe('13,454');
+  });
+
+  it('formats a whole column at one precision', () => {
+    const column = [13.93, 92.06, 377, 1152.4, 13454].map(formatQrlQuantity);
+    for (const cell of column) {
+      expect(cell).not.toContain('.');
+    }
+  });
+
+  it('keeps the fraction below 1 QRL, where it is the only information there is', () => {
+    expect(formatQrlQuantity(0.5)).toBe('0.5');
+    expect(formatQrlQuantity(0.42)).toBe('0.42');
+    expect(formatQrlQuantity(1)).toBe('1');
+  });
+
+  it('labels dust rather than rounding it to a misleading zero', () => {
+    expect(formatQrlQuantity(0.004)).toBe('<0.01');
+    expect(formatQrlQuantity(0)).toBe('0');
+  });
+
+  it('degrades to an ellipsis on a non-finite value', () => {
+    expect(formatQrlQuantity(Number.NaN)).toBe('...');
+    expect(formatQrlQuantity(Number.POSITIVE_INFINITY)).toBe('...');
+  });
+});
+
+describe('formatQrlTradeSize', () => {
+  it('keeps two decimals on an individual print, where the fraction is real', () => {
+    // Rounding one execution to a whole number misstates it: 7.75 is not 8.
+    expect(formatQrlTradeSize(7.75)).toBe('7.75');
+    expect(formatQrlTradeSize(41.88)).toBe('41.88');
+  });
+
+  it('holds the same precision at every magnitude so the column is one shape', () => {
+    const column = [7.75, 41.88, 250, 1195.5].map(formatQrlTradeSize);
+    expect(column).toEqual(['7.75', '41.88', '250.00', '1,195.50']);
+  });
+
+  it('degrades to an ellipsis on a non-finite value', () => {
+    expect(formatQrlTradeSize(Number.NaN)).toBe('...');
   });
 });

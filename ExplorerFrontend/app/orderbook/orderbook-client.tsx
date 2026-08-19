@@ -20,6 +20,7 @@ import {
   calculateYardValue,
   formatMarketPrice,
   formatQrlQuantity,
+  formatQrlTradeSize,
   markerScale,
   marketTradeKey,
   PRICE_GROUPINGS,
@@ -666,7 +667,7 @@ function RecentTrades({ trades }: { trades: MarketTrade[] }): JSX.Element {
                   {trade.aggressorSide}
                 </td>
                 <td className="py-1.5 text-right text-text-primary">{formatMarketPrice(numeric(trade.price))}</td>
-                <td className="py-1.5 text-right text-text-secondary">{formatQrlQuantity(numeric(trade.quantity))}</td>
+                <td className="py-1.5 text-right text-text-secondary">{formatQrlTradeSize(numeric(trade.quantity))}</td>
               </tr>
             ))}
           </tbody>

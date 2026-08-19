@@ -379,10 +379,39 @@ export function formatMarketPrice(value: number): string {
   });
 }
 
+/**
+ * Formats a QRL quantity for a column of quantities.
+ *
+ * Precision is decided by magnitude bands rather than per value. Choosing it
+ * per value (the old `value < 100 ? 2 : 0`) meant one bucket under the
+ * threshold grew two decimals while its neighbours stayed whole, so a ladder
+ * column read as "13.93" next to "1,152" and looked broken.
+ *
+ * At or above 1 QRL the fraction is noise next to the bucket size, so the
+ * value is whole. Below 1 the fraction is the only information present, so it
+ * is kept, and dust that would round to a misleading "0" is labelled instead.
+ */
 export function formatQrlQuantity(value: number): string {
   if (!Number.isFinite(value)) return '...';
+  if (value > 0 && value < 0.01) return '<0.01';
   return value.toLocaleString('en-US', {
     minimumFractionDigits: 0,
-    maximumFractionDigits: value < 100 ? 2 : 0,
+    maximumFractionDigits: Math.abs(value) < 1 ? 2 : 0,
+  });
+}
+
+/**
+ * Formats a single execution's size for the trade tape.
+ *
+ * Precision is fixed at two decimals at every magnitude. An individual print
+ * is small and its fraction is real information (7.75 QRL is not 8), so it
+ * keeps the decimals that formatQrlQuantity drops for aggregates, and it
+ * keeps them on every row so the column stays one shape.
+ */
+export function formatQrlTradeSize(value: number): string {
+  if (!Number.isFinite(value)) return '...';
+  return value.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
 }
