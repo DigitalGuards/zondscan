@@ -172,7 +172,7 @@ export default function Page(): JSX.Element {
             Blockchain Quantum Readiness Index
           </a>{' '}
           scores over a hundred chains on quantum readiness using a published methodology, and
-          places QRL among the handful of projects in its top quantum-ready tier.
+          shows where QRL and the major chains land.
         </p>
         <Callout type="warning" title="Testnet status">
           <p>

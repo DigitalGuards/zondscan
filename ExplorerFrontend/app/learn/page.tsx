@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
 import { sharedMetadata } from '../lib/seo/metaData';
 import {
   LEARN_CATEGORIES,
@@ -36,7 +37,6 @@ interface ExternalResource {
   title: string;
   description: string;
   href: string;
-  domain: string;
 }
 
 const EXTERNAL_RESOURCES: readonly ExternalResource[] = [
@@ -45,16 +45,64 @@ const EXTERNAL_RESOURCES: readonly ExternalResource[] = [
     description:
       'A community-maintained directory of projects, tools, services, and resources across QRL 1.x and QRL 2.0, with a submission process for new entries.',
     href: 'https://www.qrlecosystem.com/',
-    domain: 'qrlecosystem.com',
   },
   {
     title: 'Blockchain Quantum Readiness Index',
     description:
-      'An independent index that scores over a hundred blockchains on quantum readiness, with per-project reports and a published methodology. QRL sits in its top quantum-ready tier.',
+      'An independent index that scores over a hundred blockchains on quantum readiness, with per-project reports and a published methodology.',
     href: 'https://qrindex.org/',
-    domain: 'qrindex.org',
   },
 ];
+
+/** Bare hostname shown as the card footer for an external resource. */
+function resourceDomain(href: string): string {
+  return new URL(href).hostname.replace(/^www\./, '');
+}
+
+interface LearnCardProps {
+  href: string;
+  title: string;
+  description: string;
+  /** Footer line: reading time for articles, domain for external links. */
+  meta: string;
+  external?: boolean;
+}
+
+/** One card in the /learn grids; internal articles and external links share it. */
+function LearnCard({ href, title, description, meta, external }: LearnCardProps): JSX.Element {
+  const cardClass = 'card card-hover p-5 flex flex-col group';
+  const body = (
+    <>
+      <h3 className="font-display text-base font-semibold text-text-primary group-hover:text-accent transition-colors mb-2">
+        {title}
+        {external ? (
+          <>
+            <span className="sr-only"> (opens in a new tab)</span>
+            <ArrowTopRightOnSquareIcon
+              className="w-3.5 h-3.5 text-text-muted inline-block ml-1.5 align-baseline flex-shrink-0"
+              aria-hidden="true"
+            />
+          </>
+        ) : null}
+      </h3>
+      <p className="text-sm text-text-secondary leading-relaxed flex-1">{description}</p>
+      <p className="text-xs text-text-muted mt-4">{meta}</p>
+    </>
+  );
+
+  if (external) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className={cardClass}>
+        {body}
+      </a>
+    );
+  }
+  return (
+    <Link href={href} className={cardClass}>
+      {body}
+    </Link>
+  );
+}
 
 export default function LearnIndexPage(): JSX.Element {
   return (
@@ -90,21 +138,13 @@ export default function LearnIndexPage(): JSX.Element {
             <p className="text-sm text-text-secondary mb-4">{category.blurb}</p>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {articles.map((article) => (
-                <Link
+                <LearnCard
                   key={article.slug}
                   href={`/learn/${article.slug}`}
-                  className="card card-hover p-5 flex flex-col group"
-                >
-                  <h3 className="font-display text-base font-semibold text-text-primary group-hover:text-accent transition-colors mb-2">
-                    {article.title}
-                  </h3>
-                  <p className="text-sm text-text-secondary leading-relaxed flex-1">
-                    {article.description}
-                  </p>
-                  <p className="text-xs text-text-muted mt-4">
-                    {article.readingMinutes} min read
-                  </p>
-                </Link>
+                  title={article.title}
+                  description={article.description}
+                  meta={`${article.readingMinutes} min read`}
+                />
               ))}
             </div>
           </section>
@@ -116,26 +156,19 @@ export default function LearnIndexPage(): JSX.Element {
           Further reading
         </h2>
         <p className="text-sm text-text-secondary mb-4">
-          Independent sites worth bookmarking once you have the basics down. Both are
-          maintained outside ZondScan.
+          Independent sites worth bookmarking once you have the basics down. These
+          are maintained outside ZondScan and open in a new tab.
         </p>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {EXTERNAL_RESOURCES.map((resource) => (
-            <a
+            <LearnCard
               key={resource.href}
               href={resource.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="card card-hover p-5 flex flex-col group"
-            >
-              <h3 className="font-display text-base font-semibold text-text-primary group-hover:text-accent transition-colors mb-2">
-                {resource.title}
-              </h3>
-              <p className="text-sm text-text-secondary leading-relaxed flex-1">
-                {resource.description}
-              </p>
-              <p className="text-xs text-text-muted mt-4">{resource.domain}</p>
-            </a>
+              title={resource.title}
+              description={resource.description}
+              meta={resourceDomain(resource.href)}
+              external
+            />
           ))}
         </div>
       </section>
