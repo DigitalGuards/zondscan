@@ -166,6 +166,14 @@ export default function Page(): JSX.Element {
           Consensus is proof of stake on a beacon chain, covered in{' '}
           <a href="/learn/validators-and-epochs">validators and epochs</a>.
         </p>
+        <p>
+          For an outside view of where the wider industry stands, the independent{' '}
+          <a href="https://qrindex.org/" target="_blank" rel="noopener noreferrer">
+            Blockchain Quantum Readiness Index
+          </a>{' '}
+          scores over a hundred chains on quantum readiness using a published methodology, and
+          shows where QRL and the major chains land.
+        </p>
         <Callout type="warning" title="Testnet status">
           <p>
             QRL 2.0 currently runs as a public testnet, with mainnet planned after the migration
