@@ -32,6 +32,30 @@ export const metadata: Metadata = {
   },
 };
 
+interface ExternalResource {
+  title: string;
+  description: string;
+  href: string;
+  domain: string;
+}
+
+const EXTERNAL_RESOURCES: readonly ExternalResource[] = [
+  {
+    title: 'QRL Ecosystem Index',
+    description:
+      'A community-maintained directory of projects, tools, services, and resources across QRL 1.x and QRL 2.0, with a submission process for new entries.',
+    href: 'https://www.qrlecosystem.com/',
+    domain: 'qrlecosystem.com',
+  },
+  {
+    title: 'Blockchain Quantum Readiness Index',
+    description:
+      'An independent index that scores over a hundred blockchains on quantum readiness, with per-project reports and a published methodology. QRL sits in its top quantum-ready tier.',
+    href: 'https://qrindex.org/',
+    domain: 'qrindex.org',
+  },
+];
+
 export default function LearnIndexPage(): JSX.Element {
   return (
     <div className="page-content py-4 sm:py-6 lg:py-8">
@@ -86,6 +110,35 @@ export default function LearnIndexPage(): JSX.Element {
           </section>
         );
       })}
+
+      <section aria-labelledby="learn-external-resources" className="mb-10">
+        <h2 id="learn-external-resources" className="section-title mb-1">
+          Further reading
+        </h2>
+        <p className="text-sm text-text-secondary mb-4">
+          Independent sites worth bookmarking once you have the basics down. Both are
+          maintained outside ZondScan.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {EXTERNAL_RESOURCES.map((resource) => (
+            <a
+              key={resource.href}
+              href={resource.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="card card-hover p-5 flex flex-col group"
+            >
+              <h3 className="font-display text-base font-semibold text-text-primary group-hover:text-accent transition-colors mb-2">
+                {resource.title}
+              </h3>
+              <p className="text-sm text-text-secondary leading-relaxed flex-1">
+                {resource.description}
+              </p>
+              <p className="text-xs text-text-muted mt-4">{resource.domain}</p>
+            </a>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
