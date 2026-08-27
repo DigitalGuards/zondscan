@@ -188,7 +188,7 @@ export default function Page(): JSX.Element {
           and a fee. The 64-byte addresses live in the layer 2 state tree, so they never repeat in
           calldata, and the signature never touches the base layer because the proof attests that
           it was checked. At 16 gas per byte a transfer costs 256 gas of data. A batch made of one
-          2<sup>20</sup> proof and two data transactions of about 123 KB each costs about 8.4
+          2<sup>20</sup> proof and two data transactions of about 123 KB each costs about 8.3
           million gas and carries about 15,400 transfers, roughly 540 gas per transfer, about 39
           times below the 21,000 gas of a native transfer. With recursion, where many batch proofs
           are aggregated into one on-chain proof, the cost approaches the calldata floor of about
@@ -232,7 +232,7 @@ export default function Page(): JSX.Element {
           public network decides the per-second numbers. One caveat comes with them: a single
           2<sup>20</sup> trace holds about 1,000 to 3,500 signed transfers, so the data-bound rows
           need recursion before they are reachable. Without it the fixed verifier cost dominates
-          and a transfer costs 1,500 to 4,200 gas, still 5 to 14 times below the base layer.
+          and a transfer costs 1,500 to 3,600 gas, still 6 to 14 times below the base layer.
         </p>
         <p>
           The study also priced the alternative of keeping data off chain with a committee, a
