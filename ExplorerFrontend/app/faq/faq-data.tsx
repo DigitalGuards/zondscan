@@ -220,6 +220,28 @@ export const faqs: FaqItem[] = [
       'QRL 2.0 keeps the developer experience of Ethereum: the execution layer, gqrl, comes from the go-ethereum lineage and is fully EVM compatible, and consensus runs on a proof of stake beacon chain (qrysm, a fork of Prysm). The signature layer is where the two chains diverge. Ethereum secures accounts with ECDSA. QRL 2.0 secures them with the post-quantum ML-DSA-87 scheme, uses Q-prefixed addresses, and denominates amounts in Quanta (1 Quanta = 10^9 Shor = 10^18 Planck).',
   },
   {
+    id: 'scaling',
+    q: 'Can QRL 2.0 scale beyond the base layer?',
+    a: (
+      <>
+        The base layer settles about 950 transfers per block: every
+        transaction carries a 7.2 KB ML-DSA-87 signature envelope and the
+        block gas cap is 20 million. The QRL 2.0 virtual machine has no
+        pairing precompiles, so the validity proofs it can verify are STARKs,
+        which are post-quantum by construction. QuantaStark, a DigitalGuards
+        research project, measured a Hyperion STARK verifier at 2.2 to 4.4
+        million gas per proof on a local QRL 2.0 network, enough for a
+        validity rollup at roughly 540 gas per transfer. Read{' '}
+        <Link href="/learn/scaling-qrl-with-stark-proofs" className={LINK}>
+          scaling QRL 2.0 with post-quantum STARK proofs
+        </Link>
+        .
+      </>
+    ),
+    aText:
+      'The base layer settles about 950 transfers per block: every transaction carries a 7.2 KB ML-DSA-87 signature envelope and the block gas cap is 20 million. The QRL 2.0 virtual machine has no pairing precompiles, so the validity proofs it can verify are STARKs, which are post-quantum by construction. QuantaStark, a DigitalGuards research project, measured a Hyperion STARK verifier at 2.2 to 4.4 million gas per proof on a local QRL 2.0 network, enough for a validity rollup at roughly 540 gas per transfer.',
+  },
+  {
     id: 'which-wallet',
     q: 'Which wallet should I use?',
     a: (
