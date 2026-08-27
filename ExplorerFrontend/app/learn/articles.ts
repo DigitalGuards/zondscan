@@ -82,7 +82,7 @@ export const learnArticles: LearnArticleMeta[] = [
     slug: 'scaling-qrl-with-stark-proofs',
     title: 'Scaling QRL 2.0 with post-quantum STARK proofs',
     description:
-      'What a STARK validity proof is, why it is the only proof the QRL 2.0 virtual machine can verify, what the QuantaStark research project measured on a 64-byte test network, and what that means for a post-quantum layer 2.',
+      'What a STARK validity proof is, why hash-based STARKs are the proofs QRL 2.0 can verify, and what QuantaStark measured for a post-quantum layer 2.',
     category: 'basics',
     order: 4,
     updated: '2026-08-27',

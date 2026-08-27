@@ -224,11 +224,11 @@ export const faqs: FaqItem[] = [
     q: 'Can QRL 2.0 scale beyond the base layer?',
     a: (
       <>
-        The base layer settles about 950 transfers per block: every
-        transaction carries a 7.2 KB ML-DSA-87 signature envelope and the
-        block gas cap is 20 million. The QRL 2.0 virtual machine has no
-        pairing precompiles, so the validity proofs it can verify are STARKs,
-        which are post-quantum by construction. QuantaStark, a DigitalGuards
+        The base layer settles about 950 transfers per block (a 20 million
+        gas cap at 21,000 gas each), and every one of them carries a 7.2 KB
+        ML-DSA-87 signature envelope. The QRL 2.0 virtual machine has no
+        pairing precompiles, so the validity proofs it can verify are
+        hash-based STARKs, which are post-quantum by construction. QuantaStark, a DigitalGuards
         research project, measured a Hyperion STARK verifier at 2.2 to 4.4
         million gas per proof on a local QRL 2.0 network, enough for a
         validity rollup at roughly 540 gas per transfer. Read{' '}
@@ -239,7 +239,7 @@ export const faqs: FaqItem[] = [
       </>
     ),
     aText:
-      'The base layer settles about 950 transfers per block: every transaction carries a 7.2 KB ML-DSA-87 signature envelope and the block gas cap is 20 million. The QRL 2.0 virtual machine has no pairing precompiles, so the validity proofs it can verify are STARKs, which are post-quantum by construction. QuantaStark, a DigitalGuards research project, measured a Hyperion STARK verifier at 2.2 to 4.4 million gas per proof on a local QRL 2.0 network, enough for a validity rollup at roughly 540 gas per transfer.',
+      'The base layer settles about 950 transfers per block (a 20 million gas cap at 21,000 gas each), and every one of them carries a 7.2 KB ML-DSA-87 signature envelope. The QRL 2.0 virtual machine has no pairing precompiles, so the validity proofs it can verify are hash-based STARKs, which are post-quantum by construction. QuantaStark, a DigitalGuards research project, measured a Hyperion STARK verifier at 2.2 to 4.4 million gas per proof on a local QRL 2.0 network, enough for a validity rollup at roughly 540 gas per transfer.',
   },
   {
     id: 'which-wallet',

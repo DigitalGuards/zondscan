@@ -19,8 +19,8 @@ export default function Page(): JSX.Element {
         post-quantum guarantees of the base layer intact.
       </p>
       <p>
-        This article explains validity proofs in plain English, why the STARK family is the only
-        kind of proof the QRL 2.0 virtual machine can check, what the QuantaStark research project
+        This article explains validity proofs in plain English, why the STARK family, whose proofs are
+        built from hashes, is the kind of proof the QRL 2.0 virtual machine can check, what the QuantaStark research project
         measured on a local QRL 2.0 network, and what those measurements mean for a layer 2 built
         on QRL.
       </p>
@@ -38,13 +38,14 @@ export default function Page(): JSX.Element {
           Two figures fix the throughput of the base layer. The consensus rules cap a block at
           20,000,000 gas, and a native transfer costs 21,000 gas, so a full block carries 952
           transfers and about 6.9 MB of ML-DSA-87 keys and signatures. The second figure is the
-          slot time. The local network used for the QuantaStark measurements seals a block every 6
-          seconds; the mainnet parameter set of the consensus client specifies 60-second slots,
+          slot time. The Kurtosis test network the project uses as its release gate runs 6-second slots;
+          the mainnet parameter set of the consensus client specifies 60-second slots,
           and the public network is expected to follow it. At 60 seconds per slot the base layer
           settles about 16 transfers per second, at 6 seconds about 160.
         </p>
         <p>
-          A chain can raise those numbers in two ways. Bigger blocks push out the home validators
+          A chain can raise those numbers in two ways. Bigger blocks tend to push out the home
+          validators
           that keep the network decentralized. Verifying more work per unit of gas keeps blocks
           small and moves the heavy lifting off chain, and that is what validity proofs do.
         </p>
@@ -84,11 +85,13 @@ export default function Page(): JSX.Element {
         </p>
         <p>
           On QRL there is a second, decisive reason to pick STARKs. The QRL 2.0 virtual machine
-          has no pairing precompiles. Its precompile set covers the beacon deposit root, SHA-256,
+          has no pairing precompiles. On the 64-byte network the verifier targets, the precompile
+          set covers the beacon deposit root, SHA-256,
           ML-DSA-87 signature verification, identity, modular exponentiation and SHAKE256, and
-          nothing in it touches an elliptic curve. A SNARK verifier cannot run there at any gas
-          price. A STARK verifier needs hashing and arithmetic in a finite field, and both are
-          cheap on the QRVM: keccak256 is an opcode that costs 30 gas plus 6 per 64-byte word.
+          nothing in it touches an elliptic curve. A pairing-based SNARK verifier cannot run
+          there at any gas price. A STARK verifier needs hashing and arithmetic in a finite field, and both are
+          cheap on the QRVM: keccak256 is an opcode that costs 30 gas plus 6 per 64-byte word on
+          that network.
         </p>
       </LearnSection>
 
@@ -113,8 +116,8 @@ export default function Page(): JSX.Element {
 
       <LearnSection id="what-was-measured" title="What was measured">
         <p>
-          The benchmark statement is a Fibonacci computation, chosen because it is small enough to
-          audit by hand while exercising every part of the verifier. The trace size is the number
+          The benchmark statement is the Fibonacci example that ships with Plonky3, which exercises
+          every phase of the verifier. The trace size is the number
           of rows the proof attests. The figures are whole transactions on a gqrl developer node
           at optimizer runs 200 with preset c3: 34 FRI queries, blowup 8 and 16 proof-of-work bits,
           about 118 conjectured bits of security (the provable bound is lower, and the project
@@ -122,12 +125,13 @@ export default function Page(): JSX.Element {
         </p>
         <div className="overflow-x-auto">
           <table>
+            <caption className="sr-only">Measured c3 verification cost by trace size</caption>
             <thead>
               <tr>
-                <th>Trace rows</th>
-                <th>Proof size</th>
-                <th>Transaction gas</th>
-                <th>Inside the verifier</th>
+                <th scope="col">Trace rows</th>
+                <th scope="col">Proof size</th>
+                <th scope="col">Transaction gas</th>
+                <th scope="col">Inside the verifier</th>
               </tr>
             </thead>
             <tbody>
@@ -152,8 +156,10 @@ export default function Page(): JSX.Element {
         </div>
         <p>
           Both cells sit far below the project&apos;s 8,000,000 gas target and the 20,000,000
-          block cap. The gas report was also run on a full Kurtosis network with an execution
-          client, beacon node and validators, and it matched the developer node cell for cell. The
+          block cap. An earlier run of the gas report on a full Kurtosis network with an
+          execution client, beacon node and validators matched the developer node cell for cell;
+          the cells above are the developer node measurements of 27 August 2026, taken after the
+          latest transcript change. The
           verifier compiles to 14,850 bytes of runtime code against the 24,576-byte contract size
           cap. About a third of the transaction cost is calldata, the proof bytes themselves, and
           that share grows with the trace because Merkle authentication paths grow with tree
@@ -162,9 +168,9 @@ export default function Page(): JSX.Element {
         <p>
           The binding limit is transaction size. The transaction pool of the execution client
           refuses transactions above 131,072 bytes, so a single proof tops out near 123 KB, which
-          the c3 preset reaches somewhere between 2<sup>20</sup> and 2<sup>22</sup> rows. Gas alone
-          would allow c3 proofs up to 2<sup>28</sup> rows. Two ways past the size cap exist:
-          recursion, which keeps the final proof small regardless of how much work it attests, and
+          the c3 preset reaches somewhere between 2<sup>20</sup> and 2<sup>22</sup> rows. The project&apos;s 8,000,000 gas
+          target alone would allow c3 proofs up to 2<sup>28</sup> rows by the model. The study
+          prefers two ways past the size cap: recursion, which keeps the final proof small regardless of how much work it attests, and
           staged verification, which splits one proof across several transactions through the fact
           registry.
         </p>
@@ -190,12 +196,13 @@ export default function Page(): JSX.Element {
         </p>
         <div className="overflow-x-auto">
           <table>
+            <caption className="sr-only">Modelled transfers per slot by configuration</caption>
             <thead>
               <tr>
-                <th>Configuration</th>
-                <th>Transfers per slot</th>
-                <th>At 60 s slots</th>
-                <th>At 6 s slots</th>
+                <th scope="col">Configuration</th>
+                <th scope="col">Transfers per slot</th>
+                <th scope="col">At 60 s slots</th>
+                <th scope="col">At 6 s slots</th>
               </tr>
             </thead>
             <tbody>
@@ -231,15 +238,16 @@ export default function Page(): JSX.Element {
           The study also priced the alternative of keeping data off chain with a committee, a
           validium. Each committee attestation is an ML-DSA-87 signature that costs about 245,000
           gas to verify on the base layer, so a 5-of-7 attestation costs as much as 76 KB of
-          calldata, and it adds a trust assumption a post-quantum chain should avoid. The rollup
-          wins on both counts.
+          calldata. Below about 4,800 transfers per batch the rollup is cheaper on gas as well;
+          above that the validium saves gas by adding a trust assumption a post-quantum chain
+          should avoid, which is why the study recommends the rollup.
         </p>
       </LearnSection>
 
       <LearnSection id="what-is-still-open" title="What is still open">
         <p>
           Three problems sit between the measured verifier and a usable layer 2, and the
-          project&apos;s roadmap addresses them in order.
+          project&apos;s roadmap covers all three.
         </p>
         <ul>
           <li>
@@ -288,9 +296,9 @@ export default function Page(): JSX.Element {
             under GPL-3.0.
           </li>
           <li>
-            Once the verifier is deployed on the public testnet, its contracts will be published as
-            verified source on ZondScan, and every verification transaction can be read field by
-            field with <a href="/learn/read-a-transaction">how to read a transaction</a>. The gas
+            Once the verifier is deployed on the public testnet, the plan is to publish its contracts
+            as verified source on ZondScan, so that every verification transaction can be read
+            field by field with <a href="/learn/read-a-transaction">how to read a transaction</a>. The gas
             used on that page is the number this article is about.
           </li>
         </ul>
@@ -310,7 +318,7 @@ export default function Page(): JSX.Element {
             ),
           },
           {
-            q: 'Why can QRL 2.0 verify STARKs and no SNARKs?',
+            q: 'Why is a STARK the kind of proof QRL 2.0 can verify?',
             a: (
               <p>
                 Pairing-based SNARK verifiers need elliptic curve precompiles, and the QRL 2.0
