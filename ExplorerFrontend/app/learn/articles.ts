@@ -33,7 +33,7 @@ export const LEARN_CATEGORIES: Record<
   basics: {
     label: 'QRL 2.0 basics',
     blurb:
-      'The core ideas behind the chain: proof of stake consensus, post-quantum signatures, and the units amounts are counted in.',
+      'The core ideas behind the chain: proof of stake consensus, post-quantum signatures, the units amounts are counted in, and how validity proofs could scale it.',
   },
   explorer: {
     label: 'Using the explorer',
@@ -77,6 +77,16 @@ export const learnArticles: LearnArticleMeta[] = [
     order: 3,
     updated: '2026-08-05',
     readingMinutes: 4,
+  },
+  {
+    slug: 'scaling-qrl-with-stark-proofs',
+    title: 'Scaling QRL 2.0 with post-quantum STARK proofs',
+    description:
+      'What a STARK validity proof is, why hash-based STARKs are the proofs QRL 2.0 can verify, and what QuantaStark measured for a post-quantum layer 2.',
+    category: 'basics',
+    order: 4,
+    updated: '2026-08-27',
+    readingMinutes: 9,
   },
   {
     slug: 'read-a-transaction',
