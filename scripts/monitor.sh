@@ -79,6 +79,43 @@ if [ -n "$CUR_BTIME" ]; then
     fi
 fi
 
+# --- Disk space ---
+# A full filesystem takes this box down by degrees rather than all at once:
+# gqrl refuses to start below ~1GiB free and shuts itself down cleanly to avoid
+# corrupting its database, the beacon wedges mid-write and loses all its peers,
+# and every check below then fails for reasons that look unrelated to disk. On
+# 2026-08-20 the beacon DB filled / and the first signal anyone got was gqrl
+# already being down. Percentages on a 150G disk give days of lead time, so
+# warn early and alert loudly.
+#
+# MONITOR_DISK_MOUNTS is a space-separated list; set it to cover data volumes
+# mounted outside / (the beacon DB now lives on its own volume). Keeping the
+# mount paths in the environment rather than here leaves box-specific layout
+# out of this repo.
+DISK_WARN_PCT="${MONITOR_DISK_WARN_PCT:-85}"
+DISK_CRIT_PCT="${MONITOR_DISK_CRIT_PCT:-92}"
+
+for MOUNT in ${MONITOR_DISK_MOUNTS:-/}; do
+    [ -d "$MOUNT" ] || continue
+
+    # -P forces single-line POSIX output so awk sees one row per filesystem
+    # regardless of how long the device name is.
+    read -r USE_PCT AVAIL_H <<<"$(df -P -h "$MOUNT" 2>/dev/null | awk 'NR==2 {gsub(/%/,"",$5); print $5, $4}')"
+    [[ "$USE_PCT" =~ ^[0-9]+$ ]] || continue
+
+    DISK_KEY="${MOUNT//[^a-zA-Z0-9]/_}"
+
+    if [ "$USE_PCT" -ge "$DISK_CRIT_PCT" ]; then
+        alert "disk-crit-$DISK_KEY" "**Disk critical**: \`$MOUNT\` is ${USE_PCT}% full (${AVAIL_H} free). gqrl self-stops below 1GiB free."
+    elif [ "$USE_PCT" -ge "$DISK_WARN_PCT" ]; then
+        resolve "disk-crit-$DISK_KEY" "Disk \`$MOUNT\` back below ${DISK_CRIT_PCT}% (${USE_PCT}%, ${AVAIL_H} free)"
+        alert "disk-warn-$DISK_KEY" "**Disk filling**: \`$MOUNT\` is ${USE_PCT}% full (${AVAIL_H} free)"
+    else
+        resolve "disk-crit-$DISK_KEY" "Disk \`$MOUNT\` recovered (${USE_PCT}%, ${AVAIL_H} free)"
+        resolve "disk-warn-$DISK_KEY" "Disk \`$MOUNT\` back below ${DISK_WARN_PCT}% (${USE_PCT}%, ${AVAIL_H} free)"
+    fi
+done
+
 # --- PM2 Process Checks ---
 for proc in synchroniser handler frontend; do
     status=$(pm2 jlist 2>/dev/null | python3 -c "
