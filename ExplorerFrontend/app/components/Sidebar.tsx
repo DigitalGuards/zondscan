@@ -26,6 +26,7 @@ import {
   WalletIcon,
   CubeTransparentIcon,
   ChartBarSquareIcon,
+  ScaleIcon,
 } from '@heroicons/react/24/outline'
 
 interface NavItem {
@@ -65,7 +66,8 @@ const navGroups: NavGroup[] = [
       { name: 'Order Book Arena', href: '/orderbook', icon: ChartBarSquareIcon },
       { name: 'Balance Checker', href: '/checker', icon: MagnifyingGlassIcon },
       { name: 'Testnet Faucet', href: '/faucet', icon: BeakerIcon },
-      { name: 'Unit Converter', href: '/converter', icon: CalculatorIcon },
+      { name: 'Staking Calculator', href: '/staking-calculator', icon: CalculatorIcon },
+      { name: 'Unit Converter', href: '/converter', icon: ScaleIcon },
       { name: 'Richlist', href: '/richlist', icon: TrophyIcon },
     ],
   },

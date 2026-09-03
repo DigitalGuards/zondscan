@@ -40,6 +40,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     entry('/learn', 'weekly', 0.7),
     entry('/richlist', 'daily', 0.6),
     entry('/faucet', 'monthly', 0.6),
+    entry('/staking-calculator', 'weekly', 0.7),
     entry('/converter', 'yearly', 0.5),
     entry('/api-explorer', 'monthly', 0.5),
     entry('/verify-contract', 'monthly', 0.5),
