@@ -142,7 +142,7 @@ export default function MobileNavigation({ pathname, onNavigate }: MobileNavigat
                     <CheckIcon className="size-4 shrink-0 text-accent" aria-hidden="true" />
                   ) : (
                     <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px]">
-                      {t(network.id === 'testnet-v3' ? 'Upcoming' : 'Coming later')}
+                      {t(network.status === 'live' ? 'Devnet' : 'Coming later')}
                     </span>
                   )}
                 </>
@@ -157,6 +157,14 @@ export default function MobileNavigation({ pathname, onNavigate }: MobileNavigat
                   >
                     {content}
                   </span>
+                );
+              }
+
+              if (network.status === 'live' && network.href) {
+                return (
+                  <a key={network.id} href={network.href} className={rowClassName}>
+                    {content}
+                  </a>
                 );
               }
 
