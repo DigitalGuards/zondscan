@@ -7,6 +7,9 @@ import config from '../../config';
 import Badge from '../components/Badge';
 import { formatGasPrice, hexToBigInt, hexToNumber, formatBigGas } from '../lib/helpers';
 import { palette, chartTheme } from '../lib/theme';
+import { usePreferences } from '../components/PreferencesProvider';
+import type { TimeZonePreference } from '../lib/preferences';
+import { useDisplayCurrency } from '../components/useDisplayCurrency';
 
 interface GasSummary {
   avgGasPriceHex: string;
@@ -48,14 +51,6 @@ function gasCostUsd(gasPriceHex: string | undefined, gasUnits: number, qrlUsd: n
   return qrl * qrlUsd;
 }
 
-function formatUsdCost(usd: number | null): string {
-  if (usd === null) return '…';
-  if (usd === 0) return '$0';
-  if (usd < 0.000001) return `$${usd.toExponential(2)}`;
-  if (usd < 0.01) return `$${usd.toFixed(8).replace(/0+$/, '').replace(/\.$/, '')}`;
-  return `$${usd.toFixed(4)}`;
-}
-
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }): JSX.Element {
   return (
     <div className="card p-4">
@@ -66,15 +61,16 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
   );
 }
 
-function formatAxisTick(unixSec: number, range: '24h' | '7d'): string {
+function formatAxisTick(unixSec: number, range: '24h' | '7d', timeZone: TimeZonePreference): string {
   const d = new Date(unixSec * 1000);
   if (range === '7d') {
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: timeZone === 'utc' ? 'UTC' : undefined });
   }
-  return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC', hour12: false });
+  return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: timeZone === 'utc' ? 'UTC' : undefined, hour12: false });
 }
 
 function GasUsedChart({ rows, range }: { rows: GasHistoryRow[]; range: '24h' | '7d' }): JSX.Element {
+  const { preferences } = usePreferences();
   // Inline SVG line+area chart. Self-contained so we don't fight with
   // AreaChart's block-shape coupling.
   const points = useMemo(() => {
@@ -137,7 +133,7 @@ function GasUsedChart({ rows, range }: { rows: GasHistoryRow[]; range: '24h' | '
         {/* X labels */}
         {xTicks.map((t, i) => (
           <text key={i} x={sx(t)} y={h - 8} textAnchor="middle" fontSize="10" fill={chartTheme.tickLabel} fontFamily={chartTheme.fontFamily}>
-            {formatAxisTick(t, range)}
+            {formatAxisTick(t, range, preferences.timeZone)}
           </text>
         ))}
       </svg>
@@ -193,6 +189,7 @@ function HistogramChart({ buckets }: { buckets: GasSummary['gasPriceHistogram'] 
 }
 
 export default function GasClient(): JSX.Element {
+  const fiat = useDisplayCurrency();
   const [range, setRange] = useState<'24h' | '7d'>('24h');
 
   // Polling via TanStack Query so backgrounded tabs go quiet (the previous
@@ -266,7 +263,7 @@ export default function GasClient(): JSX.Element {
         <StatCard
           label="Avg Gas Price"
           value={summary ? `${formatGasPrice(summary.avgGasPriceHex)} Shor` : '…'}
-          sub={summary ? `≈ ${formatUsdCost(gasCostUsd(summary.avgGasPriceHex, 21000, summary.qrlUsdPrice))} per transfer` : 'median of last 20 transactions'}
+          sub={summary ? `≈ ${fiat.format(gasCostUsd(summary.avgGasPriceHex, 21000, summary.qrlUsdPrice), { maximumFractionDigits: 8 })} per transfer` : 'median of last 20 transactions'}
         />
         <StatCard
           label="Avg Block Time"

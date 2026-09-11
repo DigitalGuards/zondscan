@@ -1,14 +1,16 @@
-import Link from 'next/link'
-import { ChevronRightIcon } from '@heroicons/react/20/solid'
+import InterfaceText from './InterfaceText';
+import Link from 'next/link';
+import { ChevronRightIcon } from '@heroicons/react/20/solid';
 
 export interface BreadcrumbItem {
-  label: string
-  href?: string
-  fullLabel?: string
+  label: string;
+  href?: string;
+  fullLabel?: string;
+  translateLabel?: boolean;
 }
 
 interface BreadcrumbsProps {
-  items: BreadcrumbItem[]
+  items: BreadcrumbItem[];
 }
 
 export default function Breadcrumbs({ items }: BreadcrumbsProps): JSX.Element {
@@ -17,11 +19,11 @@ export default function Breadcrumbs({ items }: BreadcrumbsProps): JSX.Element {
       <ol className="flex items-center flex-wrap gap-1 text-sm text-text-muted">
         <li>
           <Link href="/" className="hover:text-accent transition-colors">
-            Home
+            <InterfaceText text="Home" />
           </Link>
         </li>
         {items.map((item, index) => {
-          const isLast = index === items.length - 1
+          const isLast = index === items.length - 1;
           return (
             <li key={item.label} className="flex items-center gap-1">
               <ChevronRightIcon className="w-4 h-4 text-text-muted/60 flex-shrink-0" />
@@ -32,7 +34,7 @@ export default function Breadcrumbs({ items }: BreadcrumbsProps): JSX.Element {
                   aria-label={item.fullLabel}
                   title={item.fullLabel}
                 >
-                  {item.label}
+                  {item.translateLabel ? <InterfaceText text={item.label} /> : item.label}
                 </span>
               ) : (
                 <Link
@@ -41,13 +43,13 @@ export default function Breadcrumbs({ items }: BreadcrumbsProps): JSX.Element {
                   aria-label={item.fullLabel}
                   title={item.fullLabel}
                 >
-                  {item.label}
+                  {item.translateLabel ? <InterfaceText text={item.label} /> : item.label}
                 </Link>
               )}
             </li>
-          )
+          );
         })}
       </ol>
     </nav>
-  )
+  );
 }

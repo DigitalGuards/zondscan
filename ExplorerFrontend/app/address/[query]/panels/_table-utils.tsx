@@ -1,5 +1,7 @@
 'use client';
 
+import InterfaceText from '../../../components/InterfaceText';
+
 import { flexRender } from '@tanstack/react-table';
 import type { Cell, Header, HeaderGroup, Row, Table } from '@tanstack/react-table';
 
@@ -44,7 +46,7 @@ export const renderTableHeader = <T,>(table: Table<T>): JSX.Element[] => {
         >
           {header.isPlaceholder
             ? null
-            : flexRender(header.column.columnDef.header, header.getContext())}
+            : typeof header.column.columnDef.header === 'string' ? <InterfaceText text={header.column.columnDef.header} /> : flexRender(header.column.columnDef.header, header.getContext())}
         </th>
       ))}
     </tr>

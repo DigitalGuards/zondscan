@@ -21,15 +21,51 @@ import (
 
 const (
 	MEXCVenue      = "MEXC"
+	MEXCVenueID    = "mexc"
 	MEXCSymbol     = "QRLUSDT"
+	MEXCQuoteAsset = "USDT"
 	MEXCAPIBaseURL = "https://api.mexc.com"
 
-	marketDataLimit      = 100
-	maxDepthBodyBytes    = 128 << 10
+	// MEXC size bands in USDT notional. Sized from the observed QRLUSDT
+	// tape (median ~8, p90 ~49, max ~333 USDT per print), which puts
+	// roughly half of prints in small, a third in medium, and a tenth in
+	// large. Retune these if the pair's liquidity profile changes;
+	// historical rows keep the band they were classified into at write
+	// time, so a retune is not retroactive.
+	mexcMediumThresholdUSDT = 10
+	mexcLargeThresholdUSDT  = 100
+
+	mexcDepthPath  = "/api/v3/depth"
+	mexcTradesPath = "/api/v3/trades"
+	mexcTickerPath = "/api/v3/ticker/24hr"
+
+	marketDataLimit = 100
+
+	// depthLimit is how many price levels per side the order-book view
+	// fetches. 100 showed only about 10 grouped buckets a side at the 0.01
+	// grouping, which is less than the ladder can display, so the view was
+	// truncating the book rather than the book being that shallow. QRLUSDT
+	// currently rests around 340 bids and 1025 asks in total, so 500 covers
+	// the entire bid side and the part of the ask side anyone reads. The far
+	// tail is parasitic anyway (a bid near zero, asks into the millions), and
+	// the ladder walks outward from the touch, so that tail only surfaces if
+	// a reader asks for enough rows to reach it.
+	depthLimit = 500
+
+	maxDepthBodyBytes    = 512 << 10
 	maxTradesBodyBytes   = 256 << 10
 	maxTickerBodyBytes   = 32 << 10
 	maxDecimalCharacters = 128
 	maxTradeIDCharacters = 128
+
+	// The collector asks for a deeper tape than the order-book view needs.
+	// MEXC caps its public trade buffer well below this (about 200 prints
+	// for QRLUSDT, roughly 8 hours at current activity), so the request is
+	// a ceiling rather than an expectation, and the extra depth is what
+	// lets the collector miss polls without losing trades.
+	tradeTapeLimit    = 1000
+	maxTapeBodyBytes  = 1 << 20
+	tradeTapeMaxItems = 2000
 )
 
 var decimalPattern = regexp.MustCompile(`^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$`)
@@ -138,6 +174,32 @@ func NewMEXCClient(baseURL string, httpClient *http.Client) (*MEXCClient, error)
 	return &MEXCClient{baseURL: u, httpClient: httpClient}, nil
 }
 
+// ID, Name, Symbol, QuoteAsset, and SizeThresholds implement Venue. They are
+// constants rather than configuration: the venue a client reads is selected
+// from the registry, and nothing about a venue is settable per request.
+func (c *MEXCClient) ID() string         { return MEXCVenueID }
+func (c *MEXCClient) Name() string       { return MEXCVenue }
+func (c *MEXCClient) Symbol() string     { return MEXCSymbol }
+func (c *MEXCClient) QuoteAsset() string { return MEXCQuoteAsset }
+
+func (c *MEXCClient) SizeThresholds() SizeThresholds {
+	return SizeThresholds{Medium: mexcMediumThresholdUSDT, Large: mexcLargeThresholdUSDT}
+}
+
+// FetchTrades returns the venue's public trade tape, deepest first request
+// the upstream will serve. This is the collector's entry point; the
+// order-book view uses the shallower tape embedded in FetchOrderBook.
+func (c *MEXCClient) FetchTrades(ctx context.Context) ([]Trade, error) {
+	var raw []mexcTradeResponse
+	if err := c.fetchJSON(ctx, mexcTradesPath, tradeTapeLimit, maxTapeBodyBytes, &raw); err != nil {
+		return nil, err
+	}
+	if raw == nil {
+		return nil, errors.New("MEXC trades response must be an array")
+	}
+	return normalizeTrades(raw, tradeTapeMaxItems)
+}
+
 type mexcDepthResponse struct {
 	LastUpdateID *uint64    `json:"lastUpdateId"`
 	Bids         [][]string `json:"bids"`
@@ -173,13 +235,13 @@ func (c *MEXCClient) FetchOrderBook(ctx context.Context) (OrderBookSnapshot, err
 
 	g, fetchCtx := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		return c.fetchJSON(fetchCtx, "/api/v3/depth", marketDataLimit, maxDepthBodyBytes, &depth)
+		return c.fetchJSON(fetchCtx, mexcDepthPath, depthLimit, maxDepthBodyBytes, &depth)
 	})
 	g.Go(func() error {
-		return c.fetchJSON(fetchCtx, "/api/v3/trades", marketDataLimit, maxTradesBodyBytes, &trades)
+		return c.fetchJSON(fetchCtx, mexcTradesPath, marketDataLimit, maxTradesBodyBytes, &trades)
 	})
 	g.Go(func() error {
-		return c.fetchJSON(fetchCtx, "/api/v3/ticker/24hr", 0, maxTickerBodyBytes, &ticker)
+		return c.fetchJSON(fetchCtx, mexcTickerPath, 0, maxTickerBodyBytes, &ticker)
 	})
 	if err := g.Wait(); err != nil {
 		return OrderBookSnapshot{}, err
@@ -191,15 +253,15 @@ func (c *MEXCClient) FetchOrderBook(ctx context.Context) (OrderBookSnapshot, err
 		return OrderBookSnapshot{}, errors.New("MEXC trades response must be an array")
 	}
 
-	bids, err := normalizeLevels("bids", depth.Bids, true)
+	bids, err := normalizeLevels("bids", depth.Bids, true, depthLimit)
 	if err != nil {
 		return OrderBookSnapshot{}, err
 	}
-	asks, err := normalizeLevels("asks", depth.Asks, false)
+	asks, err := normalizeLevels("asks", depth.Asks, false, depthLimit)
 	if err != nil {
 		return OrderBookSnapshot{}, err
 	}
-	normalizedTrades, err := normalizeTrades(trades)
+	normalizedTrades, err := normalizeTrades(trades, marketDataLimit)
 	if err != nil {
 		return OrderBookSnapshot{}, err
 	}
@@ -268,9 +330,9 @@ func (c *MEXCClient) fetchJSON(
 	return nil
 }
 
-func normalizeLevels(name string, raw [][]string, descending bool) ([]PriceLevel, error) {
-	if len(raw) > marketDataLimit {
-		return nil, fmt.Errorf("MEXC %s response exceeds %d levels", name, marketDataLimit)
+func normalizeLevels(name string, raw [][]string, descending bool, maxLevels int) ([]PriceLevel, error) {
+	if len(raw) > maxLevels {
+		return nil, fmt.Errorf("MEXC %s response exceeds %d levels", name, maxLevels)
 	}
 	levels := make([]PriceLevel, 0, len(raw))
 	seenPrices := make(map[string]struct{}, len(raw))
@@ -302,9 +364,9 @@ func normalizeLevels(name string, raw [][]string, descending bool) ([]PriceLevel
 	return levels, nil
 }
 
-func normalizeTrades(raw []mexcTradeResponse) ([]Trade, error) {
-	if len(raw) > marketDataLimit {
-		return nil, fmt.Errorf("MEXC trades response exceeds %d entries", marketDataLimit)
+func normalizeTrades(raw []mexcTradeResponse, maxEntries int) ([]Trade, error) {
+	if len(raw) > maxEntries {
+		return nil, fmt.Errorf("MEXC trades response exceeds %d entries", maxEntries)
 	}
 	trades := make([]Trade, 0, len(raw))
 	syntheticOccurrences := make(map[string]int)

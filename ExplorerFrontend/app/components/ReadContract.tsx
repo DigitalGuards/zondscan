@@ -209,7 +209,7 @@ function ReadFunctionCard({ fn, address }: { fn: AbiFunction; address: string })
           )}
 
           {result !== null && !error && (
-            <pre className="rounded-md bg-black/40 border border-border p-3 font-mono text-xs text-text-secondary whitespace-pre-wrap break-words">
+            <pre className="rounded-md bg-background-tertiary border border-border p-3 font-mono text-xs text-text-secondary whitespace-pre-wrap break-words">
               {result}
             </pre>
           )}

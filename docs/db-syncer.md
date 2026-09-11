@@ -928,6 +928,8 @@ When a new block is processed (`UpdatePendingTransactionsInBlock`):
 | `MONGOURI` | Yes | -- | Transaction-capable MongoDB URI without the database name, for example `mongodb://localhost:27017/?replicaSet=rs0` |
 | `NODE_URL` | Yes | `http://localhost:8545` | Zond execution layer JSON-RPC endpoint |
 | `MEMPOOL_NODE_URL` | No | Falls back to `NODE_URL` | Separate RPC for mempool access |
+| `ENABLE_DEBUG_TRACE` | No | `false` | Enable indexing of native transfers made by contract sub-calls |
+| `TRACE_NODE_URL` | No | Primary `NODE_URL` | Private debug-enabled HTTP(S) or WS(S) endpoint used for transaction traces |
 | `BEACONCHAIN_API` | Yes | `http://localhost:3500` | Beacon chain HTTP API endpoint |
 | `HEALTH_PORT` | No | `8083` | Health endpoint port. Docker and Kubernetes set this to `8081`. |
 | `RPC_DELAY_MS` | No | `50` | Delay between RPC calls in ms |

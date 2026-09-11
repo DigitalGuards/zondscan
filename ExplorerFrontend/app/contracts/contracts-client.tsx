@@ -1,13 +1,13 @@
 'use client';
 
+import AddressText from '../components/AddressText';
+
 import { useState, useEffect, useCallback } from 'react';
 import ImageWithFallback from '../components/ImageWithFallback';
 import Link from 'next/link';
 import axios from 'axios';
 import config from '../../config';
 import { setUrlParams, useUrlIntParam, useUrlParam } from '../lib/use-url-param';
-import { compactQrlAddress } from '../lib/helpers';
-import AddressFingerprint from '../components/AddressFingerprint';
 import Badge from '../components/Badge';
 import EmptyState from '../components/EmptyState';
 
@@ -515,11 +515,11 @@ function ContractRow({
     : 'Contract';
   const displayName = (contract.metadataName?.trim() || contract.name || '').trim();
   const primary = isToken
-    ? (displayName || compactQrlAddress(contract.address))
+    ? (displayName || <AddressText address={contract.address} leading={10} trailing={8} />)
     : 'Smart Contract';
   const secondary = isToken
     ? (contract.symbol || standardFallback)
-    : compactQrlAddress(contract.address);
+    : <AddressText address={contract.address} leading={6} trailing={4} />;
 
   const typeBadge = (() => {
     if (variant === 'erc20') return <Badge variant="success">QRC-20</Badge>;
@@ -540,10 +540,10 @@ function ContractRow({
       <td className={TD_BASE}>
         <div className="flex items-center gap-3">
           {metaImage ? (
-            <div className="relative w-8 h-8 rounded-full overflow-hidden border border-border bg-black/30 shrink-0">
+            <div className="relative w-8 h-8 rounded-full overflow-hidden border border-border bg-background-tertiary shrink-0">
               <ImageWithFallback
                 src={metaImage}
-                alt={primary}
+                alt={displayName || contract.address}
                 fill
                 sizes="32px"
                 className="object-cover"
@@ -574,7 +574,8 @@ function ContractRow({
           href={`/address/${contract.address}`}
           className="text-accent hover:underline font-mono text-sm"
         >
-          <AddressFingerprint address={contract.address} />
+          <span className="hidden sm:inline"><AddressText address={contract.address} leading={10} trailing={8} /></span>
+          <span className="sm:hidden"><AddressText address={contract.address} leading={6} trailing={4} /></span>
         </Link>
       </td>
       <td className={`hidden sm:table-cell ${TD_BASE}`}>{typeBadge}</td>
@@ -594,7 +595,7 @@ function ContractRow({
             href={`/address/${contract.creatorAddress}`}
             className="text-text-secondary hover:text-accent font-mono text-sm"
           >
-            <AddressFingerprint address={contract.creatorAddress} />
+            <AddressText address={contract.creatorAddress} leading={6} trailing={4} />
           </Link>
         ) : (
           <span className="text-text-muted text-sm">-</span>

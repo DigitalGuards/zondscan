@@ -46,7 +46,8 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "jest",
-    "check:api-drift": "node scripts/check-api-docs-drift.mjs"
+    "check:api-drift": "node scripts/check-api-docs-drift.mjs",
+    "test:e2e": "playwright test"
   },
   "overrides": {
     "minimatch": {
@@ -82,6 +83,7 @@
     ]
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

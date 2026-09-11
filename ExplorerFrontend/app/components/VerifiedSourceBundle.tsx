@@ -205,7 +205,7 @@ function SourceFilePanel({
       </div>
       <pre
         data-testid={canonicalImport ? "verified-import-source" : undefined}
-        className={`rounded-lg bg-black/40 border border-border p-3 font-mono text-xs text-text-secondary overflow-x-auto whitespace-pre transition-[max-height] duration-200 ${
+        className={`rounded-lg bg-background-tertiary border border-border p-3 font-mono text-xs text-text-secondary overflow-x-auto whitespace-pre transition-[max-height] duration-200 ${
           expanded
             ? "max-h-[36rem] overflow-y-auto"
             : "max-h-24 overflow-hidden"

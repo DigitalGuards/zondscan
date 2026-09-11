@@ -1,9 +1,11 @@
 'use client';
 
+import TimeDisplay from '../components/TimeDisplay';
+
 import React from "react";
 import Link from "next/link";
 import Badge from "../components/Badge";
-import { NATIVE_UNIT, formatTimestamp, toFixed } from "../lib/helpers";
+import { NATIVE_UNIT, toFixed } from "../lib/helpers";
 import { canonicalizeQrlAddress } from "../lib/qrlAddress";
 import AddressFingerprint from "../components/AddressFingerprint";
 
@@ -103,7 +105,7 @@ export default function RichlistClient({ richlist }: RichlistProps): JSX.Element
             <div>
               <span className="text-accent text-sm">First Seen:</span>
               <span className="ml-2 text-text-primary text-sm">
-                {item.firstSeen ? formatTimestamp(item.firstSeen) : "-"}
+                {item.firstSeen ? <TimeDisplay timestamp={item.firstSeen} /> : "-"}
               </span>
             </div>
             <div>
@@ -189,7 +191,7 @@ export default function RichlistClient({ richlist }: RichlistProps): JSX.Element
                 {typeBadge(item.isContract)}
               </td>
               <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-text-secondary text-sm">
-                {item.firstSeen ? formatTimestamp(item.firstSeen) : "-"}
+                {item.firstSeen ? <TimeDisplay timestamp={item.firstSeen} /> : "-"}
               </td>
               <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap text-right text-text-secondary text-sm">
                 {toFixed(item.balance)} {NATIVE_UNIT}
@@ -205,7 +207,7 @@ export default function RichlistClient({ richlist }: RichlistProps): JSX.Element
   );
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-0">
       <div className="page-content py-4 md:py-8">
         <div className="mb-6 md:mb-8">
           <h1 className="section-title">Richlist</h1>

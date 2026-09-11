@@ -11,7 +11,7 @@ ExplorerFrontend/
 │   │   ├── Alert.tsx      # Alert component for notifications
 │   │   ├── AreaChart.tsx  # Chart component for data visualization
 │   │   ├── SearchBar.tsx  # Global search component
-│   │   └── Sidebar.tsx    # Main navigation sidebar
+│   │   └── SiteHeader.tsx # Horizontal navigation and market bar
 │   │
 │   ├── lib/               # Utility functions
 │   │   └── helpers.ts     # Common helper functions (formatting, conversion)
@@ -189,11 +189,13 @@ The frontend uses a single `.env` file for all environment variables.
 
 ## Key Components
 
-### Sidebar (`components/Sidebar.tsx`)
-- Main navigation component
-- Fixed position with width of 256px
-- Dynamic menu items
-- Responsive design
+### SiteHeader (`components/SiteHeader.tsx`)
+- Sticky price, gas, search, appearance, and network controls
+- Horizontal navigation with grouped submenus
+- Mobile navigation dialog with keyboard support
+- Browser preferences at `/settings`
+
+See [local UI preview and browser checks](../docs/HORIZONTAL-UI.md).
 
 ### SearchBar (`components/SearchBar.tsx`)
 - Global search functionality

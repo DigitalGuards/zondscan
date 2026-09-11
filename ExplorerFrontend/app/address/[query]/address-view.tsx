@@ -103,7 +103,7 @@ export default function AddressView({ addressData, addressSegment, qnsName }: Ad
                     : `${addressType || 'Address'} ${addressSegment}`}
             </h1>
             <Breadcrumbs items={[
-                { label: 'Address' },
+                { label: 'Address', translateLabel: true },
                 {
                     label: qnsName ?? compactQrlAddress(addressSegment),
                     fullLabel: qnsName ? undefined : addressSegment,

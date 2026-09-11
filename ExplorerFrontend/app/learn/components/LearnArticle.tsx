@@ -153,7 +153,7 @@ export default function LearnArticle({ slug, children }: LearnArticleProps): JSX
         dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
       />
       <div className="max-w-3xl">
-        <Breadcrumbs items={[{ label: 'Learn', href: '/learn' }, { label: article.title }]} />
+        <Breadcrumbs items={[{ label: 'Learn', translateLabel: true, href: '/learn' }, { label: article.title }]} />
 
         <header className="mb-8">
           <span className="chip mb-3">{category.label}</span>

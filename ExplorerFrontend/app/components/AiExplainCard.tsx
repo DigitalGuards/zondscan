@@ -244,7 +244,7 @@ function AiExplainCardRecord({
 
       {explanation && (
         <>
-          <div className="rounded-md bg-black/40 border border-border p-3 text-xs md:text-sm text-text-primary font-sans whitespace-pre-wrap break-words leading-relaxed">
+          <div className="rounded-md bg-background-tertiary border border-border p-3 text-xs md:text-sm text-text-primary font-sans whitespace-pre-wrap break-words leading-relaxed">
             {explanation}
           </div>
           <div className="text-[10px] text-text-muted">

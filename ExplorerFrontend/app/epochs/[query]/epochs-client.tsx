@@ -1,12 +1,14 @@
 'use client';
 
+import TimeDisplay from '../../components/TimeDisplay';
+
 import React from 'react';
 import Link from 'next/link';
 import axios from 'axios';
 import config from '../../../config';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { formatNumberWithCommas, timeAgo, formatStaked } from '../../lib/helpers';
+import { formatNumberWithCommas, formatStaked } from '../../lib/helpers';
 import SearchBar from '../../components/SearchBar';
 import StatusBadge from '../../components/StatusBadge';
 import Pagination from '../../components/Pagination';
@@ -124,7 +126,7 @@ export default function EpochsClient({ initialData, initialPage }: EpochsClientP
                         {formatNumberWithCommas(epoch.epoch)}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-text-secondary tabular-nums">{timeAgo(epoch.timestamp)}</td>
+                    <td className="px-4 py-3 text-text-secondary tabular-nums"><TimeDisplay timestamp={epoch.timestamp} relative /></td>
                     <td className="px-4 py-3">
                       <StatusBadge status={epoch.status} />
                     </td>

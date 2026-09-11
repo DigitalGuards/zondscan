@@ -1,4 +1,5 @@
 'use client';
+import InterfaceText from '../../components/InterfaceText';
 
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -17,6 +18,11 @@ import AddressFingerprint from '../../components/AddressFingerprint';
 import ContractMetadataProvenanceNotice, {
   trustedContractMetadataABI,
 } from '../../components/ContractMetadataProvenanceNotice';
+import TimeDisplay from '../../components/TimeDisplay';
+import PreferenceDetails from '../../components/PreferenceDetails';
+import { usePreferences } from '../../components/PreferencesProvider';
+import { isZeroTokenTransfer } from '../../lib/preferences';
+import { useDisplayCurrency } from '../../components/useDisplayCurrency';
 
 // Once a tx has this many confirmations we stop polling /latestblock for
 // it; further refinement is just visual noise (most chain UIs treat
@@ -44,20 +50,6 @@ function BackToTransactionsLink(): JSX.Element | null {
   );
 }
 
-const formatTimestamp = (timestamp: number): string => {
-  if (!timestamp) return 'Unknown';
-  const date = new Date(timestamp * 1000);
-  if (date.getUTCFullYear() === 1970) return 'Pending';
-
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const month = months[date.getUTCMonth()];
-  const day = date.getUTCDate();
-  const year = date.getUTCFullYear();
-  const hours = date.getUTCHours().toString().padStart(2, '0');
-  const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-  const seconds = date.getUTCSeconds().toString().padStart(2, '0');
-  return `${month} ${day}, ${year}, ${hours}:${minutes}:${seconds} UTC`;
-};
 
 const isZeroAddress = (addr: string): boolean =>
   addr === 'Q0' || addr === 'Q' + '0'.repeat(128);
@@ -90,6 +82,11 @@ interface TransactionViewProps {
 
 export default function TransactionView({ transaction }: TransactionViewProps): JSX.Element {
   const isMobile = useIsMobile();
+  const fiat = useDisplayCurrency();
+  const { preferences, updatePreferences } = usePreferences();
+  const tokenTransfers = (transaction.tokenTransfers || []).filter(transfer =>
+    !preferences.hideZeroTokenTransfers || !isZeroTokenTransfer(transfer));
+  const hiddenTransfers = (transaction.tokenTransfers?.length || 0) - tokenTransfers.length;
 
   // Poll /latestblock so the confirmation count ticks up live; stops
   // once we cross the terminal-confirmations threshold to bound load
@@ -158,7 +155,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
   return (
     <main className="detail-content" aria-labelledby="tx-detail-heading">
       <Breadcrumbs items={[
-        { label: 'Transactions', href: '/transactions/1' },
+        { label: 'Transactions', translateLabel: true, href: '/transactions/1' },
         { label: `${transaction.hash.slice(0, 10)}...${transaction.hash.slice(-6)}` },
       ]} />
 
@@ -172,25 +169,20 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
         className="card overflow-hidden mb-6"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border">
+        <div className="flex items-center p-4 sm:p-6 border-b border-border">
           <div className="flex items-center gap-3">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-accent" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
             </svg>
-            <h1 id="tx-detail-heading" className="section-title">Transaction Details</h1>
+            <h1 id="tx-detail-heading" className="section-title"><InterfaceText text="Transaction Details" /></h1>
           </div>
-          <Badge variant={badgeVariant} size="md" dot>{effectiveStatus.text}</Badge>
         </div>
 
         {/* Content */}
         <div className="p-4 sm:p-6">
           <DetailRow label="Transaction Hash" mono>
             <div className="flex items-start gap-2">
-              <span>
-                {isMobile
-                  ? `${transaction.hash.slice(0, 10)}...${transaction.hash.slice(-8)}`
-                  : transaction.hash}
-              </span>
+              <span>{isMobile ? `${transaction.hash.slice(0, 10)}...${transaction.hash.slice(-8)}` : transaction.hash}</span>
               <CopyButton value={transaction.hash} label="Copy hash" size="sm" />
             </div>
           </DetailRow>
@@ -214,10 +206,10 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                 #{transaction.blockNumber}
               </Link>
             ) : (
-              <span className="text-text-secondary">Pending</span>
+              <span className="text-text-secondary"><InterfaceText text="Pending" /></span>
             )}
           </DetailRow>
-          <DetailRow label="Timestamp">{formatTimestamp(transaction.timestamp)}</DetailRow>
+          <DetailRow label="Timestamp"><TimeDisplay timestamp={transaction.timestamp} /></DetailRow>
           <DetailRow label="From" mono>
             <div className="flex items-start gap-2">
               <Link
@@ -287,20 +279,18 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               {paidFees}
               <span className="text-text-muted ml-1">{NATIVE_UNIT}</span>
               {(() => {
-                // USD conversion is opt-in: requires both a fee > 0 and a
-                // price from the polled /latestblock response. Skips the
-                // 18-decimal precision of paidFees and just rounds to the
-                // amount that's actually visible at human resolution.
                 const usd = latestBlockQuery.data?.qrlUsdPrice;
                 const qrlFee = parseFloat(paidFees);
                 if (!usd || usd <= 0 || !Number.isFinite(qrlFee) || qrlFee <= 0) return null;
-                const dollars = qrlFee * usd;
-                // < $0.001 renders as "<$0.001" so we don't display $0.00
-                // when there's a real (but tiny) fee.
-                const display = dollars < 0.001
-                  ? '<$0.001'
-                  : `≈ $${dollars < 1 ? dollars.toFixed(4) : dollars.toFixed(2)}`;
-                return <span className="text-text-muted text-xs ml-2" title={`@${usd.toFixed(4)} USD/QRL`}>{display}</span>;
+                return (
+                  <span
+                    className="text-text-muted text-xs ml-2"
+                    data-fee-currency={fiat.currency}
+                    title={`QRL market reference: ${fiat.format(usd, { maximumFractionDigits: 4 })}/QRL. Testnet Quanta has no market value.`}
+                  >
+                    ≈ {fiat.format(qrlFee * usd, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                  </span>
+                );
               })()}
             </DetailRow>
           )}
@@ -330,8 +320,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               <h2 id="contract-created-heading" className="text-[15px] font-semibold text-success">Contract Created</h2>
               {cc.isToken && (
                 <Badge variant={ccStandard === 'ERC-721' || ccStandard === 'ERC-1155' ? 'warning' : 'brand'}>
-                  {qrcBadgeText(ccStandard)} Token
-                </Badge>
+                  {qrcBadgeText(ccStandard)}<InterfaceText text="Token" /></Badge>
               )}
             </div>
           </div>
@@ -357,8 +346,12 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
       {/* Token Transfer Section(s). A single tx can emit several Transfer
           events (DEX swaps, ERC-1155 TransferBatch fan-out), each persisted
           as its own row, so we render one card per row. */}
-      {transaction.tokenTransfers && transaction.tokenTransfers.length > 0 &&
-        transaction.tokenTransfers.map((tt, idx) => {
+      {hiddenTransfers > 0 && <p className="mb-4 text-sm text-text-muted">
+        {hiddenTransfers} zero-quantity token transfer{hiddenTransfers === 1 ? '' : 's'} hidden.
+        {' '}<button type="button" className="text-accent hover:underline" onClick={() => updatePreferences({ hideZeroTokenTransfers: false })}><InterfaceText text="Show zero transfers" /></button>
+      </p>}
+      {tokenTransfers.length > 0 &&
+        tokenTransfers.map((tt, idx) => {
           const standard = tt.tokenStandard;
           const headerLabel =
             standard === 'ERC-721' ? 'NFT Transfer'
@@ -601,7 +594,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-accent" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 17.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
               </svg>
-              <h2 id="internal-tx-heading" className="text-[15px] font-display font-semibold text-text-primary">Internal Transactions</h2>
+              <h2 id="internal-tx-heading" className="text-[15px] font-display font-semibold text-text-primary"><InterfaceText text="Internal Transactions" /></h2>
               <Badge variant="neutral">{transaction.internalTransactions.length}</Badge>
             </div>
           </div>
@@ -686,7 +679,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
           <section aria-labelledby="input-data-heading" className="card overflow-hidden mb-6">
             <div className="px-4 sm:px-6 py-4 border-b border-border">
               <div className="flex items-center gap-2">
-                <h2 id="input-data-heading" className="text-[15px] font-display font-semibold text-text-primary">Input Data</h2>
+                <h2 id="input-data-heading" className="text-[15px] font-display font-semibold text-text-primary"><InterfaceText text="Input Data" /></h2>
                 {decodedInput && (
                   <Badge variant={decodedInput.standard === 'ERC-20' ? 'brand' : 'warning'}>
                     {decodedInput.methodName}
@@ -714,8 +707,8 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                 preserved: decoded view (if any) renders first, raw
                 hex below, matching the "default to decoded when
                 verified" intent. */}
-            <details className="group">
-              <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center gap-2 px-4 sm:px-6 py-3 hover:bg-white/5 transition-colors">
+            <PreferenceDetails key={transaction.hash} className="group">
+              <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center gap-2 px-4 sm:px-6 py-3 hover:bg-surface-2 transition-colors">
                 {/* Heroicons-style chevron-right; rotates 90° to point
                     down when the disclosure is open. currentColor so
                     the surrounding text-text-secondary / group-hover accent
@@ -803,7 +796,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                   </p>
                 )}
               </div>
-            </details>
+            </PreferenceDetails>
           </section>
         );
       })()}

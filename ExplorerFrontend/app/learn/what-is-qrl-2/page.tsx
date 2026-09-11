@@ -151,6 +151,13 @@ export default function Page(): JSX.Element {
             </p>
           </Step>
         </StepList>
+        <p>
+          For a wider map of what exists around the chain, the community-maintained{' '}
+          <a href="https://www.qrlecosystem.com/" target="_blank" rel="noopener noreferrer">
+            QRL Ecosystem Index
+          </a>{' '}
+          catalogs projects, tools, services, and resources across QRL 1.x and QRL 2.0.
+        </p>
       </LearnSection>
 
       <LearnSection id="where-zondscan-fits" title="Where ZondScan fits">

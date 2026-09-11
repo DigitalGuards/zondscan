@@ -47,7 +47,7 @@ export default function FAQPage(): JSX.Element {
         ZondScan FAQ
       </h1>
       <script type="application/ld+json">{JSON.stringify(faqJsonLd)}</script>
-      <div className="min-h-screen text-text-secondary px-4 sm:px-6 py-4 md:py-8">
+      <div className="min-h-0 text-text-secondary px-4 sm:px-6 py-4 md:py-8">
         <div className="max-w-3xl mx-auto">
           <h2 className="section-title mb-8">Frequently asked questions</h2>
 

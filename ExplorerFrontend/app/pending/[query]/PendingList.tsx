@@ -1,4 +1,8 @@
 'use client';
+import InterfaceText from '../../components/InterfaceText';
+
+import TimeDisplay from '../../components/TimeDisplay';
+import AddressText from '../../components/AddressText';
 
 import axios from 'axios';
 import React, { useState } from 'react';
@@ -6,8 +10,7 @@ import config from '../../../config';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { formatAmount, NATIVE_UNIT, timeAgo, truncateHash } from '../../lib/helpers';
-import AddressFingerprint from '../../components/AddressFingerprint';
+import { formatAmount, NATIVE_UNIT, truncateHash } from '../../lib/helpers';
 import type { PendingTransaction } from '@/app/types';
 import Badge from '../../components/Badge';
 import Pagination from '../../components/Pagination';
@@ -67,7 +70,7 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
   if (isError) {
     return (
       <div className="py-4 sm:py-6 lg:py-8">
-        <h1 className="section-title mb-4">Pending Transactions</h1>
+        <h1 className="section-title mb-4"><InterfaceText text="Pending Transactions" /></h1>
         <div className="bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-xl">
           <p className="font-bold">Error:</p>
           <p className="text-sm">{error instanceof Error ? error.message : 'Failed to load pending transactions'}</p>
@@ -88,7 +91,7 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
   return (
     <div className="py-4 sm:py-6 lg:py-8">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="section-title">Pending Transactions</h1>
+        <h1 className="section-title"><InterfaceText text="Pending Transactions" /></h1>
         <button
           onClick={handleRefresh}
           disabled={isRefreshing || isFetching}
@@ -118,12 +121,12 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Hash</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">From</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">To</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Value</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Status</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:table-cell">Time</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider"><InterfaceText text="Hash" /></th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell"><InterfaceText text="From" /></th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell"><InterfaceText text="To" /></th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider"><InterfaceText text="Value" /></th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider"><InterfaceText text="Status" /></th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:table-cell"><InterfaceText text="Time" /></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -145,12 +148,12 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
                         </td>
                         <td className="px-4 py-3 hidden sm:table-cell">
                           <span className="text-text-secondary font-mono text-xs" title={tx.from}>
-                            <AddressFingerprint address={tx.from} />
+                            <AddressText address={tx.from} />
                           </span>
                         </td>
                         <td className="px-4 py-3 hidden sm:table-cell">
                           <span className="text-text-secondary font-mono text-xs" title={tx.to}>
-                            {tx.to ? <AddressFingerprint address={tx.to} /> : 'Contract Create'}
+                            {tx.to ? <AddressText address={tx.to} /> : 'Contract Create'}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-text-secondary tabular-nums whitespace-nowrap">
@@ -163,7 +166,7 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
                           </Badge>
                         </td>
                         <td className="px-4 py-3 text-text-secondary tabular-nums hidden md:table-cell">
-                          {tx.createdAt ? timeAgo(tx.createdAt) : '-'}
+                          {tx.createdAt ? <TimeDisplay timestamp={tx.createdAt} relative /> : '-'}
                         </td>
                       </tr>
                     );

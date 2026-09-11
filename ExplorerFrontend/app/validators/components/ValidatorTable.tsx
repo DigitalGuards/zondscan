@@ -1,11 +1,11 @@
 'use client';
+import AddressText from '../../components/AddressText';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { epochsToDays, formatValidatorBalance, withdrawalCredentialsToAddress } from '../../lib/helpers';
 import { setUrlParams, useUrlParam, useUrlIntParam } from '../../lib/use-url-param';
 import Badge from '../../components/Badge';
-import AddressFingerprint from '../../components/AddressFingerprint';
 
 interface Validator {
   index: string;
@@ -323,7 +323,12 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
                       href={`/address/${validator.withdrawalAddress}`}
                       className="text-accent hover:underline font-mono"
                     >
-                      <AddressFingerprint address={validator.withdrawalAddress} />
+                      <span className="hidden md:inline">
+                        <AddressText address={validator.withdrawalAddress} leading={12} trailing={8} />
+                      </span>
+                      <span className="md:hidden">
+                        <AddressText address={validator.withdrawalAddress} leading={8} trailing={4} />
+                      </span>
                     </Link>
                   ) : (
                     <span className="text-text-muted">-</span>

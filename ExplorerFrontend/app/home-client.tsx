@@ -1,15 +1,19 @@
 'use client';
 
+import TimeDisplay from './components/TimeDisplay';
+import AddressText from './components/AddressText';
+
 import * as React from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
-import { formatNumberWithCommas, timeAgo, formatStaked, formatGasPrice, truncateHash, formatAmount, formatAddress, NATIVE_UNIT } from './lib/helpers';
-import AddressFingerprint from './components/AddressFingerprint';
+import { formatNumberWithCommas, formatStaked, formatGasPrice, truncateHash, formatAddress, NATIVE_UNIT } from './lib/helpers';
 import type { EpochInfo } from './types';
 import config from '../config.js';
 import SearchBar from './components/SearchBar';
+import TransactionAmount from './components/TransactionAmount';
+import { useDisplayCurrency } from './components/useDisplayCurrency';
 
 const Charts = dynamic(() => import('./components/Charts'), {
   loading: () => (
@@ -158,6 +162,7 @@ interface Stat {
 }
 
 function StatBar({ data }: { data: HomeData }) {
+  const fiat = useDisplayCurrency();
   const stats: Stat[] = [
     { label: 'Epoch', value: data.epochInfo ? data.epochInfo.headEpoch : '…', icon: icons.epoch },
     { label: 'Avg Gas Price', value: data.avgGasPriceHex ? `${formatGasPrice(data.avgGasPriceHex)} Shor` : '…', icon: icons.gas },
@@ -165,7 +170,7 @@ function StatBar({ data }: { data: HomeData }) {
     { label: 'Validators', value: formatNumberWithCommas(data.validatorCount.toString()), icon: icons.validators },
     { label: `Staked ${NATIVE_UNIT}`, value: data.totalStaked !== '0' ? formatStaked(data.totalStaked) : '…', icon: icons.staked },
     { label: 'Transactions', value: formatNumberWithCommas(data.totalTransactions.toString()), icon: icons.transactions },
-    { label: 'Market Cap', value: data.marketCap > 0 ? '$' + formatNumberWithCommas(data.marketCap.toString()) : '…', icon: icons.marketCap },
+    { label: `Market Cap (${fiat.currency})`, value: data.marketCap > 0 ? fiat.format(data.marketCap, { style: 'decimal', maximumFractionDigits: 0 }) : '…', icon: icons.marketCap },
     // Unit lives on the label line per the Quanta layout convention; the
     // value stays a bare number so the 8-cell strip keeps its width budget.
     { label: `Circulating ${NATIVE_UNIT}`, value: data.circulating !== '0' ? formatNumberWithCommas(data.circulating) : '…', icon: icons.circulating },
@@ -290,7 +295,7 @@ function BlockTable({ blocks, loading }: { blocks: BlockResult[]; loading: boole
                     >
                       {formatNumberWithCommas(blockNum.toString())}
                     </Link>
-                    <span className="text-[11px] text-text-muted tabular-nums">{timeAgo(timestamp)}</span>
+                    <span className="text-[11px] text-text-muted tabular-nums"><TimeDisplay timestamp={timestamp} relative /></span>
                   </div>
 
                   <div className="flex-1 min-w-0 hidden sm:block">
@@ -301,7 +306,7 @@ function BlockTable({ blocks, loading }: { blocks: BlockResult[]; loading: boole
                           href={`/address/${miner}`}
                           className="text-text-secondary hover:text-accent hover:underline font-mono min-w-0 max-w-full"
                         >
-                          <AddressFingerprint address={miner} />
+                          <AddressText address={miner} />
                         </Link>
                       </div>
                     ) : null}
@@ -337,7 +342,6 @@ function TransactionTable({ txs, loading }: { txs: TxResult[]; loading: boolean 
               const timestamp = parseTimestamp(tx.TimeStamp);
               const from = tx.From ? formatAddress(tx.From) : '';
               const to = tx.To ? formatAddress(tx.To) : '';
-              const [amount, unit] = formatAmount(tx.Amount);
 
               return (
                 <div key={`${tx.TxHash}-${idx}`} className={`${ROW_CLASS} hover:bg-surface transition-colors`}>
@@ -350,7 +354,7 @@ function TransactionTable({ txs, loading }: { txs: TxResult[]; loading: boolean 
                     >
                       {truncateHash(tx.TxHash, 10, 6)}
                     </Link>
-                    <span className="text-[11px] text-text-muted tabular-nums">{timeAgo(timestamp)}</span>
+                    <span className="text-[11px] text-text-muted tabular-nums"><TimeDisplay timestamp={timestamp} relative /></span>
                   </div>
 
                   <div className="flex-1 min-w-0 hidden sm:block">
@@ -358,7 +362,7 @@ function TransactionTable({ txs, loading }: { txs: TxResult[]; loading: boolean 
                       <span className="text-text-muted w-8 flex-shrink-0">From</span>
                       {from ? (
                         <Link href={`/address/${from}`} className="text-text-secondary hover:text-accent hover:underline font-mono min-w-0 max-w-full">
-                          <AddressFingerprint address={from} />
+                          <AddressText address={from} />
                         </Link>
                       ) : <span className="text-text-muted">…</span>}
                     </div>
@@ -366,7 +370,7 @@ function TransactionTable({ txs, loading }: { txs: TxResult[]; loading: boolean 
                       <span className="text-text-muted w-8 flex-shrink-0">To</span>
                       {to ? (
                         <Link href={`/address/${to}`} className="text-text-secondary hover:text-accent hover:underline font-mono min-w-0 max-w-full">
-                          <AddressFingerprint address={to} />
+                          <AddressText address={to} />
                         </Link>
                       ) : <span className="text-text-muted">…</span>}
                     </div>
@@ -374,7 +378,7 @@ function TransactionTable({ txs, loading }: { txs: TxResult[]; loading: boolean 
 
                   <div className="flex-shrink-0">
                     <ValueBadge>
-                      {amount} <span className="text-text-muted ml-0.5">{unit}</span>
+                      <TransactionAmount amount={tx.Amount} />
                     </ValueBadge>
                   </div>
                 </div>

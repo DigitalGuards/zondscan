@@ -1,5 +1,9 @@
 'use client';
 
+import AddressText from '../../../components/AddressText';
+
+import TimeDisplay from '../../../components/TimeDisplay';
+
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
@@ -12,12 +16,10 @@ import type { ColumnDef, Row } from '@tanstack/react-table';
 import {
   formatAddress,
   formatAmount,
-  formatTimestamp,
   normalizeHexString,
   NATIVE_UNIT,
 } from '../../../lib/helpers';
 import CopyButton from '../../../components/CopyButton';
-import AddressFingerprint from '../../../components/AddressFingerprint';
 import DebouncedInput from '../../../components/DebouncedInput';
 import { DownloadBtn } from '../../../components/DownloadBtn';
 import EmptyState from '../../../components/EmptyState';
@@ -165,7 +167,7 @@ export default function TransactionsPanel({
                 <div className="flex items-center gap-1">
                   <span className="text-text-secondary text-sm">From:</span>
                   <Link href={'/address/' + fromAddress} title={fromAddress}>
-                    <AddressFingerprint address={fromAddress} />
+                    <AddressText address={fromAddress} />
                   </Link>
                 </div>
               )}
@@ -173,7 +175,7 @@ export default function TransactionsPanel({
                 <div className="flex items-center gap-1">
                   <span className="text-text-secondary text-sm">To:</span>
                   <Link href={'/address/' + toAddress} title={toAddress}>
-                    <AddressFingerprint address={toAddress} />
+                    <AddressText address={toAddress} />
                   </Link>
                 </div>
               )}
@@ -197,7 +199,7 @@ export default function TransactionsPanel({
       }),
       columnHelper.accessor('TimeStamp', {
         header: 'Timestamp',
-        cell: (info) => <span>{formatTimestamp(info.getValue())}</span>,
+        cell: (info) => <span><TimeDisplay timestamp={info.getValue()} /></span>,
       }),
       columnHelper.accessor('formattedAmount', {
         header: 'Amount',
@@ -270,9 +272,7 @@ export default function TransactionsPanel({
                 href={'/address/' + formatAddress('0x' + normalizeHexString(r.From))}
                 className="text-sm text-accent hover:text-accent-hover break-all"
               >
-                <AddressFingerprint
-                  address={formatAddress('0x' + normalizeHexString(r.From))}
-                />
+                <AddressText address={formatAddress('0x' + normalizeHexString(r.From))} />
               </Link>
             </div>
           )}
@@ -284,9 +284,7 @@ export default function TransactionsPanel({
                 href={'/address/' + formatAddress('0x' + normalizeHexString(r.To))}
                 className="text-sm text-accent hover:text-accent-hover break-all"
               >
-                <AddressFingerprint
-                  address={formatAddress('0x' + normalizeHexString(r.To))}
-                />
+                <AddressText address={formatAddress('0x' + normalizeHexString(r.To))} />
               </Link>
             </div>
           )}
@@ -304,7 +302,7 @@ export default function TransactionsPanel({
 
           <div>
             <div className="text-xs text-text-secondary">Time</div>
-            <div className="text-sm text-text-primary">{formatTimestamp(r.TimeStamp)}</div>
+            <div className="text-sm text-text-primary"><TimeDisplay timestamp={r.TimeStamp} /></div>
           </div>
         </div>
       </div>

@@ -10,7 +10,9 @@ import {
   PlayIcon,
 } from '@heroicons/react/24/outline';
 import config from '../../config';
+import FundFlowPanel from './fund-flow';
 import { palette } from '../lib/theme';
+import TimeDisplay from '../components/TimeDisplay';
 import {
   buildHistoricalPlays,
   buildGroupedLadder,
@@ -19,6 +21,7 @@ import {
   calculateYardValue,
   formatMarketPrice,
   formatQrlQuantity,
+  formatQrlTradeSize,
   markerScale,
   marketTradeKey,
   PRICE_GROUPINGS,
@@ -34,7 +37,14 @@ import {
 
 const FIELD_WIDTH = 1000;
 const FIELD_HEIGHT = 563;
+// Markers on the arena field. Deliberately separate from the ladder's row
+// count: the field crowds long before a table does, so showing more depth
+// must not mean showing more squirrels.
 const MAX_VISIBLE_LEVELS = 14;
+
+// Rows per side in the depth ladder.
+const LADDER_ROW_OPTIONS = [12, 25, 50] as const;
+const DEFAULT_LADDER_ROWS = 12;
 
 interface ArenaGameState {
   responseKey: string;
@@ -75,6 +85,19 @@ const numeric = (value: string | number | null | undefined): number => {
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
+
+/**
+ * Stable per-bucket seed for staggering the arena's idle animation. Keyed off
+ * the price so a bucket's timing survives a change in its rank; anything
+ * derived from array position would be rewritten under a running animation.
+ */
+function seedFromPrice(price: string): number {
+  let seed = 0;
+  for (let index = 0; index < price.length; index += 1) {
+    seed = (seed * 31 + price.charCodeAt(index)) % 100_003;
+  }
+  return seed;
+}
 
 function responseIdentity(data: MarketOrderBookResponse): string {
   const newestTrade = [...data.recentTrades].sort((a, b) => b.time - a.time)[0];
@@ -187,16 +210,6 @@ function formatSignedPercent(fraction: string): string {
   return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`;
 }
 
-function formatTimestamp(value: number | string): string {
-  const date = typeof value === 'number' ? new Date(value) : new Date(value);
-  if (Number.isNaN(date.getTime())) return '...';
-  return date.toLocaleTimeString('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    timeZone: 'UTC',
-  });
-}
 
 function StatCard({
   label,
@@ -271,6 +284,7 @@ function ArenaMarker({
   yardValue,
   scale,
   isBest,
+  motionEnabled,
 }: {
   level: LadderLevel;
   side: MarketSide;
@@ -280,6 +294,7 @@ function ArenaMarker({
   yardValue: number;
   scale: number;
   isBest: boolean;
+  motionEnabled: boolean;
 }): JSX.Element | null {
   const position = priceToFieldPosition(
     level.price,
@@ -290,55 +305,93 @@ function ArenaMarker({
   if (position <= 2 || position >= 98) return null;
   const x = levelX(position, index, side);
   const y = fieldY(position);
-  const radius = 12 * scale;
+  // Geometry is drawn at a fixed base size and scaled through the CSS
+  // transform below. Sizing via attributes instead would snap between polls,
+  // because an attribute change is not something CSS can transition.
+  const radius = 12;
   const spriteSize = radius * 3.8;
+  const halo = radius + (isBest ? 4 : 2);
   const label = `${side === 'buy' ? 'Bid' : 'Ask'} price bucket at ${formatMarketPrice(level.price)} USDT, ${formatQrlQuantity(level.quantity)} QRL`;
+  // Desynchronise the idle loop so the field breathes instead of pulsing in
+  // lockstep. Seeded from the price rather than the array index: a bucket
+  // keeps its React key across polls, so its animation keeps running, and
+  // rewriting delay/duration mid-flight (which an index does whenever a
+  // bucket's rank shifts) reinterprets elapsed time against the new duration
+  // and jumps the marker a frame.
+  const priceSeed = seedFromPrice(level.raw.price);
+  const idleDelay = (priceSeed % 1600) / 1000;
+  const idleDuration = 2.6 + (priceSeed % 9) / 10;
   return (
     <g
-      transform={`translate(${x.toFixed(2)} ${y.toFixed(2)})`}
+      style={{
+        transform: `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) scale(${scale.toFixed(3)})`,
+        // SVG elements default to transform-box: view-box with a 50% 50%
+        // origin, which resolves to the centre of the viewBox rather than the
+        // element. Translate alone does not care, but scale does: left at the
+        // default every marker would grow towards the middle of the field.
+        transformOrigin: '0 0',
+        transition: motionEnabled
+          ? 'transform 900ms cubic-bezier(0.16, 1, 0.3, 1)'
+          : 'none',
+      }}
       role="img"
       aria-label={label}
       tabIndex={0}
       className="cursor-help outline-none"
     >
       <title>{label}</title>
-      {side === 'buy' ? (
-        <>
-          <circle
-            r={radius + (isBest ? 4 : 2)}
-            fill="url(#bid-halo)"
-            opacity={isBest ? 0.95 : 0.72}
-          />
-          <image
-            href="/orderbook/bid-squirrel.webp"
-            x={-spriteSize / 2}
-            y={-spriteSize * 0.56}
-            width={spriteSize}
-            height={spriteSize}
-            preserveAspectRatio="xMidYMid meet"
-          />
-        </>
-      ) : (
-        <>
-          <rect
-            x={-radius - (isBest ? 4 : 2)}
-            y={-radius - (isBest ? 4 : 2)}
-            width={(radius + (isBest ? 4 : 2)) * 2}
-            height={(radius + (isBest ? 4 : 2)) * 2}
-            rx={radius * 0.62}
-            fill="url(#ask-halo)"
-            opacity={isBest ? 0.95 : 0.72}
-          />
-          <image
-            href="/orderbook/ask-squirrel.webp"
-            x={-spriteSize / 2}
-            y={-spriteSize * 0.56}
-            width={spriteSize}
-            height={spriteSize}
-            preserveAspectRatio="xMidYMid meet"
-          />
-        </>
-      )}
+      {/* Stagger the entrance so the first paint arrives as a sweep rather
+          than 28 markers appearing on the same frame. Capped so a marker
+          that mounts mid-session is not left invisible for long. */}
+      <g
+        className={motionEnabled ? 'arena-enter' : undefined}
+        style={
+          motionEnabled ? { animationDelay: `${Math.min(index, 13) * 28}ms` } : undefined
+        }
+      >
+        <g
+          className={motionEnabled ? 'arena-idle' : undefined}
+          style={
+            motionEnabled
+              ? { animationDelay: `${idleDelay}s`, animationDuration: `${idleDuration}s` }
+              : undefined
+          }
+        >
+          {side === 'buy' ? (
+            <>
+              <circle r={halo} fill="url(#bid-halo)" opacity={isBest ? 0.95 : 0.72} />
+              <image
+                href="/orderbook/bid-squirrel.webp"
+                x={-spriteSize / 2}
+                y={-spriteSize * 0.56}
+                width={spriteSize}
+                height={spriteSize}
+                preserveAspectRatio="xMidYMid meet"
+              />
+            </>
+          ) : (
+            <>
+              <rect
+                x={-halo}
+                y={-halo}
+                width={halo * 2}
+                height={halo * 2}
+                rx={radius * 0.62}
+                fill="url(#ask-halo)"
+                opacity={isBest ? 0.95 : 0.72}
+              />
+              <image
+                href="/orderbook/ask-squirrel.webp"
+                x={-spriteSize / 2}
+                y={-spriteSize * 0.56}
+                width={spriteSize}
+                height={spriteSize}
+                preserveAspectRatio="xMidYMid meet"
+              />
+            </>
+          )}
+        </g>
+      </g>
     </g>
   );
 }
@@ -359,6 +412,7 @@ function MarketArena({
   const quantities = [...bids, ...asks].map((level) => level.quantity);
   const currentY = fieldY(game.fieldPosition);
   const previousY = fieldY(game.previousPosition);
+  const latestPlay = game.plays[0];
   const currentHalfWidth = fieldHalfWidth(game.fieldPosition);
   const furthestVisiblePrice = Math.max(
     ...bids.map((level) => Math.abs(level.price - currentPrice)),
@@ -378,7 +432,7 @@ function MarketArena({
         alt=""
         fill
         priority
-        sizes="(min-width: 1280px) 70vw, 100vw"
+        sizes="100vw"
         className="object-cover"
       />
       <div className="absolute inset-0 bg-gradient-to-b from-background/5 via-transparent to-background/20" />
@@ -457,6 +511,7 @@ function MarketArena({
             yardValue={bookYardValue}
             scale={markerScale(level.quantity, quantities)}
             isBest={index === 0}
+            motionEnabled={motionEnabled}
           />
         ))}
         {bids.map((level, index) => (
@@ -470,6 +525,7 @@ function MarketArena({
             yardValue={bookYardValue}
             scale={markerScale(level.quantity, quantities)}
             isBest={index === 0}
+            motionEnabled={motionEnabled}
           />
         ))}
 
@@ -485,6 +541,26 @@ function MarketArena({
           <title>
             {`Last trade ${formatMarketPrice(currentPrice)} USDT at field position ${game.fieldPosition.toFixed(1)}`}
           </title>
+          {/* Impact ripple. Keyed on the newest play so React remounts it per
+              play, which is what restarts the animation; a CSS animation on a
+              persistent element would only ever run once. */}
+          {motionEnabled && latestPlay && (
+            <circle
+              key={latestPlay.id}
+              r="12"
+              fill="none"
+              stroke={
+                latestPlay.direction === 'flat'
+                  ? palette.textMuted
+                  : latestPlay.direction === 'bears'
+                    ? palette.error
+                    : palette.success
+              }
+              strokeWidth="2"
+              className="arena-ripple"
+              aria-hidden="true"
+            />
+          )}
           <rect
             x="-12"
             y="-12"
@@ -496,16 +572,18 @@ function MarketArena({
             stroke={palette.info}
             strokeWidth="3"
           />
-          <text
-            x="0"
-            y="5"
-            textAnchor="middle"
-            fill={palette.textPrimary}
-            fontSize="13"
-            fontWeight="700"
-          >
-            Q
-          </text>
+          {/* QRL omega mark. Drawn as a stroked path rather than the Unicode
+              Ω glyph so it keeps the brand outline (open ring on two feet)
+              at any zoom and never depends on a font fallback. Geometry is
+              centered on the origin so it stays inside the rotated badge. */}
+          <path
+            d="M -5 5.9 L -1.8 5.9 L -1.8 3.1 A 4.7 4.7 0 1 1 1.8 3.1 L 1.8 5.9 L 5 5.9"
+            fill="none"
+            stroke={palette.textPrimary}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </g>
 
         <g transform={`translate(${FIELD_WIDTH / 2 + currentHalfWidth * 0.56} ${currentY - 12})`}>
@@ -541,39 +619,52 @@ function DepthLadder({
   midpoint,
   grouping,
   onGroupingChange,
+  rowsPerSide,
+  onRowsChange,
 }: {
   bids: LadderLevel[];
   asks: LadderLevel[];
   midpoint: number;
   grouping: PriceGrouping;
   onGroupingChange: (grouping: PriceGrouping) => void;
+  rowsPerSide: number;
+  onRowsChange: (rows: number) => void;
 }): JSX.Element {
-  const displayBids = bids.slice(0, 12);
-  const displayAsks = asks.slice(0, 12);
+  // Already limited to `rows` per side upstream, where the grouping runs.
+  const displayBids = bids;
+  const displayAsks = asks;
   const maxCumulative = Math.max(
     displayBids[displayBids.length - 1]?.cumulativeQuantity ?? 0,
     displayAsks[displayAsks.length - 1]?.cumulativeQuantity ?? 0,
     1,
   );
 
+  // The cumulative-depth bar is a row background gradient anchored to the
+  // right edge. It must not be an extra spanning <td>: that adds column slots
+  // the <thead> does not have, and table-fixed then lays the table out with
+  // more columns than there are headers, so every header drifts left of the
+  // values it labels. Each bar uses its semantic color at 10% opacity.
+  const depthBarStyle = (side: MarketSide, width: string): string => {
+    const color = `color-mix(in srgb, ${side === 'buy' ? palette.success : palette.error} 10%, transparent)`;
+    return `linear-gradient(to left, ${color} ${width}, transparent ${width})`;
+  };
+
   const rows = (levels: LadderLevel[], side: MarketSide): JSX.Element[] =>
     levels.map((level) => {
       const width = `${Math.min(100, (level.cumulativeQuantity / maxCumulative) * 100)}%`;
       return (
-        <tr key={`${side}:${level.raw.price}`} className="relative font-mono text-xs">
-          <td colSpan={3} className="absolute inset-0 p-0" aria-hidden="true">
-            <span
-              className={`absolute inset-y-0 right-0 ${side === 'buy' ? 'bg-success/10' : 'bg-error/10'}`}
-              style={{ width }}
-            />
-          </td>
-          <td className={`relative py-1.5 pr-3 ${side === 'buy' ? 'text-success' : 'text-error'}`}>
+        <tr
+          key={`${side}:${level.raw.price}`}
+          className="font-mono text-xs"
+          style={{ backgroundImage: depthBarStyle(side, width) }}
+        >
+          <td className={`py-1.5 pr-3 ${side === 'buy' ? 'text-success' : 'text-error'}`}>
             {formatMarketPrice(level.price)}
           </td>
-          <td className="relative py-1.5 px-2 text-right text-text-primary">
+          <td className="py-1.5 px-2 text-right text-text-primary">
             {formatQrlQuantity(level.quantity)}
           </td>
-          <td className="relative py-1.5 pl-2 text-right text-text-secondary">
+          <td className="py-1.5 pl-2 text-right text-text-secondary">
             {formatQrlQuantity(level.cumulativeQuantity)}
           </td>
         </tr>
@@ -587,29 +678,48 @@ function DepthLadder({
           <h3 className="font-display text-sm font-semibold text-text-primary">Grouped depth ladder</h3>
           <p className="text-xs text-text-muted mt-0.5">MEXC levels combined into price buckets</p>
         </div>
-        <label className="flex shrink-0 items-center gap-2 text-xs text-text-muted">
-          <span className="hidden sm:inline">Group</span>
-          <select
-            value={grouping}
-            onChange={(event) => onGroupingChange(event.target.value as PriceGrouping)}
-            className="rounded-md border border-border bg-surface-2 px-2 py-1.5 font-mono text-xs text-text-primary outline-none focus:border-accent"
-            aria-label="Price grouping in USDT"
-          >
-            {PRICE_GROUPINGS.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="flex shrink-0 items-center gap-3">
+          <label className="flex items-center gap-2 text-xs text-text-muted">
+            <span className="hidden sm:inline">Group</span>
+            <select
+              value={grouping}
+              onChange={(event) => onGroupingChange(event.target.value as PriceGrouping)}
+              className="rounded-md border border-border bg-surface-2 px-2 py-1.5 font-mono text-xs text-text-primary outline-none focus:border-accent"
+              aria-label="Price grouping in USDT"
+            >
+              {PRICE_GROUPINGS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-xs text-text-muted">
+            <span className="hidden sm:inline">Rows</span>
+            <select
+              value={rowsPerSide}
+              onChange={(event) => onRowsChange(Number(event.target.value))}
+              className="rounded-md border border-border bg-surface-2 px-2 py-1.5 font-mono text-xs text-text-primary outline-none focus:border-accent"
+              aria-label="Ladder rows per side"
+            >
+              {LADDER_ROW_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </div>
       <div className="px-4 py-2">
         <table className="w-full table-fixed" aria-label="MEXC QRL USDT order book levels">
           <thead>
-            <tr className="text-[10px] uppercase tracking-wider text-text-muted">
-              <th className="py-1.5 text-left font-medium">Price</th>
-              <th className="py-1.5 text-right font-medium">QRL</th>
-              <th className="py-1.5 text-right font-medium">Cumulative</th>
+            <tr className="text-[11px] font-medium uppercase tracking-[0.12em] text-text-muted">
+              {/* Horizontal padding mirrors the body cells so each right-aligned
+                  header sits exactly over its column of values. */}
+              <th className="py-1.5 pr-3 text-left font-medium">Price</th>
+              <th className="py-1.5 px-2 text-right font-medium">QRL</th>
+              <th className="py-1.5 pl-2 text-right font-medium">Cumulative</th>
             </tr>
           </thead>
           <tbody>{rows([...displayAsks].reverse(), 'sell')}</tbody>
@@ -638,8 +748,8 @@ function RecentTrades({ trades }: { trades: MarketTrade[] }): JSX.Element {
       <div className="overflow-x-auto px-4 py-2">
         <table className="w-full min-w-[330px] font-mono text-xs" aria-label="Recent QRL USDT trades">
           <thead>
-            <tr className="text-[10px] uppercase tracking-wider text-text-muted">
-              <th className="py-1.5 text-left font-medium">UTC</th>
+            <tr className="text-[11px] font-medium uppercase tracking-[0.12em] text-text-muted">
+              <th className="py-1.5 text-left font-medium">Time</th>
               <th className="py-1.5 text-left font-medium">Side</th>
               <th className="py-1.5 text-right font-medium">Price</th>
               <th className="py-1.5 text-right font-medium">QRL</th>
@@ -648,12 +758,12 @@ function RecentTrades({ trades }: { trades: MarketTrade[] }): JSX.Element {
           <tbody>
             {ordered.map((trade) => (
               <tr key={marketTradeKey(trade)} className="border-t border-border/50">
-                <td className="py-1.5 text-text-muted">{formatTimestamp(trade.time)}</td>
+                <td className="py-1.5 text-text-muted"><TimeDisplay timestamp={trade.time / 1000} clockOnly /></td>
                 <td className={`py-1.5 uppercase ${trade.aggressorSide === 'buy' ? 'text-success' : 'text-error'}`}>
                   {trade.aggressorSide}
                 </td>
                 <td className="py-1.5 text-right text-text-primary">{formatMarketPrice(numeric(trade.price))}</td>
-                <td className="py-1.5 text-right text-text-secondary">{formatQrlQuantity(numeric(trade.quantity))}</td>
+                <td className="py-1.5 text-right text-text-secondary">{formatQrlTradeSize(numeric(trade.quantity))}</td>
               </tr>
             ))}
           </tbody>
@@ -697,7 +807,7 @@ function PlayFeed({ plays }: { plays: MarketPlay[] }): JSX.Element {
                 <div className="flex items-baseline justify-between gap-3">
                   <p className={`text-sm font-medium ${tone}`}>{outcome}</p>
                   <time className="font-mono text-[11px] text-text-muted" dateTime={new Date(play.occurredAt).toISOString()}>
-                    {formatTimestamp(play.occurredAt)}
+                    <TimeDisplay timestamp={play.occurredAt / 1000} clockOnly />
                   </time>
                 </div>
                 <p className="mt-0.5 text-xs text-text-secondary">
@@ -737,6 +847,7 @@ export default function OrderBookClient(): JSX.Element {
   const [playWindowMs, setPlayWindowMs] = useState(30_000);
   const [scaleMultiplier, setScaleMultiplier] = useState(1);
   const [priceGrouping, setPriceGrouping] = useState<PriceGrouping>('0.01');
+  const [ladderRows, setLadderRows] = useState<number>(DEFAULT_LADDER_ROWS);
   const [game, setGame] = useState<ArenaGameState>(newGameState);
 
   const orderBookQuery = useQuery<MarketOrderBookResponse>({
@@ -779,6 +890,17 @@ export default function OrderBookClient(): JSX.Element {
     [data, priceGrouping],
   );
 
+  // The ladder is built separately from the arena's levels so it can run
+  // deeper into the book without adding markers to the field.
+  const ladderBids = useMemo(
+    () => (data ? buildGroupedLadder(data.bids, 'buy', priceGrouping, ladderRows) : []),
+    [data, priceGrouping, ladderRows],
+  );
+  const ladderAsks = useMemo(
+    () => (data ? buildGroupedLadder(data.asks, 'sell', priceGrouping, ladderRows) : []),
+    [data, priceGrouping, ladderRows],
+  );
+
   if (data) {
     const nextGame = advanceGame(game, data, scaleMultiplier, playWindowMs);
     if (nextGame !== game) setGame(nextGame);
@@ -819,7 +941,7 @@ export default function OrderBookClient(): JSX.Element {
 
   return (
     <div className="page-content py-4 sm:py-6 lg:py-8">
-      <header className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2.5">
             <h2 className="section-title">QRL Order Book Arena</h2>
@@ -830,8 +952,8 @@ export default function OrderBookClient(): JSX.Element {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-text-muted">
-          <span>Book {formatTimestamp(data.fetchedAt)} UTC</span>
-          <span>Last print {newestTrade ? `${formatTimestamp(newestTrade.time)} UTC` : 'waiting'}</span>
+          <span>Book <TimeDisplay timestamp={new Date(data.fetchedAt).getTime() / 1000} clockOnly /></span>
+          <span>Last print {newestTrade ? <TimeDisplay timestamp={newestTrade.time / 1000} clockOnly /> : 'waiting'}</span>
           <a
             href="https://www.mexc.com/exchange/QRL_USDT"
             target="_blank"
@@ -849,7 +971,7 @@ export default function OrderBookClient(): JSX.Element {
         </div>
       )}
 
-      <section className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Market summary">
+      <section className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Market summary">
         <StatCard
           label="Last trade"
           value={`${formatMarketPrice(stats.last)} USDT`}
@@ -875,8 +997,11 @@ export default function OrderBookClient(): JSX.Element {
         />
       </section>
 
-      <section className="card mb-4 overflow-hidden p-2 sm:p-3" aria-labelledby="arena-heading">
-        <div className="flex flex-col gap-3 px-1 pb-3 sm:flex-row sm:items-center sm:justify-between">
+      <section className="card mb-6 overflow-hidden p-0" aria-labelledby="arena-heading">
+        {/* Same header strip as every other card on the page: bordered,
+            px-4 py-3. Kept as a responsive flex rather than the panel-header
+            utility because the controls stack under the title on mobile. */}
+        <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 id="arena-heading" className="font-display text-sm font-semibold text-text-primary">
               Live market drive
@@ -927,8 +1052,8 @@ export default function OrderBookClient(): JSX.Element {
             <button
               type="button"
               onClick={() => setMotionEnabled((enabled) => !enabled)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-2 text-[11px] font-medium text-text-secondary hover:text-text-primary"
-              aria-pressed={!motionEnabled}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[11px] font-medium text-text-secondary hover:text-text-primary"
+              aria-pressed={motionEnabled}
             >
               {motionEnabled ? <PauseIcon className="h-3.5 w-3.5" /> : <PlayIcon className="h-3.5 w-3.5" />}
               Motion {motionEnabled ? 'on' : 'off'}
@@ -936,41 +1061,45 @@ export default function OrderBookClient(): JSX.Element {
           </div>
         </div>
 
-        <MarketArena
-          bids={bids}
-          asks={asks}
-          currentPrice={stats.last}
-          game={game}
-          motionEnabled={motionEnabled}
-        />
+        <div className="p-3 sm:p-4">
+          <MarketArena
+            bids={bids}
+            asks={asks}
+            currentPrice={stats.last}
+            game={game}
+            motionEnabled={motionEnabled}
+          />
 
-        <div className="grid gap-3 px-1 pt-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
-          <div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-medium text-success">Bids within {stats.bandPercent}%</span>
-              <span className="font-mono text-text-primary">{formatQrlQuantity(stats.bidQuantityInBand)} QRL</span>
+          <div className="grid gap-3 pt-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+            <div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-medium text-success">Bids within {stats.bandPercent}%</span>
+                <span className="font-mono text-text-primary">{formatQrlQuantity(stats.bidQuantityInBand)} QRL</span>
+              </div>
             </div>
-          </div>
-          <div className="hidden h-5 w-px bg-border sm:block" />
-          <div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-medium text-error">Asks within {stats.bandPercent}%</span>
-              <span className="font-mono text-text-primary">{formatQrlQuantity(stats.askQuantityInBand)} QRL</span>
+            <div className="hidden h-5 w-px bg-border sm:block" />
+            <div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-medium text-error">Asks within {stats.bandPercent}%</span>
+                <span className="font-mono text-text-primary">{formatQrlQuantity(stats.askQuantityInBand)} QRL</span>
+              </div>
             </div>
-          </div>
-          <div className="sm:col-span-3 h-2 overflow-hidden rounded-full bg-surface-3" aria-label={`${bidShare.toFixed(0)} percent bid depth inside the selected band`}>
-            <div className="h-full bg-success transition-[width] duration-500" style={{ width: `${bidShare}%` }} />
+            <div className="sm:col-span-3 h-2 overflow-hidden rounded-full bg-surface-3" aria-label={`${bidShare.toFixed(0)} percent bid depth inside the selected band`}>
+              <div className="h-full bg-success transition-[width] duration-500" style={{ width: `${bidShare}%` }} />
+            </div>
           </div>
         </div>
       </section>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
         <DepthLadder
-          bids={bids}
-          asks={asks}
+          bids={ladderBids}
+          asks={ladderAsks}
           midpoint={stats.midpoint}
           grouping={priceGrouping}
           onGroupingChange={setPriceGrouping}
+          rowsPerSide={ladderRows}
+          onRowsChange={setLadderRows}
         />
         <PlayFeed plays={game.plays} />
         <div className="xl:col-span-2">
@@ -978,8 +1107,12 @@ export default function OrderBookClient(): JSX.Element {
         </div>
       </div>
 
-      <aside className="mt-4 rounded-xl border border-border bg-surface px-4 py-3 text-xs leading-relaxed text-text-muted">
-        Public MEXC spot L2 data, aggregated by price. One arena squirrel represents one selected price bucket and its total visible QRL quantity. Resting orders can change or disappear at any time, so displayed depth is not guaranteed executable liquidity. The arena is a visualization of one centralized venue and does not represent the QRL network mempool.
+      <div className="mt-6">
+        <FundFlowPanel />
+      </div>
+
+      <aside className="mt-6 rounded-xl border border-border bg-surface px-4 py-3 text-xs leading-relaxed text-text-muted">
+        Public MEXC spot L2 data, aggregated by price. One arena squirrel represents one selected price bucket and its total visible QRL quantity. Resting orders can change or disappear at any time, so displayed depth is not guaranteed executable liquidity. The arena is a visualization of one centralized venue and does not represent the QRL network mempool. Fund-flow rollups are built from collected public executions and start accumulating when collection begins, so they cannot be backfilled.
       </aside>
     </div>
   );

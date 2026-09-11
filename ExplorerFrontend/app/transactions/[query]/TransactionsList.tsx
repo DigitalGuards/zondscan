@@ -1,12 +1,16 @@
 'use client';
+import InterfaceText from '../../components/InterfaceText';
+
+import TimeDisplay from '../../components/TimeDisplay';
+import AddressText from '../../components/AddressText';
 
 import { useMemo } from 'react';
 import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { formatAmount, timeAgo, truncateHash } from '../../lib/helpers';
-import AddressFingerprint from '../../components/AddressFingerprint';
+import { truncateHash } from '../../lib/helpers';
+import TransactionAmount from '../../components/TransactionAmount';
 import SearchBar from '../../components/SearchBar';
 import Pagination from '../../components/Pagination';
 import CopyButton from '../../components/CopyButton';
@@ -53,7 +57,7 @@ export default function TransactionsList({
 
   return (
     <div className="py-4 sm:py-6 lg:py-8">
-      <h1 className="section-title mb-4">Transactions</h1>
+      <h1 className="section-title mb-4"><InterfaceText text="Transactions" /></h1>
 
       <div className="mb-6">
         <SearchBar />
@@ -73,18 +77,17 @@ export default function TransactionsList({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Hash</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">Type</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden lg:table-cell">From</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden lg:table-cell">To</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:table-cell">Block</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Amount</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Time</th>
+                    <th className="text-left px-2 2xl:px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider"><InterfaceText text="Hash" /></th>
+                    <th className="text-left px-2 2xl:px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:[display:table-cell]">Type</th>
+                    <th className="text-left px-2 2xl:px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden xl:[display:table-cell]"><InterfaceText text="From" /></th>
+                    <th className="text-left px-2 2xl:px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden xl:[display:table-cell]"><InterfaceText text="To" /></th>
+                    <th className="text-left px-2 2xl:px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:[display:table-cell]"><InterfaceText text="Block" /></th>
+                    <th className="text-right px-2 2xl:px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider"><InterfaceText text="Amount" /></th>
+                    <th className="text-left px-2 2xl:px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider"><InterfaceText text="Time" /></th>
                   </tr>
                 </thead>
                 <tbody>
                   {transactions.map((tx) => {
-                    const [formattedAmount, unit] = formatAmount(tx.Amount);
                     const isContractCall = parseFloat(String(tx.Amount)) === 0;
                     // The API capitalises field names (BlockNumber/From/To)
                     // while the index signature on Transaction allows both
@@ -108,52 +111,55 @@ export default function TransactionsList({
                         key={tx.TxHash}
                         className="border-b border-border last:border-b-0 hover:bg-surface transition-colors"
                       >
-                        <td className="px-4 py-3">
+                        <td className="px-2 2xl:px-4 py-3">
                           <div className="flex items-center gap-1.5">
                             <Link
                               href={`/tx/${tx.TxHash}?from=transactions&page=${currentPage}`}
                               className="text-accent hover:text-accent-hover hover:underline font-mono text-xs"
                               title={tx.TxHash}
                             >
-                              {truncateHash(tx.TxHash, 10, 6)}
+                              <span className="sm:hidden">{truncateHash(tx.TxHash, 6, 4)}</span>
+                              <span className="hidden sm:inline">{truncateHash(tx.TxHash, 10, 6)}</span>
                             </Link>
-                            <CopyButton value={tx.TxHash} label="Copy hash" size="sm" stopPropagation />
+                            <span className="hidden sm:inline-flex">
+                              <CopyButton value={tx.TxHash} label="Copy hash" size="sm" stopPropagation />
+                            </span>
                           </div>
                         </td>
-                        <td className="px-4 py-3 hidden sm:table-cell">
+                        <td className="px-2 2xl:px-4 py-3 hidden sm:[display:table-cell]">
                           {isContractCall ? (
                             <Badge variant="neutral">Contract Call</Badge>
                           ) : (
                             <Badge variant="brand">Transfer</Badge>
                           )}
                         </td>
-                        <td className="px-4 py-3 hidden lg:table-cell">
+                        <td className="px-2 2xl:px-4 py-3 hidden xl:[display:table-cell]">
                           {fromAddr ? (
                             <Link
                               href={`/address/${fromAddr}`}
                               className="text-text-secondary hover:text-accent font-mono text-xs transition-colors"
                               title={fromAddr}
                             >
-                              <AddressFingerprint address={fromAddr} />
+                              <AddressText address={fromAddr} />
                             </Link>
                           ) : (
                             <span className="text-text-muted text-xs">-</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 hidden lg:table-cell">
+                        <td className="px-2 2xl:px-4 py-3 hidden xl:[display:table-cell]">
                           {toAddr ? (
                             <Link
                               href={`/address/${toAddr}`}
                               className="text-text-secondary hover:text-accent font-mono text-xs transition-colors"
                               title={toAddr}
                             >
-                              <AddressFingerprint address={toAddr} />
+                              <AddressText address={toAddr} />
                             </Link>
                           ) : (
                             <span className="text-text-muted text-xs">-</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 hidden md:table-cell">
+                        <td className="px-2 2xl:px-4 py-3 hidden md:[display:table-cell]">
                           {blockNum !== null ? (
                             <Link
                               href={`/block/${blockNum}`}
@@ -165,12 +171,11 @@ export default function TransactionsList({
                             <span className="text-text-muted text-xs">-</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-text-secondary tabular-nums whitespace-nowrap">
-                          {formattedAmount}
-                          <span className="text-text-muted text-xs ml-1">{unit}</span>
+                        <td className="px-2 2xl:px-4 text-right py-3 text-text-secondary tabular-nums whitespace-nowrap">
+                          <TransactionAmount amount={tx.Amount} />
                         </td>
-                        <td className="px-4 py-3 text-text-secondary tabular-nums">
-                          {timeAgo(tx.TimeStamp)}
+                        <td className="px-2 2xl:px-4 py-3 text-text-secondary tabular-nums whitespace-nowrap">
+                          <TimeDisplay timestamp={tx.TimeStamp} relative />
                         </td>
                       </tr>
                     );

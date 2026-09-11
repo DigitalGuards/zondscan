@@ -219,7 +219,7 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
   return (
     <div className="py-4 sm:py-6 lg:py-8">
       <Breadcrumbs items={[
-        { label: 'Pending', href: '/pending/1' },
+        { label: 'Pending', translateLabel: true, href: '/pending/1' },
         { label: `${pendingTx.hash.slice(0, 10)}...${pendingTx.hash.slice(-6)}` },
       ]} />
 

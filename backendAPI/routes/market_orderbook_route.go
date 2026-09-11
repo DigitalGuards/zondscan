@@ -26,15 +26,21 @@ type marketOrderBookCacheResult struct {
 	fetchErr error
 }
 
-var defaultOrderBookFetcher = newDefaultOrderBookFetcher()
+// venueRegistry is the shared venue set. Construction failure means a fixed
+// compile-time constant is malformed, which no request could recover from,
+// so it fails the process at startup rather than degrading every market
+// route to a 500 at runtime.
+var venueRegistry = mustVenueRegistry()
 
-func newDefaultOrderBookFetcher() orderBookFetcher {
-	client, err := marketdata.NewMEXCClient(marketdata.MEXCAPIBaseURL, nil)
+func mustVenueRegistry() *marketdata.Registry {
+	registry, err := marketdata.DefaultRegistry()
 	if err != nil {
-		panic("construct fixed MEXC market-data client: " + err.Error())
+		panic("build market-data venue registry: " + err.Error())
 	}
-	return client
+	return registry
 }
+
+var defaultOrderBookFetcher orderBookFetcher = venueRegistry.Default()
 
 // handleMarketOrderBook serves GET /market/orderbook for the fixed QRLUSDT
 // spot market. No request parameter can change the venue, symbol, or upstream.
