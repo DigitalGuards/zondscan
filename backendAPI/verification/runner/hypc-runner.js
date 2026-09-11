@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// hypc-runner: thin Node entry-point invoked by the Go backend's
-// verification pipeline. Reads a Hyperion standard-JSON input from stdin
+// hypc-runner: historical manual Node entry-point. The backend currently
+// fail-closes npm builds until complete runtime provenance exists. This file
+// reads a Hyperion standard-JSON input from stdin
 // (or a single source file path via --file plus a synthesised wrapper) and
 // emits the compiler's JSON output to stdout. Exits non-zero only on
 // runner-internal failure (compile errors are reported as a JSON output
@@ -10,9 +11,7 @@
 //   echo '<standard-json>' | node hypc-runner.js
 //   node hypc-runner.js --version          → prints the pinned compiler ID
 //
-// The Go layer enforces timeouts, concurrency caps, source-size caps,
-// and the no-network policy via exec.CommandContext + cgroups/rlimits;
-// this script just wraps @theqrl/hypc as cleanly as possible.
+// This script provides no OS sandbox, network isolation, or resource limits.
 
 const hypc = require('@theqrl/hypc');
 

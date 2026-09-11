@@ -56,6 +56,7 @@ check_dependencies() {
     command -v npm >/dev/null 2>&1 || { print_error "npm is required but not installed."; }
     command -v go >/dev/null 2>&1 || { print_error "Go is required but not installed."; }
     command -v mongod >/dev/null 2>&1 || { print_error "MongoDB is required but not installed."; }
+    command -v mongosh >/dev/null 2>&1 || { print_error "MongoDB Shell is required but not installed."; }
     command -v nginx >/dev/null 2>&1 || { print_error "Nginx is required but not installed."; }
 
     # Install PM2 if not present
@@ -63,6 +64,28 @@ check_dependencies() {
         print_status "Installing PM2..."
         npm install -g pm2 || print_error "Failed to install PM2"
     fi
+}
+
+# Require the transaction-capable topology used by reorg rollback and guarded
+# verification writes. Topology migration is an explicit database operation;
+# this deployment script only validates the existing MongoDB configuration.
+check_mongodb_transaction_topology() {
+    print_status "Checking MongoDB replica-set topology..."
+
+    if ! mongosh --quiet \
+        "mongodb://127.0.0.1:27017/admin?directConnection=true&serverSelectionTimeoutMS=5000" \
+        --eval '
+            try {
+                const hello = db.hello();
+                quit(hello.setName === "rs0" && hello.isWritablePrimary === true ? 0 : 2);
+            } catch (error) {
+                quit(3);
+            }
+        '; then
+        print_error "MongoDB on 127.0.0.1:27017 must already be the writable primary of replica set rs0. Configure and validate rs0 through an explicit database maintenance procedure, then rerun deploy.sh. The script leaves MongoDB topology unchanged."
+    fi
+
+    print_status "MongoDB replica set rs0 is writable"
 }
 
 # Configure pm2-logrotate so logs can't fill the disk
@@ -250,7 +273,7 @@ setup_backendapi() {
         print_status "Creating .env file..."
         cat > .env << EOL
 GIN_MODE=release
-MONGOURI=mongodb://localhost:27017/qrldata-z?readPreference=primary
+MONGOURI=mongodb://localhost:27017/qrldata-z?replicaSet=rs0&readPreference=primary
 HTTP_PORT=:8081
 NODE_URL=$NODE_URL
 EOL
@@ -399,7 +422,7 @@ setup_frontend() {
     else
         print_status "Creating .env file..."
         cat > .env << EOL
-DATABASE_URL=mongodb://localhost:27017/qrldata-z?readPreference=primary
+DATABASE_URL=mongodb://localhost:27017/qrldata-z?replicaSet=rs0&readPreference=primary
 DOMAIN_NAME=$PUBLIC_URL
 HANDLER_URL=http://127.0.0.1:8082
 NEXT_PUBLIC_HANDLER_URL=$PUBLIC_URL/api
@@ -434,7 +457,7 @@ setup_synchronizer() {
     else
         print_status "Creating .env file..."
         cat > .env << EOL
-MONGOURI=mongodb://localhost:27017
+MONGOURI=mongodb://localhost:27017/?replicaSet=rs0
 NODE_URL=$NODE_URL
 BEACONCHAIN_API=http://localhost:3500
 EOL
@@ -465,14 +488,16 @@ main() {
     # Set BASE_DIR early for use by cleanup functions
     export BASE_DIR=$(pwd)
 
+    # Validate dependencies and transaction topology before stopping services
+    # or offering any database cleanup.
+    check_dependencies
+    check_mongodb_transaction_topology
+
     # Clean PM2 logs and processes before starting
     clean_pm2
 
     # Clean database and log files
     clean_database_and_logs
-
-    # Check for required tools
-    check_dependencies
 
     # Ensure log rotation is in place before any processes start
     setup_pm2_logrotate
@@ -532,5 +557,8 @@ main() {
     echo "pm2 stop all"
 }
 
-# Run the deployment
-main
+# Run the deployment when invoked as a script. Sourcing exposes the validation
+# helpers for shell tests without starting an interactive deployment.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main
+fi

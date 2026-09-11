@@ -6,6 +6,8 @@ import Link from 'next/link';
 import axios from 'axios';
 import config from '../../config';
 import { setUrlParams, useUrlIntParam, useUrlParam } from '../lib/use-url-param';
+import { compactQrlAddress } from '../lib/helpers';
+import AddressFingerprint from '../components/AddressFingerprint';
 import Badge from '../components/Badge';
 import EmptyState from '../components/EmptyState';
 
@@ -143,13 +145,6 @@ function formatBlockNumber(blockNum: string | undefined): string {
   } catch {
     return '-';
   }
-}
-
-// Truncate address for display
-function truncateAddress(addr: string, start = 8, end = 6): string {
-  if (!addr) return '';
-  if (addr.length <= start + end) return addr;
-  return `${addr.slice(0, start)}...${addr.slice(-end)}`;
 }
 
 export default function ContractsClient({ initialData, totalContracts }: ContractsClientProps) {
@@ -520,11 +515,11 @@ function ContractRow({
     : 'Contract';
   const displayName = (contract.metadataName?.trim() || contract.name || '').trim();
   const primary = isToken
-    ? (displayName || truncateAddress(contract.address, 10, 8))
+    ? (displayName || compactQrlAddress(contract.address))
     : 'Smart Contract';
   const secondary = isToken
     ? (contract.symbol || standardFallback)
-    : truncateAddress(contract.address, 6, 4);
+    : compactQrlAddress(contract.address);
 
   const typeBadge = (() => {
     if (variant === 'erc20') return <Badge variant="success">QRC-20</Badge>;
@@ -579,8 +574,7 @@ function ContractRow({
           href={`/address/${contract.address}`}
           className="text-accent hover:underline font-mono text-sm"
         >
-          <span className="hidden sm:inline">{truncateAddress(contract.address, 10, 8)}</span>
-          <span className="sm:hidden">{truncateAddress(contract.address, 6, 4)}</span>
+          <AddressFingerprint address={contract.address} />
         </Link>
       </td>
       <td className={`hidden sm:table-cell ${TD_BASE}`}>{typeBadge}</td>
@@ -600,7 +594,7 @@ function ContractRow({
             href={`/address/${contract.creatorAddress}`}
             className="text-text-secondary hover:text-accent font-mono text-sm"
           >
-            {truncateAddress(contract.creatorAddress, 6, 4)}
+            <AddressFingerprint address={contract.creatorAddress} />
           </Link>
         ) : (
           <span className="text-text-muted text-sm">-</span>

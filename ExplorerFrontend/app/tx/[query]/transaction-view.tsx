@@ -13,6 +13,10 @@ import CopyButton from '../../components/CopyButton';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import DetailRow from '../../components/DetailRow';
 import Badge from '../../components/Badge';
+import AddressFingerprint from '../../components/AddressFingerprint';
+import ContractMetadataProvenanceNotice, {
+  trustedContractMetadataABI,
+} from '../../components/ContractMetadataProvenanceNotice';
 
 // Once a tx has this many confirmations we stop polling /latestblock for
 // it; further refinement is just visual noise (most chain UIs treat
@@ -56,7 +60,7 @@ const formatTimestamp = (timestamp: number): string => {
 };
 
 const isZeroAddress = (addr: string): boolean =>
-  addr === 'Q0' || addr === 'Q' + '0'.repeat(40);
+  addr === 'Q0' || addr === 'Q' + '0'.repeat(128);
 
 // QRC badge label for a token standard. Keeps the contract-created header
 // and per-row transfer header in lock-step, both branch on the same
@@ -151,9 +155,6 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
     : effectiveStatus.color === 'bg-blue-500' ? 'info' as const
     : 'warning' as const;
 
-  const displayAddr = (addr: string): string =>
-    isMobile ? `${addr.slice(0, 10)}...${addr.slice(-8)}` : addr;
-
   return (
     <main className="detail-content" aria-labelledby="tx-detail-heading">
       <Breadcrumbs items={[
@@ -185,7 +186,11 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
         <div className="p-4 sm:p-6">
           <DetailRow label="Transaction Hash" mono>
             <div className="flex items-start gap-2">
-              <span>{isMobile ? displayAddr(transaction.hash) : transaction.hash}</span>
+              <span>
+                {isMobile
+                  ? `${transaction.hash.slice(0, 10)}...${transaction.hash.slice(-8)}`
+                  : transaction.hash}
+              </span>
               <CopyButton value={transaction.hash} label="Copy hash" size="sm" />
             </div>
           </DetailRow>
@@ -219,7 +224,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                 href={`/address/${transaction.from}`}
                 className="text-text-primary hover:text-accent transition-colors break-all"
               >
-                {displayAddr(transaction.from)}
+                <AddressFingerprint address={transaction.from} />
               </Link>
               <CopyButton value={transaction.from} label="Copy address" size="sm" />
             </div>
@@ -251,7 +256,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                   href={`/address/${transaction.contractCreated.address}`}
                   className="text-text-primary hover:text-accent transition-colors break-all"
                 >
-                  {displayAddr(transaction.contractCreated.address)}
+                  <AddressFingerprint address={transaction.contractCreated.address} />
                 </Link>
                 <CopyButton
                   value={transaction.contractCreated.address}
@@ -265,7 +270,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                   href={`/address/${transaction.to}`}
                   className="text-text-primary hover:text-accent transition-colors break-all"
                 >
-                  {displayAddr(transaction.to)}
+                  <AddressFingerprint address={transaction.to} />
                 </Link>
                 <CopyButton value={transaction.to} label="Copy address" size="sm" />
               </div>
@@ -336,7 +341,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                 href={`/address/${cc.address}`}
                 className="text-accent hover:text-accent-hover transition-colors break-all"
               >
-                {displayAddr(cc.address)}
+                <AddressFingerprint address={cc.address} />
               </Link>
             </DetailRow>
             {cc.isToken && (
@@ -361,6 +366,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             : 'Token Transfer';
           const isNFT = standard === 'ERC-721' || standard === 'ERC-1155';
           const rowKey = tt.logIndex || `${tt.contractAddress}-${idx}`;
+          const tokenLabel = tt.tokenName || tt.tokenSymbol;
           return (
         <section
           key={rowKey}
@@ -382,8 +388,16 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                 href={`/address/${tt.contractAddress}`}
                 className="text-accent hover:text-accent-hover font-medium transition-colors"
               >
-                {tt.tokenName || tt.tokenSymbol || tt.contractAddress}
-                {tt.tokenName && tt.tokenSymbol && tt.tokenSymbol !== tt.tokenName ? ` (${tt.tokenSymbol})` : ''}
+                {tokenLabel ? (
+                  <>
+                    {tokenLabel}
+                    {tt.tokenName && tt.tokenSymbol && tt.tokenSymbol !== tt.tokenName
+                      ? ` (${tt.tokenSymbol})`
+                      : ''}
+                  </>
+                ) : (
+                  <AddressFingerprint address={tt.contractAddress} />
+                )}
               </Link>
             </DetailRow>
             {tt.tokenID && (
@@ -422,7 +436,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                   href={`/address/${tt.from}`}
                   className="text-text-primary hover:text-accent transition-colors break-all"
                 >
-                  {displayAddr(tt.from)}
+                  <AddressFingerprint address={tt.from} />
                 </Link>
               )}
             </DetailRow>
@@ -434,7 +448,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                   href={`/address/${tt.to}`}
                   className="text-text-primary hover:text-accent transition-colors break-all"
                 >
-                  {displayAddr(tt.to)}
+                  <AddressFingerprint address={tt.to} />
                 </Link>
               )}
             </DetailRow>
@@ -463,7 +477,11 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               // Pass the per-log ABI (when the emitting contract is verified)
               // so the decoder can fall through from the five known
               // signatures to a full ABI-driven decode.
-              const decoded = decodeEventLog(logEntry.topics, logEntry.data, logEntry.contract?.abi);
+              const decoded = decodeEventLog(
+                logEntry.topics,
+                logEntry.data,
+                trustedContractMetadataABI(logEntry.contract)
+              );
               const idxLabel = (() => { try { return parseInt(logEntry.logIndex || '0x0', 16).toString(); } catch { return logEntry.logIndex; } })();
               const decodedViaAbi = !!decoded && !decoded.standard;
               return (
@@ -489,9 +507,10 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                       href={`/address/${logEntry.address}`}
                       className="text-accent hover:text-accent-hover transition-colors break-all text-xs font-mono"
                     >
-                      {logEntry.address}
+                      <AddressFingerprint address={logEntry.address} />
                     </Link>
                   </div>
+                  <ContractMetadataProvenanceNotice contract={logEntry.contract} />
                   {decoded ? (
                     <>
                       <p className="text-xs text-text-muted font-mono mb-2">{decoded.signature}</p>
@@ -504,7 +523,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                                 href={`/address/${arg.value}`}
                                 className="text-text-primary hover:text-accent transition-colors break-all font-mono"
                               >
-                                {arg.value}
+                                <AddressFingerprint address={arg.value} />
                               </Link>
                             ) : arg.type === 'bool' ? (
                               <Badge variant={arg.value === 'true' ? 'success' : 'error'}>{arg.value}</Badge>
@@ -614,7 +633,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                       <div className="flex flex-wrap items-start gap-2">
                         <span className="text-text-secondary font-mono min-w-[60px]">from:</span>
                         <Link href={`/address/${itx.from}`} className="text-text-primary hover:text-accent transition-colors break-all font-mono">
-                          {itx.from}
+                          <AddressFingerprint address={itx.from} />
                         </Link>
                       </div>
                     )}
@@ -622,7 +641,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                       <div className="flex flex-wrap items-start gap-2">
                         <span className="text-text-secondary font-mono min-w-[60px]">to:</span>
                         <Link href={`/address/${itx.to}`} className="text-accent hover:text-accent-hover transition-colors break-all font-mono">
-                          {itx.to}
+                          <AddressFingerprint address={itx.to} />
                         </Link>
                       </div>
                     )}
@@ -659,8 +678,9 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
           3. Raw calldata fallback so users can copy it into any decoder. */}
       {transaction.input && transaction.input !== '0x' && (() => {
         const decodedInput = decodeTokenTransferInput(transaction.input);
+        const targetABI = trustedContractMetadataABI(transaction.targetContract);
         const decodedCall = !decodedInput
-          ? decodeContractCall(transaction.input, transaction.targetContract?.abi)
+          ? decodeContractCall(transaction.input, targetABI)
           : null;
         return (
           <section aria-labelledby="input-data-heading" className="card overflow-hidden mb-6">
@@ -681,6 +701,9 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                   </>
                 )}
               </div>
+            </div>
+            <div className="px-4 sm:px-6 pt-3">
+              <ContractMetadataProvenanceNotice contract={transaction.targetContract} />
             </div>
             {/* Whole body of the card is a native <details> disclosure
                 so the only visible row when collapsed is the toggle
@@ -730,7 +753,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                               href={`/address/${arg.value}`}
                               className="text-text-primary hover:text-accent transition-colors break-all font-mono"
                             >
-                              {arg.value}
+                              <AddressFingerprint address={arg.value} />
                             </Link>
                           ) : arg.type === 'bool' ? (
                             <Badge variant={arg.value === 'true' ? 'success' : 'error'}>{arg.value}</Badge>

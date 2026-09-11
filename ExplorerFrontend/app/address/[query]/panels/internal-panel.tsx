@@ -17,6 +17,7 @@ import {
   normalizeHexString,
 } from '../../../lib/helpers';
 import CopyButton from '../../../components/CopyButton';
+import AddressFingerprint from '../../../components/AddressFingerprint';
 import DebouncedInput from '../../../components/DebouncedInput';
 import { DownloadBtnInternal } from '../../../components/DownloadBtn';
 import EmptyState from '../../../components/EmptyState';
@@ -122,7 +123,7 @@ export default function InternalPanel({
           const a = formatAddress(String(raw));
           return (
             <Link href={'/address/' + a} title={a}>
-              {truncateMiddle(a)}
+              <AddressFingerprint address={a} />
             </Link>
           );
         },
@@ -135,7 +136,7 @@ export default function InternalPanel({
           const a = formatAddress(String(raw));
           return (
             <Link href={'/address/' + a} title={a}>
-              {truncateMiddle(a)}
+              <AddressFingerprint address={a} />
             </Link>
           );
         },
@@ -230,7 +231,7 @@ export default function InternalPanel({
                 href={'/address/' + formatAddress(String(r.From))}
                 className="text-sm text-accent hover:text-accent-hover break-all"
               >
-                {truncateMiddle(formatAddress(String(r.From)))}
+                <AddressFingerprint address={formatAddress(String(r.From))} />
               </Link>
             ) : (
               <div className="text-sm text-text-primary">-</div>
@@ -244,7 +245,7 @@ export default function InternalPanel({
                 href={'/address/' + formatAddress(String(r.To))}
                 className="text-sm text-accent hover:text-accent-hover break-all"
               >
-                {truncateMiddle(formatAddress(String(r.To)))}
+                <AddressFingerprint address={formatAddress(String(r.To))} />
               </Link>
             ) : (
               <div className="text-sm text-text-primary">-</div>

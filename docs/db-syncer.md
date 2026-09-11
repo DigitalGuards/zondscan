@@ -52,6 +52,33 @@ Comprehensive documentation for the QRL Zond blockchain synchronizer that powers
 
 ### Data Flow
 
+MongoDB must provide multi-document transactions through a replica set or `mongos`. The syncer validates the topology with the `hello` command before creating collections or starting background workers. A standalone `mongod` is rejected because reorg rollback updates the indexed chain, companion records, and sync high-water mark as one transaction.
+
+Exactly one syncer process may target a database. The process acquires a renewable lease in `syncer_leases` before starting writers and terminates if lease renewal fails. A new generation can acquire only a fresh or cleanly released lease. TTL expiry alone never grants takeover because a suspended old process could resume an in-flight write. Deployment configuration must keep one syncer replica and use a no-overlap rollout strategy.
+
+Crash recovery is fail closed. First compute-fence the old process and host so they cannot resume, then inspect the exact expired lease `owner` and `generation`, and acknowledge that identity:
+
+```bash
+cd QRL2MongoDB
+MONGOURI='mongodb://<replica-set>/?replicaSet=rs0' go run ./cmd/recover-syncer-lease --owner '<inspected-owner>' --generation <inspected-generation> --compute-fenced
+```
+
+The command rejects live leases and identity mismatches. Do not use it merely because a health check is failing. A pre-upgrade lease row that lacks `releasedGeneration` also requires this compute-fenced acknowledgement after the old binary is stopped.
+
+### Block companion migration and rollout order
+
+The current API and syncer fail closed on markerless, pending, unknown-state, missing-height, duplicate-height, or conflicting block rows. They also require the named unique `blockNumberInt_desc_idx` index. Existing databases must complete the offline companion migration before either new binary serves traffic:
+
+```bash
+cd QRL2MongoDB
+MONGOURI='mongodb://<replica-set>/?replicaSet=rs0' go run ./cmd/reindex-block-companions
+MONGOURI='mongodb://<replica-set>/?replicaSet=rs0' NODE_URLS='http://<reviewed-node>:8545' go run ./cmd/reindex-block-companions --execute
+```
+
+Use this order: stop the old backend and every writer, verify the old syncer released its lease, take a recoverable database backup, run the dry inventory, run `--execute`, require the final canonical audit attestation and unique-height index, deploy both binaries, then start the syncer. `--limit N` creates a resumable checkpoint; keep public traffic stopped until an unlimited final run reports that the migration gate is clear. The command acquires and renews the same exclusive lease as the normal syncer.
+
+The migration rejects every repeated height, including rows with the same hash. Its final unlimited pass upgrades the historical non-unique height index only after the canonical audit succeeds. The syncer then initializes the independent token scan state. Blocks with transactions enter `tokenIngestionState: "pending"`; empty blocks become `complete`. Token endpoints fail closed while pending blocks replay. Exact-block token classification and balance reads require a node that retains the historical state selected by block hash. A pruned node can leave the oldest token claim retrying and intentionally stall the complete prefix. For an uninterrupted token API rollout, wait until no complete blocks with transactions remain missing or pending token state before starting the backend.
+
 1. **Initial Sync**: On startup, the syncer determines the last synced block from the `sync_state` collection. It then fetches all blocks from that point to the chain head using a producer/consumer pattern with concurrent block fetching.
 
 2. **Continuous Monitoring**: After the initial sync, it enters a polling loop (every 30 seconds) that checks for new blocks and processes them individually or in batches depending on how far behind it is.
@@ -63,6 +90,7 @@ Comprehensive documentation for the QRL Zond blockchain synchronizer that powers
    - Gap detection (every 5 minutes)
    - Wallet count sync (every 4 hours)
    - Contract reprocessing (every 1 hour)
+   - Durable token block retry drain (immediately, then every 30 seconds)
 
 ### Module Structure
 
@@ -89,7 +117,11 @@ Comprehensive documentation for the QRL Zond blockchain synchronizer that powers
 
 ```
 main()
-  |-- Start health check server (:8081/health)
+  |-- Connect to MongoDB and validate transaction topology
+  |-- Acquire and renew the exclusive syncer lease
+  |-- Require the block companion attestation and unique height index
+  |-- Initialize and verify token collections, indexes, and legacy ordering backfill
+  |-- Start health check server (:$HEALTH_PORT/health)
   |-- StartPendingTransactionSync()    <-- background goroutine
   |-- Sync()                           <-- blocks until caught up, then continuous
 ```
@@ -111,7 +143,7 @@ The `Sync()` function performs the initial catch-up:
 
 5. **Post-sync tasks** (after initial sync completes):
    - Calculate daily transaction volume
-   - Process token transfers for the entire synced range
+   - Drain durable token block work for the synced range
    - Start wallet count sync service
    - Start contract reprocessing service
    - Enter continuous block monitoring
@@ -253,7 +285,20 @@ Stores complete block data as fetched from the Zond node.
 }
 ```
 
-All numeric values are stored as hex strings with `0x` prefix. Block documents are the full JSON-RPC response including `jsonrpc` and `id` fields.
+All numeric values are stored as hex strings with `0x` prefix. Block documents are the full JSON-RPC response including `jsonrpc` and `id` fields. The top-level `blockNumberInt` has a required unique descending index. Core companion writes and token effects have separate durable state:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `blockNumberInt` | int64 | Canonical numeric height, unique across the collection |
+| `ingestionState` | string | `pending` until all core block companions are durable, then `complete` |
+| `companionsCompletedAt` | date | Core companion completion time |
+| `tokenIngestionState` | string | `pending` until exact-block token effects complete, then `complete` |
+| `tokenProcessingToken` | string | Random ownership token for the current token claim |
+| `tokenProcessingUntil` | date | Mongo server-time crash-reclaim deadline |
+| `tokenAttempts` | int | Durable token processing attempt count |
+| `tokenNextAttemptAt` | date | Mongo server-time retry eligibility |
+| `lastTokenError` | string | Bounded diagnostic from the last token failure |
+| `tokenCompletedAt` | date | Exact-block token processing completion time |
 
 #### `transfer`
 Individual transaction records with derived values. One document per transaction.
@@ -344,7 +389,7 @@ Smart contract deployments and token metadata.
 | `maxTxLimit` | string | (Optional) Custom max tx amount |
 
 #### `tokenTransfers`
-ERC20 token transfer events extracted from transaction logs.
+ERC-20, ERC-721, and ERC-1155 token transfer events extracted from transaction logs.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -353,14 +398,18 @@ ERC20 token transfer events extracted from transaction logs.
 | `to` | string | Recipient address (lowercase) |
 | `amount` | string | Transfer amount (hex or decimal) |
 | `blockNumber` | string | Block number (hex) |
-| `txHash` | string | Transaction hash (unique index) |
+| `blockHash` | string | Exact canonical block hash that emitted the event |
+| `blockNumberInt` | int64 | Numeric block height used for ordering |
+| `txHash` | string | Transaction hash |
+| `logIndex` | string | Canonical event position within the block |
+| `tokenID` | string | Decimal NFT token ID, empty for ERC-20 |
 | `timestamp` | string | Block timestamp (hex) |
 | `tokenSymbol` | string | Token symbol |
 | `tokenDecimals` | uint8 | Token decimals |
 | `tokenName` | string | Token name |
 | `transferType` | string | `"direct"` or `"event"` |
 
-**Indexes**: `(contractAddress, blockNumber)`, `(from, blockNumber)`, `(to, blockNumber)`, `txHash` (unique).
+**Indexes**: `(contractAddress, blockNumber)`, `(from, blockNumber)`, `(to, blockNumber)`, numeric `blockNumberInt`, NFT history, and `(txHash, contractAddress, logIndex, tokenID)` unique.
 
 #### `tokenBalances`
 Current token holder balances per contract.
@@ -371,11 +420,35 @@ Current token holder balances per contract.
 | `holderAddress` | string | Holder address (lowercase) |
 | `balance` | string | Current balance (decimal string via RPC) |
 | `blockNumber` | string | Last updated block (hex) |
+| `blockNumberInt` | int64 | Numeric height of the exact observation |
+| `blockHash` | string | Exact block hash used for historical RPC reads |
+| `tokenID` | string | Decimal NFT token ID, empty for ERC-20 |
+| `tokenStandard` | string | `ERC-20`, `ERC-721`, or `ERC-1155` |
+| `balanceStale` | bool | Hidden from public readers while reconciliation is pending |
 | `updatedAt` | string | ISO 8601 timestamp |
 
-**Index**: `(contractAddress, holderAddress)` unique.
+**Index**: `(contractAddress, holderAddress, tokenID)` unique, plus standard and reconciliation query indexes.
 
 **Schema validation** enforced on this collection (see `configs/setup.go`).
+
+#### `tokenEventDeadLetters`
+Durable audit records for structurally valid logs from confirmed token contracts whose event payload cannot be decoded canonically.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `blockNumber` | string | Exact source height (hex) |
+| `blockNumberInt` | int64 | Numeric source height used for rollback |
+| `blockHash` | string | Exact source block hash |
+| `txHash` | string | Exact source transaction hash |
+| `logIndex` | string | Canonical event position within the block |
+| `emitter` | string | Confirmed token contract address |
+| `topic0` | string | Transfer event signature |
+| `tokenStandard` | string | Confirmed token standard used for decoding |
+| `reason` | string | Bounded deterministic rejection reason |
+| `firstSeenAt` | date | Mongo server time when first quarantined |
+| `lastSeenAt` | date | Mongo server time of the latest replay |
+
+**Indexes**: `(blockHash, txHash, logIndex)` unique and `(blockNumberInt, blockHash)` for rollback. Startup fails closed if these indexes cannot be created. Reorg rollback deletes dead letters owned by the orphaned block.
 
 #### `pending_token_contracts`
 Queue for contracts awaiting token detection processing.
@@ -385,10 +458,20 @@ Queue for contracts awaiting token detection processing.
 | `contractAddress` | string | Contract address |
 | `txHash` | string | Transaction hash |
 | `blockNumber` | string | Block number (hex) |
+| `blockHash` | string | Canonical block hash bound to the queued transaction |
 | `blockTimestamp` | string | Block timestamp (hex) |
 | `processed` | bool | Whether this has been processed |
+| `processing` | bool | Whether one worker currently owns the item |
+| `processingToken` | string | Random ownership token required for completion |
+| `processingUntil` | date | Mongo server-time claim deadline |
+| `attempts` | int | Durable processing attempt count |
+| `nextAttemptAt` | date | Mongo server-time retry eligibility |
+| `lastError` | string | Bounded diagnostic from the last failed attempt |
+| `createdAt` | date | Mongo server time when the queue identity was first seen |
+| `updatedAt` | date | Mongo server time of the latest queue mutation |
+| `processedAt` | date | Mongo server time when processing completed |
 
-**Indexes**: `(contractAddress, txHash)` unique, `processed`.
+**Indexes**: `(contractAddress, txHash)` unique, queue claim and retry indexes, plus a 30-day TTL on completed `processedAt` records.
 
 ### 3.3 Validator Collections
 
@@ -531,6 +614,38 @@ Records the starting block of the initial sync (used for token processing range)
 | `_id` | string | `"initial_sync_start"` |
 | `block_number` | string | Hex block number (typically `"0x1"`) |
 
+#### `syncer_leases`
+Coordinates the exclusive chain-indexer writer across processes.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `_id` | string | `"chain-indexer"` |
+| `owner` | string | Random process identity holding the lease |
+| `generation` | long | Monotonic ownership generation |
+| `expiresAt` | date | UTC lease expiry renewed by the active syncer |
+| `releasedAt` | date | Mongo server time of a clean or compute-fenced release |
+| `releasedGeneration` | long | Generation whose release was acknowledged |
+
+#### `balance_reconciliations`
+Durable reorg work for native, ERC-20, ERC-721, and ERC-1155 snapshots that must be refreshed from canonical RPC state.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `_id` | string | Deterministic hash of the balance identity |
+| `kind` | string | `native`, `erc20`, `erc721`, or `erc1155` |
+| `address` | string | Native address when `kind` is `native` |
+| `contractAddress` | string | Token contract for token kinds |
+| `holderAddress` | string | Holder for ERC-20 and ERC-1155 |
+| `tokenID` | string | Canonical decimal uint256 for ERC-721 and ERC-1155 |
+| `rollbackTo` | string | Reorg rollback target that created or refreshed the work |
+| `availableAt` | date | Mongo server-time retry or crash-reclaim eligibility |
+| `claimToken` | string | Random ownership token required for failure or completion |
+| `claimExpiresAt` | date | Server-time claim deadline |
+| `attempts` | int | Durable failed-attempt count |
+| `lastError` | string | Bounded diagnostic from the last failed attempt |
+
+The queue uses fair availability ordering and bounded exponential backoff, so persistent RPC failures cannot starve newer invalidations. Public readers hide the stale snapshots until an ownership-safe refresh completes.
+
 ### 3.6 Mempool Collection
 
 #### `pending_transactions`
@@ -586,7 +701,7 @@ All calls go through a shared HTTP client with connection pooling (100 max idle 
 | `qrl_getBalance` | `rpc/calls.go` | Get address balance |
 | `qrl_getCode` | `rpc/calls.go` | Get contract bytecode |
 | `qrl_call` | `rpc/calls.go`, `rpc/tokenscalls.go` | Call contract method (read-only) |
-| `qrl_getLogs` | `rpc/calls.go` | Get event logs for a block (Transfer events) |
+| `qrl_getLogs` | `rpc/calls.go` | Get Transfer logs using an exact block-hash selector |
 | `qrl_getTransactionByHash` | `rpc/calls.go` | Get transaction details by hash |
 | `debug_traceTransaction` | `rpc/calls.go` | Trace internal calls (callTracer) |
 | `txpool_content` | `rpc/pending.go` | Get mempool pending/queued transactions |
@@ -634,28 +749,25 @@ During `ProcessTransactions()` for each block:
 
 ### 5.2 Phase 2: Process Queued Contracts
 
-`ProcessTokenTransfersFromTransactions()` runs after transaction processing:
-1. Queries all unprocessed entries from `pending_token_contracts`.
-2. For each, checks if the contract exists in `contractCode` and `isToken == true`.
-3. If it's a token:
-   - Gets transaction details via RPC
-   - Checks for **direct transfer calls** by decoding `tx.data` (function signature `0xa9059cbb`)
-   - Checks for **Transfer event logs** by getting the transaction receipt and filtering for the Transfer event signature (`0xddf252ad...`)
-   - Stores each transfer in `tokenTransfers` collection
-   - Updates sender and recipient balances in `tokenBalances` (via RPC `balanceOf` call)
-4. Marks the entry as `processed: true`.
+`ProcessTokenTransfersFromTransactions()` drains the legacy per-transaction queue after transaction processing:
+1. Atomically claims one eligible unprocessed entry with a random token, Mongo server-time deadline, and incremented attempt count.
+2. Checks that the queued block is still represented by exactly one canonical `ingestionState: "complete"` block and that the receipt identity matches it.
+3. Marks the legacy item processed after exact receipt and canonical block validation. Transfer, classification, metadata, and balance effects are owned exclusively by the durable block-level worker, which avoids two queues mutating the same projection out of order.
+4. Failure releases the item with bounded exponential backoff. A periodic worker retries eligible items even when the chain head is idle.
 
-### 5.3 Block-Level Token Transfer Processing
+### 5.3 Durable Block-Level Token Processing
 
-`ProcessBlockTokenTransfers()` takes a different approach for bulk processing:
-1. Calls `qrl_getLogs` for the block with the Transfer event signature topic filter.
-2. For each log with 3 topics (standard Transfer event):
-   - Extracts the contract address from `log.Address`.
-   - Calls `EnsureTokenInDatabase()` to verify/create the token in `contractCode`.
-   - Extracts `from` and `to` from `log.Topics[1]` and `log.Topics[2]` (last 20 bytes).
-   - Extracts `amount` from `log.Data`.
-   - Checks for duplicates via `TokenTransferExists()`.
-   - Stores the transfer and updates balances.
+`ProcessBlockTokenTransfers()` receives one exact complete block and runs behind a durable claim stored on that block:
+
+1. Claim one `tokenIngestionState: "pending"` block using Mongo server time, a random owner token, and a crash-reclaim deadline.
+2. Call `qrl_getLogs` with `blockHash` and the Transfer, TransferSingle, and TransferBatch signatures.
+3. Validate every returned log identity before any token effect is written: `removed` is false, block number and hash match, the transaction belongs to the stored block, transaction and log indexes are canonical and unique, and the emitter is a valid QIP-55 address.
+4. Classify each emitter against the exact block state. RPC and Mongo failures remain retryable errors. A successful probe with no recognized token standard skips that emitter's matching ABI-shaped logs.
+5. Decode every log for confirmed token standards using canonical ERC-20, ERC-721, and ERC-1155 payload rules. Deterministic shape or decode failures are idempotently written to `tokenEventDeadLetters`, then later block heights can continue. A dead-letter write failure remains retryable and keeps the block pending.
+6. After planning all logs, idempotently upsert transfer rows and refresh token balance, ownership, and metadata state using exact-block RPC calls.
+7. Reload the exact unique block and compare its transaction snapshot. Mark token ingestion complete only while the same claim token and block identity are still owned.
+
+A failure releases the claim with bounded exponential backoff. A crash leaves the claim reclaimable after its server-time lease. Claims are strictly height ordered: an older retry stalls later token effects so historical replay cannot overwrite a newer balance or ownership projection. The startup worker drains work immediately and every 30 seconds, including while the chain head is quiet. Balance reconciliation also waits for this queue to reach a complete prefix. Reorg rollback deletes the owning orphan block and its transfer rows, then queues affected balance identities for reconciliation.
 
 ### 5.4 Transfer Event Signature
 
@@ -665,17 +777,14 @@ keccak256("Transfer(address,address,uint256)")
 ```
 
 Log topics layout:
-- `topics[0]`: Event signature (Transfer)
-- `topics[1]`: `from` address (padded to 32 bytes, last 20 bytes are the address)
-- `topics[2]`: `to` address (padded to 32 bytes, last 20 bytes are the address)
-- `data`: Transfer amount (uint256, hex encoded)
+- `topics[0]`: event signature hash in the high 32 bytes of a 64-byte VM word, followed by 32 zero bytes
+- `topics[1]`: complete 64-byte `from` address
+- `topics[2]`: complete 64-byte `to` address
+- `data`: Transfer amount in one 64-byte ABI word
 
 ### 5.5 Post-Initial-Sync Token Processing (`synchroniser/token_sync.go`)
 
-After the initial block sync completes, `ProcessTokensAfterInitialSync()`:
-1. Queries `blocks` collection for all blocks that have at least one transaction.
-2. Filters by hex range comparison in Go (not MongoDB, because hex strings are not zero-padded).
-3. Processes token transfers in configurable batches (default: 10 blocks per batch, 86ms delay between batches).
+After the initial block sync completes, `ProcessTokensAfterInitialSync()` queries complete blocks by numeric `blockNumberInt` and requests their durable token claims in batches. The independent startup worker also continuously drains pending or crash-reclaimable claims, so restart and quiet-head recovery do not depend on another block arriving.
 
 ---
 
@@ -816,11 +925,11 @@ When a new block is processed (`UpdatePendingTransactionsInBlock`):
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MONGOURI` | Yes | `mongodb://localhost:27017` | MongoDB connection string (without database name) |
+| `MONGOURI` | Yes | -- | Transaction-capable MongoDB URI without the database name, for example `mongodb://localhost:27017/?replicaSet=rs0` |
 | `NODE_URL` | Yes | `http://localhost:8545` | Zond execution layer JSON-RPC endpoint |
 | `MEMPOOL_NODE_URL` | No | Falls back to `NODE_URL` | Separate RPC for mempool access |
 | `BEACONCHAIN_API` | Yes | `http://localhost:3500` | Beacon chain HTTP API endpoint |
-| `HEALTH_PORT` | No | `8081` | Port for Kubernetes health check endpoint |
+| `HEALTH_PORT` | No | `8083` | Health endpoint port. Docker and Kubernetes set this to `8081`. |
 | `RPC_DELAY_MS` | No | `50` | Delay between RPC calls in ms |
 | `RPC_DELAY_JITTER_MS` | No | `26` | Random jitter added to RPC delay |
 
@@ -863,7 +972,7 @@ When a new block is processed (`UpdatePendingTransactionsInBlock`):
 | Constant | Value | Description |
 |----------|-------|-------------|
 | `QUANTA` | 1e18 | Wei-to-QRL divisor |
-| `QRLZeroAddress` | `Q000...000` | Zero address (40 hex chars + Q) |
+| `QRLZeroAddress` | `Q000...000` | Zero address (128 hex chars + Q) |
 | `LOG_FILENAME` | `zond_sync.log` | Log file name (in `logs/` directory) |
 
 ---
@@ -873,8 +982,24 @@ When a new block is processed (`UpdatePendingTransactionsInBlock`):
 ### 10.1 Prerequisites
 
 - Go 1.24+
-- MongoDB (accessible, database will be created automatically)
+- MongoDB replica set or sharded cluster with a writable primary. The database is created automatically.
 - QRL Zond node (execution layer + beacon chain)
+
+The native `deploy.sh` path expects a writable single-node replica set named `rs0` on `127.0.0.1:27017`. It validates this topology before stopping services or offering database cleanup. The script leaves topology migration to an explicit maintenance procedure.
+
+For a new native single-node installation, configure `mongod` with `replication.replSetName: rs0`, keep its network bind restricted to the intended hosts, start it, and initialize it once:
+
+```bash
+mongosh --quiet "mongodb://127.0.0.1:27017/admin?directConnection=true" \
+  --eval 'rs.initiate({_id:"rs0",members:[{_id:0,host:"127.0.0.1:27017"}]})'
+
+mongosh --quiet "mongodb://127.0.0.1:27017/admin?replicaSet=rs0" \
+  --eval 'const s=rs.status(); printjson({set:s.set,myState:s.myState,ok:s.ok})'
+```
+
+Back up and schedule maintenance before converting an existing standalone deployment. Review the advertised member hostname from every application host before initializing it. Native application URIs must use the same replica-set name.
+
+`deploy.sh` preserves existing component `.env` files. Before deploying an existing installation, update the backend and frontend database URIs to include `/qrldata-z?replicaSet=rs0`, and update the syncer URI to include `/?replicaSet=rs0`.
 
 ### 10.2 Build
 
@@ -898,7 +1023,7 @@ cp .env.example .env
 
 Edit `.env`:
 ```env
-MONGOURI=mongodb://localhost:27017
+MONGOURI=mongodb://localhost:27017/?replicaSet=rs0
 NODE_URL=http://localhost:8545
 MEMPOOL_NODE_URL=http://localhost:8545
 BEACONCHAIN_API=http://localhost:3500
@@ -926,7 +1051,7 @@ Logs are written to both stdout and `logs/zond_sync.log`.
 docker build -t zond-syncer .
 
 # Run
-docker run -e MONGOURI=mongodb://mongo:27017 \
+docker run -e 'MONGOURI=mongodb://mongo:27017/?replicaSet=rs0' \
            -e NODE_URL=http://node:8545 \
            -e BEACONCHAIN_API=http://beacon:3500 \
            zond-syncer
@@ -936,7 +1061,11 @@ The Dockerfile uses a two-stage build (Go 1.24-alpine builder, alpine runner) wi
 
 ### 10.6 Kubernetes
 
-The `/health` endpoint (port 8081, configurable via `HEALTH_PORT`) returns `{"status":"ok"}` for liveness/readiness probes.
+The MongoDB StatefulSet starts `mongod` with `--replSet rs0`. Its readiness probe initializes an uninitialized database with the stable `mongodb-0.mongodb.zond-explorer.svc.cluster.local` member name, then reports ready only when that exact member is the writable `rs0` primary. The probe rejects existing replica configurations with another set name or member identity. The headless Service publishes the pod before readiness so that stable member name resolves during initialization.
+
+The syncer Deployment uses `replicas: 1` and the `Recreate` strategy. Keep both settings. The in-database lease provides a second exclusivity check and causes another syncer process to fail during startup.
+
+The `/health` endpoint uses `HEALTH_PORT` (`8083` by default; deployments set `8081`) for liveness/readiness probes.
 
 ---
 
@@ -960,7 +1089,7 @@ Located in `scripts/`, these Python scripts are used for one-time reindexing ope
 ```bash
 cd scripts
 pip install -r requirements.txt
-MONGOURI=mongodb://localhost:27017 NODE_URL=http://localhost:8545 python reindex_contracts.py
+MONGOURI=mongodb://localhost:27017/?replicaSet=rs0 NODE_URL=http://localhost:8545 python reindex_contracts.py
 ```
 
 ### 11.2 `reindex_tokens.py`
@@ -984,7 +1113,7 @@ MONGOURI=mongodb://localhost:27017 NODE_URL=http://localhost:8545 python reindex
 cd scripts
 pip install -r requirements.txt
 pip install web3
-MONGOURI=mongodb://localhost:27017 NODE_URL=http://localhost:8545 python reindex_tokens.py
+MONGOURI=mongodb://localhost:27017/?replicaSet=rs0 NODE_URL=http://localhost:8545 python reindex_tokens.py
 ```
 
 ---
@@ -993,6 +1122,8 @@ MONGOURI=mongodb://localhost:27017 NODE_URL=http://localhost:8545 python reindex
 
 ### 12.1 Concurrency Model
 
+- **Exclusive process lease** in `syncer_leases` permits one active syncer generation for a database. The two-minute lease is renewed every 40 seconds. Clean release is required before a new generation can acquire, so TTL expiry cannot create split brain. Crash recovery requires explicit compute fencing and exact owner/generation acknowledgement.
+- **Chain mutation mutex** serializes local block insertion, companion writes, contract reprocessing, sync-state updates, and rollback.
 - **Producer/consumer pattern** for batch block fetching. Producers run as goroutines, limited to 8 concurrent via a channel-based semaphore (`producerSem`).
 - **Atomic operations** (`sync/atomic`) used to track the highest processed block number across goroutines.
 - **Mutex** (`sync.Mutex`) protects sync state updates during consumer processing.
@@ -1023,9 +1154,14 @@ Delays are configurable via `RPC_DELAY_MS` and `RPC_DELAY_JITTER_MS` environment
 In `processSubsequentBlocks()`:
 1. After fetching a new block, checks if `block.parentHash` matches the hash of the previous block stored in MongoDB.
 2. If there's a mismatch, calls `Rollback()` which:
-   - Deletes all blocks after the mismatched block number (in a MongoDB transaction).
-   - Updates the sync state to the rolled-back block.
+   - Captures the removed blocks, transactions, and created contracts in one MongoDB transaction snapshot.
+   - Deletes the blocks and their append-only companion records, contract trust rows, and pending verification jobs.
+   - Removes only mined pending-transaction tombstones for orphaned transaction hashes so canonical mempool entries can return.
+   - Marks affected native and ERC-20/721/1155 snapshots stale and enqueues canonical RPC reconciliation in the same transaction. Native identities include transaction and internal-call endpoints, created contracts, the block miner, and withdrawal beneficiaries.
+   - Clears contract flags on affected address records and resets the sync high-water mark to the rollback target.
 3. Returns the parent block number so the sync loop reprocesses from there.
+
+Rollback requires MongoDB transactions. Startup rejects a standalone topology so a reorg cannot begin a partial multi-collection cleanup.
 
 ### 12.5 Address Format
 
@@ -1065,7 +1201,7 @@ Uses [uber-go/zap](https://github.com/uber-go/zap) structured logging:
 
 ### 12.9 Health Check
 
-A simple HTTP health endpoint at `/health` (default port 8081) returns:
+A simple HTTP health endpoint at `/health` (default port 8083) returns:
 ```json
 {"status":"ok"}
 ```
@@ -1073,17 +1209,18 @@ Used for Kubernetes liveness/readiness probes and Docker health checks.
 
 ### 12.10 Duplicate Prevention
 
-- **Blocks**: `BlockExists()` checks before every insert (both single and batch).
-- **Batch inserts**: `InsertManyBlockDocuments()` deduplicates within the batch and against the DB.
-- **Token transfers**: `txHash` has a unique index; `TokenTransferExists()` checks before insert.
-- **Token balances**: `(contractAddress, holderAddress)` compound unique index with upsert.
+- **Blocks**: fetched height, envelope identity, deterministic ordering, parent continuity, and same-height identity are validated before durable insertion. Any duplicate height is rejected, and `blockNumberInt_desc_idx` enforces uniqueness. Post-write identity reads classify the confirmed prefix after partial or uncertain batch outcomes.
+- **Block visibility**: `ingestionState: "pending"` remains hidden. The exact block becomes `complete` only after every companion write succeeds.
+- **Token transfer visibility**: the owning block must be uniquely core-complete and token-complete, and the transfer `blockHash` must exactly match that block. Hashless legacy rows remain hidden until replay repairs them.
+- **Token transfers**: `(txHash, contractAddress, logIndex, tokenID)` is the idempotent event identity.
+- **Token balances**: `(contractAddress, holderAddress, tokenID)` compound identity with standard-aware upsert.
 - **Sync state**: Only updates if new block number is higher than existing.
-- **Pending contracts**: `(contractAddress, txHash)` compound unique index with upsert.
+- **Pending contracts**: canonical `(contractAddress, txHash)` compound identity with owner-token claims.
 
 ### 12.11 Collection Initialization
 
-On MongoDB connection (`configs/setup.go`):
+`configs.ConnectDB()` performs a read-only connection and topology check. After the exclusive lease is acquired, `configs.BootstrapDB()`:
 1. Creates collections with JSON schema validators for `dailyTransactionsVolume`, `coingecko`, `priceHistory`, `walletCount`, `totalCirculatingSupply`, and `tokenBalances`.
-2. Creates compound and unique indexes for `tokenBalances`, `pending_token_contracts`, `tokenTransfers`, `priceHistory`, and `transfer`.
+2. Creates compound and unique indexes for `blocks`, `tokenBalances`, `pending_token_contracts`, `tokenTransfers`, `tokenEventDeadLetters`, `priceHistory`, and `transfer`. An existing non-unique block-height index is upgraded only by the offline migration after its duplicate audit.
 3. Initializes the `sync_state` collection with `block_number: "0x0"` if empty.
 4. Initializes CoinGecko collection with zero values.

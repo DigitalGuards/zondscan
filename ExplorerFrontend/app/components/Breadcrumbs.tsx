@@ -4,6 +4,7 @@ import { ChevronRightIcon } from '@heroicons/react/20/solid'
 export interface BreadcrumbItem {
   label: string
   href?: string
+  fullLabel?: string
 }
 
 interface BreadcrumbsProps {
@@ -25,11 +26,21 @@ export default function Breadcrumbs({ items }: BreadcrumbsProps): JSX.Element {
             <li key={item.label} className="flex items-center gap-1">
               <ChevronRightIcon className="w-4 h-4 text-text-muted/60 flex-shrink-0" />
               {isLast || !item.href ? (
-                <span className="text-text-secondary truncate max-w-[200px] sm:max-w-[300px]" aria-current="page">
+                <span
+                  className="text-text-secondary truncate max-w-[200px] sm:max-w-[300px]"
+                  aria-current="page"
+                  aria-label={item.fullLabel}
+                  title={item.fullLabel}
+                >
                   {item.label}
                 </span>
               ) : (
-                <Link href={item.href} className="hover:text-accent transition-colors">
+                <Link
+                  href={item.href}
+                  className="hover:text-accent transition-colors"
+                  aria-label={item.fullLabel}
+                  title={item.fullLabel}
+                >
                   {item.label}
                 </Link>
               )}

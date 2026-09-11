@@ -13,6 +13,12 @@ RUN npm ci
 FROM node:20-alpine AS builder
 WORKDIR /app
 
+# Next resolves rewrites while building the image. The browser uses `/api`,
+# which stays same-origin, and this private URL is baked only into the server
+# rewrite table. Override the argument if the backend service has another name.
+ARG HANDLER_URL=http://backend:8080
+ENV HANDLER_URL=${HANDLER_URL}
+
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

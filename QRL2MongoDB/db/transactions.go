@@ -10,48 +10,66 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"regexp"
 	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
 )
 
-// ProcessTransactions processes only transaction data without token logic
-func ProcessTransactions(blockData interface{}) {
-	for _, tx := range blockData.(models.ZondDatabaseBlock).Result.Transactions {
-		to, contractAddress, statusTx, isContract := processContracts(&tx)
+// ProcessTransactions processes transaction data and reports every companion
+// write failure so the durable block-ingestion marker can remain pending.
+func ProcessTransactions(block models.ZondDatabaseBlock) error {
+	var errs []error
+	for _, tx := range block.Result.Transactions {
+		to, contractAddress, statusTx, isContract, contractErr := processContracts(&tx)
+		if contractErr != nil {
+			errs = append(errs, contractErr)
+		}
 
-		processTransactionData(&tx, blockData.(models.ZondDatabaseBlock).Result.Timestamp, to, contractAddress, statusTx, isContract, blockData.(models.ZondDatabaseBlock).Result.Size)
+		if err := processTransactionData(&tx, block.Result.Timestamp, to, contractAddress, statusTx, isContract, block.Result.Size); err != nil {
+			errs = append(errs, err)
+		}
 
 		// Store contract addresses for later token processing
 		// Only queue if this is actually a contract (new creation or interaction with existing contract)
 		// This avoids queuing regular wallet addresses which would just be filtered out later
 		if contractAddress != "" {
 			// New contract creation - always queue
-			QueuePotentialTokenContract(contractAddress, &tx, blockData.(models.ZondDatabaseBlock).Result.Timestamp)
+			if err := QueuePotentialTokenContract(contractAddress, &tx, block.Result.Timestamp); err != nil {
+				errs = append(errs, err)
+			}
 		} else if isContract && to != "" {
 			// Transaction to an existing contract - queue for token processing
-			QueuePotentialTokenContract(to, &tx, blockData.(models.ZondDatabaseBlock).Result.Timestamp)
+			if err := QueuePotentialTokenContract(to, &tx, block.Result.Timestamp); err != nil {
+				errs = append(errs, err)
+			}
 		}
 	}
+	return errors.Join(errs...)
 }
 
 // QueuePotentialTokenContract stores a mapping of potential token contract addresses
 // to be processed later in a batch
-func QueuePotentialTokenContract(address string, tx *models.Transaction, blockTimestamp string) {
+func QueuePotentialTokenContract(address string, tx *models.Transaction, blockTimestamp string) error {
 	// Skip if the address is empty
 	if address == "" {
-		return
+		return nil
+	}
+
+	pending, err := newPendingTokenContractWork(address, tx, blockTimestamp)
+	if err != nil {
+		return err
 	}
 
 	// Use the pending contracts collection to store addresses
 	collection := configs.GetCollection(configs.DB, "pending_token_contracts")
 	if collection == nil {
-		configs.Logger.Error("Failed to get pending_token_contracts collection")
-		return
+		return fmt.Errorf("pending_token_contracts collection is unavailable")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -59,42 +77,312 @@ func QueuePotentialTokenContract(address string, tx *models.Transaction, blockTi
 
 	// Create the document to insert
 	doc := bson.M{
-		"contractAddress": address,
-		"txHash":          tx.Hash,
-		"blockNumber":     tx.BlockNumber,
-		"blockTimestamp":  blockTimestamp,
+		"contractAddress": pending.ContractAddress,
+		"txHash":          pending.TxHash,
+		"blockNumber":     pending.BlockNumber,
+		"blockHash":       pending.BlockHash,
+		"blockTimestamp":  pending.BlockTimestamp,
 		"processed":       false,
 	}
 
 	// Use upsert to prevent duplicates
 	opts := options.Update().SetUpsert(true)
 	filter := bson.M{
-		"contractAddress": address,
-		"txHash":          tx.Hash,
+		"contractAddress": pending.ContractAddress,
+		"txHash":          pending.TxHash,
 	}
 
-	_, err := collection.UpdateOne(ctx, filter, bson.M{"$set": doc}, opts)
+	_, err = collection.UpdateOne(ctx, filter, bson.M{
+		"$set": doc,
+		"$setOnInsert": bson.M{
+			"createdAt": time.Now().UTC(),
+			"attempts":  0,
+		},
+		"$currentDate": bson.M{"updatedAt": true},
+		"$unset": bson.M{
+			"processing":          "",
+			"processingToken":     "",
+			"processingStartedAt": "",
+			"processingUntil":     "",
+			"nextAttemptAt":       "",
+			"lastError":           "",
+			"lastFailedAt":        "",
+			"processedAt":         "",
+		},
+	}, opts)
 	if err != nil {
 		configs.Logger.Error("Failed to queue potential token contract",
-			zap.String("address", address),
-			zap.String("txHash", tx.Hash),
+			zap.String("address", pending.ContractAddress),
+			zap.String("txHash", pending.TxHash),
 			zap.Error(err))
+		return err
 	} else {
 		configs.Logger.Debug("Queued potential token contract for later processing",
-			zap.String("address", address),
-			zap.String("txHash", tx.Hash),
-			zap.String("blockNumber", tx.BlockNumber))
+			zap.String("address", pending.ContractAddress),
+			zap.String("txHash", pending.TxHash),
+			zap.String("blockNumber", pending.BlockNumber))
+	}
+	return nil
+}
+
+const (
+	pendingTokenClaimLease = 15 * time.Minute
+	pendingTokenBatchLimit = 256
+)
+
+type pendingTokenContractWork struct {
+	ID              primitive.ObjectID `bson:"_id,omitempty"`
+	ContractAddress string             `bson:"contractAddress"`
+	TxHash          string             `bson:"txHash"`
+	BlockNumber     string             `bson:"blockNumber"`
+	BlockHash       string             `bson:"blockHash"`
+	BlockTimestamp  string             `bson:"blockTimestamp"`
+	ProcessingToken string             `bson:"processingToken"`
+	Attempts        int                `bson:"attempts"`
+}
+
+func newPendingTokenContractWork(
+	address string,
+	tx *models.Transaction,
+	blockTimestamp string,
+) (pendingTokenContractWork, error) {
+	if tx == nil {
+		return pendingTokenContractWork{}, fmt.Errorf("queue potential token contract: transaction is nil")
+	}
+	work, err := normalizePendingTokenContractWork(pendingTokenContractWork{
+		ContractAddress: address,
+		TxHash:          tx.Hash,
+		BlockNumber:     tx.BlockNumber,
+		BlockHash:       tx.BlockHash,
+		BlockTimestamp:  blockTimestamp,
+	})
+	if err != nil {
+		return pendingTokenContractWork{}, fmt.Errorf("queue potential token contract: %w", err)
+	}
+	if work.BlockHash == "" {
+		return pendingTokenContractWork{}, fmt.Errorf("queue potential token contract: block hash is required")
+	}
+	if work.BlockTimestamp == "" {
+		return pendingTokenContractWork{}, fmt.Errorf("queue potential token contract: block timestamp is required")
+	}
+	return work, nil
+}
+
+func normalizePendingTokenContractWork(work pendingTokenContractWork) (pendingTokenContractWork, error) {
+	work.ContractAddress = validation.ConvertToQAddress(work.ContractAddress)
+	if !validation.IsValidAddress(work.ContractAddress) {
+		return pendingTokenContractWork{}, fmt.Errorf("invalid contract address: %s", work.ContractAddress)
+	}
+
+	var err error
+	work.TxHash, err = canonicalFixedHash(work.TxHash, "transaction hash")
+	if err != nil {
+		return pendingTokenContractWork{}, err
+	}
+	work.BlockNumber, err = canonicalHexQuantity(work.BlockNumber, "block number")
+	if err != nil {
+		return pendingTokenContractWork{}, err
+	}
+	if work.BlockHash != "" {
+		work.BlockHash, err = canonicalFixedHash(work.BlockHash, "block hash")
+		if err != nil {
+			return pendingTokenContractWork{}, err
+		}
+	}
+	if work.BlockTimestamp != "" {
+		work.BlockTimestamp, err = canonicalHexQuantity(work.BlockTimestamp, "block timestamp")
+		if err != nil {
+			return pendingTokenContractWork{}, err
+		}
+	}
+	return work, nil
+}
+
+func canonicalFixedHash(value, field string) (string, error) {
+	value = strings.ToLower(value)
+	if err := validation.ValidateHexString(value, validation.HashLength); err != nil {
+		return "", fmt.Errorf("invalid %s: %w", field, err)
+	}
+	return value, nil
+}
+
+func canonicalHexQuantity(value, field string) (string, error) {
+	value = strings.ToLower(value)
+	if !validation.IsValidHexString(value) {
+		return "", fmt.Errorf("invalid %s: %s", field, value)
+	}
+	number := new(big.Int)
+	if _, ok := number.SetString(strings.TrimPrefix(value, "0x"), 16); !ok {
+		return "", fmt.Errorf("invalid %s: %s", field, value)
+	}
+	return "0x" + number.Text(16), nil
+}
+
+func pendingTokenClaimFilter() bson.M {
+	epoch := time.Unix(0, 0).UTC()
+	return bson.M{
+		"processed": false,
+		"$expr": bson.M{"$and": bson.A{
+			bson.M{"$lte": bson.A{
+				bson.M{"$ifNull": bson.A{"$nextAttemptAt", epoch}},
+				"$$NOW",
+			}},
+			bson.M{"$or": bson.A{
+				bson.M{"$ne": bson.A{
+					bson.M{"$ifNull": bson.A{"$processing", false}},
+					true,
+				}},
+				bson.M{"$lte": bson.A{
+					bson.M{"$ifNull": bson.A{"$processingUntil", epoch}},
+					"$$NOW",
+				}},
+			}},
+		}},
 	}
 }
 
-// ProcessTokenTransfersFromTransactions processes token transfers for queued contracts
-// This should be called after transaction processing is complete.
-// Uses FindOneAndUpdate to atomically claim each work item, preventing duplicate
-// processing if multiple goroutines call this function concurrently.
-func ProcessTokenTransfersFromTransactions() {
+func pendingTokenClaimSort() bson.D {
+	return bson.D{
+		{Key: "nextAttemptAt", Value: 1},
+		{Key: "processingUntil", Value: 1},
+		{Key: "createdAt", Value: 1},
+		{Key: "_id", Value: 1},
+	}
+}
+
+func pendingTokenClaimUpdate(token string) mongo.Pipeline {
+	return mongo.Pipeline{
+		bson.D{{Key: "$set", Value: bson.M{
+			"processing":          true,
+			"processingToken":     token,
+			"processingStartedAt": "$$NOW",
+			"processingUntil": bson.M{"$dateAdd": bson.M{
+				"startDate": "$$NOW",
+				"unit":      "second",
+				"amount":    int64(pendingTokenClaimLease / time.Second),
+			}},
+			"attempts": bson.M{"$add": bson.A{
+				bson.M{"$ifNull": bson.A{"$attempts", 0}},
+				1,
+			}},
+		}}},
+	}
+}
+
+func pendingTokenClaimOwnerFilter(work pendingTokenContractWork) bson.M {
+	filter := bson.M{
+		"processed":       false,
+		"processing":      true,
+		"processingToken": work.ProcessingToken,
+	}
+	if !work.ID.IsZero() {
+		filter["_id"] = work.ID
+	} else {
+		filter["contractAddress"] = work.ContractAddress
+		filter["txHash"] = work.TxHash
+	}
+	return filter
+}
+
+func pendingTokenRenewClaimUpdate() mongo.Pipeline {
+	return mongo.Pipeline{
+		bson.D{{Key: "$set", Value: bson.M{
+			"processingUntil": bson.M{"$dateAdd": bson.M{
+				"startDate": "$$NOW",
+				"unit":      "second",
+				"amount":    int64(pendingTokenClaimLease / time.Second),
+			}},
+		}}},
+	}
+}
+
+func renewPendingTokenClaim(
+	collection *mongo.Collection,
+	work pendingTokenContractWork,
+) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	result, err := collection.UpdateOne(
+		ctx,
+		pendingTokenClaimOwnerFilter(work),
+		pendingTokenRenewClaimUpdate(),
+	)
+	if err != nil {
+		return fmt.Errorf("renew token claim: %w", err)
+	}
+	if result.MatchedCount != 1 {
+		return fmt.Errorf("renew token claim: ownership lost")
+	}
+	return nil
+}
+
+func pendingTokenRetryDelay(attempts int) time.Duration {
+	if attempts < 1 {
+		attempts = 1
+	}
+	shift := attempts - 1
+	if shift > 7 {
+		shift = 7
+	}
+	delay := 5 * time.Second * time.Duration(1<<shift)
+	if delay > 10*time.Minute {
+		return 10 * time.Minute
+	}
+	return delay
+}
+
+func pendingTokenFailureUpdate(message string, retryDelay time.Duration) mongo.Pipeline {
+	if len(message) > 2048 {
+		message = message[:2048]
+	}
+	return mongo.Pipeline{
+		bson.D{{Key: "$set", Value: bson.M{
+			"processing":   false,
+			"lastError":    message,
+			"lastFailedAt": "$$NOW",
+			"nextAttemptAt": bson.M{"$dateAdd": bson.M{
+				"startDate": "$$NOW",
+				"unit":      "second",
+				"amount":    int64(retryDelay / time.Second),
+			}},
+		}}},
+		bson.D{{Key: "$unset", Value: bson.A{
+			"processingToken",
+			"processingStartedAt",
+			"processingUntil",
+		}}},
+	}
+}
+
+func pendingTokenSuccessUpdate() bson.M {
+	return bson.M{
+		"$set": bson.M{
+			"processed":  true,
+			"processing": false,
+		},
+		"$currentDate": bson.M{"processedAt": true},
+		"$unset": bson.M{
+			"processingToken":     "",
+			"processingStartedAt": "",
+			"processingUntil":     "",
+			"nextAttemptAt":       "",
+			"lastError":           "",
+			"lastFailedAt":        "",
+		},
+	}
+}
+
+// ProcessTokenTransfersFromTransactions validates legacy receipt queue entries
+// after transaction ingestion. Each item uses a durable server-time claim.
+// Transfer, metadata, and balance effects belong to the block-wide token queue.
+// A crash or error leaves the receipt item reclaimable and idempotent.
+func ProcessTokenTransfersFromTransactions(stopCh ...<-chan struct{}) error {
 	configs.Logger.Info("Processing of queued token contracts")
 
 	collection := configs.GetCollection(configs.DB, "pending_token_contracts")
+	if collection == nil {
+		return fmt.Errorf("pending_token_contracts collection is unavailable")
+	}
 
 	// Count unprocessed items for logging
 	countCtx, countCancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -102,35 +390,38 @@ func ProcessTokenTransfersFromTransactions() {
 	countCancel()
 	if err != nil {
 		configs.Logger.Error("Failed to count pending token contracts", zap.Error(err))
-		return
+		return err
 	}
 
 	configs.Logger.Info("Found pending token contracts to process", zap.Int64("count", count))
 	if count == 0 {
 		configs.Logger.Info("No pending token contracts to process")
-		return
+		return nil
 	}
 
-	// Process each item by atomically claiming it with FindOneAndUpdate.
-	// This prevents race conditions: only the goroutine that successfully flips
-	// processed=false→true will execute processTokenContract for that item.
 	processed := 0
-	claimFilter := bson.M{"processed": false}
-	claimUpdate := bson.M{"$set": bson.M{"processed": true}}
+	failed := 0
+	claimed := 0
+	var batchErrors []error
+	claimFilter := pendingTokenClaimFilter()
 	findOneOpts := options.FindOneAndUpdate().
-		SetSort(bson.D{{Key: "contractAddress", Value: 1}, {Key: "txHash", Value: 1}}).
-		SetReturnDocument(options.Before)
+		SetSort(pendingTokenClaimSort()).
+		SetReturnDocument(options.After)
 
-	for {
-		var pending struct {
-			ContractAddress string `bson:"contractAddress"`
-			TxHash          string `bson:"txHash"`
-			BlockNumber     string `bson:"blockNumber"`
-			BlockTimestamp  string `bson:"blockTimestamp"`
+	for claimed < pendingTokenBatchLimit {
+		if pendingTokenQueueStopped(stopCh) {
+			break
 		}
+		claimToken := primitive.NewObjectID().Hex()
+		var pending pendingTokenContractWork
 
 		claimCtx, claimCancel := context.WithTimeout(context.Background(), 30*time.Second)
-		err := collection.FindOneAndUpdate(claimCtx, claimFilter, claimUpdate, findOneOpts).Decode(&pending)
+		err := collection.FindOneAndUpdate(
+			claimCtx,
+			claimFilter,
+			pendingTokenClaimUpdate(claimToken),
+			findOneOpts,
+		).Decode(&pending)
 		claimCancel()
 
 		if err == mongo.ErrNoDocuments {
@@ -139,125 +430,295 @@ func ProcessTokenTransfersFromTransactions() {
 		}
 		if err != nil {
 			configs.Logger.Error("Failed to claim pending token contract", zap.Error(err))
+			batchErrors = append(batchErrors, fmt.Errorf("claim pending token contract: %w", err))
 			break
 		}
+		claimed++
 
 		configs.Logger.Debug("Processing token contract",
 			zap.String("address", pending.ContractAddress),
 			zap.String("txHash", pending.TxHash),
 			zap.String("blockNumber", pending.BlockNumber))
 
-		processTokenContract(pending.ContractAddress, pending.TxHash, pending.BlockNumber, pending.BlockTimestamp)
+		processErr := renewPendingTokenClaim(collection, pending)
+		if processErr == nil {
+			processErr = processTokenContract(pending)
+		}
+		ownerFilter := pendingTokenClaimOwnerFilter(pending)
+		if processErr != nil {
+			failed++
+			retryDelay := pendingTokenRetryDelay(pending.Attempts)
+			failureCtx, failureCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			result, updateErr := collection.UpdateOne(
+				failureCtx,
+				ownerFilter,
+				pendingTokenFailureUpdate(processErr.Error(), retryDelay),
+			)
+			failureCancel()
+			if updateErr != nil {
+				processErr = errors.Join(processErr, fmt.Errorf("release failed token claim: %w", updateErr))
+			} else if result.MatchedCount != 1 {
+				processErr = errors.Join(processErr, fmt.Errorf("token claim ownership lost before failure release"))
+			}
+			configs.Logger.Error("Queued token contract processing failed",
+				zap.String("address", pending.ContractAddress),
+				zap.String("txHash", pending.TxHash),
+				zap.Duration("retryAfter", retryDelay),
+				zap.Error(processErr))
+			batchErrors = append(batchErrors, processErr)
+			continue
+		}
+
+		completeCtx, completeCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		result, completeErr := collection.UpdateOne(
+			completeCtx,
+			ownerFilter,
+			pendingTokenSuccessUpdate(),
+		)
+		completeCancel()
+		if completeErr != nil {
+			failed++
+			batchErrors = append(batchErrors, fmt.Errorf(
+				"complete pending token contract %s %s: %w",
+				pending.ContractAddress,
+				pending.TxHash,
+				completeErr,
+			))
+			continue
+		}
+		if result.MatchedCount != 1 {
+			failed++
+			batchErrors = append(batchErrors, fmt.Errorf(
+				"complete pending token contract %s %s: claim ownership lost",
+				pending.ContractAddress,
+				pending.TxHash,
+			))
+			continue
+		}
 		processed++
 	}
 
-	configs.Logger.Info("Completed batch processing of token contracts", zap.Int("processed", processed))
+	configs.Logger.Info("Completed batch processing of token contracts",
+		zap.Int("claimed", claimed),
+		zap.Int("processed", processed),
+		zap.Int("failed", failed),
+		zap.Int("batchLimit", pendingTokenBatchLimit))
+	return errors.Join(batchErrors...)
 }
 
-// processTokenContract processes a single token contract address
-func processTokenContract(targetAddress string, txHash string, blockNumber string, blockTimestamp string) {
-	configs.Logger.Debug("Checking for token transfers",
-		zap.String("targetAddress", targetAddress),
+func pendingTokenQueueStopped(stopCh []<-chan struct{}) bool {
+	if len(stopCh) == 0 || stopCh[0] == nil {
+		return false
+	}
+	select {
+	case <-stopCh[0]:
+		return true
+	default:
+		return false
+	}
+}
+
+func exactCaseInsensitiveRegex(value string) primitive.Regex {
+	return primitive.Regex{
+		Pattern: "^" + regexp.QuoteMeta(value) + "$",
+		Options: "i",
+	}
+}
+
+func pendingTokenCanonicalBlockFilter(
+	work pendingTokenContractWork,
+	receipt *models.TransactionReceipt,
+) bson.M {
+	blockHash := strings.ToLower(receipt.Result.BlockHash)
+	// Nested Result and Transaction model fields have JSON tags only. Mongo's
+	// BSON encoder therefore lowercases their Go field names, which makes the
+	// stored transaction keys blocknumber and blockhash.
+	return bson.M{
+		"ingestionState": BlockIngestionComplete,
+		"blockNumberInt": utils.HexToInt64(work.BlockNumber),
+		"result.number":  exactCaseInsensitiveRegex(work.BlockNumber),
+		"result.hash":    exactCaseInsensitiveRegex(blockHash),
+		"result.transactions": bson.M{"$elemMatch": bson.M{
+			"hash":        exactCaseInsensitiveRegex(work.TxHash),
+			"blocknumber": exactCaseInsensitiveRegex(work.BlockNumber),
+			"blockhash":   exactCaseInsensitiveRegex(blockHash),
+		}},
+	}
+}
+
+func validatePendingTokenReceiptIdentity(
+	work pendingTokenContractWork,
+	receipt *models.TransactionReceipt,
+) error {
+	if receipt == nil {
+		return fmt.Errorf("transaction receipt is nil")
+	}
+
+	receiptTxHash, err := canonicalFixedHash(receipt.Result.TransactionHash, "receipt transaction hash")
+	if err != nil {
+		return err
+	}
+	if receiptTxHash != work.TxHash {
+		return fmt.Errorf("receipt transaction hash %s does not match queued hash %s",
+			receiptTxHash, work.TxHash)
+	}
+	receiptBlockNumber, err := canonicalHexQuantity(receipt.Result.BlockNumber, "receipt block number")
+	if err != nil {
+		return err
+	}
+	if receiptBlockNumber != work.BlockNumber {
+		return fmt.Errorf("receipt block number %s does not match queued block %s",
+			receiptBlockNumber, work.BlockNumber)
+	}
+	receiptBlockHash, err := canonicalFixedHash(receipt.Result.BlockHash, "receipt block hash")
+	if err != nil {
+		return err
+	}
+	if work.BlockHash != "" && receiptBlockHash != work.BlockHash {
+		return fmt.Errorf("receipt block hash %s does not match queued block hash %s",
+			receiptBlockHash, work.BlockHash)
+	}
+	if _, err := canonicalHexQuantity(receipt.Result.Status, "receipt status"); err != nil {
+		return err
+	}
+
+	target := receipt.Result.To
+	if receipt.Result.ContractAddress != "" &&
+		!validation.IsZeroAddress(receipt.Result.ContractAddress) {
+		target = receipt.Result.ContractAddress
+	}
+	target = validation.ConvertToQAddress(target)
+	if !validation.IsValidAddress(target) {
+		return fmt.Errorf("receipt has invalid target address: %s", target)
+	}
+	if target != work.ContractAddress {
+		return fmt.Errorf("receipt target %s does not match queued contract %s",
+			target, work.ContractAddress)
+	}
+
+	for index, log := range receipt.Result.Logs {
+		if log.Removed {
+			return fmt.Errorf("receipt log %d is marked removed", index)
+		}
+		logTxHash, err := canonicalFixedHash(log.TransactionHash, "receipt log transaction hash")
+		if err != nil {
+			return fmt.Errorf("receipt log %d: %w", index, err)
+		}
+		if logTxHash != work.TxHash {
+			return fmt.Errorf("receipt log %d transaction hash %s does not match queued hash %s",
+				index, logTxHash, work.TxHash)
+		}
+		logBlockNumber, err := canonicalHexQuantity(log.BlockNumber, "receipt log block number")
+		if err != nil {
+			return fmt.Errorf("receipt log %d: %w", index, err)
+		}
+		if logBlockNumber != work.BlockNumber {
+			return fmt.Errorf("receipt log %d block number %s does not match queued block %s",
+				index, logBlockNumber, work.BlockNumber)
+		}
+		logBlockHash, err := canonicalFixedHash(log.BlockHash, "receipt log block hash")
+		if err != nil {
+			return fmt.Errorf("receipt log %d: %w", index, err)
+		}
+		if logBlockHash != receiptBlockHash {
+			return fmt.Errorf("receipt log %d block hash %s does not match receipt block hash %s",
+				index, logBlockHash, receiptBlockHash)
+		}
+		logAddress := validation.ConvertToQAddress(log.Address)
+		if !validation.IsValidAddress(logAddress) {
+			return fmt.Errorf("receipt log %d has invalid emitter: %s", index, log.Address)
+		}
+		if !validation.IsValidHexString(log.LogIndex) {
+			return fmt.Errorf("receipt log %d has invalid log index: %s", index, log.LogIndex)
+		}
+	}
+	return nil
+}
+
+func validatePendingTokenCanonicalBlock(
+	work pendingTokenContractWork,
+	receipt *models.TransactionReceipt,
+) error {
+	if configs.BlocksCollections == nil {
+		return fmt.Errorf("blocks collection is unavailable")
+	}
+	blockNumberInt := utils.HexToInt64(work.BlockNumber)
+	if work.BlockNumber != GenesisBlockHex && blockNumberInt == 0 {
+		return fmt.Errorf("queued block number exceeds the indexed int64 range: %s", work.BlockNumber)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	type canonicalBlock struct {
+		Result struct {
+			Timestamp string `bson:"timestamp"`
+		} `bson:"result"`
+	}
+	var canonicalBlocks []canonicalBlock
+	cursor, err := configs.BlocksCollections.Find(
+		ctx,
+		pendingTokenCanonicalBlockFilter(work, receipt),
+		options.Find().SetProjection(bson.M{"result.timestamp": 1}).SetLimit(2),
+	)
+	if err != nil {
+		return fmt.Errorf("load complete canonical block %s: %w", work.BlockNumber, err)
+	}
+	defer cursor.Close(ctx)
+	if err := cursor.All(ctx, &canonicalBlocks); err != nil {
+		return fmt.Errorf("decode complete canonical block %s: %w", work.BlockNumber, err)
+	}
+	if len(canonicalBlocks) == 0 {
+		return fmt.Errorf("queued transaction %s is absent from a complete canonical block %s",
+			work.TxHash, work.BlockNumber)
+	}
+	if len(canonicalBlocks) != 1 {
+		return fmt.Errorf("queued transaction %s matches multiple complete canonical blocks at %s",
+			work.TxHash, work.BlockNumber)
+	}
+	canonical := canonicalBlocks[0]
+	if work.BlockTimestamp != "" {
+		timestamp, err := canonicalHexQuantity(canonical.Result.Timestamp, "canonical block timestamp")
+		if err != nil {
+			return err
+		}
+		if timestamp != work.BlockTimestamp {
+			return fmt.Errorf("canonical block timestamp %s does not match queued timestamp %s",
+				timestamp, work.BlockTimestamp)
+		}
+	}
+	return nil
+}
+
+// processTokenContract validates one legacy queue item against its exact receipt
+// and complete canonical block row. Token classification, transfer, metadata,
+// and balance side effects are owned exclusively by the durable block-wide
+// token worker, which preserves strict block-height ordering across retries.
+func processTokenContract(pending pendingTokenContractWork) error {
+	work, err := normalizePendingTokenContractWork(pending)
+	if err != nil {
+		return err
+	}
+	txHash := work.TxHash
+
+	configs.Logger.Debug("Validating legacy token queue identity",
+		zap.String("targetAddress", work.ContractAddress),
 		zap.String("txHash", txHash))
 
-	// Check if this is a token contract
-	contract := GetContractByAddress(targetAddress)
-	if contract == nil {
-		configs.Logger.Debug("Contract not found in database",
-			zap.String("address", targetAddress))
-		return
-	}
-
-	if !contract.IsToken {
-		configs.Logger.Debug("Contract is not a token",
-			zap.String("address", targetAddress))
-		return
-	}
-
-	configs.Logger.Debug("Found token contract",
-		zap.String("address", targetAddress),
-		zap.String("name", contract.Name),
-		zap.String("symbol", contract.Symbol))
-
-	// The former "direct transfer call" calldata-decode branch was deleted:
-	// its decoder could never produce a sender address, so the branch was
-	// unreachable dead code. Transfer detection relies on receipt logs.
-
-	// Check transfer events in logs
 	receipt, err := rpc.GetTransactionReceipt(txHash)
 	if err != nil {
-		configs.Logger.Error("Failed to get transaction receipt",
-			zap.String("hash", txHash),
-			zap.Error(err))
-		return
+		return fmt.Errorf("get transaction receipt %s: %w", txHash, err)
 	}
-
-	transfers := rpc.ProcessTransferLogs(receipt)
-	for _, transferEvent := range transfers {
-		// Idempotent dedupe of the log-derived row. processTokenContract
-		// runs only on ERC-20 contracts (the legacy ProcessTransferLogs
-		// path), so tokenID is always "" here.
-		exists, err := TokenTransferExists(txHash, targetAddress, transferEvent.LogIndex, "")
-		if err != nil {
-			configs.Logger.Error("Failed to check duplicate token transfer",
-				zap.String("txHash", txHash),
-				zap.String("contract", targetAddress),
-				zap.String("logIndex", transferEvent.LogIndex),
-				zap.Error(err))
-			continue
-		}
-		if exists {
-			configs.Logger.Debug("Skipping duplicate token transfer event",
-				zap.String("txHash", txHash),
-				zap.String("contract", targetAddress),
-				zap.String("logIndex", transferEvent.LogIndex))
-			continue
-		}
-
-		configs.Logger.Info("Found token transfer event",
-			zap.String("contract", targetAddress),
-			zap.String("from", transferEvent.From),
-			zap.String("to", transferEvent.To),
-			zap.String("amount", transferEvent.Amount))
-
-		// Store token transfer
-		transfer := models.TokenTransfer{
-			ContractAddress: targetAddress,
-			From:            transferEvent.From,
-			To:              transferEvent.To,
-			Amount:          transferEvent.Amount,
-			BlockNumber:     blockNumber,
-			TxHash:          txHash,
-			LogIndex:        transferEvent.LogIndex,
-			Timestamp:       blockTimestamp,
-			TokenSymbol:     contract.Symbol,
-			TokenDecimals:   contract.Decimals,
-			TokenName:       contract.Name,
-			TransferType:    "event",
-		}
-		if err := StoreTokenTransfer(transfer); err != nil {
-			configs.Logger.Error("Failed to store token transfer",
-				zap.String("txHash", txHash),
-				zap.Error(err))
-		}
-
-		// Update token balances
-		if err := StoreTokenBalance(targetAddress, transferEvent.From, transferEvent.Amount, blockNumber); err != nil {
-			configs.Logger.Error("Failed to store token balance for sender",
-				zap.String("contract", targetAddress),
-				zap.String("holder", transferEvent.From),
-				zap.Error(err))
-		}
-		if err := StoreTokenBalance(targetAddress, transferEvent.To, transferEvent.Amount, blockNumber); err != nil {
-			configs.Logger.Error("Failed to store token balance for recipient",
-				zap.String("contract", targetAddress),
-				zap.String("holder", transferEvent.To),
-				zap.Error(err))
-		}
+	if err := validatePendingTokenReceiptIdentity(work, receipt); err != nil {
+		return fmt.Errorf("validate transaction receipt %s: %w", txHash, err)
 	}
+	if err := validatePendingTokenCanonicalBlock(work, receipt); err != nil {
+		return fmt.Errorf("validate queued canonical identity %s: %w", txHash, err)
+	}
+	return nil
 }
 
-func processTransactionData(tx *models.Transaction, blockTimestamp string, to string, contractAddress string, statusTx string, isContract bool, size string) {
+func processTransactionData(tx *models.Transaction, blockTimestamp string, to string, contractAddress string, statusTx string, isContract bool, size string) error {
+	var errs []error
 	from := tx.From
 	txHash := tx.Hash
 	blockNumber := tx.BlockNumber
@@ -289,22 +750,32 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 	// upserted with isContract=false and only the recipient carries the
 	// computed flag.
 	if from != "" {
-		upsertAddressBalance(from, false)
+		if err := RefreshAddressBalance(from, false); err != nil {
+			configs.Logger.Warn("Failed to refresh sender balance", zap.String("address", from), zap.Error(err))
+			errs = append(errs, err)
+		}
 	}
 	if to != "" {
-		upsertAddressBalance(to, isContract)
+		if err := RefreshAddressBalance(to, isContract); err != nil {
+			configs.Logger.Warn("Failed to refresh recipient balance", zap.String("address", to), zap.Error(err))
+			errs = append(errs, err)
+		}
 	}
 	// Contract creation (to == ""): register the freshly created contract's
 	// addresses row immediately with isContract=true instead of waiting for
 	// its first inbound transaction.
 	if contractAddress != "" {
-		upsertAddressBalance(contractAddress, true)
+		if err := RefreshAddressBalance(contractAddress, true); err != nil {
+			configs.Logger.Warn("Failed to refresh created contract balance", zap.String("address", contractAddress), zap.Error(err))
+			errs = append(errs, err)
+		}
 	}
 
 	trace := rpc.CallDebugTraceTransaction(tx.Hash)
 	if trace.Err != nil {
 		configs.Logger.Warn("Debug trace failed; internal calls for this tx will be missing",
 			zap.String("txHash", txHash), zap.Error(trace.Err))
+		errs = append(errs, fmt.Errorf("debug trace %s: %w", txHash, trace.Err))
 	}
 	// Persist the nested (depth >= 1) call frames: value moved by contract
 	// code rather than by the outer transaction itself, e.g. an HTLC claim
@@ -313,13 +784,24 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 	if err := StoreInternalCalls(trace.InternalCalls, txHash, blockTimestamp, blockNumber); err != nil {
 		configs.Logger.Error("Failed to store internal calls",
 			zap.String("txHash", txHash), zap.Error(err))
+		errs = append(errs, fmt.Errorf("store internal calls for %s: %w", txHash, err))
 	}
 
 	// Register contracts created by nested CREATE/CREATE2 frames (factory
 	// deployments). Only effective when debug tracing is enabled: with
 	// ENABLE_DEBUG_TRACE unset the trace carries no internal calls and this
 	// is a no-op, matching how traces are gated everywhere else.
-	storeInternalContractCreations(trace.InternalCalls, from, txHash, blockNumber, statusTx)
+	if err := storeInternalContractCreations(
+		trace.InternalCalls,
+		from,
+		txHash,
+		blockNumber,
+		tx.BlockHash,
+		tx.ChainID,
+		statusTx,
+	); err != nil {
+		errs = append(errs, err)
+	}
 
 	// Calculate fees using hex strings. Guard against empty/short
 	// gasPrice, slicing [2:] on those panics; treat too-short as zero.
@@ -375,8 +857,13 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 	feesResult := new(big.Float).Quo(feesFloat, divisor)
 	fees, _ := feesResult.Float64()
 
-	TransactionByAddressCollection(blockTimestamp, txType, from, to, txHash, valueFloat64, fees, blockNumber, value.String(), feesBig.String())
-	TransferCollection(blockNumber, blockTimestamp, from, to, txHash, pk, signature, nonce, valueFloat64, data, contractAddress, statusTx, size, fees)
+	if _, err := TransactionByAddressCollection(blockTimestamp, txType, from, to, txHash, valueFloat64, fees, blockNumber, value.String(), feesBig.String()); err != nil {
+		errs = append(errs, fmt.Errorf("store transactionByAddress row for %s: %w", txHash, err))
+	}
+	if _, err := TransferCollection(blockNumber, blockTimestamp, from, to, txHash, pk, signature, nonce, valueFloat64, data, contractAddress, statusTx, size, fees); err != nil {
+		errs = append(errs, fmt.Errorf("store transfer row for %s: %w", txHash, err))
+	}
+	return errors.Join(errs...)
 }
 
 func TransferCollection(blockNumber string, blockTimestamp string, from string, to string, hash string, pk string, signature string, nonce string, value float64, data string, contractAddress string, status string, size string, paidFees float64) (*mongo.InsertOneResult, error) {
@@ -539,23 +1026,21 @@ func TransactionByAddressCollection(timeStamp string, txType string, from string
 	return result, err
 }
 
-// upsertAddressBalance fetches the current balance of one address via RPC and
-// upserts its addresses row with the given contract flag. Failures are logged
-// and swallowed: a missed balance refresh self-heals on the address's next
-// transaction.
-func upsertAddressBalance(address string, isContract bool) {
+// RefreshAddressBalance fetches the current canonical balance of one address
+// and clears any rollback stale marker only after the Mongo write succeeds.
+func RefreshAddressBalance(address string, isContract bool) error {
 	responseBalance, err := rpc.GetBalance(address)
 	if err != nil {
-		configs.Logger.Warn("Failed to do rpc request: ", zap.Error(err))
-		return
+		return fmt.Errorf("get native balance for %s: %w", address, err)
 	}
 
 	getBalanceResult := new(big.Int)
 	if responseBalance != "" && len(responseBalance) > 2 {
-		getBalanceResult.SetString(responseBalance[2:], 16)
+		if _, ok := getBalanceResult.SetString(responseBalance[2:], 16); !ok {
+			return fmt.Errorf("invalid native balance response for %s: %q", address, responseBalance)
+		}
 	} else {
-		configs.Logger.Warn("Invalid balance response", zap.String("balance", responseBalance))
-		return
+		return fmt.Errorf("invalid native balance response for %s: %q", address, responseBalance)
 	}
 
 	divisor := new(big.Float).SetFloat64(float64(utils.QUANTA))
@@ -563,7 +1048,8 @@ func upsertAddressBalance(address string, isContract bool) {
 	resultBigFloat := new(big.Float).Quo(bigIntAsFloat, divisor)
 	resultFloat64, _ := resultBigFloat.Float64()
 
-	UpsertTransactions(address, resultFloat64, isContract)
+	_, err = UpsertTransactions(address, resultFloat64, isContract)
+	return err
 }
 
 func UpsertTransactions(address string, value float64, isContract bool) (*mongo.UpdateResult, error) {
@@ -581,6 +1067,10 @@ func UpsertTransactions(address string, value float64, isContract bool) (*mongo.
 				{Key: "id", Value: address},
 				{Key: "balance", Value: value},
 				{Key: "isContract", Value: true}, // Always set to true if we know it's a contract
+			}},
+			{Key: "$unset", Value: bson.D{
+				{Key: "balanceStale", Value: ""},
+				{Key: "balanceStaleAt", Value: ""},
 			}},
 		}
 		opts := options.Update().SetUpsert(true)
@@ -606,6 +1096,10 @@ func UpsertTransactions(address string, value float64, isContract bool) (*mongo.
 				{Key: "balance", Value: value},
 				// Don't update isContract field since we want to keep it as true
 			}},
+			{Key: "$unset", Value: bson.D{
+				{Key: "balanceStale", Value: ""},
+				{Key: "balanceStaleAt", Value: ""},
+			}},
 		}
 		opts := options.Update().SetUpsert(true)
 		result, err := configs.AddressesCollections.UpdateOne(ctx, filter, update, opts)
@@ -621,6 +1115,10 @@ func UpsertTransactions(address string, value float64, isContract bool) (*mongo.
 			{Key: "id", Value: address},
 			{Key: "balance", Value: value},
 			{Key: "isContract", Value: isContract},
+		}},
+		{Key: "$unset", Value: bson.D{
+			{Key: "balanceStale", Value: ""},
+			{Key: "balanceStaleAt", Value: ""},
 		}},
 	}
 	opts := options.Update().SetUpsert(true)

@@ -4,27 +4,33 @@ import (
 	"strings"
 )
 
-// Test fixtures: realistic Q-addresses that pass validation.IsValidAddress.
-// `topic(addr)` left-pads the 20-byte address into a 32-byte indexed topic.
+// Test fixtures: native QIP-55 addresses that pass validation.IsValidAddress.
+// A full-width address occupies one 64-byte indexed topic without padding.
 const (
-	aliceAddr = "Q6153d37fa4da7193e6219dcbd2bbe62fa12905b1"
-	bobAddr   = "Q539f73306bdd4288f93a5e50b4d5bf1a9b07f147"
-	opAddr    = "Qa1b2c3d4e5f60708090a0b0c0d0e0f1011121314"
+	aliceAddr = "Q" +
+		"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f" +
+		"202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f"
+	bobAddr = "Q" +
+		"ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100" +
+		"00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+	opAddr = "Q" +
+		"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" +
+		"fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
 )
 
 // topic builds an indexed-topic representation of a Q-prefix address:
-// "0x" + 24 zero hex chars + 40-char lowercase hex.
+// "0x" + the complete 128-character lowercase address body.
 func topic(addr string) string {
 	stripped := strings.TrimPrefix(strings.ToLower(addr), "q")
-	return "0x" + strings.Repeat("0", 24) + stripped
+	return "0x" + stripped
 }
 
-// word builds a 32-byte ABI-encoded uint256 word from a hex string (no 0x).
+// word builds a uint256 value right-aligned in a 64-byte ABI word.
 func word(hexStr string) string {
-	if len(hexStr) > 64 {
-		panic("word > 32 bytes")
+	if len(hexStr) > uint256HexLength {
+		panic("uint256 > 32 bytes")
 	}
-	return strings.Repeat("0", 64-len(hexStr)) + hexStr
+	return strings.Repeat("0", abiWordHexLength-len(hexStr)) + hexStr
 }
 
 // hexEncode is an inline lower-case hex.EncodeToString without importing.

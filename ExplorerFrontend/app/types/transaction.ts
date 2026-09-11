@@ -83,6 +83,11 @@ export type InternalTransaction = BaseInternalTransaction & OptionalInternalTran
  */
 export type TokenStandard = 'ERC-20' | 'ERC-721' | 'ERC-1155';
 
+export type ContractMetadataProvenanceStatus =
+  | 'digest-backed'
+  | 'legacy-unrecorded'
+  | 'invalid-recorded';
+
 /**
  * Token transfer information for a transaction
  */
@@ -174,6 +179,8 @@ export interface ContractMeta {
   verified?: boolean;
   contractName?: string;
   abi?: string;
+  /** Trust state computed by the backend's compact recorded-metadata gate. */
+  provenanceStatus?: ContractMetadataProvenanceStatus | string;
 }
 
 /**

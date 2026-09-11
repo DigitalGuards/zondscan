@@ -6,33 +6,16 @@ package middleware
 
 import (
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-// realClientIP returns the best available identifier for the originating
-// client. Production sits behind Cloudflare → nginx → backend, so each
-// inbound connection arrives from a Cloudflare edge IP rather than the
-// real client. Cloudflare strips any client-supplied `CF-Connecting-IP`
-// at its edge before forwarding, so when that header is present we can
-// trust it as the true client. If the header is missing we fall back to
-// `c.ClientIP()`, which (with SetTrustedProxies) returns either an XFF-
-// walked IP or the immediate RemoteAddr.
-//
-// Worst-case fallback path (nginx hit directly, no Cloudflare hop): the
-// limiter buckets all requests under one key (loopback). That's a
-// strictly tighter limit than the public-facing rate, not looser, so it
-// degrades safely.
+// realClientIP delegates proxy-header trust to Gin's configured trusted
+// proxy list. Direct clients cannot select a fresh bucket by supplying
+// CF-Connecting-IP, X-Forwarded-For, or X-Real-IP themselves.
 func realClientIP(c *gin.Context) string {
-	if v := c.GetHeader("CF-Connecting-IP"); v != "" {
-		// Header is a single IP, never a list. Trim to be defensive.
-		if ip := strings.TrimSpace(v); ip != "" {
-			return ip
-		}
-	}
 	return c.ClientIP()
 }
 

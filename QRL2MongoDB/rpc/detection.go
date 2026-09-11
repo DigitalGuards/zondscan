@@ -1,7 +1,9 @@
 package rpc
 
 import (
+	"QRL2MongoDB/validation"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -43,11 +45,10 @@ const (
 // TotalSupply); NFT collections often omit `decimals()` entirely.
 //
 // MetadataURI is best-effort populated for NFT (ERC-721/1155) contracts via
-// the OpenSea-convention contractURI() probe. Empty means either "the contract
-// doesn't implement contractURI" or "the probe failed transiently" - the
-// background metadata fetcher service handles the URI -> JSON resolution
-// separately, so a missing URI at classification time can be filled in on a
-// later reclassification pass without breaking anything.
+// the OpenSea-convention contractURI() probe. Empty means the contract does
+// not implement contractURI or returned malformed optional metadata. Transport
+// failures are returned so durable ingestion retries without persisting a
+// partial classification.
 type ContractDetectionResult struct {
 	Standard    string // StandardERC20 | StandardERC721 | StandardERC1155 | ""
 	Name        string
@@ -60,7 +61,8 @@ type ContractDetectionResult struct {
 
 // DetectContractType classifies a contract by trying ERC-165 supportsInterface
 // first (the cheap, definitive signal for ERC-721/1155) and falling back to
-// the ERC-20 name+symbol+decimals triad otherwise.
+// mandatory ERC-20 totalSupply and balanceOf behavior otherwise. ERC-20 name,
+// symbol, and decimals remain optional enrichment.
 //
 // Error contract: a non-nil error means the *probe itself* failed (transport
 // blip, etc.), the caller MUST bail without writing classification fields,
@@ -72,15 +74,41 @@ type ContractDetectionResult struct {
 // that ALSO satisfy ERC-721 are categorised as ERC-1155 (matches the plan's
 // dual-impl tie-breaker).
 func DetectContractType(addr string) (ContractDetectionResult, error) {
+	return detectContractType(addr, CallContractMethod)
+}
+
+// DetectContractTypeAtBlock classifies a contract against the exact state
+// selected by blockHash. Historical token replay must not use latest state:
+// contract code can be upgraded or removed after the claimed block.
+func DetectContractTypeAtBlock(addr string, blockHash string) (ContractDetectionResult, error) {
+	blockHash = strings.ToLower(blockHash)
+	if err := validation.ValidateHexString(blockHash, validation.HashLength); err != nil {
+		return ContractDetectionResult{}, fmt.Errorf("invalid classification block hash: %w", err)
+	}
+	return detectContractType(addr, func(contractAddress string, methodSig string) (string, error) {
+		return callContractMethodAtBlockHash(contractAddress, methodSig, blockHash)
+	})
+}
+
+func detectContractType(addr string, call contractMethodCaller) (ContractDetectionResult, error) {
 	// Try ERC-1155 first (broader spec).
-	supports, hasERC165, err := SupportsInterface(addr, InterfaceIDERC1155)
+	supports, hasERC165, err := supportsInterfaceWithCaller(addr, InterfaceIDERC1155, call)
 	if err != nil {
 		return ContractDetectionResult{}, fmt.Errorf("supportsInterface(ERC-1155): %w", err)
 	}
 	if supports {
-		name, _ := GetTokenName(addr)      // best-effort; many ERC-1155s omit name()
-		symbol, _ := GetTokenSymbol(addr)  // best-effort; many ERC-1155s omit symbol()
-		metaURI, _ := GetContractURI(addr) // best-effort; many collections omit contractURI()
+		name, err := optionalTokenString(addr, SIG_NAME, decodeTokenName, call)
+		if err != nil {
+			return ContractDetectionResult{}, fmt.Errorf("ERC-1155 name: %w", err)
+		}
+		symbol, err := optionalTokenString(addr, SIG_SYMBOL, decodeTokenSymbol, call)
+		if err != nil {
+			return ContractDetectionResult{}, fmt.Errorf("ERC-1155 symbol: %w", err)
+		}
+		metaURI, err := optionalTokenString(addr, SIG_CONTRACT_URI, parseDynamicString, call)
+		if err != nil {
+			return ContractDetectionResult{}, fmt.Errorf("ERC-1155 contractURI: %w", err)
+		}
 		return ContractDetectionResult{
 			Standard:    StandardERC1155,
 			Name:        name,
@@ -91,14 +119,23 @@ func DetectContractType(addr string) (ContractDetectionResult, error) {
 	}
 
 	// Try ERC-721.
-	supports721, hasERC165From721, err := SupportsInterface(addr, InterfaceIDERC721)
+	supports721, hasERC165From721, err := supportsInterfaceWithCaller(addr, InterfaceIDERC721, call)
 	if err != nil {
 		return ContractDetectionResult{}, fmt.Errorf("supportsInterface(ERC-721): %w", err)
 	}
 	if supports721 {
-		name, _ := GetTokenName(addr)
-		symbol, _ := GetTokenSymbol(addr)
-		metaURI, _ := GetContractURI(addr)
+		name, err := optionalTokenString(addr, SIG_NAME, decodeTokenName, call)
+		if err != nil {
+			return ContractDetectionResult{}, fmt.Errorf("ERC-721 name: %w", err)
+		}
+		symbol, err := optionalTokenString(addr, SIG_SYMBOL, decodeTokenSymbol, call)
+		if err != nil {
+			return ContractDetectionResult{}, fmt.Errorf("ERC-721 symbol: %w", err)
+		}
+		metaURI, err := optionalTokenString(addr, SIG_CONTRACT_URI, parseDynamicString, call)
+		if err != nil {
+			return ContractDetectionResult{}, fmt.Errorf("ERC-721 contractURI: %w", err)
+		}
 		return ContractDetectionResult{
 			Standard:    StandardERC721,
 			Name:        name,
@@ -114,17 +151,17 @@ func DetectContractType(addr string) (ContractDetectionResult, error) {
 	// without being ERC-721/1155 and ARE ERC-20.
 	erc165Known := hasERC165 || hasERC165From721
 
-	// Fall back to the original ERC-20 name+symbol+decimals triad.
-	name, symbol, decimals, isERC20 := GetTokenInfo(addr)
+	// Fall back to mandatory ERC-20 read behavior and optional metadata.
+	name, symbol, decimals, isERC20, err := getTokenInfoStrict(addr, call)
+	if err != nil {
+		return ContractDetectionResult{}, err
+	}
 	if !isERC20 {
 		return ContractDetectionResult{HasERC165: erc165Known}, nil
 	}
-	totalSupply, err := GetTokenTotalSupply(addr)
+	totalSupply, err := optionalTokenTotalSupply(addr, call)
 	if err != nil {
-		// totalSupply RPC failure is non-fatal, the triad already
-		// classified this as ERC-20. Leave TotalSupply empty; the merge
-		// in StoreContract won't demote an existing value.
-		totalSupply = ""
+		return ContractDetectionResult{}, fmt.Errorf("ERC-20 totalSupply: %w", err)
 	}
 	return ContractDetectionResult{
 		Standard:    StandardERC20,
@@ -136,47 +173,183 @@ func DetectContractType(addr string) (ContractDetectionResult, error) {
 	}, nil
 }
 
-// GetTokenInfo attempts to determine if a contract is an ERC20 token and returns its details
+type contractMethodCaller func(contractAddress string, methodSig string) (string, error)
+
+func callContractMethodAtBlockHash(
+	contractAddress string,
+	methodSig string,
+	blockHash string,
+) (string, error) {
+	params, err := exactBlockContractCallParams(contractAddress, methodSig, blockHash)
+	if err != nil {
+		return "", err
+	}
+	var result struct {
+		Result string `json:"result"`
+	}
+	err = rpcCall("qrl_call", params, &result)
+	if err != nil {
+		return "", err
+	}
+	return result.Result, nil
+}
+
+func exactBlockContractCallParams(
+	contractAddress string,
+	methodSig string,
+	blockHash string,
+) ([]interface{}, error) {
+	contractAddress = validation.ConvertToQAddress(contractAddress)
+	if !validation.IsValidAddress(contractAddress) {
+		return nil, fmt.Errorf("invalid contract address: %s", contractAddress)
+	}
+	if !validation.IsValidHexString(methodSig) {
+		return nil, fmt.Errorf("invalid contract calldata")
+	}
+	blockHash = strings.ToLower(blockHash)
+	if err := validation.ValidateHexString(blockHash, validation.HashLength); err != nil {
+		return nil, fmt.Errorf("invalid contract call block hash: %w", err)
+	}
+	return []interface{}{
+		map[string]string{
+			"to":   contractAddress,
+			"data": methodSig,
+		},
+		map[string]interface{}{
+			"blockHash":        blockHash,
+			"requireCanonical": false,
+		},
+	}, nil
+}
+
+// isConfirmedContractRevert identifies the QRVM's explicit revert error.
+// Other JSON-RPC errors, including unavailable historical state and server
+// failures, must remain retryable.
+func isConfirmedContractRevert(err error) bool {
+	var rpcErr *RPCError
+	return errors.As(err, &rpcErr) && rpcErr.Code == 3
+}
+
+// optionalTokenString treats a confirmed contract-level revert or malformed
+// ABI value as an unsupported optional field. Transport failures remain
+// retryable so callers cannot persist a partial classification during an RPC
+// outage.
+func optionalTokenString(
+	contractAddress string,
+	methodSig string,
+	decode func(string) (string, error),
+	call contractMethodCaller,
+) (string, error) {
+	result, err := call(contractAddress, methodSig)
+	if err != nil {
+		if isConfirmedContractRevert(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	value, err := decode(result)
+	if err != nil {
+		return "", nil
+	}
+	return value, nil
+}
+
+func optionalTokenTotalSupply(
+	contractAddress string,
+	call contractMethodCaller,
+) (string, error) {
+	result, err := call(contractAddress, SIG_SUPPLY)
+	if err != nil {
+		if isConfirmedContractRevert(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	totalSupply, err := decodeTokenTotalSupply(result)
+	if err != nil {
+		return "", nil
+	}
+	return totalSupply, nil
+}
+
+func getTokenInfoStrict(
+	contractAddress string,
+	call contractMethodCaller,
+) (string, string, uint8, bool, error) {
+	// totalSupply() and balanceOf(address) are mandatory ERC-20 behavior.
+	// The Transfer log being processed provides the event half of the signal;
+	// these two read-only probes avoid relying on optional metadata methods.
+	result, err := call(contractAddress, SIG_SUPPLY)
+	if err != nil {
+		if isConfirmedContractRevert(err) {
+			return "", "", 0, false, nil
+		}
+		return "", "", 0, false, fmt.Errorf("token totalSupply: %w", err)
+	}
+	if _, err := decodeTokenTotalSupply(result); err != nil {
+		return "", "", 0, false, nil
+	}
+	encodedAddress := encodeAddressForABI(contractAddress)
+	if encodedAddress == "" {
+		return "", "", 0, false, fmt.Errorf("invalid token address: %s", contractAddress)
+	}
+	result, err = call(contractAddress, SIG_BALANCE+encodedAddress)
+	if err != nil {
+		if isConfirmedContractRevert(err) {
+			return "", "", 0, false, nil
+		}
+		return "", "", 0, false, fmt.Errorf("token balanceOf: %w", err)
+	}
+	if _, err := decodeTokenBalance(result); err != nil {
+		return "", "", 0, false, nil
+	}
+
+	name, err := optionalTokenString(contractAddress, SIG_NAME, decodeTokenName, call)
+	if err != nil {
+		return "", "", 0, false, fmt.Errorf("token name: %w", err)
+	}
+	symbol, err := optionalTokenString(contractAddress, SIG_SYMBOL, decodeTokenSymbol, call)
+	if err != nil {
+		return "", "", 0, false, fmt.Errorf("token symbol: %w", err)
+	}
+	decimals, err := optionalTokenDecimals(contractAddress, call)
+	if err != nil {
+		return "", "", 0, false, fmt.Errorf("token decimals: %w", err)
+	}
+
+	return name, symbol, decimals, true, nil
+}
+
+func optionalTokenDecimals(contractAddress string, call contractMethodCaller) (uint8, error) {
+	result, err := call(contractAddress, SIG_DECIMALS)
+	if err != nil {
+		if isConfirmedContractRevert(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	decimals, err := decodeTokenDecimals(result)
+	if err != nil {
+		return 0, nil
+	}
+	return decimals, nil
+}
+
+// GetTokenInfo retains the historical best-effort API. Durable classification
+// uses getTokenInfoStrict so transport failures reach the block retry queue.
 func GetTokenInfo(contractAddress string) (string, string, uint8, bool) {
 	zap.L().Info("Checking if contract is a token", zap.String("address", contractAddress))
-
-	// First check if the contract has a valid 'name' method
-	name, err := GetTokenName(contractAddress)
+	name, symbol, decimals, isERC20, err := getTokenInfoStrict(contractAddress, CallContractMethod)
 	if err != nil {
-		zap.L().Debug("Contract does not have a valid name method",
+		zap.L().Warn("Token classification RPC failed",
 			zap.String("address", contractAddress),
 			zap.Error(err))
 		return "", "", 0, false
 	}
-	zap.L().Info("Contract has a valid name",
-		zap.String("address", contractAddress),
-		zap.String("name", name))
-
-	// Now check for symbol
-	symbol, err := GetTokenSymbol(contractAddress)
-	if err != nil {
-		zap.L().Debug("Contract does not have a valid symbol method",
-			zap.String("address", contractAddress),
-			zap.Error(err))
+	if !isERC20 {
 		return "", "", 0, false
 	}
-	zap.L().Info("Contract has a valid symbol",
-		zap.String("address", contractAddress),
-		zap.String("symbol", symbol))
 
-	// Finally check for decimals
-	decimals, err := GetTokenDecimals(contractAddress)
-	if err != nil {
-		zap.L().Debug("Contract does not have a valid decimals method",
-			zap.String("address", contractAddress),
-			zap.Error(err))
-		return "", "", 0, false
-	}
-	zap.L().Info("Contract has valid decimals",
-		zap.String("address", contractAddress),
-		zap.Uint8("decimals", decimals))
-
-	// If we got here, this is likely a valid token
 	zap.L().Info("Detected valid ERC20 token",
 		zap.String("address", contractAddress),
 		zap.String("name", name),
@@ -202,41 +375,52 @@ func GetTokenInfo(contractAddress string) (string, string, uint8, bool) {
 // `false, false, nil` because legacy ERC-20s without ERC-165 revert on
 // any unknown selector, and that's the discriminator we rely on.
 //
-// Calldata layout per ABI spec is selector + interfaceID (right-padded to
-// 32 bytes), NOT left-padded, `bytes4` is a fixed-length type and the
-// ABI pads fixed types on the right with zero bytes.
+// Calldata layout is selector + interfaceID right-padded to one 64-byte ABI
+// word. `bytes4` is fixed-length and occupies the high four bytes.
 func SupportsInterface(addr string, interfaceID [4]byte) (supports, hasERC165 bool, err error) {
-	calldata := SIG_SUPPORTS_INTERFACE + hex.EncodeToString(interfaceID[:]) + strings.Repeat("0", 56)
+	return supportsInterfaceWithCaller(addr, interfaceID, CallContractMethod)
+}
 
-	result, callErr := CallContractMethod(addr, calldata)
+func supportsInterfaceWithCaller(
+	addr string,
+	interfaceID [4]byte,
+	call contractMethodCaller,
+) (supports, hasERC165 bool, err error) {
+	calldata := SIG_SUPPORTS_INTERFACE + encodeBytes4ForABI(interfaceID)
+
+	result, callErr := call(addr, calldata)
 	if callErr != nil {
-		// A typed *RPCError means the node returned a JSON-RPC error object
-		// (revert / invalid opcode / out-of-gas / unknown method). That's
-		// the not-ERC-165 signal. Anything else (request build, transport,
-		// unmarshal) is transient.
-		if isNodeRPCError(callErr) {
+		// Only the QRVM's confirmed code-3 revert is the not-ERC-165 signal.
+		// Other JSON-RPC, transport, and decode failures remain retryable.
+		if isConfirmedContractRevert(callErr) {
 			return false, false, nil
 		}
 		return false, false, callErr
 	}
 
-	stripped := strings.TrimPrefix(result, "0x")
-	// Empty / "0x" / malformed-too-short: treat as not-ERC-165 (a real
-	// ERC-165 contract returns a full 32-byte bool32).
-	if len(stripped) < 64 {
-		return false, false, nil
-	}
+	value, ok := parseBoolFromWord(result)
+	return value, ok, nil
+}
 
-	// Last byte of the 32-byte bool32 tells us true (0x01) vs false (0x00).
-	lastByte := stripped[len(stripped)-2:]
-	switch lastByte {
+func encodeBytes4ForABI(value [4]byte) string {
+	return hex.EncodeToString(value[:]) + strings.Repeat("0", abiWordHexLength-8)
+}
+
+func parseBoolFromWord(result string) (bool, bool) {
+	stripped := strings.TrimPrefix(result, "0x")
+	if len(stripped) != abiWordHexLength {
+		return false, false
+	}
+	word := stripped
+	if strings.TrimLeft(word[:abiWordHexLength-2], "0") != "" {
+		return false, false
+	}
+	switch word[abiWordHexLength-2:] {
 	case "01":
-		return true, true, nil
+		return true, true
 	case "00":
-		return false, true, nil
+		return false, true
 	default:
-		// Non-bool return (e.g. legacy contract returning data of different
-		// shape). Conservatively not-ERC-165.
-		return false, false, nil
+		return false, false
 	}
 }

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { epochsToDays, formatValidatorBalance, withdrawalCredentialsToAddress } from '../../lib/helpers';
 import { setUrlParams, useUrlParam, useUrlIntParam } from '../../lib/use-url-param';
 import Badge from '../../components/Badge';
+import AddressFingerprint from '../../components/AddressFingerprint';
 
 interface Validator {
   index: string;
@@ -322,12 +323,7 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
                       href={`/address/${validator.withdrawalAddress}`}
                       className="text-accent hover:underline font-mono"
                     >
-                      <span className="hidden md:inline">
-                        {validator.withdrawalAddress.slice(0, 12)}...{validator.withdrawalAddress.slice(-8)}
-                      </span>
-                      <span className="md:hidden">
-                        {validator.withdrawalAddress.slice(0, 8)}...
-                      </span>
+                      <AddressFingerprint address={validator.withdrawalAddress} />
                     </Link>
                   ) : (
                     <span className="text-text-muted">-</span>

@@ -3,8 +3,14 @@ package handler
 import (
 	"backendAPI/aiexplain"
 	"backendAPI/configs"
+	"backendAPI/db"
+	"backendAPI/explainauth"
+	"backendAPI/models"
 	"backendAPI/routes"
 	"backendAPI/verification"
+	"context"
+	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -34,10 +40,9 @@ func recoveryMiddleware() gin.HandlerFunc {
 // requests are served with a wildcard allow-origin, POST requests only
 // echo origins on the allowlist. Browser extensions send
 // Origin: chrome-extension://<install-id>; the id is per-install so it
-// cannot be allowlisted by value, a scheme-level allowance adds no
-// exposure beyond what a no-Origin client (curl) already gets because
-// credentials are never allowed and the POST endpoints carry their own
-// per-IP rate limits.
+// cannot be allowlisted by value, so extension schemes are checked here.
+// Disallowed browser origins are rejected before route middleware runs.
+// Requests without Origin remain available to non-browser API clients.
 func corsMiddleware(postAllowOrigins []string) gin.HandlerFunc {
 	postOriginAllowed := func(origin string) bool {
 		lower := strings.ToLower(origin)
@@ -79,9 +84,13 @@ func corsMiddleware(postAllowOrigins []string) gin.HandlerFunc {
 		case http.MethodGet, http.MethodHead:
 			c.Header("Access-Control-Allow-Origin", "*")
 		default:
-			if postOriginAllowed(origin) {
-				c.Header("Access-Control-Allow-Origin", origin)
+			if !postOriginAllowed(origin) {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+					"error": "origin is not allowed for this request",
+				})
+				return
 			}
+			c.Header("Access-Control-Allow-Origin", origin)
 		}
 		c.Header("Access-Control-Expose-Headers", "Content-Length")
 
@@ -180,15 +189,26 @@ func RequestHandler() {
 	if dbClient == nil {
 		log.Fatal("Failed to get MongoDB client, shutting down")
 	}
+	preflightCtx, preflightCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := db.ValidateBlockIngestionReadiness(preflightCtx); err != nil {
+		preflightCancel()
+		log.Fatalf("Block ingestion migration preflight failed: %v", err)
+	}
+	preflightCancel()
 	log.Println("MongoDB connection successful")
 
-	// Init the contract-verification singleton before routes register ,
+	// Init the contract-verification singleton before routes register;
 	// the handlers tolerate a nil verifier (503 response) so a missing
-	// HYPC_RUNNER env never blocks the rest of the backend from booting.
+	// compiler configuration never blocks the rest of the backend from booting.
 	if err := verification.Init(); err != nil {
 		log.Printf("Contract verification disabled: %v", err)
 	} else {
 		log.Println("Contract verification ready")
+		defer func() {
+			if err := verification.Close(); err != nil {
+				log.Printf("Contract verification cleanup failed: %v", err)
+			}
+		}()
 	}
 
 	// Init the AI explainer singleton. Same nil-tolerance pattern as the
@@ -198,6 +218,15 @@ func RequestHandler() {
 		log.Printf("Contract AI explainer disabled: %v", err)
 	} else {
 		log.Println("Contract AI explainer ready")
+	}
+
+	// Creator authorization is independently optional at startup. A missing or
+	// invalid configuration disables only regeneration; initial explanation
+	// generation remains available through the public verified-contract gate.
+	if err := initExplainAuthorization(); err != nil {
+		log.Printf("Contract AI regeneration authorization disabled: %v", err)
+	} else {
+		log.Println("Contract AI regeneration authorization ready")
 	}
 
 	// Configure routes
@@ -219,7 +248,8 @@ func RequestHandler() {
 			log.Fatal("TLS paths are not configured")
 		}
 		log.Printf("Starting production server on HTTPS port %s\n", httpsPort)
-		if err := router.RunTLS(httpsPort, certPath, keyPath); err != nil {
+		server := newHTTPServer(httpsPort, router)
+		if err := server.ListenAndServeTLS(certPath, keyPath); err != nil {
 			log.Fatalf("Failed to start HTTPS server: %v", err)
 		}
 	} else {
@@ -228,10 +258,80 @@ func RequestHandler() {
 			httpPort = ":8080"
 		}
 		log.Printf("Starting development server on HTTP port %s\n", httpPort)
-		if err := router.Run(httpPort); err != nil {
+		server := newHTTPServer(httpPort, router)
+		if err := server.ListenAndServe(); err != nil {
 			log.Fatalf("Failed to start HTTP server: %v", err)
 		}
 	}
 
 	log.Println("Server shutdown complete") // This should never execute unless router.Run returns
+}
+
+func newHTTPServer(address string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              address,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
+}
+
+func initExplainAuthorization() error {
+	explainauth.SetDefault(nil)
+	settings, err := configs.EnvExplainAuthSettings()
+	if err != nil {
+		return err
+	}
+	config, err := explainauth.NewConfig(settings.Origin, settings.ExpectedChainID)
+	if err != nil {
+		return err
+	}
+	indexContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := configs.ValidateExplainChallengeTTLIndex(indexContext); err != nil {
+		return fmt.Errorf("validate challenge TTL index: %w", err)
+	}
+	service, err := explainauth.NewService(config, explainauth.Dependencies{
+		Store: db.NewContractExplainChallengeStore(configs.ContractExplainChallengesCollection),
+		Contracts: explainauth.ContractReaderFunc(func(
+			ctx context.Context,
+			address string,
+		) (models.ContractInfo, error) {
+			if err := ctx.Err(); err != nil {
+				return models.ContractInfo{}, err
+			}
+			contract, err := db.ReturnContractCode(address)
+			if err != nil {
+				return models.ContractInfo{}, err
+			}
+			if err := ctx.Err(); err != nil {
+				return models.ContractInfo{}, err
+			}
+			return contract, nil
+		}),
+		Chain: explainauth.ChainIDReaderFunc(readNodeChainID),
+	})
+	if err != nil {
+		return err
+	}
+	explainauth.SetDefault(service)
+	return nil
+}
+
+func readNodeChainID(ctx context.Context) (string, error) {
+	result, rpcErr, err := db.NodeRPC(ctx, "qrl_chainId", []interface{}{})
+	if err != nil {
+		return "", err
+	}
+	if rpcErr != nil {
+		return "", rpcErr
+	}
+	var chainID string
+	if err := json.Unmarshal(result, &chainID); err != nil || chainID == "" {
+		return "", fmt.Errorf("qrl_chainId returned an invalid result")
+	}
+	return chainID, nil
 }

@@ -52,6 +52,32 @@ fi
 echo "[dapp-example] building SDK"
 ( cd "$CACHE_DIR" && npm install --no-audit --no-fund && npm run build )
 
+# QIP-55 release gate: the staged example must use a Connect build whose
+# address boundary is Q plus 128 hexadecimal characters. This catches a stale
+# public ref before its Q40 bundle is copied into the explorer build.
+(
+  cd "$CACHE_DIR"
+  node <<'NODE'
+const sdk = require('./dist/index.js');
+const sample =
+  typeof sdk.qip55AddressFromBytes === 'function'
+    ? sdk.qip55AddressFromBytes(new Uint8Array(64))
+    : '';
+
+if (
+  sdk.QRL_ADDRESS_BYTES !== 64 ||
+  sample.length !== 129 ||
+  typeof sdk.isCurrentQrlAddress !== 'function' ||
+  !sdk.isCurrentQrlAddress(sample) ||
+  sdk.isCurrentQrlAddress(`Q${'0'.repeat(40)}`)
+) {
+  throw new Error(
+    `[dapp-example] QIP-55 requires a functional 64-byte QRL address boundary, received QRL_ADDRESS_BYTES=${String(sdk.QRL_ADDRESS_BYTES)}`,
+  );
+}
+NODE
+)
+
 echo "[dapp-example] building example with base=/dapp-example/"
 (
   cd "$CACHE_DIR/example"

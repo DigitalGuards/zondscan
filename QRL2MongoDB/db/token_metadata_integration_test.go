@@ -34,7 +34,26 @@ func TestMain(m *testing.M) {
 		fmt.Println("integration tests need a live MongoDB:", err)
 		os.Exit(1)
 	}
-	os.Exit(m.Run())
+	owner, err := configs.NewSyncerLeaseOwner()
+	if err != nil {
+		fmt.Println("integration tests could not create lease owner:", err)
+		os.Exit(1)
+	}
+	lease, err := configs.AcquireSyncerLease(context.Background(), "integration-"+owner, 2*time.Minute)
+	if err != nil {
+		fmt.Println("integration tests need the exclusive syncer lease:", err)
+		os.Exit(1)
+	}
+	if err := configs.BootstrapDB(); err != nil {
+		fmt.Println("integration tests could not bootstrap MongoDB:", err)
+		os.Exit(1)
+	}
+	code := m.Run()
+	if err := configs.ReleaseSyncerLease(context.Background(), lease); err != nil {
+		fmt.Println("integration tests could not release syncer lease:", err)
+		code = 1
+	}
+	os.Exit(code)
 }
 
 func cleanupTokens(t *testing.T) {

@@ -4,6 +4,8 @@ import (
 	"backendAPI/db"
 	"backendAPI/hexutil"
 	"backendAPI/models"
+	"backendAPI/qrladdress"
+	"backendAPI/sourcebundle"
 	"fmt"
 	"log"
 	"net/http"
@@ -35,17 +37,30 @@ func respondInternal(c *gin.Context) {
 	c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 }
 
-// requireAddressParam reads the named path param and validates it with
-// isValidAddressParam, emitting the shared 400 body on failure. When ok
-// is false the response has already been written and the handler must
-// return without writing anything else.
+// requireAddressParam reads the named path param, validates it, and returns
+// the canonical QIP-55 checksum form. When ok is false the response has
+// already been written and the handler must return without writing anything
+// else.
 func requireAddressParam(c *gin.Context, name string) (string, bool) {
-	v := c.Param(name)
-	if !isValidAddressParam(v) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid address; expected Q or 0x followed by 40 hex chars"})
+	return requireAddressValue(c, c.Param(name))
+}
+
+// requireAddressValue is the path-independent address guard used by both
+// path params and form values. Accepted Q/q/0x/0X aliases converge on one
+// checksummed uppercase-Q value before reaching cache, database, RPC, and
+// response code.
+func requireAddressValue(c *gin.Context, value string) (string, bool) {
+	if !isValidAddressParam(value) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf(
+				"invalid address; expected Q or 0x followed by %d hex chars",
+				qrlAddressHexLength,
+			),
+		})
 		return "", false
 	}
-	return v, true
+	canonical, _ := qrladdress.Canonicalize(value)
+	return canonical, true
 }
 
 // requireTxHashParam is the tx-hash counterpart of requireAddressParam.
@@ -108,7 +123,12 @@ func contractInfoPayload(contractsByAddr map[string]models.ContractInfo, addr st
 		"verified":      c.Verified,
 		"contractName":  c.ContractName,
 	}
-	if c.Verified && c.Abi != "" {
+	if !c.Verified {
+		return payload
+	}
+	provenanceStatus := sourcebundle.ClassifyRecordedMetadata(c)
+	payload["provenanceStatus"] = provenanceStatus
+	if c.Abi != "" && provenanceStatus != models.CompilerProvenanceInvalidRecorded {
 		payload["abi"] = c.Abi
 	}
 	return payload

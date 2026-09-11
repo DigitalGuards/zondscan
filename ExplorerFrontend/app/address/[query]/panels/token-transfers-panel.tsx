@@ -13,6 +13,7 @@ import {
 import type { ColumnDef, Row } from '@tanstack/react-table';
 import { formatTimestamp, formatTokenAmount } from '../../../lib/helpers';
 import CopyButton from '../../../components/CopyButton';
+import AddressFingerprint from '../../../components/AddressFingerprint';
 import DebouncedInput from '../../../components/DebouncedInput';
 import config from '../../../../config';
 import {
@@ -166,8 +167,7 @@ export default function TokenTransfersPanel({
           header: 'Token',
           cell: (info) => {
             const { name, symbol, standard, tokenID, contractAddress } = info.getValue();
-            const label =
-              name || symbol || (contractAddress ? truncateMiddle(contractAddress) : 'Token');
+            const label = name || symbol;
             // Surface QRC-X branding on the row (DB rows stay ERC-X).
             const badge = standard ? standard.replace(/^ERC-/, 'QRC-') : 'Token';
             return (
@@ -177,7 +177,9 @@ export default function TokenTransfersPanel({
                   className="text-accent hover:text-accent-hover font-medium"
                   title={contractAddress}
                 >
-                  {label}
+                  {label || (contractAddress ? (
+                    <AddressFingerprint address={contractAddress} />
+                  ) : 'Token')}
                 </Link>
                 <div className="flex items-center gap-2 text-xs text-text-secondary">
                   <span className="font-mono">{badge}</span>
@@ -206,7 +208,7 @@ export default function TokenTransfersPanel({
                     title={from}
                     className="text-accent hover:text-accent-hover"
                   >
-                    {truncateMiddle(from)}
+                    <AddressFingerprint address={from} />
                   </Link>
                 </div>
               )}
@@ -218,7 +220,7 @@ export default function TokenTransfersPanel({
                     title={to}
                     className="text-accent hover:text-accent-hover"
                   >
-                    {truncateMiddle(to)}
+                    <AddressFingerprint address={to} />
                   </Link>
                 </div>
               )}
@@ -300,7 +302,7 @@ export default function TokenTransfersPanel({
   ): JSX.Element => {
     const r = row.original;
     const badge = r.tokenStandard ? r.tokenStandard.replace(/^ERC-/, 'QRC-') : 'Token';
-    const label = r.tokenName || r.tokenSymbol || r.contractAddress;
+    const label = r.tokenName || r.tokenSymbol;
     return (
       <div key={row.id} className="p-4 border-b border-border last:border-b-0">
         <div className="space-y-3">
@@ -311,7 +313,7 @@ export default function TokenTransfersPanel({
                 href={`/address/${r.contractAddress}`}
                 className="text-sm text-accent hover:text-accent-hover break-all"
               >
-                {label}
+                {label || <AddressFingerprint address={r.contractAddress} />}
               </Link>
               <div className="text-xs text-text-secondary font-mono">
                 {badge}
@@ -346,7 +348,7 @@ export default function TokenTransfersPanel({
                 href={`/address/${r.from}`}
                 className="text-sm text-accent hover:text-accent-hover break-all"
               >
-                {truncateMiddle(r.from)}
+                <AddressFingerprint address={r.from} />
               </Link>
             </div>
           )}
@@ -358,7 +360,7 @@ export default function TokenTransfersPanel({
                 href={`/address/${r.to}`}
                 className="text-sm text-accent hover:text-accent-hover break-all"
               >
-                {truncateMiddle(r.to)}
+                <AddressFingerprint address={r.to} />
               </Link>
             </div>
           )}

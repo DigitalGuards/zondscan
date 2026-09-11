@@ -7,10 +7,12 @@ import (
 	"QRL2MongoDB/rpc"
 	"QRL2MongoDB/utils"
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -95,69 +97,54 @@ func getRPCDelay(bulkSync bool) time.Duration {
 // Sync starts the synchronization process. stopCh is closed by main.go on a
 // termination signal; it is threaded into every background ticker goroutine
 // started here so they stop accepting new work during graceful shutdown.
-func Sync(stopCh <-chan struct{}) {
+func Sync(stopCh <-chan struct{}) error {
 	var err error
 	var nextBlock string
 	var maxHex string
-
-	// Ensure the token collections + their indexes exist before we start
-	// processing blocks. Pre-Phase-2 this only ran via processInitialBlock,
-	// which is gated on IsCollectionsExist() == false, but the configs init
-	// path creates non-token collections (dailyTransactionsVolume etc), so
-	// IsCollectionsExist returns true on every restart and the gate never
-	// opens. Calling InitializeTokenCollections here is idempotent
-	// (CreateMany no-ops on existing indexes) and guarantees the Phase 2
-	// (contract, holder, tokenID) unique index actually gets created.
-	if err := InitializeTokenCollections(); err != nil {
-		configs.Logger.Error("Failed to initialize token collections at sync start",
+	if err := db.ValidateBlockIngestionMigration(); err != nil {
+		configs.Logger.Error("Block ingestion migration gate failed; synchronization is disabled until companion rows are explicitly reindexed",
 			zap.Error(err))
-		// Continue anyway: the indexes are about correctness, not liveness;
-		// the syncer can still index blocks and we'll log the issue loudly.
+		return err
 	}
 
-	// Idempotent genesis guard: the producer loop below starts at
-	// lastKnown+1, which skips block 0 forever on a fresh DB (a sync state of
-	// "0x0" means "nothing synced", not "block 0 done"). Insert block 0
-	// through the normal insert path; InsertBlockDocument no-ops when the
-	// block already exists, so a restart never duplicates it.
-	if !db.BlockExists("0x0") {
-		// Retry with the same backoff the latest-block fetch below uses: gap
-		// detection only scans the newest blocks, so a startup failure here
-		// would otherwise leave genesis missing for the whole process
-		// lifetime (until the next restart).
+	// Token work has its own durable per-block claim. Normalize and validate the
+	// queue synchronously so an unknown state fails startup instead of hiding a
+	// block forever, then keep the drainer alive for quiet-head retries.
+	if err := initializePendingTokenBlockQueue(); err != nil {
+		return fmt.Errorf("initialize durable token block queue: %w", err)
+	}
+	StartPendingTokenBlockWorker(stopCh)
+
+	// The producer loop starts at lastKnown+1, so genesis is checked through
+	// the same durable path on every startup. This also resumes a pending
+	// companion write left by a crash before its completion marker.
+	var genErr error
+	for retries := 0; retries < 5; retries++ {
 		var genesisBlock *models.ZondDatabaseBlock
-		var genErr error
-		for retries := 0; retries < 5; retries++ {
-			genesisBlock, genErr = rpc.GetBlockByNumberMainnet("0x0")
-			if genErr == nil {
-				break
-			}
-			configs.Logger.Warn("Failed to fetch genesis block, retrying...",
-				zap.Error(genErr),
-				zap.Int("retry", retries+1))
-			time.Sleep(time.Duration(1<<uint(retries)) * time.Second)
+		genesisBlock, genErr = rpc.GetBlockByNumberMainnet("0x0")
+		if genErr == nil {
+			genErr = ingestFetchedBlock("0x0", genesisBlock)
 		}
-		if genErr != nil {
-			configs.Logger.Error("Failed to fetch genesis block after retries; continuing without it (retried on next restart)",
-				zap.Error(genErr))
-		} else {
-			db.UpdateTransactionStatuses(genesisBlock)
-			db.InsertBlockDocument(*genesisBlock)
-			db.ProcessTransactions(*genesisBlock)
-			configs.Logger.Info("Genesis block inserted")
+		if genErr == nil {
+			configs.Logger.Info("Genesis block reached durable ingestion completion")
+			break
 		}
+		configs.Logger.Warn("Failed to ingest genesis block, retrying",
+			zap.Error(genErr),
+			zap.Int("retry", retries+1))
+		time.Sleep(time.Duration(1<<uint(retries)) * time.Second)
+	}
+	if genErr != nil {
+		configs.Logger.Error("Failed to ingest genesis block after retries; canonical sync will remain at its confirmed prefix",
+			zap.Error(genErr))
 	}
 
-	// DB queries, no retry needed, these are local and don't fail transiently.
+	// The durable sync state is the only startup cursor. A block row can exist
+	// with ingestionState=pending after a crash, so deriving the cursor from the
+	// numerically latest row would skip its companion replay.
 	nextBlock = db.GetLastKnownBlockNumber()
 	if nextBlock == "0x0" {
-		nextBlock = db.GetLatestBlockNumberFromDB()
-		if nextBlock == "0x0" {
-			configs.Logger.Info("No existing blocks found, starting from genesis")
-		} else {
-			configs.Logger.Info("Starting from latest block in DB",
-				zap.String("block", nextBlock))
-		}
+		configs.Logger.Info("Starting from the durable genesis sync cursor")
 	} else {
 		configs.Logger.Info("Continuing from last known block",
 			zap.String("block", nextBlock))
@@ -188,25 +175,26 @@ func Sync(stopCh <-chan struct{}) {
 
 	if err != nil {
 		configs.Logger.Error("Failed to get latest block after retries", zap.Error(err))
-		return
+		return fmt.Errorf("get latest block after retries: %w", err)
 	}
 
 	configs.Logger.Info("Starting sync from block number", zap.String("block", nextBlock))
 	wg := sync.WaitGroup{}
 	configs.Logger.Info("Latest block from network", zap.String("block", maxHex))
 
-	// Initialize the producer semaphore
-	producerSem = make(chan struct{}, MaxProducerConcurrency)
+	producerGroup := newBlockProducerGroup(MaxProducerConcurrency)
 
 	// Create a buffered channel of read only channels, with length 32.
 	producers := make(chan (<-chan Data), 32)
+	initialBatchCtx, cancelInitialBatch := context.WithCancel(context.Background())
 	configs.Logger.Info("Initialized producer channels")
 
 	// Start the consumer.
+	var initialBatchReport consumerReport
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		consumer(producers)
+		initialBatchReport = consumeBatches(producers, cancelInitialBatch)
 	}()
 	configs.Logger.Info("Started consumer process")
 
@@ -218,12 +206,23 @@ func Sync(stopCh <-chan struct{}) {
 
 	// Start producers in correct order with larger batch size
 	currentBlock := nextBlock
+scheduleInitialBatches:
 	for utils.CompareHexNumbers(currentBlock, maxHex) < 0 {
+		select {
+		case <-initialBatchCtx.Done():
+			break scheduleInitialBatches
+		default:
+		}
 		endBlock := utils.AddHexNumbers(currentBlock, utils.IntToHex(batchSize))
 		if utils.CompareHexNumbers(endBlock, maxHex) > 0 {
 			endBlock = maxHex
 		}
-		producers <- producer(currentBlock, endBlock)
+		producerChan := producerGroup.producerWithContext(initialBatchCtx, currentBlock, endBlock)
+		select {
+		case producers <- producerChan:
+		case <-initialBatchCtx.Done():
+			break scheduleInitialBatches
+		}
 		configs.Logger.Info("Processing block range",
 			zap.String("from", currentBlock),
 			zap.String("to", endBlock))
@@ -232,7 +231,15 @@ func Sync(stopCh <-chan struct{}) {
 
 	close(producers)
 	wg.Wait()
-	configs.Logger.Info("Initial sync completed successfully!")
+	cancelInitialBatch()
+	producerGroup.wait()
+	if initialBatchReport.err != nil {
+		configs.Logger.Error("Initial batch sync stopped at its confirmed canonical prefix",
+			zap.Int("highest_processed_block", initialBatchReport.highestProcessedBlock),
+			zap.Error(initialBatchReport.err))
+	} else {
+		configs.Logger.Info("Initial sync completed successfully!")
+	}
 
 	configs.Logger.Info("Calculating daily transaction volume...")
 	db.GetDailyTransactionVolume()
@@ -262,16 +269,14 @@ func Sync(stopCh <-chan struct{}) {
 	// Process tokens using the dedicated token sync module
 	ProcessTokensAfterInitialSync(initialSyncStart, tokenMaxHex)
 
-	// Start auxiliary services after initial sync
-	go func() {
-		// Start wallet count sync
-		configs.Logger.Info("Starting wallet count sync service...")
-		StartWalletCountSync(stopCh)
+	// Start auxiliary services after initial sync. Their goroutines are
+	// registered so shutdown cannot release the writer lease while one is
+	// still mutating MongoDB.
+	configs.Logger.Info("Starting wallet count sync service...")
+	StartWalletCountSync(stopCh)
 
-		// Start contract reprocessing job
-		configs.Logger.Info("Starting contract reprocessing service...")
-		StartContractReprocessingJob(stopCh)
-	}()
+	configs.Logger.Info("Starting contract reprocessing service...")
+	StartContractReprocessingJob(stopCh)
 
 	// Signal that initial sync is done so mempool polling can begin
 	atomic.StoreInt32(&initialSyncComplete, 1)
@@ -279,6 +284,7 @@ func Sync(stopCh <-chan struct{}) {
 
 	configs.Logger.Info("Starting continuous block monitoring...")
 	singleBlockInsertion(stopCh)
+	return nil
 }
 
 // findHighestProcessedBlock returns the sync-state block number.
@@ -332,7 +338,13 @@ func processSubsequentBlocks(currentBlock string) string {
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		blockData, err = rpc.GetBlockByNumberMainnet(currentBlock)
-		if err == nil && blockData != nil && blockData.Result.ParentHash != "" {
+		if err == nil {
+			err = validateFetchedBlock(currentBlock, blockData)
+		}
+		if err == nil {
+			err = db.UpdateTransactionStatuses(blockData)
+		}
+		if err == nil {
 			break // Success
 		}
 
@@ -357,102 +369,96 @@ func processSubsequentBlocks(currentBlock string) string {
 		return ""
 	}
 
-	if blockData == nil || blockData.Result.ParentHash == "" {
-		configs.Logger.Error("Invalid block data received after retries",
-			zap.String("block", currentBlock))
-		trackFailedBlock(currentBlock, fmt.Errorf("invalid block data: nil or missing parent hash"))
+	// Serialize the complete indexed mutation with gap-fill, batch ingestion,
+	// and rollback. Parent linkage is re-read under the same lock so a rollback
+	// cannot remove it between validation and child insertion.
+	lockChainMutation()
+	defer chainMutationMu.Unlock()
+
+	currentNumber, parseErr := parseBatchBlockNumber(currentBlock)
+	if parseErr != nil {
+		trackFailedBlock(currentBlock, parseErr)
 		return ""
 	}
 
-	// Get the parent block's hash from our DB
-	parentBlockNum := utils.SubtractHexNumbers(currentBlock, "0x1")
-	dbParentHash := db.GetLatestBlockHashHeaderFromDB(parentBlockNum)
-
-	// If this is not the genesis block and we don't have the parent, we need to sync the parent first
-	if parentBlockNum != "0x0" && dbParentHash == "" {
-		configs.Logger.Info("Missing parent block, syncing parent first",
-			zap.String("current_block", currentBlock),
-			zap.String("parent_block", parentBlockNum))
-		return parentBlockNum
-	}
-
-	// For non-genesis blocks, verify parent hash
-	if parentBlockNum != "0x0" && blockData.Result.ParentHash != dbParentHash {
-		configs.Logger.Warn("Parent hash mismatch detected",
-			zap.String("block", currentBlock),
-			zap.String("expected_parent", dbParentHash),
-			zap.String("actual_parent", blockData.Result.ParentHash))
-
-		// Reorg: block N (currentBlock) does not build on the stored block N-1
-		// (parentBlockNum), so the stored N-1 is stale and must be removed.
-		// Rollback deletes blocks with blockNumberInt > arg (strict $gt), so to
-		// include N-1 in the deletion set we pass N-2 (parentBlockNum - 0x1).
-		// Rollback then deletes every block >= N-1 (i.e. the stale N-1 and any
-		// stragglers above it) and resets the sync state to N-2, so the
-		// continuous loop re-syncs starting at N-1.
-		rollbackTarget := utils.SubtractHexNumbers(parentBlockNum, "0x1")
-		err = db.Rollback(rollbackTarget)
-		if err != nil {
-			configs.Logger.Error("Failed to rollback block",
-				zap.String("rollback_target", rollbackTarget),
-				zap.String("stale_block", parentBlockNum),
-				zap.Error(err))
-			// Rollback did not delete the stale block. Returning parentBlockNum
-			// here would let the BlockExists guard skip the still-present N-1,
-			// advance to N, re-detect the mismatch, and ping-pong forever
-			// without ever repairing the data. Return currentBlock instead so
-			// the next tick retries this same block (and the rollback) until it
-			// succeeds.
-			return currentBlock
+	if currentNumber > 0 {
+		parentBlockNum := utils.IntToHex(currentNumber - 1)
+		dbParentHash, parentErr := db.GetCanonicalBlockHash(parentBlockNum)
+		if parentErr != nil {
+			if errors.Is(parentErr, db.ErrCanonicalBlockNotFound) ||
+				errors.Is(parentErr, db.ErrBlockWriteUnresolved) {
+				configs.Logger.Info("Parent block is missing or incomplete; repairing it first",
+					zap.String("current_block", currentBlock),
+					zap.String("parent_block", parentBlockNum))
+				return parentBlockNum
+			}
+			configs.Logger.Error("Failed to read canonical parent identity",
+				zap.String("current_block", currentBlock),
+				zap.String("parent_block", parentBlockNum),
+				zap.Error(parentErr))
+			trackFailedBlock(currentBlock, parentErr)
+			return ""
 		}
-		// Resume from the rolled-back point: re-sync the stale block (N-1)
-		// first so its parent linkage is rebuilt before N.
-		return parentBlockNum
+
+		if !strings.EqualFold(blockData.Result.ParentHash, dbParentHash) {
+			configs.Logger.Warn("Parent hash mismatch detected",
+				zap.String("block", currentBlock),
+				zap.String("expected_parent", dbParentHash),
+				zap.String("actual_parent", blockData.Result.ParentHash))
+			if currentNumber == 1 {
+				conflictErr := fmt.Errorf("block %s does not build on immutable genesis", currentBlock)
+				trackFailedBlock(currentBlock, conflictErr)
+				return ""
+			}
+
+			// Reorg: block N (currentBlock) does not build on the stored block N-1
+			// (parentBlockNum), so the stored N-1 is stale and must be removed.
+			// Rollback deletes blocks with blockNumberInt > arg (strict $gt), so to
+			// include N-1 in the deletion set we pass N-2 (parentBlockNum - 0x1).
+			// Rollback then deletes every block >= N-1 (i.e. the stale N-1 and any
+			// stragglers above it) and resets the sync state to N-2, so the
+			// continuous loop re-syncs starting at N-1.
+			rollbackTarget := utils.IntToHex(currentNumber - 2)
+			err = db.Rollback(rollbackTarget)
+			if err != nil {
+				configs.Logger.Error("Failed to rollback block",
+					zap.String("rollback_target", rollbackTarget),
+					zap.String("stale_block", parentBlockNum),
+					zap.Error(err))
+				// Rollback did not delete the stale block. Returning parentBlockNum
+				// here would let the BlockExists guard skip the still-present N-1,
+				// advance to N, re-detect the mismatch, and ping-pong forever
+				// without ever repairing the data. Return currentBlock instead so
+				// the next tick retries this same block (and the rollback) until it
+				// succeeds.
+				return currentBlock
+			}
+			// Resume from the rolled-back point: re-sync the stale block (N-1)
+			// first so its parent linkage is rebuilt before N.
+			return parentBlockNum
+		}
 	}
 
-	// Idempotency guard: if this block is already stored, skip BOTH the block
-	// insert and ProcessTransactions together. InsertBlockDocument already
-	// no-ops on an existing block, but ProcessTransactions used to run
-	// unconditionally right after, duplicating transfer + transactionByAddress
-	// rows (which have no unique index on txHash) on any re-process: retry
-	// after a partial failure, node restart, or gap-fill overlap. Guarding both
-	// with one BlockExists check keeps them consistent.
-	//
-	// This does NOT block the reorg re-sync path above: Rollback deletes the
-	// stale block first, so BlockExists returns false on the subsequent
-	// reprocess and the block is re-inserted correctly.
-	if db.BlockExists(currentBlock) {
-		configs.Logger.Info("Block already processed, skipping insert and transaction processing",
+	confirmed, ingestErr := ingestPreparedBatchLocked([]batchBlock{{
+		block:  *blockData,
+		number: currentNumber,
+	}}, nil)
+	if ingestErr != nil {
+		configs.Logger.Error("Durable block ingestion failed",
 			zap.String("block", currentBlock),
-			zap.String("hash", blockData.Result.Hash))
-		// Still advance the sync state and return the next block so the caller
-		// continues forward rather than re-checking the same block.
-		db.StoreLastKnownBlockNumber(currentBlock)
-		return utils.AddHexNumbers(currentBlock, "0x1")
+			zap.Error(ingestErr))
+		trackFailedBlock(currentBlock, ingestErr)
+		return ""
 	}
-
-	// Process the block. UpdateTransactionStatuses fetches each receipt and
-	// fills tx.Status before persistence; the batch (producer_consumer) and
-	// gap-repair paths already do this, but this head-following path never
-	// did, so live-synced transactions were stored with an empty status.
-	db.UpdateTransactionStatuses(blockData)
-	db.InsertBlockDocument(*blockData)
-	db.ProcessTransactions(*blockData)
-
-	// Update any pending transactions that are now mined in this block
-	if err := UpdatePendingTransactionsInBlock(blockData); err != nil {
-		configs.Logger.Error("Failed to update pending transactions in block",
-			zap.String("block", blockData.Result.Number),
-			zap.Error(err))
-		// Don't return error to avoid blocking block processing
+	if len(confirmed) != 1 || confirmed[0] != currentNumber {
+		unresolvedErr := fmt.Errorf("block %s did not reach durable companion completion", currentBlock)
+		trackFailedBlock(currentBlock, unresolvedErr)
+		return ""
 	}
 
 	configs.Logger.Info("Block processed successfully",
 		zap.String("block", currentBlock),
 		zap.String("hash", blockData.Result.Hash))
-
-	// Update sync state after successful processing
-	db.StoreLastKnownBlockNumber(currentBlock)
 
 	// Return next block number
 	return utils.AddHexNumbers(currentBlock, "0x1")

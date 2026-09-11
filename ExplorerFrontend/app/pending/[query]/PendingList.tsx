@@ -6,7 +6,8 @@ import config from '../../../config';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { formatAmount, formatGasPrice, NATIVE_UNIT, timeAgo, truncateHash } from '../../lib/helpers';
+import { formatAmount, NATIVE_UNIT, timeAgo, truncateHash } from '../../lib/helpers';
+import AddressFingerprint from '../../components/AddressFingerprint';
 import type { PendingTransaction } from '@/app/types';
 import Badge from '../../components/Badge';
 import Pagination from '../../components/Pagination';
@@ -144,12 +145,12 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
                         </td>
                         <td className="px-4 py-3 hidden sm:table-cell">
                           <span className="text-text-secondary font-mono text-xs" title={tx.from}>
-                            {truncateHash(tx.from, 8, 6)}
+                            <AddressFingerprint address={tx.from} />
                           </span>
                         </td>
                         <td className="px-4 py-3 hidden sm:table-cell">
                           <span className="text-text-secondary font-mono text-xs" title={tx.to}>
-                            {tx.to ? truncateHash(tx.to, 8, 6) : 'Contract Create'}
+                            {tx.to ? <AddressFingerprint address={tx.to} /> : 'Contract Create'}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-text-secondary tabular-nums whitespace-nowrap">

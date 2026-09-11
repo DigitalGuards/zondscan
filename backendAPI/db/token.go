@@ -11,7 +11,6 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // GetTokenBalancesByAddress returns token balances for a given wallet address
@@ -34,45 +33,45 @@ func GetTokenBalancesByAddress(address string, standardFilter *string) ([]models
 
 	matchStage := bson.M{
 		"holderAddress": bson.M{"$in": searchAddresses},
+		"balanceStale":  bson.M{"$ne": true},
 	}
 	if standardFilter != nil && *standardFilter != "" {
 		matchStage["tokenStandard"] = *standardFilter
 	}
 
-	// Aggregation pipeline to join with contractCode for token metadata
-	pipeline := []bson.M{
-		// Match token balances for this address (case-insensitive)
-		{
-			"$match": matchStage,
+	contractLookupPipeline := canonicalContractPipeline(bson.M{
+		"$expr": bson.M{
+			"$eq": []interface{}{
+				bson.M{"$toLower": "$address"},
+				"$$contractAddr",
+			},
 		},
+	})
+
+	// Aggregation pipeline to join with contractCode for token metadata.
+	// Token balances are keyed snapshots with a last-mutation height and a
+	// rollback-managed balanceStale marker. Their persisted schema has no
+	// blockHash, so this reader can prove durable height only. Exact block-hash
+	// identity requires a future token-balance schema migration and reindex.
+	pipeline := canonicalCompanionPipeline(matchStage)
+	pipeline = append(pipeline,
 		// Add lowercase version of contractAddress for case-insensitive lookup
-		{
+		bson.M{
 			"$addFields": bson.M{
 				"contractAddressLower": bson.M{"$toLower": "$contractAddress"},
 			},
 		},
 		// Join with contractCode collection using lowercase addresses
-		{
+		bson.M{
 			"$lookup": bson.M{
-				"from": "contractCode",
-				"let":  bson.M{"contractAddr": "$contractAddressLower"},
-				"pipeline": []bson.M{
-					{
-						"$match": bson.M{
-							"$expr": bson.M{
-								"$eq": []interface{}{
-									bson.M{"$toLower": "$address"},
-									"$$contractAddr",
-								},
-							},
-						},
-					},
-				},
-				"as": "tokenInfo",
+				"from":     "contractCode",
+				"let":      bson.M{"contractAddr": "$contractAddressLower"},
+				"pipeline": contractLookupPipeline,
+				"as":       "tokenInfo",
 			},
 		},
 		// Unwind the tokenInfo array (should be single element)
-		{
+		bson.M{
 			"$unwind": bson.M{
 				"path":                       "$tokenInfo",
 				"preserveNullAndEmptyArrays": true,
@@ -81,7 +80,7 @@ func GetTokenBalancesByAddress(address string, standardFilter *string) ([]models
 		// Project final structure with token metadata. Phase 2: include
 		// tokenID + tokenStandard so the address page can render NFT
 		// holdings per (collection, tokenID) row.
-		{
+		bson.M{
 			"$project": bson.M{
 				"contractAddress": 1,
 				"holderAddress":   1,
@@ -100,7 +99,7 @@ func GetTokenBalancesByAddress(address string, standardFilter *string) ([]models
 		// balances can exceed Decimal128's 34-digit limit, and one oversized
 		// balance used to 500 this wallet token list permanently. An
 		// oversized value now sorts as 0; the original string stays intact.
-		{
+		bson.M{
 			"$addFields": bson.M{
 				"balanceDecimal": bson.M{"$convert": bson.M{
 					"input":   "$balance",
@@ -111,10 +110,10 @@ func GetTokenBalancesByAddress(address string, standardFilter *string) ([]models
 			},
 		},
 		// Sort by balance descending (highest value tokens first)
-		{
+		bson.M{
 			"$sort": bson.M{"balanceDecimal": -1},
 		},
-	}
+	)
 
 	cursor, err := collection.Aggregate(ctx, pipeline)
 	if err != nil {
@@ -177,7 +176,10 @@ func GetTokenHolders(contractAddress, tokenID string, page, limit int) ([]models
 	defer cancel()
 
 	contractVariants := normalizeAddressBoth(contractAddress)
-	matchStage := bson.M{"contractAddress": bson.M{"$in": contractVariants}}
+	matchStage := bson.M{
+		"contractAddress": bson.M{"$in": contractVariants},
+		"balanceStale":    bson.M{"$ne": true},
+	}
 	if tokenID != "" {
 		matchStage["tokenID"] = tokenID
 	}
@@ -208,22 +210,26 @@ func GetTokenHolders(contractAddress, tokenID string, page, limit int) ([]models
 	// tokenID-scoped path: rows already represent (holder, id) tuples, no
 	// grouping needed.
 	if tokenID != "" {
-		totalCount, err := collection.CountDocuments(ctx, matchStage)
+		totalCount, err := aggregateCanonicalCount(
+			ctx,
+			collection,
+			canonicalCompanionPipeline(matchStage),
+		)
 		if err != nil {
 			return nil, 0, err
 		}
-		pipeline := []bson.M{
-			{"$match": matchStage},
-			{
+		pipeline := canonicalCompanionPipeline(matchStage)
+		pipeline = append(pipeline,
+			bson.M{
 				"$addFields": bson.M{
 					"balanceLen": bson.M{"$strLenCP": bson.M{"$ifNull": []interface{}{"$balance", ""}}},
 				},
 			},
-			{"$sort": bson.D{{Key: "balanceLen", Value: -1}, {Key: "balance", Value: -1}}},
-			{"$skip": skip},
-			{"$limit": lim},
-			{"$project": bson.M{"balanceLen": 0}},
-		}
+			bson.M{"$sort": bson.D{{Key: "balanceLen", Value: -1}, {Key: "balance", Value: -1}}},
+			bson.M{"$skip": skip},
+			bson.M{"$limit": lim},
+			bson.M{"$project": bson.M{"balanceLen": 0}},
+		)
 		cursor, err := collection.Aggregate(ctx, pipeline)
 		if err != nil {
 			return nil, 0, err
@@ -258,11 +264,11 @@ func GetTokenHolders(contractAddress, tokenID string, page, limit int) ([]models
 	// Distinct-holder count. Mongo doesn't have a clean "$count after $group"
 	// alongside the paginated cursor, so issue a separate aggregation that
 	// stops at $count.
-	countPipeline := []bson.M{
-		{"$match": matchStage},
+	countPipeline := canonicalCompanionPipeline(matchStage)
+	countPipeline = append(countPipeline,
 		groupStage,
-		{"$count": "total"},
-	}
+		bson.M{"$count": "total"},
+	)
 	countCursor, err := collection.Aggregate(ctx, countPipeline)
 	if err != nil {
 		return nil, 0, err
@@ -279,11 +285,11 @@ func GetTokenHolders(contractAddress, tokenID string, page, limit int) ([]models
 		totalCount = countResult[0].Total
 	}
 
-	pipeline := []bson.M{
-		{"$match": matchStage},
+	pipeline := canonicalCompanionPipeline(matchStage)
+	pipeline = append(pipeline,
 		groupStage,
 		// Reshape grouped doc back into TokenBalance.
-		{
+		bson.M{
 			"$project": bson.M{
 				"_id":             0,
 				"contractAddress": 1,
@@ -295,10 +301,10 @@ func GetTokenHolders(contractAddress, tokenID string, page, limit int) ([]models
 				"balanceDecimal":  1,
 			},
 		},
-		{"$sort": bson.M{"balanceDecimal": -1}},
-		{"$skip": skip},
-		{"$limit": lim},
-	}
+		bson.M{"$sort": bson.M{"balanceDecimal": -1}},
+		bson.M{"$skip": skip},
+		bson.M{"$limit": lim},
+	)
 
 	cursor, err := collection.Aggregate(ctx, pipeline)
 	if err != nil {
@@ -331,6 +337,7 @@ func GetTokenIDs(contractAddress string, page, limit int) ([]TokenIDSummary, int
 	matchStage := bson.M{
 		"contractAddress": bson.M{"$in": contractVariants},
 		"tokenID":         bson.M{"$exists": true, "$ne": ""},
+		"balanceStale":    bson.M{"$ne": true},
 	}
 
 	collection := configs.TokenBalancesCollection
@@ -361,12 +368,12 @@ func GetTokenIDs(contractAddress string, page, limit int) ([]TokenIDSummary, int
 	}
 
 	// Total count of distinct ids.
-	countPipeline := []bson.M{
-		{"$match": matchStage},
+	countPipeline := canonicalCompanionPipeline(matchStage)
+	countPipeline = append(countPipeline,
 		firstGroup,
 		secondGroup,
-		{"$count": "total"},
-	}
+		bson.M{"$count": "total"},
+	)
 	countCursor, err := collection.Aggregate(ctx, countPipeline)
 	if err != nil {
 		return nil, 0, err
@@ -390,11 +397,11 @@ func GetTokenIDs(contractAddress string, page, limit int) ([]TokenIDSummary, int
 	// sort on equal-length numeric strings matches numeric sort, so the
 	// (len, lex) tuple gives correct numeric ascending order for the full
 	// uint256 range without involving Decimal128.
-	pipeline := []bson.M{
-		{"$match": matchStage},
+	pipeline := canonicalCompanionPipeline(matchStage)
+	pipeline = append(pipeline,
 		firstGroup,
 		secondGroup,
-		{
+		bson.M{
 			"$project": bson.M{
 				"_id":           0,
 				"tokenID":       "$_id",
@@ -405,11 +412,11 @@ func GetTokenIDs(contractAddress string, page, limit int) ([]TokenIDSummary, int
 				"tokenIDLen":    bson.M{"$strLenCP": bson.M{"$ifNull": []interface{}{"$_id", ""}}},
 			},
 		},
-		{"$sort": bson.D{{Key: "tokenIDLen", Value: 1}, {Key: "tokenID", Value: 1}}},
-		{"$skip": int64(page * limit)},
-		{"$limit": int64(limit)},
-		{"$project": bson.M{"tokenIDLen": 0}},
-	}
+		bson.M{"$sort": bson.D{{Key: "tokenIDLen", Value: 1}, {Key: "tokenID", Value: 1}}},
+		bson.M{"$skip": int64(page * limit)},
+		bson.M{"$limit": int64(limit)},
+		bson.M{"$project": bson.M{"tokenIDLen": 0}},
+	)
 
 	cursor, err := collection.Aggregate(ctx, pipeline)
 	if err != nil {
@@ -474,8 +481,13 @@ func GetTokenTransfers(contractAddress string, page, limit int) ([]models.TokenT
 	contractFilter := bson.M{"contractAddress": bson.M{"$in": contractVariants}}
 	collection := configs.TokenTransfersCollection
 
-	// Count total transfers
-	totalCount, err := collection.CountDocuments(ctx, contractFilter)
+	// Count only transfers whose owning block reached its durable completion
+	// marker. The same fence is applied to the page query below.
+	totalCount, err := aggregateCanonicalCount(
+		ctx,
+		collection,
+		canonicalTokenCompanionPipeline(contractFilter),
+	)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -483,12 +495,13 @@ func GetTokenTransfers(contractAddress string, page, limit int) ([]models.TokenT
 	// Find with pagination, sorted by block number descending (most recent first).
 	// Sort on the numeric blockNumberInt field, not the hex string blockNumber,
 	// so ordering is true chain order rather than lexicographic.
-	opts := options.Find().
-		SetSort(bson.D{{Key: "blockNumberInt", Value: -1}}).
-		SetSkip(int64(page * limit)).
-		SetLimit(int64(limit))
-
-	cursor, err := collection.Find(ctx, contractFilter, opts)
+	pipeline := canonicalTokenCompanionPipeline(contractFilter)
+	pipeline = append(pipeline,
+		bson.M{"$sort": bson.D{{Key: "blockNumberInt", Value: -1}}},
+		bson.M{"$skip": int64(page * limit)},
+		bson.M{"$limit": int64(limit)},
+	)
+	cursor, err := collection.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -532,7 +545,7 @@ func GetTokenTransfersByAddress(address string, page, limit int) ([]models.Token
 	// without per-page round-trips). A lower ceiling here silently
 	// truncated active addresses, and the "(N)" tab badge then under-
 	// reported their real activity. The `total` returned in the response
-	// is still the unbounded CountDocuments, so the tab can render the
+	// is still the unbounded canonical count, so the tab can render the
 	// true number regardless of what was paginated in.
 	if limit > 250 {
 		limit = 250
@@ -542,17 +555,22 @@ func GetTokenTransfersByAddress(address string, page, limit int) ([]models.Token
 	filter := addressOrFilter(canonical)
 	collection := configs.TokenTransfersCollection
 
-	totalCount, err := collection.CountDocuments(ctx, filter)
+	totalCount, err := aggregateCanonicalCount(
+		ctx,
+		collection,
+		canonicalTokenCompanionPipeline(filter),
+	)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	opts := options.Find().
-		SetSort(bson.D{{Key: "blockNumberInt", Value: -1}}).
-		SetSkip(int64(page * limit)).
-		SetLimit(int64(limit))
-
-	cursor, err := collection.Find(ctx, filter, opts)
+	pipeline := canonicalTokenCompanionPipeline(filter)
+	pipeline = append(pipeline,
+		bson.M{"$sort": bson.D{{Key: "blockNumberInt", Value: -1}}},
+		bson.M{"$skip": int64(page * limit)},
+		bson.M{"$limit": int64(limit)},
+	)
+	cursor, err := collection.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -579,21 +597,44 @@ func GetTokenInfo(contractAddress string) (*models.TokenInfo, error) {
 	// Get contract info
 	contractCollection := configs.ContractInfoCollection
 	var contract models.ContractInfo
-	err := contractCollection.FindOne(ctx, bson.M{"address": contractInFilter}).Decode(&contract)
+	contractPipeline := canonicalContractPipeline(bson.M{"address": contractInFilter})
+	contractPipeline = append(contractPipeline, bson.M{"$limit": 1})
+	contractCursor, err := contractCollection.Aggregate(ctx, contractPipeline)
 	if err != nil {
+		return nil, err
+	}
+	defer contractCursor.Close(ctx)
+	if !contractCursor.Next(ctx) {
+		if err := contractCursor.Err(); err != nil {
+			return nil, err
+		}
+		return nil, mongo.ErrNoDocuments
+	}
+	if err := contractCursor.Decode(&contract); err != nil {
 		return nil, err
 	}
 
 	// Count holders
 	balanceCollection := configs.TokenBalancesCollection
-	holderCount, err := balanceCollection.CountDocuments(ctx, bson.M{"contractAddress": contractInFilter})
+	holderCount, err := aggregateCanonicalCount(
+		ctx,
+		balanceCollection,
+		canonicalCompanionPipeline(bson.M{
+			"contractAddress": contractInFilter,
+			"balanceStale":    bson.M{"$ne": true},
+		}),
+	)
 	if err != nil {
 		holderCount = 0
 	}
 
-	// Count transfers
+	// Count canonical-complete transfers.
 	transferCollection := configs.TokenTransfersCollection
-	transferCount, err := transferCollection.CountDocuments(ctx, bson.M{"contractAddress": contractInFilter})
+	transferCount, err := aggregateCanonicalCount(
+		ctx,
+		transferCollection,
+		canonicalTokenCompanionPipeline(bson.M{"contractAddress": contractInFilter}),
+	)
 	if err != nil {
 		transferCount = 0
 	}
@@ -639,10 +680,8 @@ func CountTokenTransfersByTxHashes(txHashes []string) (map[string]int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	pipeline := []bson.M{
-		{"$match": bson.M{"txHash": bson.M{"$in": normalized}}},
-		{"$group": bson.M{"_id": "$txHash", "count": bson.M{"$sum": 1}}},
-	}
+	pipeline := canonicalTokenCompanionPipeline(bson.M{"txHash": bson.M{"$in": normalized}})
+	pipeline = append(pipeline, bson.M{"$group": bson.M{"_id": "$txHash", "count": bson.M{"$sum": 1}}})
 	cursor, err := configs.TokenTransfersCollection.Aggregate(ctx, pipeline)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -661,6 +700,9 @@ func CountTokenTransfersByTxHashes(txHashes []string) (map[string]int, error) {
 			continue
 		}
 		out[row.ID] = row.Count
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -689,7 +731,8 @@ func GetTokenTransfersByTxHash(txHash string) ([]models.TokenTransfer, error) {
 		normalizedHash = "0x" + normalizedHash
 	}
 
-	cursor, err := collection.Find(ctx, bson.M{"txHash": normalizedHash})
+	pipeline := canonicalTokenCompanionPipeline(bson.M{"txHash": normalizedHash})
+	cursor, err := collection.Aggregate(ctx, pipeline)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return []models.TokenTransfer{}, nil
@@ -767,12 +810,18 @@ func GetNFTBalancesByAddress(address string, standardFilter *string) ([]models.N
 	matchStage := bson.M{
 		"holderAddress": bson.M{"$in": searchAddresses},
 		"tokenStandard": bson.M{"$in": standards},
+		"balanceStale":  bson.M{"$ne": true},
 	}
+	contractLookupPipeline := canonicalContractPipeline(bson.M{
+		"$expr": bson.M{"$eq": []interface{}{
+			bson.M{"$toLower": "$address"}, "$$contractAddr",
+		}},
+	})
 
 	collection := configs.TokenBalancesCollection
 
-	pipeline := []bson.M{
-		{"$match": matchStage},
+	pipeline := canonicalCompanionPipeline(matchStage)
+	pipeline = append(pipeline, []bson.M{
 		// Join the collection-level row (name/symbol/metadataName/etc) from
 		// contractCode. Case-insensitive lookup on the lowercase address to
 		// match the existing GetTokenBalancesByAddress pattern.
@@ -783,14 +832,10 @@ func GetNFTBalancesByAddress(address string, standardFilter *string) ([]models.N
 		},
 		{
 			"$lookup": bson.M{
-				"from": "contractCode",
-				"let":  bson.M{"contractAddr": "$contractAddressLower"},
-				"pipeline": []bson.M{
-					{"$match": bson.M{"$expr": bson.M{"$eq": []interface{}{
-						bson.M{"$toLower": "$address"}, "$$contractAddr",
-					}}}},
-				},
-				"as": "contractInfo",
+				"from":     "contractCode",
+				"let":      bson.M{"contractAddr": "$contractAddressLower"},
+				"pipeline": contractLookupPipeline,
+				"as":       "contractInfo",
 			},
 		},
 		{"$unwind": bson.M{"path": "$contractInfo", "preserveNullAndEmptyArrays": true}},
@@ -863,7 +908,7 @@ func GetNFTBalancesByAddress(address string, standardFilter *string) ([]models.N
 		// the route is not paginated so this is a hard ceiling, not a page.
 		{"$limit": 500},
 		{"$project": bson.M{"tokenIDLen": 0}},
-	}
+	}...)
 
 	cursor, err := collection.Aggregate(ctx, pipeline)
 	if err != nil {

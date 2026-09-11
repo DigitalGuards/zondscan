@@ -2,6 +2,7 @@ package configs
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -83,6 +84,8 @@ func bindCollections(client *mongo.Client) {
 	ValidatorsCollections = db.Collection(validatorsCollName)
 	ContractInfoCollection = db.Collection(contractCodeCollName)
 	ContractVerificationsCollection = db.Collection(contractVerificationsCollName)
+	ContractExplainChallengesCollection = db.Collection(contractExplainChallengesCollName)
+	ContractExplainUsageCollection = db.Collection(contractExplainUsageCollName)
 	BlockSizesCollection = db.Collection(blockSizesCollName)
 	TotalCirculatingSupplyCollection = db.Collection(totalCirculatingSupplyCollName)
 	CoinGeckoCollection = db.Collection(coinGeckoCollName)
@@ -217,6 +220,9 @@ func createIndexes(db *mongo.Database) {
 		},
 	}
 
+	contractExplainChallengeIndexes := explainChallengeIndexModels()
+	contractExplainUsageIndexes := explainUsageIndexModels()
+
 	// transfer collection indexes
 	transferIndexes := []mongo.IndexModel{
 		{
@@ -313,6 +319,8 @@ func createIndexes(db *mongo.Database) {
 		addressesCollName:                    addressesIndexes,
 		internalTransactionByAddressCollName: internalTransactionsIndexes,
 		contractCodeCollName:                 contractCodeIndexes,
+		contractExplainChallengesCollName:    contractExplainChallengeIndexes,
+		contractExplainUsageCollName:         contractExplainUsageIndexes,
 		transferCollName:                     transferIndexes,
 		validatorsCollName:                   validatorsIndexes,
 		tokenTransfersCollName:               tokenTransfersIndexes,
@@ -324,6 +332,16 @@ func createIndexes(db *mongo.Database) {
 		exists, err := collectionExists(db, collName)
 		if err != nil {
 			log.Printf("Warning: Could not check if collection %s exists: %v", collName, err)
+			continue
+		}
+
+		if !exists && (collName == contractExplainChallengesCollName ||
+			collName == contractExplainUsageCollName) {
+			if _, err := db.Collection(collName).Indexes().CreateMany(ctx, indexes); err != nil {
+				log.Printf("Warning: Could not create indexes for %s: %v", collName, err)
+			} else {
+				log.Printf("Created collection and required indexes for %s", collName)
+			}
 			continue
 		}
 
@@ -364,6 +382,98 @@ func createIndexes(db *mongo.Database) {
 		} else {
 			log.Printf("Created missing indexes for collection %s", collName)
 		}
+	}
+}
+
+func explainChallengeIndexModels() []mongo.IndexModel {
+	return []mongo.IndexModel{
+		{
+			Keys: bson.D{{Key: "expiresAt", Value: 1}},
+			Options: options.Index().
+				SetName("contract_explain_challenge_expiry").
+				SetExpireAfterSeconds(0),
+		},
+	}
+}
+
+func explainUsageIndexModels() []mongo.IndexModel {
+	return []mongo.IndexModel{
+		{
+			Keys: bson.D{{Key: "expiresAt", Value: 1}},
+			Options: options.Index().
+				SetName("contract_explain_provider_usage_expiry").
+				SetExpireAfterSeconds(0),
+		},
+	}
+}
+
+// ValidateExplainChallengeTTLIndex checks the live index definition used to
+// bound replay-record retention. Index creation logs and continues so the
+// rest of the explorer can start, while regeneration stays disabled unless
+// the exact immediate-expiry TTL index is present.
+func ValidateExplainChallengeTTLIndex(ctx context.Context) error {
+	if ContractExplainChallengesCollection == nil {
+		return fmt.Errorf("contract explanation challenge collection is unavailable")
+	}
+	cursor, err := ContractExplainChallengesCollection.Indexes().List(ctx)
+	if err != nil {
+		return fmt.Errorf("list contract explanation challenge indexes: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var indexes []bson.M
+	if err := cursor.All(ctx, &indexes); err != nil {
+		return fmt.Errorf("decode contract explanation challenge indexes: %w", err)
+	}
+	return validateExplainChallengeTTLIndexDocuments(indexes)
+}
+
+func validateExplainChallengeTTLIndexDocuments(indexes []bson.M) error {
+	for _, index := range indexes {
+		name, _ := index["name"].(string)
+		if name != "contract_explain_challenge_expiry" {
+			continue
+		}
+		key, ok := indexDocumentValue(index["key"], "expiresAt")
+		_, partial := index["partialFilterExpression"]
+		sparse, _ := index["sparse"].(bool)
+		unique, _ := index["unique"].(bool)
+		if !ok || !numericEquals(key, 1) || !numericEquals(index["expireAfterSeconds"], 0) ||
+			partial || sparse || unique {
+			return fmt.Errorf("contract explanation challenge TTL index has an unexpected definition")
+		}
+		return nil
+	}
+	return fmt.Errorf("contract explanation challenge TTL index is missing")
+}
+
+func indexDocumentValue(document any, key string) (any, bool) {
+	switch value := document.(type) {
+	case bson.M:
+		field, ok := value[key]
+		return field, ok && len(value) == 1
+	case bson.D:
+		if len(value) != 1 || value[0].Key != key {
+			return nil, false
+		}
+		return value[0].Value, true
+	default:
+		return nil, false
+	}
+}
+
+func numericEquals(value any, expected int64) bool {
+	switch number := value.(type) {
+	case int:
+		return int64(number) == expected
+	case int32:
+		return int64(number) == expected
+	case int64:
+		return number == expected
+	case float64:
+		return number == float64(expected)
+	default:
+		return false
 	}
 }
 

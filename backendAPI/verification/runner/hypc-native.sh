@@ -1,9 +1,9 @@
 #!/bin/sh
-# Native-hypc runner.
+# Manual native-hypc compatibility runner.
 #
-# Matches the wire contract of hypc-runner.js so the Go side
-# (backendAPI/verification/compiler.go) can swap between the WASM-via-Node
-# runner and a native hypc binary by changing two env vars:
+# The backend verifier does not execute this script. Enabled native builds are
+# copied into a sealed memfd and executed directly from the retained descriptor.
+# This utility preserves the historical runner wire contract for manual checks:
 #
 #   HYPC_NODE_BIN=/bin/sh                  (was "node")
 #   HYPC_RUNNER=.../hypc-native.sh         (was "hypc-runner.js")
@@ -12,12 +12,27 @@
 #   $0 --version  →  stdout = single line with the hypc build id, no prefix
 #   $0            →  stdin = standard-JSON, stdout = standard-JSON output
 #
-# HYPC_BIN env var overrides the default `hypc` discovery (lets us pin the
-# absolute path on a deploy host without depending on PATH ordering).
+# HYPC_BIN must name an absolute path selected by the caller.
+# There is deliberately no PATH fallback for native compiler discovery.
 
 set -eu
 
-bin="${HYPC_BIN:-hypc}"
+: "${HYPC_BIN:?HYPC_BIN is required and must be an absolute path}"
+
+case "$HYPC_BIN" in
+    /*) ;;
+    *)
+        echo "hypc-native: HYPC_BIN must be an absolute path" >&2
+        exit 64
+        ;;
+esac
+
+if [ ! -x "$HYPC_BIN" ]; then
+    echo "hypc-native: HYPC_BIN is not executable: $HYPC_BIN" >&2
+    exit 69
+fi
+
+bin="$HYPC_BIN"
 
 if [ "${1-}" = "--version" ]; then
     # `hypc --version` prints two lines; only the second carries the build

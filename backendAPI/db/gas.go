@@ -77,7 +77,7 @@ func GetRecentBlockSamples(n int) ([]BlockGasSample, error) {
 		SetSort(primitive.D{{Key: "blockNumberInt", Value: -1}}).
 		SetLimit(int64(n))
 
-	cur, err := configs.BlocksCollection.Find(ctx, primitive.D{}, opts)
+	cur, err := configs.BlocksCollection.Find(ctx, completedBlockFilter(nil), opts)
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +218,10 @@ func GetRecentTransactionGasPrices(n int, maxBlocks int) ([]string, error) {
 
 	pipeline := bson.A{
 		// Only consider blocks that actually have at least one tx.
-		bson.M{"$match": bson.M{"result.transactions.0": bson.M{"$exists": true}}},
+		bson.M{"$match": bson.M{
+			"ingestionState":        completedBlockIngestionState,
+			"result.transactions.0": bson.M{"$exists": true},
+		}},
 		bson.M{"$sort": bson.M{"blockNumberInt": -1}},
 		bson.M{"$limit": maxBlocks},
 		bson.M{"$unwind": "$result.transactions"},

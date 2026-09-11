@@ -2,6 +2,9 @@
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "dependencies": {
     "@headlessui/react": "^2.2.0",
     "@heroicons/react": "^2.0.18",
@@ -10,9 +13,9 @@
     "@tailwindcss/postcss": "^4.2.2",
     "@tanstack/react-query": "^5.90.16",
     "@tanstack/react-table": "^8.21.3",
-    "@theqrl/wallet.js": "^6.2.3",
-    "@theqrl/web3": "1.0.1",
-    "@theqrl/web3-zond-abi": "^0.3.3",
+    "@theqrl/wallet.js": "^6.2.4",
+    "@theqrl/web3": "1.0.3",
+    "@theqrl/web3-qrl-abi": "1.0.3",
     "@visx/axis": "4.0.1-alpha.0",
     "@visx/brush": "4.0.1-alpha.0",
     "@visx/gradient": "4.0.1-alpha.0",

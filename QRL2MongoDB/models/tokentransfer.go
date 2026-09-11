@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 // TokenTransfer represents a token transfer event.
 //
 // LogIndex disambiguates multiple Transfer events within the same tx (a
@@ -17,6 +19,10 @@ type TokenTransfer struct {
 	To              string `bson:"to"`
 	Amount          string `bson:"amount"`
 	BlockNumber     string `bson:"blockNumber"`
+	// BlockHash binds the event row to the exact canonical block identity.
+	// Rollback still removes rows by BlockNumber, while readers and repair
+	// tooling can use this field to reject a same-height orphan.
+	BlockHash string `bson:"blockHash"`
 	// BlockNumberInt is the numeric form of BlockNumber, set at write time
 	// via HexToInt64. Sorting on the hex string lex-orders incorrectly
 	// ("0x9" sorts after "0x10", and width boundaries like 0xffff -> 0x10000
@@ -44,4 +50,21 @@ type TokenTransfer struct {
 	// so the compound unique index (txHash, contract, logIndex, tokenID)
 	// keeps batch elements distinct.
 	TokenID string `bson:"tokenID,omitempty" json:"tokenID,omitempty"`
+}
+
+// TokenEventDeadLetter records one deterministic token-event rejection. The
+// exact log identity is unique, so replay refreshes the audit timestamp without
+// duplicating the quarantine record or blocking later canonical block heights.
+type TokenEventDeadLetter struct {
+	BlockNumber    string    `bson:"blockNumber"`
+	BlockNumberInt int64     `bson:"blockNumberInt"`
+	BlockHash      string    `bson:"blockHash"`
+	TxHash         string    `bson:"txHash"`
+	LogIndex       string    `bson:"logIndex"`
+	Emitter        string    `bson:"emitter"`
+	Topic0         string    `bson:"topic0"`
+	TokenStandard  string    `bson:"tokenStandard"`
+	Reason         string    `bson:"reason"`
+	FirstSeenAt    time.Time `bson:"firstSeenAt"`
+	LastSeenAt     time.Time `bson:"lastSeenAt"`
 }

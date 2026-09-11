@@ -34,6 +34,7 @@ export default function Footer(): JSX.Element {
             <ul className="space-y-2 text-sm text-text-secondary">
               <li><Link href="/faucet" className="hover:text-accent transition-colors">Testnet Faucet</Link></li>
               <li><Link href="/checker" className="hover:text-accent transition-colors">Balance Checker</Link></li>
+              <li><Link href="/staking-calculator" className="hover:text-accent transition-colors">Staking Calculator</Link></li>
               <li><Link href="/converter" className="hover:text-accent transition-colors">Quanta ↔ Shor</Link></li>
             </ul>
           </div>

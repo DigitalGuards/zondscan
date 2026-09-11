@@ -9,6 +9,7 @@ import { epochsToDays, formatValidatorBalance, withdrawalCredentialsToAddress } 
 import Badge from '../../components/Badge';
 import CollapsibleHex from '../../components/CollapsibleHex';
 import CopyButton from '../../components/CopyButton';
+import AddressFingerprint from '../../components/AddressFingerprint';
 import EmptyState from '../../components/EmptyState';
 
 interface ValidatorDetail {
@@ -152,7 +153,7 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
                 href={`/address/${withdrawalAddress}`}
                 className="text-accent hover:underline font-mono text-sm break-all"
               >
-                {withdrawalAddress}
+                <AddressFingerprint address={withdrawalAddress} />
               </Link>
               <CopyButton value={withdrawalAddress} label="Copy withdrawal address" size="sm" />
             </div>

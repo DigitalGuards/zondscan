@@ -1,93 +1,257 @@
-# hypc verification runners
+# Hyperion compiler registry and sandbox
 
-The backend verifier (`backendAPI/verification/`) compiles submitted contract
-source with a pinned [`@theqrl/hypc`](https://www.npmjs.com/package/@theqrl/hypc)
-build and byte-matches the result against the on-chain runtime code. The
-compile itself runs in a one-shot subprocess so the Go layer keeps the
-timeout / concurrency / stdin-size budget and the runner stays tiny.
+The contract verifier selects a pinned Hyperion compiler by `buildId`, compiles
+standard JSON in a one-shot subprocess, and byte-matches the result against the
+deployed runtime code. Enabled verification requires Linux, a fully static
+x86-64 Hyperion compiler, and a fully static x86-64 NsJail launcher.
 
-## Runner wire contract
+## Sealed execution trust chain
 
-Both runners speak the same contract, so the Go side can swap between them by
-config alone:
+Registry initialization fails closed unless both executable artifacts have
+absolute paths and exact SHA-256 pins. For each artifact, the backend:
 
-| Invocation | stdin | stdout |
-| --- | --- | --- |
-| `<runner> --version` | — | a single line: the exact hypc build id (no prefix) |
-| `<runner>` | Hyperion standard-JSON | hypc standard-JSON output |
+1. Rejects symlinks, FIFO, device, socket, non-regular, non-executable, and
+   group-writable or world-writable paths. Linux opens use `openat2` with
+   `RESOLVE_NO_SYMLINKS`, `RESOLVE_NO_MAGICLINKS`, `O_NONBLOCK`, and a
+   descriptor identity check.
+2. Requires a Linux x86-64 ELF with no `PT_INTERP` program header and no
+   `DT_NEEDED` dependency. Host loaders and shared-library trees are outside
+   the execution identity and are therefore unsupported.
+3. Copies the exact open descriptor into an executable `memfd`, calculates its
+   SHA-256 during that copy, requires the configured digest, and seals the
+   snapshot against writes, growth, shrinking, execute-mode changes, and
+   further seal changes.
 
-- **`hypc-runner.js`** — wraps the `@theqrl/hypc` WASM via Node. Invoke with
-  `nodeBin: "node"`. This is the npm-published build (currently only `0.0.2`).
-- **`hypc-native.sh`** — wraps a natively-built `hypc` binary. Invoke with
-  `nodeBin: "/bin/sh"` and set `bin` to the absolute path of the `hypc`
-  binary (exported to the runner as `HYPC_BIN`). Use this for builds that
-  aren't on npm, e.g. a `0.2.0-develop` snapshot built from
-  [`theqrl/hyperion`](https://github.com/theqrl/hyperion).
+The backend also embeds [`nsjail.cfg`](./nsjail.cfg), verifies its exact
+build-time SHA-256, copies it into a read-only non-executable `memfd`, and seals
+it. The current policy digest is:
 
-## Configuring the builds
-
-The verifier supports **multiple** builds; a submission picks one via
-`compilerVersion` (the default build is used when omitted).
-
-### Preferred: `HYPC_COMPILERS` manifest
-
-Set `HYPC_COMPILERS` to either an inline JSON array or a path to a JSON file
-of `CompilerSpec` entries. See [`compilers.example.json`](./compilers.example.json).
-
-The manifest is parsed with Go's standard `encoding/json`, so it must be
-**strict JSON — no comments, no trailing commas**:
-
-```json
-[
-  {
-    "buildId": "0.2.0-develop.2026.4.13+commit.d5d1b977.Linux.g++",
-    "nodeBin": "/bin/sh",
-    "runner": "/abs/path/to/hypc-native.sh",
-    "bin": "/usr/local/bin/hypc-0.2.0",
-    "default": true
-  },
-  {
-    "buildId": "0.0.2+commit.3e18e55d.Emscripten.clang",
-    "runner": "/abs/path/to/hypc-runner.js"
-  }
-]
+```text
+cc2c6d14e943c9b4b9252e69c2fbf9a5a4313938cd561594a255746393baaa8c
 ```
 
-Per-entry fields:
-- `buildId` *(required)* — the version string the runner must report from `--version`; the build is skipped if it reports anything else.
-- `runner` *(required)* — absolute path to `hypc-runner.js` (WASM) or `hypc-native.sh` (native).
-- `nodeBin` *(optional, default `"node"`)* — interpreter; use `/bin/sh` for the native wrapper.
-- `bin` *(optional)* — native hypc path, exported to the runner as `HYPC_BIN`.
-- `default` *(optional)* — the build used when a submission omits `compilerVersion`; if none is flagged, the first surviving build wins.
+Each compiler version probe and compile launches the sealed NsJail snapshot as
+child fd 3. NsJail reads the sealed policy from child fd 5 and executes the
+sealed Hyperion snapshot by fd from child fd 4. No trusted host pathname is
+resolved after registry initialization. Replacing the configured NsJail,
+Hyperion, or manifest pathname cannot change a running registry's retained
+bytes.
+
+Registry shutdown closes all retained descriptors. Initialization fails closed
+outside Linux and when the kernel does not support race-free `openat2`,
+executable sealed memfds, or the required NsJail setup. Explicit `MFD_EXEC`
+supports hardened `vm.memfd_noexec=1` configurations that require executable
+intent at memfd creation.
+
+## Sandbox policy
+
+The embedded policy creates new user, mount, PID, IPC, UTS, network, and cgroup
+namespaces for every compiler invocation. It provides a 4 KiB empty read-only
+tmpfs as `/`, mounts no host path, `/proc`, `/dev`, or `/sys`, disables
+loopback, clears the environment, maps the child to uid and gid 65534, retains
+no capabilities, and applies `no_new_privs`.
+
+The following child limits are mandatory and fixed in the policy:
+
+- address space: 2048 MiB
+- CPU time: 30 seconds
+- core size: 0 bytes
+- regular-file output: 0 bytes
+- open descriptors: 16
+- processes: 1
+- stack: 64 MiB
+- locked memory, POSIX message queues, and real-time priority: 0
+
+The Kafel seccomp policy is `DEFAULT KILL_PROCESS`. Its small allowlist is based
+on direct traces of the pinned static Hyperion version and a representative
+optimized contract compile. Read and write are restricted to standard streams,
+file metadata and ioctl operations are restricted to descriptors 0 through 2,
+executable memory mappings are denied, and `prlimit64` is restricted to querying
+or lowering the current process's configured resource classes.
+
+The allowlist excludes all socket and connect operations; `clone`, `clone3`,
+`fork`, and `vfork`; `ptrace` and cross-process memory access; mount and
+namespace mutation; BPF, perf, io_uring, keyring, userfaultfd, module, kexec,
+reboot, and privilege-changing operations; filesystem opens and mutation; and
+new memfd creation. `RLIMIT_NPROC=1` is defense in depth for the seccomp process
+creation boundary.
+
+NsJail aborts before compiler execution if it cannot create a required
+namespace, mount the empty root, apply an rlimit, compile or install seccomp, or
+otherwise complete containment. The Go parent retains its shared concurrency
+semaphore, request and output caps, wall deadline, process-group kill,
+parent-death signal, and bounded command wait. NsJail's 30-second limit remains
+an inner ceiling when the Go wall timeout is configured higher.
+
+## Configuring the launcher
+
+Set these global values in addition to the compiler registry:
 
 ```bash
-# file path
-HYPC_COMPILERS=/home/ops/zondscan/backendAPI/verification/runner/compilers.json
-# …or inline
-HYPC_COMPILERS='[{"buildId":"0.0.2+commit.3e18e55d.Emscripten.clang","runner":"/abs/hypc-runner.js"}]'
+VERIFIER_SANDBOX_BIN=/absolute/path/to/nsjail-static
+VERIFIER_SANDBOX_SHA256=<exact-64-character-sha256>
 ```
 
-Each build is probed at startup (`<runner> --version`) and must report
-exactly its `buildId`. A build that fails the probe is skipped with a warning
-(the others stay live); verification only boots disabled if **none** survive,
-in which case the `/contract/*` endpoints answer `503`.
+Both settings are mandatory. The digest should come from the exact deployment
+artifact, not from a tag name or source commit alone.
 
-### Legacy: single-build env vars (still supported)
-
-When `HYPC_COMPILERS` is unset, a one-entry registry is synthesised from the
-original env vars, so existing single-build deploys keep working untouched:
+[`build-nsjail-static.sh`](./build-nsjail-static.sh) builds from an already
+initialized, clean checkout and refuses source commits other than NsJail 3.6 at
+`f78475530b46d0186111a9096b30725f816b55fe` with Kafel at
+`76d0f41bf3eb5c4008713d64b9767b461a9129a3`. It requires local static protobuf,
+zlib, libnl-route, libnl, and pthread development artifacts. No generated binary
+is tracked.
 
 ```bash
-HYPC_NODE_BIN=node                                          # default "node"
-HYPC_RUNNER=/abs/path/to/hypc-runner.js                     # required
-HYPC_BUILD_ID=0.0.2+commit.3e18e55d.Emscripten.clang        # required
-HYPC_BIN=/usr/local/bin/hypc                                # optional (native runner)
+git clone --branch 3.6 --recurse-submodules https://github.com/google/nsjail.git /absolute/build/nsjail
+git -C /absolute/build/nsjail rev-parse HEAD
+git -C /absolute/build/nsjail/kafel rev-parse HEAD
+./build-nsjail-static.sh /absolute/build/nsjail /absolute/output/nsjail-static
+file /absolute/output/nsjail-static
+readelf -l /absolute/output/nsjail-static
+readelf -d /absolute/output/nsjail-static
+sha256sum /absolute/output/nsjail-static
 ```
 
-### Shared limits (apply to all builds)
+Set `NSJAIL_EXPECTED_SHA256` when reproducing an artifact whose exact binary
+digest is already approved. The recipe never embeds a workstation-specific
+binary digest.
+
+## Configuring compiler builds
+
+Set `HYPC_COMPILERS` to either an inline JSON array or an absolute path to a JSON
+file. A file-backed manifest also requires `HYPC_COMPILERS_SHA256`, the exact
+SHA-256 of the manifest bytes. The manifest must be regular, contain no symlink
+in its resolved path, and must not be group-writable or world-writable. JSON
+parsing rejects comments, trailing content, trailing commas, unknown fields,
+and duplicate object members.
+
+See [`compilers.example.json`](./compilers.example.json). The fields are:
+
+- `kind`: required. Enabled entries must be `native`.
+- `buildId`: required exact version from the compiler's `Version:` output.
+- `bin`: required absolute path to a fully static Linux x86-64 compiler.
+- `sha256`: required 64-character hexadecimal artifact digest.
+- `disabled`: optional historical identity that cannot be selected.
+- `default`: exactly one enabled entry must set this to `true`.
+
+`runner` and `nodeBin` are rejected on enabled native entries. Enabled npm
+entries fail closed because their complete JS, WASM, Node, and loader runtime
+identity is unavailable. A non-default historical native entry that fails its
+artifact or version probe is skipped. A failed explicit default makes registry
+initialization fail, so a historical build is never promoted implicitly.
+
+The current local Q128 compiler identity is:
+
+```text
+Version: 0.2.0-develop.2026.8.27+commit.6f862206.mod.Linux.g++
+SHA-256: ac24ccbb53fa6200dc6ca9a3bb87aac5dbb8dd7a23a3f91c3a7563f6275882dd
+Hyperion source commit: 6f862206ff34bce56098cc23b4b3f575e0ea3c5f
+```
+
+The `.mod` suffix and binary digest identify the audit-updated local static
+artifact. The previous dynamic artifact is unsupported because it has a host
+loader and shared-library dependency tree. Historical identities remain
+disabled until matching static artifacts are available.
+
+`compilers.json` is ignored so absolute local paths remain outside tracked
+configuration. Build Hyperion in a separate static build directory, copy the
+example manifest, replace its placeholders, set its mode to `0600`, and verify
+both artifacts before backend startup:
 
 ```bash
-VERIFIER_MAX_CONCURRENCY=2     # total concurrent compiles across ALL builds
-VERIFIER_COMPILE_TIMEOUT=30s   # per-compile hard deadline
-VERIFIER_SOURCE_MAX_BYTES=262144   # standard-JSON payload cap (256 KiB)
+cmake -S ../../../../hyperion -B ../../../../hyperion/build-static -DHYPC_LINK_STATIC=ON
+cmake --build ../../../../hyperion/build-static --target hypc
+realpath ../../../../hyperion/build-static/hypc/hypc
+../../../../hyperion/build-static/hypc/hypc --version
+file ../../../../hyperion/build-static/hypc/hypc
+readelf -l ../../../../hyperion/build-static/hypc/hypc
+readelf -d ../../../../hyperion/build-static/hypc/hypc
+sha256sum ../../../../hyperion/build-static/hypc/hypc
+chmod 0600 compilers.json
+sha256sum compilers.json
 ```
+
+The `readelf` checks must show no `INTERP` program header and no `NEEDED`
+dynamic tag. Startup repeats those checks from the securely opened descriptors.
+
+## Legacy compiler environment
+
+When `HYPC_COMPILERS` is unset, `HYPC_BUILD_ID`, `HYPC_BIN`, and `HYPC_SHA256`
+can synthesize one native default entry:
+
+```bash
+HYPC_BUILD_ID=0.2.0-develop.2026.8.27+commit.6f862206.mod.Linux.g++
+HYPC_BIN=/absolute/path/to/hypc-6f862206-static
+HYPC_SHA256=ac24ccbb53fa6200dc6ca9a3bb87aac5dbb8dd7a23a3f91c3a7563f6275882dd
+```
+
+`HYPC_RUNNER` and `HYPC_NODE_BIN` do not enter the native execution chain. A
+runner-only legacy configuration is treated as npm and fails closed.
+
+## Provenance v2
+
+`GET /contract/compiler-info` exposes a canonical provenance record for every
+selectable build. Successful verification persists the same record in the job
+payload, job result, and contract document.
+
+Schema `qrl.contract-compiler-provenance.v2` binds the build id and these exact,
+ordered components:
+
+1. `hypc`: the sealed compiler artifact SHA-256
+2. `nsjail`: the sealed launcher artifact SHA-256
+3. `policy`: the exact embedded NsJail config SHA-256
+
+The execution digest uses unsigned 64-bit big-endian length prefixes for every
+variable field and component count, which makes the canonical byte sequence
+unambiguous. Schema v1 records lack sandbox identity and classify as
+`invalid-recorded`. An absent provenance field on an older record remains
+`legacy-unrecorded`; the backend never infers old provenance from the current
+registry.
+
+## Shared Go resource limits
+
+```bash
+VERIFIER_MAX_CONCURRENCY=2
+VERIFIER_COMPILE_TIMEOUT=30s
+VERIFIER_SOURCE_MAX_BYTES=262144
+VERIFIER_COMPILER_MAX_STDOUT_BYTES=16777216
+VERIFIER_COMPILER_MAX_STDERR_BYTES=262144
+```
+
+These limits apply across every enabled compiler build. Reaching either output
+cap cancels the compile, kills the Linux process group, and returns a distinct
+stdout or stderr exhaustion error.
+
+## Local real-sandbox tests
+
+Regular tests build test-only static launchers and require no installed NsJail.
+The hostile and representative Hyperion probes are opt-in so CI can provide its
+own pinned artifacts:
+
+```bash
+VERIFIER_REAL_SANDBOX_TEST=1 \
+VERIFIER_SANDBOX_BIN=/absolute/path/to/nsjail-static \
+VERIFIER_SANDBOX_SHA256=<nsjail-sha256> \
+VERIFIER_TEST_HYPC_BIN=/absolute/path/to/hypc-static \
+VERIFIER_TEST_HYPC_SHA256=<hypc-sha256> \
+VERIFIER_TEST_HYPC_BUILD_ID='<exact-Version-field>' \
+go test -count=1 -v ./verification -run 'TestReal(Sandbox|Static)'
+```
+
+The probes validate the empty root and environment, hostname, mandatory
+rlimits, host read and write denial, TCP and Unix socket denial, process
+creation denial, invalid-policy startup failure, a representative optimized
+Hyperion compile, and byte-for-byte equality with direct compiler output.
+
+## Deployment gate
+
+Production must provision the reviewed static NsJail and Hyperion artifacts,
+set their exact digests, and run a real-sandbox smoke test on the deployment
+kernel. Kernel policy must permit the required unprivileged user, mount, PID,
+IPC, UTS, network, and cgroup namespaces. The verifier intentionally stays
+unavailable if any artifact, namespace, memfd, mount, rlimit, or seccomp setup
+cannot be established.
+
+`hypc-native.sh` and `hypc-runner.js` remain manual compatibility utilities.
+The backend does not execute either file in the enabled native trust chain.

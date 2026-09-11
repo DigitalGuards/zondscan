@@ -6,6 +6,13 @@ import axios, { AxiosError } from 'axios';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import config from '../../config';
+import {
+  classifyVerificationJobArtifact,
+  type VerificationJobArtifactInput,
+  type VerificationJobPayload,
+  type VerificationJobResult,
+  type VerificationJobTarget,
+} from '../lib/verificationJobArtifact';
 
 interface CompilerBuild {
   buildId: string;
@@ -27,15 +34,14 @@ interface VerifyEnqueueResponse {
   alreadyVerified?: boolean;
 }
 
-interface VerificationJob {
+interface VerificationJob extends VerificationJobArtifactInput {
   jobId: string;
   status: 'pending' | 'compiling' | 'success' | 'failed';
   error?: string;
   address: string;
-  payload?: {
-    contractName?: string;
-    compilerVersion?: string;
-  };
+  target?: VerificationJobTarget;
+  payload?: VerificationJobPayload;
+  result?: VerificationJobResult;
 }
 
 const COMMON_LICENSES = ['MIT', 'GPL-3.0', 'Apache-2.0', 'BSD-2-Clause', 'BSD-3-Clause', 'Unlicense', 'No license'];
@@ -98,6 +104,9 @@ export default function VerifyContractClient(): JSX.Element {
   }, [compilerInfo]);
 
   const isTerminal = job?.status === 'success' || job?.status === 'failed';
+  const jobArtifactStatus = job ? classifyVerificationJobArtifact(job) : null;
+  const trustedSuccess = job?.status === 'success' && jobArtifactStatus === 'digest-backed';
+  const invalidSuccess = job?.status === 'success' && jobArtifactStatus !== 'digest-backed';
 
   // Poll the job to terminal. Depend on the stable jobId (not the whole
   // job object) so setJob() inside the poller doesn't restart the timer
@@ -195,19 +204,32 @@ export default function VerifyContractClient(): JSX.Element {
 
       {job && (
         <div className={`rounded-lg border p-3 text-xs md:text-sm ${
-          job.status === 'success' ? 'border-green-500/40 bg-green-500/10 text-green-300' :
+          trustedSuccess ? 'border-green-500/40 bg-green-500/10 text-green-300' :
+          invalidSuccess ? 'border-red-500/40 bg-red-500/10 text-red-300' :
           job.status === 'failed' ? 'border-red-500/40 bg-red-500/10 text-red-300' :
           'border-border bg-card-gradient text-text-secondary'
         }`}>
           <div className="font-medium">
             {job.status === 'pending' && 'Queued…'}
             {job.status === 'compiling' && 'Compiling + matching bytecode…'}
-            {job.status === 'success' && 'Verified ✓'}
+            {trustedSuccess && 'Verified ✓'}
+            {invalidSuccess && 'Verification result integrity check failed'}
             {job.status === 'failed' && 'Verification failed'}
           </div>
-          {job.status === 'success' && (
+          {trustedSuccess && (
             <div className="mt-1">
               <Link href={`/address/${job.address}`} className="underline">View verified contract →</Link>
+            </div>
+          )}
+          {invalidSuccess && (
+            <p className="mt-1">
+              The successful job response fails the deployment-bound artifact
+              integrity check. Refresh after the backend record is repaired.
+            </p>
+          )}
+          {trustedSuccess && typeof job.result?.artifactDigest === 'string' && (
+            <div className="mt-2 break-all font-mono text-[11px] opacity-80">
+              Artifact: {job.result.artifactDigest}
             </div>
           )}
           {job.error && (

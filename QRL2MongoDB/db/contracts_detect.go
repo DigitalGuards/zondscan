@@ -6,19 +6,23 @@ import (
 	"QRL2MongoDB/rpc"
 	"QRL2MongoDB/validation"
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
 )
 
-// processContracts processes contract-related information from a transaction
-func processContracts(tx *models.Transaction) (string, string, string, bool) {
+// processContracts processes contract-related information from a transaction.
+func processContracts(tx *models.Transaction) (string, string, string, bool, error) {
 	var to string
 	var contractAddress string
 	var statusTx string
 	var isContract bool
+	var errs []error
 
 	// Check if it's a contract creation transaction
 	if tx.To == "" {
@@ -29,7 +33,7 @@ func processContracts(tx *models.Transaction) (string, string, string, bool) {
 			configs.Logger.Error("Failed to get contract address",
 				zap.String("hash", tx.Hash),
 				zap.Error(err))
-			return "", "", "", false
+			return "", "", "", false, fmt.Errorf("get contract address for %s: %w", tx.Hash, err)
 		}
 
 		if contractAddress != "" {
@@ -41,6 +45,7 @@ func processContracts(tx *models.Transaction) (string, string, string, bool) {
 				configs.Logger.Error("Failed to get contract code",
 					zap.String("address", contractAddress),
 					zap.Error(err))
+				errs = append(errs, fmt.Errorf("get contract code for %s: %w", contractAddress, err))
 			}
 
 			// Classify the contract (ERC-20 / ERC-721 / ERC-1155 / unknown).
@@ -52,24 +57,28 @@ func processContracts(tx *models.Transaction) (string, string, string, bool) {
 				configs.Logger.Warn("Contract type detection failed; storing without classification",
 					zap.String("address", contractAddress),
 					zap.Error(detErr))
+				errs = append(errs, fmt.Errorf("detect contract type for %s: %w", contractAddress, detErr))
 			}
 
 			// Store complete contract information
 			contract := models.ContractInfo{
-				Address:             contractAddress,
-				Status:              statusTx,
-				IsToken:             detection.Standard != "",
-				Name:                detection.Name,
-				Symbol:              detection.Symbol,
-				Decimals:            detection.Decimals,
-				TotalSupply:         detection.TotalSupply,
-				TokenStandard:       detection.Standard,
-				HasERC165:           detection.HasERC165,
-				ContractCode:        contractCode,
-				CreatorAddress:      tx.From,
-				CreationTransaction: tx.Hash,
-				CreationBlockNumber: tx.BlockNumber,
-				UpdatedAt:           time.Now().UTC().Format(time.RFC3339),
+				Address:                  contractAddress,
+				Status:                   statusTx,
+				IsToken:                  detection.Standard != "",
+				Name:                     detection.Name,
+				Symbol:                   detection.Symbol,
+				Decimals:                 detection.Decimals,
+				TotalSupply:              detection.TotalSupply,
+				TokenStandard:            detection.Standard,
+				HasERC165:                detection.HasERC165,
+				ContractCode:             contractCode,
+				CreatorAddress:           tx.From,
+				CreatorAddressProvenance: models.CreatorAddressProvenanceDirectDeployment,
+				CreationTransaction:      tx.Hash,
+				CreationBlockNumber:      tx.BlockNumber,
+				CreationBlockHash:        tx.BlockHash,
+				ChainID:                  tx.ChainID,
+				UpdatedAt:                time.Now().UTC().Format(time.RFC3339),
 			}
 
 			// Store the contract
@@ -78,6 +87,7 @@ func processContracts(tx *models.Transaction) (string, string, string, bool) {
 				configs.Logger.Error("Failed to store contract",
 					zap.String("address", contractAddress),
 					zap.Error(err))
+				errs = append(errs, fmt.Errorf("store contract %s: %w", contractAddress, err))
 			}
 		}
 	} else {
@@ -85,10 +95,14 @@ func processContracts(tx *models.Transaction) (string, string, string, bool) {
 		statusTx = tx.Status
 
 		// Check if the destination address is a contract
-		isContract = IsAddressContract(to)
+		var err error
+		isContract, err = IsAddressContract(to)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("classify destination %s: %w", to, err))
+		}
 	}
 
-	return to, contractAddress, statusTx, isContract
+	return to, contractAddress, statusTx, isContract, errors.Join(errs...)
 }
 
 // storeInternalContractCreations registers contracts created by nested
@@ -100,7 +114,16 @@ func processContracts(tx *models.Transaction) (string, string, string, bool) {
 // with the outer transaction's sender/hash/block as the creation metadata.
 // The calls slice is empty unless debug tracing is enabled
 // (ENABLE_DEBUG_TRACE), so this is a no-op on nodes without the debug_ API.
-func storeInternalContractCreations(calls []rpc.InternalCall, creator string, txHash string, blockNumber string, statusTx string) {
+func storeInternalContractCreations(
+	calls []rpc.InternalCall,
+	creator string,
+	txHash string,
+	blockNumber string,
+	blockHash string,
+	chainID string,
+	statusTx string,
+) error {
+	var errs []error
 	for _, call := range calls {
 		if !strings.HasPrefix(call.Type, "CREATE") || call.To == "" {
 			continue
@@ -111,6 +134,7 @@ func storeInternalContractCreations(calls []rpc.InternalCall, creator string, tx
 			configs.Logger.Error("Failed to get contract code",
 				zap.String("address", call.To),
 				zap.Error(err))
+			errs = append(errs, fmt.Errorf("get internal contract code for %s: %w", call.To, err))
 		}
 
 		// Classify the contract (ERC-20 / ERC-721 / ERC-1155 / unknown).
@@ -122,43 +146,52 @@ func storeInternalContractCreations(calls []rpc.InternalCall, creator string, tx
 			configs.Logger.Warn("Contract type detection failed; storing without classification",
 				zap.String("address", call.To),
 				zap.Error(detErr))
+			errs = append(errs, fmt.Errorf("detect internal contract type for %s: %w", call.To, detErr))
 		}
 
 		contract := models.ContractInfo{
-			Address:             call.To,
-			Status:              statusTx,
-			IsToken:             detection.Standard != "",
-			Name:                detection.Name,
-			Symbol:              detection.Symbol,
-			Decimals:            detection.Decimals,
-			TotalSupply:         detection.TotalSupply,
-			TokenStandard:       detection.Standard,
-			HasERC165:           detection.HasERC165,
-			ContractCode:        contractCode,
-			CreatorAddress:      creator,
-			CreationTransaction: txHash,
-			CreationBlockNumber: blockNumber,
-			UpdatedAt:           time.Now().UTC().Format(time.RFC3339),
+			Address:                  call.To,
+			Status:                   statusTx,
+			IsToken:                  detection.Standard != "",
+			Name:                     detection.Name,
+			Symbol:                   detection.Symbol,
+			Decimals:                 detection.Decimals,
+			TotalSupply:              detection.TotalSupply,
+			TokenStandard:            detection.Standard,
+			HasERC165:                detection.HasERC165,
+			ContractCode:             contractCode,
+			CreatorAddress:           creator,
+			CreatorAddressProvenance: models.CreatorAddressProvenanceCreateTraceOuter,
+			CreationTransaction:      txHash,
+			CreationBlockNumber:      blockNumber,
+			CreationBlockHash:        blockHash,
+			ChainID:                  chainID,
+			UpdatedAt:                time.Now().UTC().Format(time.RFC3339),
 		}
 
 		if err := StoreContract(contract); err != nil {
 			configs.Logger.Error("Failed to store contract",
 				zap.String("address", call.To),
 				zap.Error(err))
+			errs = append(errs, fmt.Errorf("store internal contract %s: %w", call.To, err))
 		}
 	}
+	return errors.Join(errs...)
 }
 
-// IsAddressContract checks if an address is a contract by querying the contractCode collection
-// and falling back to RPC getCode call if not found
-func IsAddressContract(address string) bool {
+// IsAddressContract checks if an address is a contract and returns every
+// lookup, probe, and persistence failure to the durable ingestion boundary.
+func IsAddressContract(address string) (bool, error) {
 	// Normalize address to canonical Q-prefix form
 	address = validation.ConvertToQAddress(address)
 
 	// First check our database
-	contract := getContractFromDB(address)
+	contract, err := getContractFromDB(address)
+	if err != nil {
+		return false, err
+	}
 	if contract != nil {
-		return true
+		return true, nil
 	}
 
 	// If not in database, check via RPC
@@ -167,7 +200,7 @@ func IsAddressContract(address string) bool {
 		configs.Logger.Error("Failed to get code for address",
 			zap.String("address", address),
 			zap.Error(err))
-		return false
+		return false, err
 	}
 
 	// If code is not empty/0x, it's a contract
@@ -183,13 +216,11 @@ func IsAddressContract(address string) bool {
 		// any previously-good classification through its merge.
 		detection, detErr := rpc.DetectContractType(address)
 		if detErr != nil {
-			configs.Logger.Warn("Contract type detection failed; storing without classification",
+			configs.Logger.Warn("Contract type detection failed",
 				zap.String("address", address),
 				zap.Error(detErr))
+			return false, detErr
 		}
-
-		// First try to get existing contract from both collections to preserve creation data
-		existingContract, err := GetContract(address)
 
 		// Create base contract info
 		contract := models.ContractInfo{
@@ -206,39 +237,29 @@ func IsAddressContract(address string) bool {
 			UpdatedAt:     time.Now().UTC().Format(time.RFC3339),
 		}
 
-		// If we have existing contract data, preserve the creation information
-		if err == nil && existingContract != nil {
-			// Preserve creation information if present
-			if existingContract.CreatorAddress != "" {
-				contract.CreatorAddress = existingContract.CreatorAddress
-			}
-			if existingContract.CreationTransaction != "" {
-				contract.CreationTransaction = existingContract.CreationTransaction
-			}
-			if existingContract.CreationBlockNumber != "" {
-				contract.CreationBlockNumber = existingContract.CreationBlockNumber
-			}
-		}
-
 		err = StoreContract(contract)
 		if err != nil {
 			configs.Logger.Error("Failed to store detected contract",
 				zap.String("address", address),
 				zap.Error(err))
+			return false, err
 		}
 	}
 
-	return isContract
+	return isContract, nil
 }
 
 // getContractFromDB retrieves contract information from the contractCode collection
 // Local version to avoid naming conflicts
-func getContractFromDB(address string) *models.ContractInfo {
+func getContractFromDB(address string) (*models.ContractInfo, error) {
 	// First check in the main contracts collection
 	mainContract, err := GetContract(address)
 	if err == nil && mainContract != nil {
 		// If found in main collection, return it
-		return mainContract
+		return mainContract, nil
+	}
+	if err != nil && !errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, err
 	}
 
 	// If not found in main collection, check the contractCode collection
@@ -249,8 +270,11 @@ func getContractFromDB(address string) *models.ContractInfo {
 	defer cancel()
 
 	err = collection.FindOne(ctx, bson.M{"address": address}).Decode(&contract)
-	if err != nil {
-		return nil
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, nil
 	}
-	return &contract
+	if err != nil {
+		return nil, err
+	}
+	return &contract, nil
 }

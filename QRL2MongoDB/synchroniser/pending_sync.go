@@ -7,10 +7,14 @@ import (
 	"QRL2MongoDB/rpc"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
 )
 
@@ -25,6 +29,105 @@ const (
 	// stops mined rows from lingering for the full MAX_PENDING_AGE.
 	MAX_MINED_TOMBSTONE_AGE = 1 * time.Hour
 )
+
+type pendingVerificationOperations struct {
+	withMutationLock     func(func() error) error
+	countCanonicalBlocks func(bson.M) (int64, error)
+	markMined            func(string) (bool, error)
+}
+
+func completedCanonicalReceiptFilter(
+	hash string,
+	receipt *models.TransactionReceipt,
+) (bson.M, error) {
+	if strings.TrimSpace(hash) == "" {
+		return nil, fmt.Errorf("pending transaction hash is empty")
+	}
+	if receipt == nil {
+		return nil, fmt.Errorf("pending transaction receipt is nil")
+	}
+	if receipt.Result.BlockNumber == "" || receipt.Result.BlockHash == "" {
+		return nil, fmt.Errorf("receipt for %s has incomplete canonical block identity", hash)
+	}
+	if receipt.Result.TransactionHash != "" &&
+		!strings.EqualFold(receipt.Result.TransactionHash, hash) {
+		return nil, fmt.Errorf("receipt transaction hash %s does not match pending hash %s",
+			receipt.Result.TransactionHash, hash)
+	}
+	return bson.M{
+		"ingestionState":           db.BlockIngestionComplete,
+		"result.number":            receipt.Result.BlockNumber,
+		"result.hash":              receipt.Result.BlockHash,
+		"result.transactions.hash": hash,
+	}, nil
+}
+
+func countCompletedCanonicalReceiptBlocks(filter bson.M) (int64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return configs.BlocksCollections.CountDocuments(
+		ctx,
+		filter,
+		options.Count().SetLimit(2),
+	)
+}
+
+func markPendingTransactionMined(hash string) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	result, err := configs.PendingTransactionsCollections.UpdateOne(
+		ctx,
+		bson.M{"_id": hash, "status": "pending"},
+		bson.M{"$set": bson.M{
+			"status":   "mined",
+			"lastSeen": time.Now().UTC(),
+		}},
+	)
+	if err != nil {
+		return false, err
+	}
+	return result.MatchedCount == 1, nil
+}
+
+func verifyPendingTransactionWithOperations(
+	hash string,
+	getReceipt func(string) (*models.TransactionReceipt, error),
+	operations pendingVerificationOperations,
+) (*models.TransactionReceipt, bool, error) {
+	receipt, err := getReceipt(hash)
+	if err != nil {
+		return nil, false, fmt.Errorf("get receipt for pending transaction %s: %w", hash, err)
+	}
+	if receipt == nil || receipt.Result.Status == "" {
+		return receipt, false, nil
+	}
+	filter, err := completedCanonicalReceiptFilter(hash, receipt)
+	if err != nil {
+		return receipt, false, err
+	}
+
+	markedMined := false
+	err = operations.withMutationLock(func() error {
+		count, countErr := operations.countCanonicalBlocks(filter)
+		if countErr != nil {
+			return fmt.Errorf("count canonical blocks for pending transaction %s: %w", hash, countErr)
+		}
+		switch count {
+		case 0:
+			return nil
+		case 1:
+			markedMined, countErr = operations.markMined(hash)
+			if countErr != nil {
+				return fmt.Errorf("mark pending transaction %s mined: %w", hash, countErr)
+			}
+			return nil
+		default:
+			return fmt.Errorf("receipt for pending transaction %s matched %d complete canonical blocks",
+				hash, count)
+		}
+	})
+	return receipt, markedMined, err
+}
 
 // StartPendingTransactionSync starts the periodic mempool monitoring. The
 // stopCh is threaded into each periodic task so they stop accepting new work
@@ -94,12 +197,14 @@ func UpdatePendingTransactionsInBlock(block *models.ZondDatabaseBlock) error {
 	// verifyPendingTransactions/UpdatePendingTransactionStatus writes, so
 	// both tombstone paths produce identical rows. blockNumber lives in
 	// the blocks/transactions collections.
+	var errs []error
 	for _, tx := range pendingTxs {
 		if blockTxs[tx.Hash] {
 			if err := db.UpdatePendingTransactionStatus(tx.Hash, "mined"); err != nil {
 				configs.Logger.Error("Failed to tombstone mined transaction",
 					zap.String("hash", tx.Hash),
 					zap.Error(err))
+				errs = append(errs, fmt.Errorf("tombstone mined transaction %s: %w", tx.Hash, err))
 				continue
 			}
 			configs.Logger.Info("Transaction mined",
@@ -108,7 +213,7 @@ func UpdatePendingTransactionsInBlock(block *models.ZondDatabaseBlock) error {
 		}
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 // processTxPoolGroup upserts all transactions from a single txpool group (pending or
@@ -198,29 +303,40 @@ func verifyPendingTransactions() error {
 	configs.Logger.Info("Verifying pending transactions against node",
 		zap.Int("count", len(hashes)))
 
+	operations := pendingVerificationOperations{
+		withMutationLock:     WithChainMutationLock,
+		countCanonicalBlocks: countCompletedCanonicalReceiptBlocks,
+		markMined:            markPendingTransactionMined,
+	}
 	tombstonedCount := 0
+	var errs []error
 	for _, hash := range hashes {
-		// Check if transaction has a receipt (meaning it's mined)
-		receipt, err := rpc.GetTransactionReceipt(hash)
+		// Receipt preparation stays outside the canonical mutation lock. The
+		// final status write takes the lock, then confirms the receipt still
+		// identifies exactly one complete canonical block containing this tx.
+		receipt, tombstoned, err := verifyPendingTransactionWithOperations(
+			hash,
+			rpc.GetTransactionReceipt,
+			operations,
+		)
 		if err != nil {
-			configs.Logger.Warn("Failed to get receipt for pending tx",
+			configs.Logger.Warn("Failed to verify receipt for pending tx",
 				zap.String("hash", hash),
 				zap.Error(err))
+			errs = append(errs, err)
 			continue
 		}
-
-		// If receipt exists with status, the tx is mined, tombstone the row.
-		if receipt != nil && receipt.Result.Status != "" {
-			if err := db.UpdatePendingTransactionStatus(hash, "mined"); err != nil {
-				configs.Logger.Error("Failed to tombstone mined pending transaction",
-					zap.String("hash", hash),
-					zap.Error(err))
-			} else {
-				tombstonedCount++
-				configs.Logger.Info("Tombstoned mined transaction in pending",
-					zap.String("hash", hash),
-					zap.String("blockNumber", receipt.Result.BlockNumber))
-			}
+		if tombstoned {
+			tombstonedCount++
+			configs.Logger.Info("Tombstoned mined transaction in pending",
+				zap.String("hash", hash),
+				zap.String("blockNumber", receipt.Result.BlockNumber),
+				zap.String("blockHash", receipt.Result.BlockHash))
+		} else if receipt != nil && receipt.Result.Status != "" {
+			configs.Logger.Debug("Receipt block is no longer canonical or pending row changed",
+				zap.String("hash", hash),
+				zap.String("blockNumber", receipt.Result.BlockNumber),
+				zap.String("blockHash", receipt.Result.BlockHash))
 		}
 	}
 
@@ -230,5 +346,5 @@ func verifyPendingTransactions() error {
 			zap.Int("total", len(hashes)))
 	}
 
-	return nil
+	return errors.Join(errs...)
 }

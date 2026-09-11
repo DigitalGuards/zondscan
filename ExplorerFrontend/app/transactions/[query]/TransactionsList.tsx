@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatAmount, timeAgo, truncateHash } from '../../lib/helpers';
+import AddressFingerprint from '../../components/AddressFingerprint';
 import SearchBar from '../../components/SearchBar';
 import Pagination from '../../components/Pagination';
 import CopyButton from '../../components/CopyButton';
@@ -133,7 +134,7 @@ export default function TransactionsList({
                               className="text-text-secondary hover:text-accent font-mono text-xs transition-colors"
                               title={fromAddr}
                             >
-                              {truncateHash(fromAddr, 8, 6)}
+                              <AddressFingerprint address={fromAddr} />
                             </Link>
                           ) : (
                             <span className="text-text-muted text-xs">-</span>
@@ -146,7 +147,7 @@ export default function TransactionsList({
                               className="text-text-secondary hover:text-accent font-mono text-xs transition-colors"
                               title={toAddr}
                             >
-                              {truncateHash(toAddr, 8, 6)}
+                              <AddressFingerprint address={toAddr} />
                             </Link>
                           ) : (
                             <span className="text-text-muted text-xs">-</span>

@@ -82,7 +82,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const address = normalizeQrlAddress(payload.address || '');
   if (!address) {
     return NextResponse.json(
-      { error: 'Enter a valid QRL address (Q… followed by 40 hex characters).' },
+      { error: 'Enter a valid QRL address with exactly 128 hex characters.' },
       { status: 400 },
     );
   }

@@ -1,11 +1,47 @@
 package configs
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
+
+const (
+	explainAuthOriginEnv  = "AI_EXPLAIN_AUTH_ORIGIN"
+	explainAuthChainIDEnv = "AI_EXPLAIN_AUTH_CHAIN_ID"
+)
+
+var ErrExplainAuthNotConfigured = errors.New("AI explanation authorization is not configured")
+
+type ExplainAuthSettings struct {
+	Origin          string
+	ExpectedChainID string
+}
+
+// LoadExplainAuthSettings reads the paired trusted values used by the
+// regeneration authorization service. Both settings are required together.
+// Their protocol-level validation occurs in explainauth.NewConfig.
+func LoadExplainAuthSettings(getenv func(string) string) (ExplainAuthSettings, error) {
+	origin := strings.TrimSpace(getenv(explainAuthOriginEnv))
+	chainID := strings.TrimSpace(getenv(explainAuthChainIDEnv))
+	if origin == "" || chainID == "" {
+		return ExplainAuthSettings{}, fmt.Errorf(
+			"%w: set %s and %s",
+			ErrExplainAuthNotConfigured,
+			explainAuthOriginEnv,
+			explainAuthChainIDEnv,
+		)
+	}
+	return ExplainAuthSettings{Origin: origin, ExpectedChainID: chainID}, nil
+}
+
+func EnvExplainAuthSettings() (ExplainAuthSettings, error) {
+	return LoadExplainAuthSettings(os.Getenv)
+}
 
 func EnvMongoURI() string {
 	// If MONGOURI is already set (e.g., via Docker), use it directly

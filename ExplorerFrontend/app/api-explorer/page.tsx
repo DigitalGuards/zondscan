@@ -37,8 +37,8 @@ const BASE_URL = 'https://zondscan.com/api';
 
 // Example values reused from the spec's own response examples so curl
 // commands and Try-it links look like real traffic.
-const EXAMPLE_WALLET = 'Q20d20b8026b8f02540249f42acbd6181dc4a0a48';
-const EXAMPLE_CONTRACT = 'Q30b4e6b5d1a2c3f4e5d6a7b8c9d0e1f2a3b4c5d6';
+const EXAMPLE_WALLET = 'Q' + '20'.repeat(64);
+const EXAMPLE_CONTRACT = 'Q' + '30'.repeat(64);
 const EXAMPLE_TX = '0x9c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d';
 
 /** Path-parameter example values, keyed by spec path. */
@@ -53,6 +53,7 @@ const PATH_EXAMPLES: Record<string, Record<string, string>> = {
   '/api/address/{address}/token-transfers': { address: EXAMPLE_WALLET },
   '/api/address/{address}/tokens': { address: EXAMPLE_WALLET },
   '/api/address/{address}/nfts': { address: EXAMPLE_WALLET },
+  '/api/qns/resolve/{name}': { name: 'moscowchill.qrl' },
   '/api/walletdistribution/{query}': { query: '100' },
   '/api/token/{address}/info': { address: EXAMPLE_CONTRACT },
   '/api/token/{address}/holders': { address: EXAMPLE_CONTRACT },
@@ -378,7 +379,7 @@ function Conventions(): JSX.Element {
           <p className="text-sm text-text-secondary leading-relaxed">
             Addresses in responses are Q-prefixed, the canonical QRL 2.0 form, for example{' '}
             <span className="chip font-mono break-all">{EXAMPLE_WALLET}</span>. Most lookup parameters accept both
-            the Q form and the 0x form of the same 40 hex characters; each parameter documents its accepted forms.
+            the Q form and the 0x form of the same 128 hex characters; each parameter documents its accepted forms.
           </p>
         </div>
         <div className="card p-4 sm:p-5">

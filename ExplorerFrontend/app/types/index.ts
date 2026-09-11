@@ -6,6 +6,7 @@ export {
   type TransactionDetails,
   type PendingTransaction,
   type ContractMeta,
+  type ContractMetadataProvenanceStatus,
   type TxLog,
   type TokenTransferInfo,
   type InternalTx,
@@ -29,6 +30,8 @@ export {
 // Address types
 export {
   type ContractData,
+  type CompilerProvenance,
+  type CompilerProvenanceComponent,
   type AddressData,
   type BalanceDisplayProps,
   type ActivityDisplayProps,

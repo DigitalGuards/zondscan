@@ -4,8 +4,11 @@ import (
 	"QRL2MongoDB/configs"
 	"QRL2MongoDB/models"
 	"QRL2MongoDB/rpc"
+	"errors"
+	"fmt"
 	"time"
 
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
 )
 
@@ -16,57 +19,62 @@ func preserveCreationInfo(contractInfo *models.ContractInfo, existingContract *m
 		return
 	}
 	contractInfo.CreatorAddress = existingContract.CreatorAddress
+	contractInfo.CreatorAddressProvenance = existingContract.CreatorAddressProvenance
 	contractInfo.CreationTransaction = existingContract.CreationTransaction
 	contractInfo.CreationBlockNumber = existingContract.CreationBlockNumber
+	contractInfo.CreationBlockHash = existingContract.CreationBlockHash
+	contractInfo.ChainID = existingContract.ChainID
 	contractInfo.ContractCode = existingContract.ContractCode
+	contractInfo.ContractCodeSHA256 = existingContract.ContractCodeSHA256
+	contractInfo.GenesisContract = existingContract.GenesisContract
 }
 
-// EnsureContractClassified looks the contract up via DetectContractType and
-// persists the (possibly updated) classification.
-//
-// Returns the merged ContractInfo and the detected standard string
-// ("ERC-20"/"ERC-721"/"ERC-1155" or "" for unclassified). Callers should
-// check `standard == ""` to skip non-token logs; the *ContractInfo will still
-// be populated when an existing contract record was preserved.
-//
-// On transient RPC failure DetectContractType returns an error and we return
-// (existing, ""), never demoting a previously-classified contract. The
-// caller's "skip non-token" guard correctly skips this log; the next sighting
-// re-tries and either succeeds (promotion) or stays unclassified (no harm).
-func EnsureContractClassified(contractAddress string, blockNumber string, txHash string) (*models.ContractInfo, string) {
-	detection, detErr := rpc.DetectContractType(contractAddress)
-	if detErr != nil {
-		// Transient probe failure, preserve existing state, don't write
-		// anything that would clobber a previously-good classification.
-		configs.Logger.Debug("Contract type detection failed; preserving existing classification",
-			zap.String("address", contractAddress),
-			zap.Error(detErr))
-		existing, _ := GetContract(contractAddress)
-		if existing != nil && existing.TokenStandard != "" {
-			return existing, existing.TokenStandard
-		}
-		return existing, ""
-	}
-	if detection.Standard == "" {
-		// Not a recognised standard; not necessarily an error. Don't churn
-		// the DB on every log emission from such a contract.
-		configs.Logger.Debug("Contract is not a recognised token standard",
-			zap.String("address", contractAddress))
-		return nil, ""
+type preparedContractClassification struct {
+	contract *models.ContractInfo
+	standard string
+	persist  bool
+}
+
+// prepareContractClassification resolves a contract against the exact claimed
+// block state and builds the row that will be persisted after every block log
+// has decoded successfully.
+func prepareContractClassification(
+	contractAddress string,
+	blockNumber string,
+	blockHash string,
+	txHash string,
+) (preparedContractClassification, error) {
+	existingContract, err := GetContract(contractAddress)
+	if err != nil && !errors.Is(err, mongo.ErrNoDocuments) {
+		return preparedContractClassification{}, fmt.Errorf("load existing contract %s: %w", contractAddress, err)
 	}
 
-	configs.Logger.Debug("Contract classified",
+	detection, detErr := rpc.DetectContractTypeAtBlock(contractAddress, blockHash)
+	if detErr != nil {
+		return preparedContractClassification{}, fmt.Errorf(
+			"detect contract type %s at block %s %s for transaction %s: %w",
+			contractAddress,
+			blockNumber,
+			blockHash,
+			txHash,
+			detErr,
+		)
+	}
+	if detection.Standard == "" {
+		configs.Logger.Debug("Contract is not a recognised token standard at claimed block",
+			zap.String("address", contractAddress),
+			zap.String("blockNumber", blockNumber),
+			zap.String("blockHash", blockHash))
+		return preparedContractClassification{contract: existingContract}, nil
+	}
+
+	configs.Logger.Debug("Contract classified at claimed block",
 		zap.String("address", contractAddress),
+		zap.String("blockNumber", blockNumber),
+		zap.String("blockHash", blockHash),
 		zap.String("standard", detection.Standard),
 		zap.String("name", detection.Name),
 		zap.String("symbol", detection.Symbol))
-
-	existingContract, err := GetContract(contractAddress)
-	if err != nil {
-		configs.Logger.Debug("GetContract returned error (treating as fresh)",
-			zap.String("address", contractAddress),
-			zap.Error(err))
-	}
 
 	contractInfo := models.ContractInfo{
 		Address:       contractAddress,
@@ -95,21 +103,85 @@ func EnsureContractClassified(contractAddress string, blockNumber string, txHash
 	// mint tx latched as its creation tx. The first-sighted log block is NOT
 	// the creation block for a token first seen late, so nothing is guessed.
 	if contractInfo.CreationTransaction == "" {
-		if creationTx := findCreationTransaction(contractAddress); creationTx != nil {
+		creationTx, creationErr := findCreationTransaction(contractAddress)
+		if creationErr != nil {
+			return preparedContractClassification{}, fmt.Errorf(
+				"look up authoritative contract creation evidence for %s: %w",
+				contractAddress,
+				creationErr,
+			)
+		} else if creationTx != nil {
 			contractInfo.CreationTransaction = creationTx.TxHash
 			contractInfo.CreationBlockNumber = creationTx.BlockNumber
 			if creationTx.From != "" && creationTx.From != "Q" {
 				contractInfo.CreatorAddress = creationTx.From
 			}
+			contractInfo.CreatorAddressProvenance = creationTx.Provenance
 		}
 	}
 
-	if err := StoreContract(contractInfo); err != nil {
-		configs.Logger.Error("Failed to store/update classified contract",
-			zap.String("address", contractAddress),
-			zap.Error(err))
-		return nil, ""
-	}
+	return preparedContractClassification{
+		contract: &contractInfo,
+		standard: detection.Standard,
+		persist:  true,
+	}, nil
+}
 
-	return &contractInfo, detection.Standard
+func persistPreparedContractClassification(classification preparedContractClassification) error {
+	if !classification.persist {
+		return nil
+	}
+	if classification.contract == nil {
+		return fmt.Errorf("prepared contract classification has no metadata row")
+	}
+	// Historical replay establishes the standard at one exact block. Mutable
+	// token metadata belongs to the current-head reprocessor: persisting an old
+	// totalSupply (or pre-upgrade name/symbol/decimals/URI) would latch that
+	// first historical value through StoreContract's gap-fill merge.
+	persisted := *classification.contract
+	persisted.Name = ""
+	persisted.Symbol = ""
+	persisted.Decimals = 0
+	persisted.TotalSupply = ""
+	persisted.MetadataURI = ""
+	if err := StoreContract(persisted); err != nil {
+		return fmt.Errorf("store classified contract %s: %w", classification.contract.Address, err)
+	}
+	return nil
+}
+
+// EnsureContractClassified resolves a contract against one exact block and
+// immediately persists the classification. Block-wide ingestion uses the
+// prepare/persist split directly so later malformed logs cannot observe an
+// early classification side effect.
+//
+// Returns the merged ContractInfo and the detected standard string
+// ("ERC-20"/"ERC-721"/"ERC-1155" or "" for unclassified). Callers should
+// check `standard == ""` to skip non-token logs; the *ContractInfo will still
+// be populated when an existing contract record was preserved.
+//
+// Every claimed block is probed at its own hash, including contracts with an
+// existing classification, so proxy upgrades and later self-destruction do
+// not rewrite historical event meaning. Existing rows provide provenance and
+// creation metadata only. Transport, decode, and Mongo failures reach the
+// durable block retry queue before token transfer effects begin.
+func EnsureContractClassified(
+	contractAddress string,
+	blockNumber string,
+	blockHash string,
+	txHash string,
+) (*models.ContractInfo, string, error) {
+	classification, err := prepareContractClassification(
+		contractAddress,
+		blockNumber,
+		blockHash,
+		txHash,
+	)
+	if err != nil {
+		return nil, "", err
+	}
+	if err := persistPreparedContractClassification(classification); err != nil {
+		return nil, "", err
+	}
+	return classification.contract, classification.standard, nil
 }

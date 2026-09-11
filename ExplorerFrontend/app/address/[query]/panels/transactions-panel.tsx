@@ -17,6 +17,7 @@ import {
   NATIVE_UNIT,
 } from '../../../lib/helpers';
 import CopyButton from '../../../components/CopyButton';
+import AddressFingerprint from '../../../components/AddressFingerprint';
 import DebouncedInput from '../../../components/DebouncedInput';
 import { DownloadBtn } from '../../../components/DownloadBtn';
 import EmptyState from '../../../components/EmptyState';
@@ -164,7 +165,7 @@ export default function TransactionsPanel({
                 <div className="flex items-center gap-1">
                   <span className="text-text-secondary text-sm">From:</span>
                   <Link href={'/address/' + fromAddress} title={fromAddress}>
-                    {truncateMiddle(fromAddress)}
+                    <AddressFingerprint address={fromAddress} />
                   </Link>
                 </div>
               )}
@@ -172,7 +173,7 @@ export default function TransactionsPanel({
                 <div className="flex items-center gap-1">
                   <span className="text-text-secondary text-sm">To:</span>
                   <Link href={'/address/' + toAddress} title={toAddress}>
-                    {truncateMiddle(toAddress)}
+                    <AddressFingerprint address={toAddress} />
                   </Link>
                 </div>
               )}
@@ -269,7 +270,9 @@ export default function TransactionsPanel({
                 href={'/address/' + formatAddress('0x' + normalizeHexString(r.From))}
                 className="text-sm text-accent hover:text-accent-hover break-all"
               >
-                {truncateMiddle(formatAddress('0x' + normalizeHexString(r.From)))}
+                <AddressFingerprint
+                  address={formatAddress('0x' + normalizeHexString(r.From))}
+                />
               </Link>
             </div>
           )}
@@ -281,7 +284,9 @@ export default function TransactionsPanel({
                 href={'/address/' + formatAddress('0x' + normalizeHexString(r.To))}
                 className="text-sm text-accent hover:text-accent-hover break-all"
               >
-                {truncateMiddle(formatAddress('0x' + normalizeHexString(r.To)))}
+                <AddressFingerprint
+                  address={formatAddress('0x' + normalizeHexString(r.To))}
+                />
               </Link>
             </div>
           )}

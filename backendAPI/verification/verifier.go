@@ -11,8 +11,7 @@ import (
 
 	"backendAPI/db"
 	"backendAPI/models"
-
-	"go.mongodb.org/mongo-driver/bson"
+	"backendAPI/sourcebundle"
 )
 
 // Verifier ties the compiler Registry + on-chain code + byte match + the M1
@@ -38,63 +37,88 @@ type Verifier struct {
 //
 // The supplied ctx should typically be context.Background() so the job
 // survives the client connection being torn down mid-compile.
-func (v *Verifier) RunAsync(jobID string, req VerifyRequest) {
+func (v *Verifier) RunAsync(jobID string, req VerifyRequest, target models.VerificationTarget) {
+	canonicalReq, err := CanonicalizeVerifyRequest(req)
+	if err != nil {
+		failJob(jobID, target, fmt.Sprintf("invalid verification request: %s", err.Error()))
+		return
+	}
+	req = canonicalReq
+
 	comp, ok := v.Registry.Resolve(req.CompilerVersion)
 	if !ok {
-		failJob(jobID, fmt.Sprintf("unsupported compilerVersion %q", req.CompilerVersion))
+		failJob(jobID, target, fmt.Sprintf("unsupported compilerVersion %q", req.CompilerVersion))
 		return
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), comp.Timeout+15*time.Second)
 		defer cancel()
-		v.run(ctx, jobID, req, comp)
+		v.run(ctx, jobID, req, target, comp)
 	}()
 }
 
-func (v *Verifier) run(ctx context.Context, jobID string, req VerifyRequest, comp *Compiler) {
-	if err := db.UpdateVerificationJob(jobID, bson.M{"status": models.VerificationJobCompiling}); err != nil {
-		// Status transition failures aren't fatal, the rest of the run
-		// continues and the client will see the eventual terminal state.
-		// But we log so persistent mongo issues don't go unnoticed.
-		log.Printf("verifier: failed to mark job %s compiling: %v", jobID, err)
+func (v *Verifier) run(
+	ctx context.Context,
+	jobID string,
+	req VerifyRequest,
+	target models.VerificationTarget,
+	comp *Compiler,
+) {
+	if err := db.ClaimVerificationJob(jobID, target); err != nil {
+		log.Printf("verifier: job %s lost its verification fence before compile: %v", jobID, err)
+		return
 	}
 
-	input := wrapStandardJSON(req)
+	input, err := wrapStandardJSON(req)
+	if err != nil {
+		failJob(jobID, target, fmt.Sprintf("invalid verification request: %s", err.Error()))
+		return
+	}
 
 	out, err := comp.Compile(ctx, input)
 	if err != nil {
-		failJob(jobID, fmt.Sprintf("compile invocation failed: %s", err.Error()))
+		failJob(jobID, target, fmt.Sprintf("compile invocation failed: %s", err.Error()))
 		return
 	}
 	if fatal := out.FatalErrors(); len(fatal) > 0 {
-		failJob(jobID, formatCompileErrors(fatal))
+		failJob(jobID, target, formatCompileErrors(fatal))
 		return
 	}
 
-	contract, ok := findContract(out, req.ContractName)
+	primarySource := primarySourcePath(req.ContractName)
+	contract, ok := findContract(out, primarySource, req.ContractName)
 	if !ok {
-		failJob(jobID, fmt.Sprintf("contract %q not found in compiler output", req.ContractName))
+		failJob(jobID, target, fmt.Sprintf(
+			"contract %q not found in primary compiler source %q",
+			req.ContractName,
+			primarySource,
+		))
 		return
 	}
 
 	onchain, err := FetchOnChainCode(ctx, req.Address)
 	if err != nil {
-		failJob(jobID, fmt.Sprintf("fetch on-chain code: %s", err.Error()))
+		failJob(jobID, target, fmt.Sprintf("fetch on-chain code: %s", err.Error()))
+		return
+	}
+	onchainDigest, err := RuntimeCodeSHA256(onchain)
+	if err != nil || onchainDigest != target.DeployedCodeSHA256 {
+		failJob(jobID, target, "verification target changed before bytecode match")
 		return
 	}
 
 	dbc := contract.DeployedBytecode()
 	match, err := Match(dbc.Object, onchain, dbc.ImmutableReferences)
 	if err != nil {
-		failJob(jobID, fmt.Sprintf("match: %s", err.Error()))
+		failJob(jobID, target, fmt.Sprintf("match: %s", err.Error()))
 		return
 	}
 	if match.NotFound {
-		failJob(jobID, "no contract code at address (qrl_getCode returned empty)")
+		failJob(jobID, target, "no contract code at address (qrl_getCode returned empty)")
 		return
 	}
 	if !match.Matched {
-		failJob(jobID, fmt.Sprintf("bytecode mismatch (compiled=%d B, on-chain=%d B, diff@byte=%d)",
+		failJob(jobID, target, fmt.Sprintf("bytecode mismatch (compiled=%d B, on-chain=%d B, diff@byte=%d)",
 			match.CompiledLen, match.OnChainLen, match.DiffByteOffset))
 		return
 	}
@@ -105,50 +129,48 @@ func (v *Verifier) run(ctx context.Context, jobID string, req VerifyRequest, com
 		Abi:                  string(abiBytes),
 		ContractName:         req.ContractName,
 		CompilerVersion:      comp.BuildID,
+		CompilerProvenance:   comp.ProvenanceRecord(),
 		OptimizationEnabled:  req.OptimizerEnabled,
 		OptimizationRuns:     req.OptimizerRuns,
 		EvmVersion:           req.EvmVersion,
 		ConstructorArguments: req.ConstructorArguments,
 		Libraries:            req.Libraries,
+		Imports:              req.Imports,
 		License:              req.License,
 		VerificationMethod:   "full-source",
 	}
-	if err := db.MarkContractVerified(req.Address, result); err != nil {
-		failJob(jobID, fmt.Sprintf("write verification: %s", err.Error()))
+	if err := RevalidateVerificationTarget(ctx, target); err != nil {
+		failJob(jobID, target, fmt.Sprintf("revalidate verification target: %s", err.Error()))
 		return
 	}
-
-	if err := db.UpdateVerificationJob(jobID, bson.M{
-		"status": models.VerificationJobSuccess,
-		"error":  "",
-		"result": models.VerificationJobResultRef{
-			Abi:        string(abiBytes),
-			VerifiedAt: time.Now().UTC().Format(time.RFC3339),
-		},
-	}); err != nil {
-		log.Printf("verifier: failed to mark job %s success: %v", jobID, err)
+	if _, err := db.MarkContractVerified(jobID, target, result); err != nil {
+		failJob(jobID, target, fmt.Sprintf("write verification: %s", err.Error()))
 	}
 }
 
-func failJob(jobID, msg string) {
-	if err := db.UpdateVerificationJob(jobID, bson.M{
-		"status": models.VerificationJobFailed,
-		"error":  msg,
-	}); err != nil {
+func failJob(jobID string, target models.VerificationTarget, msg string) {
+	if err := db.FailVerificationJob(jobID, target, msg); err != nil &&
+		!errors.Is(err, db.ErrVerificationTargetChanged) {
 		log.Printf("verifier: failed to mark job %s failed (%q): %v", jobID, msg, err)
 	}
 }
 
 // wrapStandardJSON builds the Hyperion standard-JSON input from the user-
 // submitted single-file request. The primary source is keyed by
-// `<ContractName>.hyp`; any caller-supplied imports are passed through
-// verbatim so the runner's import resolver can find them.
-func wrapStandardJSON(req VerifyRequest) StandardJSONInput {
+// `<ContractName>.hyp`; canonical imports retain their exact source content
+// under the same clean paths persisted with the verification record.
+func wrapStandardJSON(req VerifyRequest) (StandardJSONInput, error) {
+	canonicalReq, err := CanonicalizeVerifyRequest(req)
+	if err != nil {
+		return StandardJSONInput{}, err
+	}
+	req = canonicalReq
+
 	sources := map[string]StandardJSONSource{
-		req.ContractName + ".hyp": {Content: req.SourceCode},
+		primarySourcePath(req.ContractName): {Content: req.SourceCode},
 	}
 	for path, content := range req.Imports {
-		sources[normalizeImportPath(path)] = StandardJSONSource{Content: content}
+		sources[path] = StandardJSONSource{Content: content}
 	}
 
 	// hypc 0.2.x treats "no optimizer block" and "optimizer: {enabled:false}"
@@ -195,30 +217,22 @@ func wrapStandardJSON(req VerifyRequest) StandardJSONInput {
 		Language: "Hyperion",
 		Sources:  sources,
 		Settings: settings,
-	}
+	}, nil
 }
 
-// normalizeImportPath strips a leading "./" from a user-supplied import
-// key so it lines up with whatever Hyperion's resolver looks up. Users
-// who literally write `import "./Context.hyp"` in their source might
-// reasonably key the imports map either way; we accept both.
-func normalizeImportPath(p string) string {
-	if strings.HasPrefix(p, "./") {
-		return p[2:]
+// findContract selects a contract only from the named primary source unit.
+// Imported units may declare the same contract name, so a cross-unit scan
+// would make source selection depend on randomized Go map iteration.
+func findContract(out *StandardJSONOutput, sourceUnit, name string) (*CompiledContract, bool) {
+	unit, ok := out.Contracts[sourceUnit]
+	if !ok {
+		return nil, false
 	}
-	return p
-}
-
-// findContract walks the compiler output for a contract with the supplied
-// name. Hypc nests contracts under <sourceUnit>.<contractName> so we scan
-// every source unit for a matching name.
-func findContract(out *StandardJSONOutput, name string) (*CompiledContract, bool) {
-	for _, unit := range out.Contracts {
-		if c, ok := unit[name]; ok {
-			return &c, true
-		}
+	contract, ok := unit[name]
+	if !ok {
+		return nil, false
 	}
-	return nil, false
+	return &contract, true
 }
 
 func formatCompileErrors(es []CompilerError) string {
@@ -237,15 +251,22 @@ func formatCompileErrors(es []CompilerError) string {
 	return msg
 }
 
-// AlreadyVerified returns true when the contract document at `address`
-// already carries a verified=true marker, so duplicate submissions can
-// be made idempotent.
+// AlreadyVerified returns true for valid digest-backed and legacy verified
+// records so duplicate submissions remain idempotent. Invalid recorded
+// provenance requires controlled operator repair and is never overwritten by
+// the public submission path.
 func AlreadyVerified(address string) (bool, error) {
 	c, err := db.ReturnContractCode(address)
 	if err != nil {
 		return false, err
 	}
-	return c.Verified, nil
+	if !c.Verified {
+		return false, nil
+	}
+	if sourcebundle.ClassifyStoredVerification(c) == models.CompilerProvenanceInvalidRecorded {
+		return false, ErrInvalidStoredVerification
+	}
+	return true, nil
 }
 
 // HasPendingJob returns true when a job for `address` is currently
@@ -268,6 +289,10 @@ func HasPendingJob(address string) (bool, error) {
 // ErrAlreadyVerified is returned by Enqueue when the contract is already
 // verified, callers should treat this as success (idempotency).
 var ErrAlreadyVerified = errors.New("verification: address already verified")
+
+// ErrInvalidStoredVerification protects write-once verification records from
+// unauthenticated replacement when their persisted provenance is malformed.
+var ErrInvalidStoredVerification = errors.New("stored verification record is invalid; operator repair required")
 
 // ErrDuplicateJob is returned by Enqueue when a pending job already exists
 // for the same address.

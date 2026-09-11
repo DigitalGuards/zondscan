@@ -5,6 +5,7 @@ import Link from 'next/link';
 import axios from 'axios';
 import config from '../../../config';
 import { formatNumberWithCommas, truncateHash, formatAddress, formatTimestamp, timeAgo, formatStaked } from '../../lib/helpers';
+import AddressFingerprint from '../../components/AddressFingerprint';
 import SearchBar from '../../components/SearchBar';
 import StatusBadge from '../../components/StatusBadge';
 
@@ -56,7 +57,7 @@ function formatGasUsed(hex: string): string {
 // The execution coinbase is always the zero address on this network, so
 // linking it as "proposer" would be misleading. Render a dash for it until
 // proposer-index enrichment lands (the column stays so it can slot in).
-const ZERO_ADDRESS = 'Q0000000000000000000000000000000000000000';
+const ZERO_ADDRESS = 'Q' + '0'.repeat(128);
 
 // ── Summary Row ──────────────────────────────────────────────────────────────
 
@@ -244,7 +245,7 @@ export default function EpochDetailClient({ epochId }: { epochId: string }): JSX
                         <td className="px-4 py-2 hidden sm:table-cell">
                           {isProposed && proposer && proposer !== ZERO_ADDRESS ? (
                             <Link href={`/address/${proposer}`} className="text-text-secondary hover:text-accent hover:underline font-mono text-xs transition-colors">
-                              {truncateHash(proposer, 8, 6)}
+                              <AddressFingerprint address={proposer} />
                             </Link>
                           ) : isProposed ? (
                             <span className="text-text-muted">-</span>

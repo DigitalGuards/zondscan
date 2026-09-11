@@ -7,6 +7,7 @@ services:
     image: mongo:8.2
     container_name: zond-mongodb
     restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     environment:
       # REQUIRED on kernels 6.19+/7.0 with CET user shadow stack (Zen 4+/recent
       # Intel): mongod 8.x's coroutine stack-pivot trips the hardware ROP
@@ -22,13 +23,17 @@ services:
       # with GLIBC_TUNABLES=glibc.cpu.hwcaps=-SHSTK:glibc.pthread.rseq=0.
       - GLIBC_TUNABLES=glibc.cpu.hwcaps=-SHSTK
     ports:
-      - "27018:27017"  # Use 27018 externally to avoid conflict with local MongoDB
+      - "127.0.0.1:27018:27017"  # Use 27018 externally to avoid conflict with local MongoDB
     volumes:
       - mongodb_data:/data/db
     networks:
       - zond-network
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --quiet --eval 'try { rs.status().ok } catch (e) { rs.initiate({_id:\"rs0\",members:[{_id:0,host:\"mongodb:27017\"}]}).ok }' | grep -q 1",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -41,9 +46,9 @@ services:
     container_name: zond-backend
     restart: unless-stopped
     ports:
-      - "8082:8080"  # Use 8082 externally to avoid conflict with beacon chain
+      - "127.0.0.1:8082:8080"  # Use 8082 externally to avoid conflict with beacon chain
     environment:
-      - MONGOURI=mongodb://mongodb:27017/qrldata-z
+      - MONGOURI=mongodb://mongodb:27017/qrldata-z?replicaSet=rs0
       - NODE_URL=http://host.docker.internal:8545
       - HTTP_PORT=:8080
     depends_on:
@@ -62,13 +67,17 @@ services:
     build:
       context: ./ExplorerFrontend
       dockerfile: Dockerfile
+      args:
+        HANDLER_URL: http://backend:8080
     container_name: zond-frontend
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
-      - DATABASE_URL=mongodb://mongodb:27017/qrldata-z
-      - NEXT_PUBLIC_HANDLER_URL=http://backend:8080
+      - DATABASE_URL=mongodb://mongodb:27017/qrldata-z?replicaSet=rs0
+      - HANDLER_URL=http://backend:8080
+      - NEXT_PUBLIC_HANDLER_URL=/api
+      - DOMAIN_NAME=http://localhost:3000
       - NEXT_PUBLIC_DOMAIN_NAME=localhost
     depends_on:
       - backend
@@ -88,9 +97,9 @@ services:
     container_name: zond-syncer
     restart: unless-stopped
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     environment:
-      - MONGOURI=mongodb://mongodb:27017
+      - MONGOURI=mongodb://mongodb:27017/?replicaSet=rs0
       - NODE_URL=https://qrlwallet.com/api/zond-rpc/testnet
       - MEMPOOL_NODE_URL=http://host.docker.internal:8545
       - BEACONCHAIN_API=http://host.docker.internal:5051

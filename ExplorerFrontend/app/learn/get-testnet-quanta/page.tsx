@@ -81,7 +81,7 @@ export default function Page(): JSX.Element {
               one yet, follow <a href="/learn/create-a-wallet">Create a QRL wallet</a> to set
               one up in a few minutes with{' '}
               <a href="https://qrlwallet.com">MyQRLWallet</a>. Then copy your address: it
-              starts with <code>Q</code> followed by 40 hexadecimal characters.
+              starts with <code>Q</code> followed by 128 hexadecimal characters.
             </p>
           </Step>
           <Step title="Open the faucet">

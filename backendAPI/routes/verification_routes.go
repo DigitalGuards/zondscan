@@ -3,6 +3,7 @@ package routes
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"log"
 	"net/http"
 	"time"
@@ -62,6 +63,12 @@ func RegisterVerificationRoutes(router *gin.Engine) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "contractName and sourceCode are required"})
 			return
 		}
+		canonicalReq, err := verification.CanonicalizeVerifyRequest(req)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid verification inputs: " + err.Error()})
+			return
+		}
+		req = canonicalReq
 		// Resolve the requested build (empty selects the registry default).
 		// Pin the request to the resolved build id so the stored payload and
 		// the async compile can't drift from what we validated here.
@@ -79,11 +86,7 @@ func RegisterVerificationRoutes(router *gin.Engine) {
 		// Idempotency: if the contract is already verified, return success
 		// without spawning another compile.
 		already, err := verification.AlreadyVerified(req.Address)
-		if err == nil && already {
-			c.JSON(http.StatusOK, gin.H{
-				"alreadyVerified": true,
-				"address":         req.Address,
-			})
+		if respondAlreadyVerified(c, req.Address, already, err) {
 			return
 		}
 
@@ -94,23 +97,25 @@ func RegisterVerificationRoutes(router *gin.Engine) {
 			return
 		}
 
+		target, err := verification.CaptureVerificationTarget(c.Request.Context(), req.Address)
+		if err != nil {
+			log.Printf("capture verification target for %s: %v", req.Address, err)
+			if errors.Is(err, verification.ErrVerificationTargetIncomplete) ||
+				errors.Is(err, verification.ErrVerificationTargetChanged) {
+				c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "unable to confirm canonical contract identity"})
+			return
+		}
+
 		jobID := newJobID()
 		job := models.ContractVerificationJob{
 			JobID:   jobID,
 			Address: req.Address,
 			Status:  models.VerificationJobPending,
-			Payload: models.VerificationJobPayload{
-				SourceCode:           req.SourceCode,
-				ContractName:         req.ContractName,
-				CompilerVersion:      comp.BuildID,
-				OptimizationEnabled:  req.OptimizerEnabled,
-				OptimizationRuns:     req.OptimizerRuns,
-				EvmVersion:           req.EvmVersion,
-				ConstructorArguments: req.ConstructorArguments,
-				Libraries:            req.Libraries,
-				License:              req.License,
-				VerificationMethod:   "full-source",
-			},
+			Payload: verificationJobPayload(req, comp),
+			Target:  target,
 		}
 		if err := db.CreateVerificationJob(job); err != nil {
 			log.Printf("create verification job %s: %v", jobID, err)
@@ -118,7 +123,7 @@ func RegisterVerificationRoutes(router *gin.Engine) {
 			return
 		}
 
-		v.RunAsync(jobID, req)
+		v.RunAsync(jobID, req, target)
 
 		c.JSON(http.StatusAccepted, verification.VerifyEnqueueResponse{
 			JobID:   jobID,
@@ -141,6 +146,49 @@ func RegisterVerificationRoutes(router *gin.Engine) {
 		}
 		c.JSON(http.StatusOK, job)
 	})
+}
+
+func respondAlreadyVerified(c *gin.Context, address string, already bool, err error) bool {
+	if errors.Is(err, verification.ErrInvalidStoredVerification) {
+		log.Printf("contract verification blocked for %s: %v", address, err)
+		c.JSON(http.StatusConflict, gin.H{
+			"error": verification.ErrInvalidStoredVerification.Error(),
+		})
+		return true
+	}
+	if err != nil {
+		log.Printf("contract verification state lookup failed for %s: %v", address, err)
+		respondInternal(c)
+		return true
+	}
+	if already {
+		c.JSON(http.StatusOK, gin.H{
+			"alreadyVerified": true,
+			"address":         address,
+		})
+		return true
+	}
+	return false
+}
+
+func verificationJobPayload(
+	req verification.VerifyRequest,
+	comp *verification.Compiler,
+) models.VerificationJobPayload {
+	return models.VerificationJobPayload{
+		SourceCode:           req.SourceCode,
+		ContractName:         req.ContractName,
+		CompilerVersion:      comp.BuildID,
+		CompilerProvenance:   comp.ProvenanceRecord(),
+		OptimizationEnabled:  req.OptimizerEnabled,
+		OptimizationRuns:     req.OptimizerRuns,
+		EvmVersion:           req.EvmVersion,
+		ConstructorArguments: req.ConstructorArguments,
+		Libraries:            req.Libraries,
+		Imports:              req.Imports,
+		License:              req.License,
+		VerificationMethod:   "full-source",
+	}
 }
 
 // newJobID returns a short opaque token (16 hex chars). Crypto random is

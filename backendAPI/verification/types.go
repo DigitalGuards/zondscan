@@ -1,6 +1,10 @@
 package verification
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"backendAPI/models"
+)
 
 // VerifyRequest is the JSON body for POST /contract/verify.
 //
@@ -9,7 +13,7 @@ import "encoding/json"
 // `imports` map keyed by the path the source uses for the import (e.g.
 // "./Context.hyp" → the Context.hyp content). The Go layer wraps both
 // into a Hyperion standard-JSON `sources` map before invoking the
-// runner, users never see standard-JSON directly in v1.
+// compiler, users never see standard-JSON directly in v1.
 type VerifyRequest struct {
 	Address              string            `json:"address" binding:"required"`
 	SourceCode           string            `json:"sourceCode" binding:"required"`
@@ -39,22 +43,28 @@ type VerifyEnqueueResponse struct {
 // the default build so single-build clients (which only read those two
 // fields) keep working unchanged.
 type CompilerInfoResponse struct {
-	Language  string          `json:"language"`
-	BuildID   string          `json:"buildId"`
-	Default   string          `json:"default"`
-	Compilers []CompilerBuild `json:"compilers"`
+	Language   string                     `json:"language"`
+	BuildID    string                     `json:"buildId"`
+	Kind       string                     `json:"kind"`
+	SHA256     string                     `json:"sha256"`
+	Provenance *models.CompilerProvenance `json:"provenance"`
+	Default    string                     `json:"default"`
+	Compilers  []CompilerBuild            `json:"compilers"`
 }
 
 // CompilerBuild describes one selectable compiler build in the
 // /contract/compiler-info response.
 type CompilerBuild struct {
-	BuildID  string `json:"buildId"`
-	Language string `json:"language"`
-	Default  bool   `json:"default"`
+	BuildID    string                     `json:"buildId"`
+	Language   string                     `json:"language"`
+	Kind       string                     `json:"kind"`
+	SHA256     string                     `json:"sha256"`
+	Provenance *models.CompilerProvenance `json:"provenance"`
+	Default    bool                       `json:"default"`
 }
 
 // StandardJSONInput is the Hyperion standard-JSON shape we feed to the
-// runner. Mirrors the Solidity standard-JSON layout, see
+// compiler. Mirrors the Solidity standard-JSON layout, see
 // theQRL/hyperion docs for details.
 type StandardJSONInput struct {
 	Language string                        `json:"language"`
@@ -78,7 +88,7 @@ type Optimizer struct {
 	Runs    int  `json:"runs"`
 }
 
-// StandardJSONOutput is the runner's JSON output shape.
+// StandardJSONOutput is the compiler's JSON output shape.
 type StandardJSONOutput struct {
 	Errors    []CompilerError                        `json:"errors,omitempty"`
 	Contracts map[string]map[string]CompiledContract `json:"contracts,omitempty"`
@@ -137,7 +147,7 @@ type ImmutableRange struct {
 	Length int `json:"length"`
 }
 
-// FatalErrors filters a runner's output for errors that should fail the
+// FatalErrors filters a compiler's output for errors that should fail the
 // verification (severity == "error"). Warnings are surfaced but not fatal.
 func (o *StandardJSONOutput) FatalErrors() []CompilerError {
 	out := []CompilerError{}

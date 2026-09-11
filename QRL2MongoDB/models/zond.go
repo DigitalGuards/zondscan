@@ -1,6 +1,6 @@
 package models
 
-import ()
+import "time"
 
 type RPC struct {
 	Jsonrpc string `json:"jsonrpc"`
@@ -22,6 +22,18 @@ type ZondDatabaseBlockWithInt struct {
 	ID             int    `json:"id"      bson:"id"`
 	Result         Result `json:"result"  bson:"result"`
 	BlockNumberInt int64  `bson:"blockNumberInt"`
+	IngestionState string `bson:"ingestionState,omitempty"`
+	// Token ingestion is a second durable boundary on the canonical block row.
+	// A complete companion row remains pending here until its block-wide logs,
+	// transfer rows, balances, and metadata side effects all finish.
+	TokenIngestionState  string     `bson:"tokenIngestionState,omitempty"`
+	TokenProcessingToken string     `bson:"tokenProcessingToken,omitempty"`
+	TokenProcessingUntil *time.Time `bson:"tokenProcessingUntil,omitempty"`
+	TokenAttempts        int        `bson:"tokenAttempts,omitempty"`
+	TokenNextAttemptAt   *time.Time `bson:"tokenNextAttemptAt,omitempty"`
+	LastTokenError       string     `bson:"lastTokenError,omitempty"`
+	LastTokenFailedAt    *time.Time `bson:"lastTokenFailedAt,omitempty"`
+	TokenCompletedAt     *time.Time `bson:"tokenCompletedAt,omitempty"`
 }
 
 type Withdrawal struct {

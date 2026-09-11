@@ -379,6 +379,7 @@ func GetEpochDetail(epochId string) (*models.EpochDetailResponse, error) {
 	// Get blocks in this epoch's slot range
 	blockFilter := bson.M{
 		"blockNumberInt": bson.M{"$gte": startSlot, "$lt": endSlot},
+		"ingestionState": completedBlockIngestionState,
 	}
 	projection := bson.D{
 		{Key: "blockNumberInt", Value: 1},

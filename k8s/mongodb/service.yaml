@@ -10,6 +10,9 @@ metadata:
 spec:
   # Headless service for StatefulSet (required for stable network identity)
   clusterIP: None
+  # Publish mongodb-0 before it is ready so the stable replica-set member
+  # hostname resolves while the first-node readiness probe initializes rs0.
+  publishNotReadyAddresses: true
   ports:
     - port: 27017
       targetPort: 27017

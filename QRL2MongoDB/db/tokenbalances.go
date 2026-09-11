@@ -5,6 +5,7 @@ import (
 	"QRL2MongoDB/rpc"
 	"QRL2MongoDB/validation"
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -16,8 +17,141 @@ import (
 	"go.uber.org/zap"
 )
 
+type tokenBalanceMutationStore interface {
+	DeleteMany(context.Context, interface{}, ...*options.DeleteOptions) (*mongo.DeleteResult, error)
+	DeleteOne(context.Context, interface{}, ...*options.DeleteOptions) (*mongo.DeleteResult, error)
+	UpdateOne(context.Context, interface{}, interface{}, ...*options.UpdateOptions) (*mongo.UpdateResult, error)
+}
+
+var (
+	getERC721OwnerForBalanceStore = rpc.GetERC721Owner
+	getERC1155ForBalanceStore     = rpc.GetERC1155Balance
+	getTokenBalanceMutationStore  = func() tokenBalanceMutationStore {
+		collection := configs.GetTokenBalancesCollection()
+		if collection == nil {
+			return nil
+		}
+		return collection
+	}
+)
+
+func canonicalTokenBalanceObservation(
+	blockNumber string,
+	blockHash string,
+) (string, int64, string, error) {
+	canonicalNumber, err := canonicalHexQuantity(blockNumber, "token balance block number")
+	if err != nil {
+		return "", 0, "", err
+	}
+	number := new(big.Int)
+	number.SetString(strings.TrimPrefix(canonicalNumber, "0x"), 16)
+	if !number.IsInt64() {
+		return "", 0, "", fmt.Errorf("token balance block number exceeds int64: %s", canonicalNumber)
+	}
+	if blockHash != "" {
+		blockHash, err = canonicalFixedHash(blockHash, "token balance block hash")
+		if err != nil {
+			return "", 0, "", err
+		}
+	}
+	return canonicalNumber, number.Int64(), blockHash, nil
+}
+
+// hasNewerTokenBalanceObservation rejects only strictly newer observations.
+// An equal-height row may carry an orphaned block hash and must remain
+// replaceable by the exact canonical replay. The synchroniser serializes the
+// caller with rollback and enforces one unique canonical block identity, so a
+// stale equal-height writer cannot arrive after the replacement.
+func hasNewerTokenBalanceObservation(filter bson.M, blockNumberInt int64) (bool, error) {
+	collection := configs.GetTokenBalancesCollection()
+	if collection == nil {
+		return false, fmt.Errorf("token balances collection is nil")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	var existing struct {
+		BlockNumber    string `bson:"blockNumber"`
+		BlockNumberInt *int64 `bson:"blockNumberInt"`
+	}
+	// Rollback deliberately retains snapshot rows and marks them stale before
+	// exact canonical replay. Exclude them from the ordering fence, even when
+	// their orphaned height is numerically above the replayed observation.
+	observationFilter := bson.M{"$and": bson.A{
+		filter,
+		bson.M{"balanceStale": bson.M{"$ne": true}},
+	}}
+	err := collection.FindOne(
+		ctx,
+		observationFilter,
+		options.FindOne().
+			SetProjection(bson.M{
+				"blockNumber":    1,
+				"blockNumberInt": 1,
+			}).
+			SetSort(bson.D{{Key: "blockNumberInt", Value: -1}}),
+	).Decode(&existing)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("load token balance observation: %w", err)
+	}
+	existingInt := int64(0)
+	if existing.BlockNumberInt != nil {
+		existingInt = *existing.BlockNumberInt
+	} else {
+		_, parsed, _, err := canonicalTokenBalanceObservation(existing.BlockNumber, "")
+		if err != nil {
+			return false, fmt.Errorf("decode legacy token balance observation: %w", err)
+		}
+		existingInt = parsed
+	}
+	return existingInt > blockNumberInt, nil
+}
+
 // StoreTokenBalance updates the token balance for a given address
 func StoreTokenBalance(contractAddress string, holderAddress string, amount string, blockNumber string) error {
+	return storeTokenBalanceWithGetter(
+		contractAddress,
+		holderAddress,
+		amount,
+		blockNumber,
+		"",
+		false,
+		rpc.GetTokenBalance,
+	)
+}
+
+// StoreTokenBalanceAtBlock stores the ERC-20 balance observed at blockHash.
+func StoreTokenBalanceAtBlock(
+	contractAddress string,
+	holderAddress string,
+	amount string,
+	blockNumber string,
+	blockHash string,
+) error {
+	return storeTokenBalanceWithGetter(
+		contractAddress,
+		holderAddress,
+		amount,
+		blockNumber,
+		blockHash,
+		true,
+		func(address string, holder string) (string, error) {
+			return rpc.GetTokenBalanceAtBlock(address, holder, blockHash)
+		},
+	)
+}
+
+func storeTokenBalanceWithGetter(
+	contractAddress string,
+	holderAddress string,
+	amount string,
+	blockNumber string,
+	blockHash string,
+	enforceOrdering bool,
+	getBalance func(string, string) (string, error),
+) error {
 	// Normalize addresses to canonical Q-prefix form
 	contractAddress = validation.ConvertToQAddress(contractAddress)
 
@@ -38,6 +172,43 @@ func StoreTokenBalance(contractAddress string, holderAddress string, amount stri
 		return nil
 	}
 
+	var err error
+	blockNumber, blockNumberInt, blockHash, err := canonicalTokenBalanceObservation(
+		blockNumber,
+		blockHash,
+	)
+	if err != nil {
+		return err
+	}
+	filter := bson.M{
+		"contractAddress": contractAddress,
+		"holderAddress":   holderAddress,
+		"$and": bson.A{
+			bson.M{"$or": bson.A{
+				bson.M{"tokenStandard": rpc.StandardERC20},
+				bson.M{"tokenStandard": bson.M{"$exists": false}},
+			}},
+			bson.M{"$or": bson.A{
+				bson.M{"tokenID": ""},
+				bson.M{"tokenID": bson.M{"$exists": false}},
+			}},
+		},
+	}
+	if enforceOrdering {
+		stale, err := hasNewerTokenBalanceObservation(filter, blockNumberInt)
+		if err != nil {
+			return err
+		}
+		if stale {
+			configs.Logger.Debug("Skipping stale ERC-20 balance observation",
+				zap.String("contractAddress", contractAddress),
+				zap.String("holderAddress", holderAddress),
+				zap.String("blockNumber", blockNumber),
+				zap.String("blockHash", blockHash))
+			return nil
+		}
+	}
+
 	collection := configs.GetTokenBalancesCollection()
 	if collection == nil {
 		configs.Logger.Error("Failed to get token balances collection")
@@ -46,16 +217,13 @@ func StoreTokenBalance(contractAddress string, holderAddress string, amount stri
 
 	// Get current balance from RPC with more robust error handling
 	configs.Logger.Debug("Calling RPC to get current token balance")
-	balance, err := rpc.GetTokenBalance(contractAddress, holderAddress)
+	balance, err := getBalance(contractAddress, holderAddress)
 	if err != nil {
 		configs.Logger.Error("Failed to get token balance from RPC",
 			zap.String("contractAddress", contractAddress),
 			zap.String("holderAddress", holderAddress),
 			zap.Error(err))
-		// Continue with a zero balance if we can't get the actual balance
-		// This allows us to at least record that we tried to update this token balance
-		configs.Logger.Debug("Using default zero balance after RPC failure")
-		balance = "0"
+		return fmt.Errorf("get token balance: %w", err)
 	} else {
 		configs.Logger.Debug("Retrieved current token balance",
 			zap.String("contractAddress", contractAddress),
@@ -68,25 +236,28 @@ func StoreTokenBalance(contractAddress string, holderAddress string, amount stri
 	// standard without having to JOIN against contractCode. Legacy rows
 	// without the field are still uniquely keyed by (contract, holder)
 	// because Mongo treats their missing tokenID as null.
-	update := bson.M{
-		"$set": bson.M{
-			"contractAddress": contractAddress,
-			"holderAddress":   holderAddress,
-			"balance":         balance,
-			"blockNumber":     blockNumber,
-			"updatedAt":       time.Now().UTC().Format(time.RFC3339),
-			"tokenStandard":   rpc.StandardERC20,
-		},
+	set := bson.M{
+		"contractAddress": contractAddress,
+		"holderAddress":   holderAddress,
+		"balance":         balance,
+		"blockNumber":     blockNumber,
+		"blockNumberInt":  blockNumberInt,
+		"updatedAt":       time.Now().UTC().Format(time.RFC3339),
+		"tokenStandard":   rpc.StandardERC20,
 	}
+	unset := bson.M{
+		"balanceStale":   "",
+		"balanceStaleAt": "",
+	}
+	if blockHash != "" {
+		set["blockHash"] = blockHash
+	} else {
+		unset["blockHash"] = ""
+	}
+	update := bson.M{"$set": set, "$unset": unset}
 
 	// Update options
 	opts := options.Update().SetUpsert(true)
-
-	// Filter to find existing document
-	filter := bson.M{
-		"contractAddress": contractAddress,
-		"holderAddress":   holderAddress,
-	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -98,7 +269,7 @@ func StoreTokenBalance(contractAddress string, holderAddress string, amount stri
 			zap.String("contractAddress", contractAddress),
 			zap.String("holderAddress", holderAddress),
 			zap.Error(err))
-		return fmt.Errorf("failed to update token balance: %v", err)
+		return fmt.Errorf("failed to update token balance: %w", err)
 	}
 
 	configs.Logger.Debug("Token balance update completed",
@@ -128,17 +299,82 @@ func StoreTokenBalance(contractAddress string, holderAddress string, amount stri
 // at high NFT volume would prefer an event-delta accumulator with periodic
 // reconciliation. See GetERC721Owner for the same note.
 func StoreERC721Ownership(contractAddress string, tokenID *big.Int, blockNumber string) error {
+	return storeERC721OwnershipWithGetter(
+		contractAddress,
+		tokenID,
+		blockNumber,
+		"",
+		false,
+		getERC721OwnerForBalanceStore,
+	)
+}
+
+// StoreERC721OwnershipAtBlock refreshes ownership from the exact state
+// selected by blockHash.
+func StoreERC721OwnershipAtBlock(
+	contractAddress string,
+	tokenID *big.Int,
+	blockNumber string,
+	blockHash string,
+) error {
+	return storeERC721OwnershipWithGetter(
+		contractAddress,
+		tokenID,
+		blockNumber,
+		blockHash,
+		true,
+		func(address string, id *big.Int) (string, error) {
+			return rpc.GetERC721OwnerAtBlock(address, id, blockHash)
+		},
+	)
+}
+
+func storeERC721OwnershipWithGetter(
+	contractAddress string,
+	tokenID *big.Int,
+	blockNumber string,
+	blockHash string,
+	enforceOrdering bool,
+	getOwner func(string, *big.Int) (string, error),
+) error {
 	if tokenID == nil {
 		return fmt.Errorf("tokenID required")
 	}
 	contractAddress = validation.ConvertToQAddress(contractAddress)
+	blockNumber, blockNumberInt, blockHash, err := canonicalTokenBalanceObservation(
+		blockNumber,
+		blockHash,
+	)
+	if err != nil {
+		return err
+	}
+	idStr := tokenID.String()
+	observationFilter := bson.M{
+		"contractAddress": contractAddress,
+		"tokenID":         idStr,
+		"tokenStandard":   rpc.StandardERC721,
+	}
+	if enforceOrdering {
+		stale, err := hasNewerTokenBalanceObservation(observationFilter, blockNumberInt)
+		if err != nil {
+			return err
+		}
+		if stale {
+			configs.Logger.Debug("Skipping stale ERC-721 ownership observation",
+				zap.String("contract", contractAddress),
+				zap.String("tokenID", idStr),
+				zap.String("blockNumber", blockNumber),
+				zap.String("blockHash", blockHash))
+			return nil
+		}
+	}
 
 	configs.Logger.Debug("Refreshing ERC-721 ownership",
 		zap.String("contract", contractAddress),
 		zap.String("tokenID", tokenID.String()),
 		zap.String("blockNumber", blockNumber))
 
-	owner, err := rpc.GetERC721Owner(contractAddress, tokenID)
+	owner, err := getOwner(contractAddress, tokenID)
 	if err != nil {
 		// Transport / unmarshal failure. Preserve existing state.
 		configs.Logger.Warn("GetERC721Owner transport error; preserving existing balance state",
@@ -148,15 +384,13 @@ func StoreERC721Ownership(contractAddress string, tokenID *big.Int, blockNumber 
 		return err
 	}
 
-	collection := configs.GetTokenBalancesCollection()
+	collection := getTokenBalanceMutationStore()
 	if collection == nil {
 		return fmt.Errorf("token balances collection is nil")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-
-	idStr := tokenID.String()
 
 	// No current owner (burned / never minted): drop any stale row.
 	if owner == "" {
@@ -166,10 +400,11 @@ func StoreERC721Ownership(contractAddress string, tokenID *big.Int, blockNumber 
 			"tokenStandard":   rpc.StandardERC721,
 		})
 		if dErr != nil {
-			configs.Logger.Warn("Failed to delete stale ERC-721 ownership row",
+			configs.Logger.Error("Failed to delete stale ERC-721 ownership row",
 				zap.String("contract", contractAddress),
 				zap.String("tokenID", idStr),
 				zap.Error(dErr))
+			return fmt.Errorf("delete burned ERC-721 ownership row: %w", dErr)
 		}
 		return nil
 	}
@@ -185,10 +420,11 @@ func StoreERC721Ownership(contractAddress string, tokenID *big.Int, blockNumber 
 		"holderAddress":   bson.M{"$ne": owner},
 	})
 	if dErr != nil {
-		configs.Logger.Warn("Failed to delete stale ERC-721 ownership row(s) for prior holder",
+		configs.Logger.Error("Failed to delete stale ERC-721 ownership row(s) for prior holder",
 			zap.String("contract", contractAddress),
 			zap.String("tokenID", idStr),
 			zap.Error(dErr))
+		return fmt.Errorf("delete prior ERC-721 ownership row: %w", dErr)
 	}
 
 	// Upsert the current owner's row.
@@ -197,17 +433,26 @@ func StoreERC721Ownership(contractAddress string, tokenID *big.Int, blockNumber 
 		"holderAddress":   owner,
 		"tokenID":         idStr,
 	}
-	update := bson.M{
-		"$set": bson.M{
-			"contractAddress": contractAddress,
-			"holderAddress":   owner,
-			"tokenID":         idStr,
-			"tokenStandard":   rpc.StandardERC721,
-			"balance":         "1",
-			"blockNumber":     blockNumber,
-			"updatedAt":       time.Now().UTC().Format(time.RFC3339),
-		},
+	set := bson.M{
+		"contractAddress": contractAddress,
+		"holderAddress":   owner,
+		"tokenID":         idStr,
+		"tokenStandard":   rpc.StandardERC721,
+		"balance":         "1",
+		"blockNumber":     blockNumber,
+		"blockNumberInt":  blockNumberInt,
+		"updatedAt":       time.Now().UTC().Format(time.RFC3339),
 	}
+	unset := bson.M{
+		"balanceStale":   "",
+		"balanceStaleAt": "",
+	}
+	if blockHash != "" {
+		set["blockHash"] = blockHash
+	} else {
+		unset["blockHash"] = ""
+	}
+	update := bson.M{"$set": set, "$unset": unset}
 	if _, err := collection.UpdateOne(ctx, filter, update, options.Update().SetUpsert(true)); err != nil {
 		configs.Logger.Error("Failed to upsert ERC-721 ownership row",
 			zap.String("contract", contractAddress),
@@ -232,6 +477,48 @@ func StoreERC721Ownership(contractAddress string, tokenID *big.Int, blockNumber 
 // TODO(scale): One RPC call per (from, to) side per ERC-1155 transfer. See
 // GetERC1155Balance for the accumulator/reconciliation note.
 func StoreERC1155Balance(contractAddress, holderAddress string, tokenID *big.Int, blockNumber string) error {
+	return storeERC1155BalanceWithGetter(
+		contractAddress,
+		holderAddress,
+		tokenID,
+		blockNumber,
+		"",
+		false,
+		getERC1155ForBalanceStore,
+	)
+}
+
+// StoreERC1155BalanceAtBlock refreshes one holder balance from the exact
+// state selected by blockHash.
+func StoreERC1155BalanceAtBlock(
+	contractAddress string,
+	holderAddress string,
+	tokenID *big.Int,
+	blockNumber string,
+	blockHash string,
+) error {
+	return storeERC1155BalanceWithGetter(
+		contractAddress,
+		holderAddress,
+		tokenID,
+		blockNumber,
+		blockHash,
+		true,
+		func(address string, holder string, id *big.Int) (*big.Int, error) {
+			return rpc.GetERC1155BalanceAtBlock(address, holder, id, blockHash)
+		},
+	)
+}
+
+func storeERC1155BalanceWithGetter(
+	contractAddress string,
+	holderAddress string,
+	tokenID *big.Int,
+	blockNumber string,
+	blockHash string,
+	enforceOrdering bool,
+	getBalance func(string, string, *big.Int) (*big.Int, error),
+) error {
 	if tokenID == nil {
 		return fmt.Errorf("tokenID required")
 	}
@@ -242,6 +529,35 @@ func StoreERC1155Balance(contractAddress, holderAddress string, tokenID *big.Int
 	if validation.IsZeroAddress(holderAddress) {
 		return nil
 	}
+	blockNumber, blockNumberInt, blockHash, err := canonicalTokenBalanceObservation(
+		blockNumber,
+		blockHash,
+	)
+	if err != nil {
+		return err
+	}
+	idStr := tokenID.String()
+	filter := bson.M{
+		"contractAddress": contractAddress,
+		"holderAddress":   holderAddress,
+		"tokenID":         idStr,
+		"tokenStandard":   rpc.StandardERC1155,
+	}
+	if enforceOrdering {
+		stale, err := hasNewerTokenBalanceObservation(filter, blockNumberInt)
+		if err != nil {
+			return err
+		}
+		if stale {
+			configs.Logger.Debug("Skipping stale ERC-1155 balance observation",
+				zap.String("contract", contractAddress),
+				zap.String("holder", holderAddress),
+				zap.String("tokenID", idStr),
+				zap.String("blockNumber", blockNumber),
+				zap.String("blockHash", blockHash))
+			return nil
+		}
+	}
 
 	configs.Logger.Debug("Refreshing ERC-1155 balance",
 		zap.String("contract", contractAddress),
@@ -249,7 +565,7 @@ func StoreERC1155Balance(contractAddress, holderAddress string, tokenID *big.Int
 		zap.String("tokenID", tokenID.String()),
 		zap.String("blockNumber", blockNumber))
 
-	balance, err := rpc.GetERC1155Balance(contractAddress, holderAddress, tokenID)
+	balance, err := getBalance(contractAddress, holderAddress, tokenID)
 	if err != nil {
 		configs.Logger.Warn("GetERC1155Balance transport error; preserving existing balance state",
 			zap.String("contract", contractAddress),
@@ -259,7 +575,7 @@ func StoreERC1155Balance(contractAddress, holderAddress string, tokenID *big.Int
 		return err
 	}
 
-	collection := configs.GetTokenBalancesCollection()
+	collection := getTokenBalanceMutationStore()
 	if collection == nil {
 		return fmt.Errorf("token balances collection is nil")
 	}
@@ -267,36 +583,39 @@ func StoreERC1155Balance(contractAddress, holderAddress string, tokenID *big.Int
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	idStr := tokenID.String()
-	filter := bson.M{
-		"contractAddress": contractAddress,
-		"holderAddress":   holderAddress,
-		"tokenID":         idStr,
-	}
-
 	// Sparse storage: delete the row when balance is zero.
 	if balance == nil || balance.Sign() == 0 {
-		if _, dErr := collection.DeleteOne(ctx, filter); dErr != nil && dErr != mongo.ErrNoDocuments {
-			configs.Logger.Warn("Failed to delete zero ERC-1155 balance row",
+		if _, dErr := collection.DeleteOne(ctx, filter); dErr != nil {
+			configs.Logger.Error("Failed to delete zero ERC-1155 balance row",
 				zap.String("contract", contractAddress),
 				zap.String("holder", holderAddress),
 				zap.String("tokenID", idStr),
 				zap.Error(dErr))
+			return fmt.Errorf("delete zero ERC-1155 balance row: %w", dErr)
 		}
 		return nil
 	}
 
-	update := bson.M{
-		"$set": bson.M{
-			"contractAddress": contractAddress,
-			"holderAddress":   holderAddress,
-			"tokenID":         idStr,
-			"tokenStandard":   rpc.StandardERC1155,
-			"balance":         balance.String(),
-			"blockNumber":     blockNumber,
-			"updatedAt":       time.Now().UTC().Format(time.RFC3339),
-		},
+	set := bson.M{
+		"contractAddress": contractAddress,
+		"holderAddress":   holderAddress,
+		"tokenID":         idStr,
+		"tokenStandard":   rpc.StandardERC1155,
+		"balance":         balance.String(),
+		"blockNumber":     blockNumber,
+		"blockNumberInt":  blockNumberInt,
+		"updatedAt":       time.Now().UTC().Format(time.RFC3339),
 	}
+	unset := bson.M{
+		"balanceStale":   "",
+		"balanceStaleAt": "",
+	}
+	if blockHash != "" {
+		set["blockHash"] = blockHash
+	} else {
+		unset["blockHash"] = ""
+	}
+	update := bson.M{"$set": set, "$unset": unset}
 	if _, err := collection.UpdateOne(ctx, filter, update, options.Update().SetUpsert(true)); err != nil {
 		configs.Logger.Error("Failed to upsert ERC-1155 balance row",
 			zap.String("contract", contractAddress),

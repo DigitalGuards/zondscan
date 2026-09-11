@@ -7,21 +7,46 @@ import (
 	"QRL2MongoDB/utils"
 	"QRL2MongoDB/validation"
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
 )
 
-// StoreTokenTransfer stores a token transfer event in the database
+// StoreTokenTransfer atomically inserts or refreshes one canonical transfer
+// identity. Refreshing an existing row repairs legacy rows that have no
+// blockHash and rebinds a replayed transaction to the current canonical block.
 func StoreTokenTransfer(transfer models.TokenTransfer) error {
 	// Get explicit reference to the tokenTransfers collection
 	collection := configs.GetTokenTransfersCollection()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	var err error
+	transfer.BlockNumber, err = canonicalHexQuantity(transfer.BlockNumber, "token transfer block number")
+	if err != nil {
+		return err
+	}
+	transfer.BlockHash, err = canonicalFixedHash(transfer.BlockHash, "token transfer block hash")
+	if err != nil {
+		return err
+	}
+	transfer.TxHash, err = canonicalFixedHash(transfer.TxHash, "token transfer transaction hash")
+	if err != nil {
+		return err
+	}
+	if transfer.TransferType == "event" {
+		transfer.LogIndex, err = canonicalHexQuantity(transfer.LogIndex, "token transfer log index")
+		if err != nil {
+			return err
+		}
+	}
 
 	// Additional validation and normalization before inserting
 	if transfer.From == "" {
@@ -36,10 +61,22 @@ func StoreTokenTransfer(transfer models.TokenTransfer) error {
 	transfer.From = validation.ConvertToQAddress(transfer.From)
 	transfer.To = validation.ConvertToQAddress(transfer.To)
 	transfer.ContractAddress = validation.ConvertToQAddress(transfer.ContractAddress)
+	if !validation.IsValidAddress(transfer.ContractAddress) {
+		return fmt.Errorf("invalid token transfer contract address: %s", transfer.ContractAddress)
+	}
+	if !validation.IsValidAddress(transfer.From) {
+		return fmt.Errorf("invalid token transfer sender address: %s", transfer.From)
+	}
+	if !validation.IsValidAddress(transfer.To) {
+		return fmt.Errorf("invalid token transfer recipient address: %s", transfer.To)
+	}
 
+	blockNumber := new(big.Int)
+	blockNumber.SetString(strings.TrimPrefix(transfer.BlockNumber, "0x"), 16)
+	if !blockNumber.IsInt64() {
+		return fmt.Errorf("token transfer block number exceeds int64: %s", transfer.BlockNumber)
+	}
 	// Populate the numeric block number so sort operations order correctly.
-	// BlockNumber is the raw hex string; utils.HexToInt64 returns 0 on any
-	// parse error.
 	transfer.BlockNumberInt = utils.HexToInt64(transfer.BlockNumber)
 
 	// Debug-level log for per-record operations; Info is reserved for batch summaries.
@@ -49,7 +86,44 @@ func StoreTokenTransfer(transfer models.TokenTransfer) error {
 		zap.String("to", transfer.To),
 		zap.String("txHash", transfer.TxHash))
 
-	_, err := collection.InsertOne(ctx, transfer)
+	filter := tokenTransferIdentityFilter(
+		transfer.TxHash,
+		transfer.ContractAddress,
+		transfer.LogIndex,
+		transfer.TokenID,
+	)
+	if transfer.TransferType == "event" && transfer.LogIndex != "" {
+		// Rows written before logIndex was introduced cannot be mapped safely
+		// when one transaction emitted multiple Transfer events. Canonical replay
+		// reconstructs every event from exact block logs, so remove only the
+		// ambiguous event alias before writing its indexed replacement. Preserve
+		// direct-calldata rows, whose empty logIndex is an intentional identity.
+		legacyResult, legacyErr := collection.DeleteMany(ctx, bson.M{
+			"txHash":          transfer.TxHash,
+			"contractAddress": transfer.ContractAddress,
+			"transferType":    bson.M{"$ne": "direct"},
+			"$or": bson.A{
+				bson.M{"logIndex": ""},
+				bson.M{"logIndex": nil},
+				bson.M{"logIndex": bson.M{"$exists": false}},
+			},
+		})
+		if legacyErr != nil {
+			return fmt.Errorf("remove ambiguous legacy token transfer alias: %w", legacyErr)
+		}
+		if legacyResult.DeletedCount > 0 {
+			configs.Logger.Info("Removed ambiguous legacy token transfer alias before canonical replay",
+				zap.String("txHash", transfer.TxHash),
+				zap.String("contract", transfer.ContractAddress),
+				zap.Int64("deleted", legacyResult.DeletedCount))
+		}
+	}
+	result, err := collection.UpdateOne(
+		ctx,
+		filter,
+		bson.M{"$set": transfer},
+		options.Update().SetUpsert(true),
+	)
 	if err != nil {
 		configs.Logger.Error("Failed to store token transfer",
 			zap.String("txHash", transfer.TxHash),
@@ -60,8 +134,39 @@ func StoreTokenTransfer(transfer models.TokenTransfer) error {
 
 	configs.Logger.Debug("Successfully stored token transfer in database",
 		zap.String("token", transfer.TokenSymbol),
-		zap.String("txHash", transfer.TxHash))
+		zap.String("txHash", transfer.TxHash),
+		zap.Int64("matched", result.MatchedCount),
+		zap.Int64("upserted", result.UpsertedCount))
 	return nil
+}
+
+func tokenTransferIdentityFilter(txHash, contractAddress, logIndex, tokenID string) bson.M {
+	filter := bson.M{
+		"txHash":          txHash,
+		"contractAddress": contractAddress,
+	}
+
+	andClauses := []bson.M{}
+	if logIndex == "" {
+		andClauses = append(andClauses, bson.M{"$or": []bson.M{
+			{"logIndex": ""},
+			{"logIndex": bson.M{"$exists": false}},
+		}})
+	} else {
+		filter["logIndex"] = logIndex
+	}
+	if tokenID == "" {
+		andClauses = append(andClauses, bson.M{"$or": []bson.M{
+			{"tokenID": ""},
+			{"tokenID": bson.M{"$exists": false}},
+		}})
+	} else {
+		filter["tokenID"] = tokenID
+	}
+	if len(andClauses) > 0 {
+		filter["$and"] = andClauses
+	}
+	return filter
 }
 
 // TokenTransferExists checks if a specific token transfer is already
@@ -83,33 +188,7 @@ func TokenTransferExists(txHash, contractAddress, logIndex, tokenID string) (boo
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	filter := bson.M{
-		"txHash":          txHash,
-		"contractAddress": contractAddress,
-	}
-
-	andClauses := []bson.M{}
-	if logIndex == "" {
-		andClauses = append(andClauses, bson.M{"$or": []bson.M{
-			{"logIndex": ""},
-			{"logIndex": bson.M{"$exists": false}},
-		}})
-	} else {
-		filter["logIndex"] = logIndex
-	}
-	if tokenID == "" {
-		// `omitempty` on the new TokenID field strips it for ERC-20 writes,
-		// and pre-NFT rows never had the field, both must match this clause.
-		andClauses = append(andClauses, bson.M{"$or": []bson.M{
-			{"tokenID": ""},
-			{"tokenID": bson.M{"$exists": false}},
-		}})
-	} else {
-		filter["tokenID"] = tokenID
-	}
-	if len(andClauses) > 0 {
-		filter["$and"] = andClauses
-	}
+	filter := tokenTransferIdentityFilter(txHash, contractAddress, logIndex, tokenID)
 
 	count, err := collection.CountDocuments(ctx, filter)
 	if err != nil {
@@ -122,19 +201,411 @@ func TokenTransferExists(txHash, contractAddress, logIndex, tokenID string) (boo
 		return false, err
 	}
 
-	return count > 0, nil
+	if count > 1 {
+		return false, fmt.Errorf(
+			"token transfer identity matches %d rows: %s %s %s %s",
+			count,
+			txHash,
+			contractAddress,
+			logIndex,
+			tokenID,
+		)
+	}
+	return count == 1, nil
 }
 
-// ProcessBlockTokenTransfers processes all token-transfer events in a block
-// across the three supported standards (ERC-20, ERC-721, ERC-1155).
-//
-// We pull all three event signatures in a single qrl_getLogs call (OR-matched
-// on topic[0]), classify the emitting contract via supportsInterface, then
-// dispatch to a per-standard decoder. ERC-20/721 share the same topic[0] so
-// the (standard, topicCount) tuple is the disambiguator, relying on the
-// contract's persisted classification rather than per-event guesswork
-// closes the topic-0 ambiguity surface.
-func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error {
+type canonicalTokenBlock struct {
+	number           string
+	hash             string
+	timestamp        string
+	transactionIndex map[string]string
+	transactionSet   []string
+}
+
+type plannedTokenLog struct {
+	standard string
+	rows     []models.TokenTransfer
+}
+
+func canonicalTokenBlockIdentity(block models.ZondDatabaseBlock) (canonicalTokenBlock, error) {
+	number, err := canonicalHexQuantity(block.Result.Number, "token block number")
+	if err != nil {
+		return canonicalTokenBlock{}, err
+	}
+	hash, err := canonicalFixedHash(block.Result.Hash, "token block hash")
+	if err != nil {
+		return canonicalTokenBlock{}, err
+	}
+	timestamp, err := canonicalHexQuantity(block.Result.Timestamp, "token block timestamp")
+	if err != nil {
+		return canonicalTokenBlock{}, err
+	}
+
+	identity := canonicalTokenBlock{
+		number:           number,
+		hash:             hash,
+		timestamp:        timestamp,
+		transactionIndex: make(map[string]string, len(block.Result.Transactions)),
+		transactionSet:   make([]string, 0, len(block.Result.Transactions)),
+	}
+	seenIndexes := make(map[string]struct{}, len(block.Result.Transactions))
+	for position, transaction := range block.Result.Transactions {
+		txHash, err := canonicalFixedHash(transaction.Hash, "block transaction hash")
+		if err != nil {
+			return canonicalTokenBlock{}, fmt.Errorf("transaction %d: %w", position, err)
+		}
+		txBlockNumber, err := canonicalHexQuantity(transaction.BlockNumber, "transaction block number")
+		if err != nil {
+			return canonicalTokenBlock{}, fmt.Errorf("transaction %s: %w", txHash, err)
+		}
+		if txBlockNumber != number {
+			return canonicalTokenBlock{}, fmt.Errorf(
+				"transaction %s block number %s does not match block %s",
+				txHash,
+				txBlockNumber,
+				number,
+			)
+		}
+		txBlockHash, err := canonicalFixedHash(transaction.BlockHash, "transaction block hash")
+		if err != nil {
+			return canonicalTokenBlock{}, fmt.Errorf("transaction %s: %w", txHash, err)
+		}
+		if txBlockHash != hash {
+			return canonicalTokenBlock{}, fmt.Errorf(
+				"transaction %s block hash %s does not match block %s",
+				txHash,
+				txBlockHash,
+				hash,
+			)
+		}
+		txIndex, err := canonicalHexQuantity(transaction.TransactionIndex, "transaction index")
+		if err != nil {
+			return canonicalTokenBlock{}, fmt.Errorf("transaction %s: %w", txHash, err)
+		}
+		expectedIndex := "0x" + new(big.Int).SetInt64(int64(position)).Text(16)
+		if txIndex != expectedIndex {
+			return canonicalTokenBlock{}, fmt.Errorf(
+				"transaction %s index %s does not match position %s",
+				txHash,
+				txIndex,
+				expectedIndex,
+			)
+		}
+		if _, exists := identity.transactionIndex[txHash]; exists {
+			return canonicalTokenBlock{}, fmt.Errorf("duplicate transaction hash in block: %s", txHash)
+		}
+		if _, exists := seenIndexes[txIndex]; exists {
+			return canonicalTokenBlock{}, fmt.Errorf("duplicate transaction index in block: %s", txIndex)
+		}
+		seenIndexes[txIndex] = struct{}{}
+		identity.transactionIndex[txHash] = txIndex
+		identity.transactionSet = append(identity.transactionSet, txHash+"@"+txIndex)
+	}
+	return identity, nil
+}
+
+func normalizeTokenBlockLogs(
+	logs []models.Log,
+	identity canonicalTokenBlock,
+) ([]models.Log, error) {
+	normalized := make([]models.Log, len(logs))
+	seenLogIndexes := make(map[string]struct{}, len(logs))
+	for position, log := range logs {
+		if log.Removed {
+			return nil, fmt.Errorf("token log %d is marked removed", position)
+		}
+		blockNumber, err := canonicalHexQuantity(log.BlockNumber, "log block number")
+		if err != nil {
+			return nil, fmt.Errorf("token log %d: %w", position, err)
+		}
+		if blockNumber != identity.number {
+			return nil, fmt.Errorf("token log %d block number %s does not match %s",
+				position, blockNumber, identity.number)
+		}
+		blockHash, err := canonicalFixedHash(log.BlockHash, "log block hash")
+		if err != nil {
+			return nil, fmt.Errorf("token log %d: %w", position, err)
+		}
+		if blockHash != identity.hash {
+			return nil, fmt.Errorf("token log %d block hash %s does not match %s",
+				position, blockHash, identity.hash)
+		}
+		txHash, err := canonicalFixedHash(log.TransactionHash, "log transaction hash")
+		if err != nil {
+			return nil, fmt.Errorf("token log %d: %w", position, err)
+		}
+		expectedTxIndex, member := identity.transactionIndex[txHash]
+		if !member {
+			return nil, fmt.Errorf("token log %d transaction %s is absent from block %s",
+				position, txHash, identity.number)
+		}
+		txIndex, err := canonicalHexQuantity(log.TransactionIndex, "log transaction index")
+		if err != nil {
+			return nil, fmt.Errorf("token log %d: %w", position, err)
+		}
+		if txIndex != expectedTxIndex {
+			return nil, fmt.Errorf("token log %d transaction index %s does not match %s",
+				position, txIndex, expectedTxIndex)
+		}
+		logIndex, err := canonicalHexQuantity(log.LogIndex, "log index")
+		if err != nil {
+			return nil, fmt.Errorf("token log %d: %w", position, err)
+		}
+		if _, exists := seenLogIndexes[logIndex]; exists {
+			return nil, fmt.Errorf("duplicate token log index in block: %s", logIndex)
+		}
+		seenLogIndexes[logIndex] = struct{}{}
+
+		emitter := validation.ConvertToQAddress(log.Address)
+		if !validation.IsValidAddress(emitter) {
+			return nil, fmt.Errorf("token log %d has invalid emitter: %s", position, log.Address)
+		}
+		if len(log.Topics) == 0 {
+			return nil, fmt.Errorf("token log %d has no event topic", position)
+		}
+		for topicIndex, topic := range log.Topics {
+			topic = strings.ToLower(topic)
+			if err := validation.ValidateHexString(topic, validation.AddressLength); err != nil {
+				return nil, fmt.Errorf("token log %d topic %d: %w", position, topicIndex, err)
+			}
+			log.Topics[topicIndex] = topic
+		}
+		topic0 := log.Topics[0]
+		switch topic0 {
+		case rpc.TransferEventSignature, rpc.TransferSingleEventSignature, rpc.TransferBatchEventSignature:
+		default:
+			return nil, fmt.Errorf("token log %d has unexpected event signature %s", position, topic0)
+		}
+		data := strings.ToLower(log.Data)
+		if !validation.IsValidHexString(data) || (len(data)-2)%2 != 0 {
+			return nil, fmt.Errorf("token log %d has invalid data: %s", position, log.Data)
+		}
+
+		log.Address = emitter
+		log.BlockNumber = blockNumber
+		log.BlockHash = blockHash
+		log.TransactionHash = txHash
+		log.TransactionIndex = txIndex
+		log.LogIndex = logIndex
+		log.Data = data
+		normalized[position] = log
+	}
+	return normalized, nil
+}
+
+func planTokenBlockLogs(
+	logs []models.Log,
+	identity canonicalTokenBlock,
+	processingFence func() error,
+) ([]plannedTokenLog, []models.TokenEventDeadLetter, error) {
+	return planTokenBlockLogsWithClassification(
+		logs,
+		identity,
+		processingFence,
+		prepareContractClassification,
+		persistPreparedContractClassification,
+		StoreTokenEventDeadLetter,
+	)
+}
+
+func planTokenBlockLogsWithClassification(
+	logs []models.Log,
+	identity canonicalTokenBlock,
+	processingFence func() error,
+	prepare func(string, string, string, string) (preparedContractClassification, error),
+	persist func(preparedContractClassification) error,
+	storeDeadLetter func(models.TokenEventDeadLetter) error,
+) ([]plannedTokenLog, []models.TokenEventDeadLetter, error) {
+	classifications := make(map[string]preparedContractClassification)
+	preparedToPersist := make([]preparedContractClassification, 0)
+	plans := make([]plannedTokenLog, 0, len(logs))
+	deadLetters := make([]models.TokenEventDeadLetter, 0)
+	seenRows := make(map[string]struct{})
+	for _, log := range logs {
+		classified, exists := classifications[log.Address]
+		if !exists {
+			var err error
+			classified, err = prepare(
+				log.Address,
+				identity.number,
+				identity.hash,
+				log.TransactionHash,
+			)
+			if err != nil {
+				return nil, nil, err
+			}
+			classifications[log.Address] = classified
+			if classified.persist {
+				preparedToPersist = append(preparedToPersist, classified)
+			}
+		}
+		if classified.standard == "" {
+			continue
+		}
+		if classified.contract == nil {
+			return nil, nil, fmt.Errorf("classified token contract %s has no metadata row", log.Address)
+		}
+		rows, err := decodeTransferLog(
+			log,
+			classified.contract,
+			classified.standard,
+			identity.number,
+			identity.hash,
+			identity.timestamp,
+		)
+		if err != nil {
+			deadLetters = append(deadLetters, models.TokenEventDeadLetter{
+				BlockNumber:   identity.number,
+				BlockHash:     identity.hash,
+				TxHash:        log.TransactionHash,
+				LogIndex:      log.LogIndex,
+				Emitter:       log.Address,
+				Topic0:        log.Topics[0],
+				TokenStandard: classified.standard,
+				Reason: boundedTokenEventDeadLetterReason(fmt.Sprintf(
+					"deterministic token event decode rejected: %v",
+					err,
+				)),
+			})
+			continue
+		}
+		for _, row := range rows {
+			key := strings.Join([]string{row.TxHash, row.ContractAddress, row.LogIndex, row.TokenID}, "|")
+			if _, exists := seenRows[key]; exists {
+				return nil, nil, fmt.Errorf("duplicate decoded token transfer identity: %s", key)
+			}
+			seenRows[key] = struct{}{}
+		}
+		plans = append(plans, plannedTokenLog{standard: classified.standard, rows: rows})
+	}
+	for _, deadLetter := range deadLetters {
+		if err := checkTokenProcessingFence(processingFence, "store token event dead-letter"); err != nil {
+			return nil, nil, err
+		}
+		if err := storeDeadLetter(deadLetter); err != nil {
+			return nil, nil, err
+		}
+	}
+	for _, classification := range preparedToPersist {
+		if err := checkTokenProcessingFence(processingFence, "persist contract classification"); err != nil {
+			return nil, nil, err
+		}
+		if err := persist(classification); err != nil {
+			return nil, nil, err
+		}
+	}
+	return plans, deadLetters, nil
+}
+
+func checkTokenProcessingFence(processingFence func() error, phase string) error {
+	if processingFence == nil {
+		return nil
+	}
+	if err := processingFence(); err != nil {
+		return fmt.Errorf("token processing fence before %s: %w", phase, err)
+	}
+	return nil
+}
+
+func refreshTokenTransferState(row models.TokenTransfer, standard string) error {
+	var errs []error
+	switch standard {
+	case rpc.StandardERC20:
+		if err := StoreTokenBalanceAtBlock(
+			row.ContractAddress,
+			row.From,
+			row.Amount,
+			row.BlockNumber,
+			row.BlockHash,
+		); err != nil {
+			errs = append(errs, fmt.Errorf("refresh sender token balance: %w", err))
+		}
+		if err := StoreTokenBalanceAtBlock(
+			row.ContractAddress,
+			row.To,
+			row.Amount,
+			row.BlockNumber,
+			row.BlockHash,
+		); err != nil {
+			errs = append(errs, fmt.Errorf("refresh recipient token balance: %w", err))
+		}
+	case rpc.StandardERC721:
+		id, ok := new(big.Int).SetString(row.TokenID, 10)
+		if !ok {
+			return fmt.Errorf("invalid ERC-721 token ID: %s", row.TokenID)
+		}
+		if err := StoreERC721OwnershipAtBlock(
+			row.ContractAddress,
+			id,
+			row.BlockNumber,
+			row.BlockHash,
+		); err != nil {
+			errs = append(errs, fmt.Errorf("refresh ERC-721 ownership: %w", err))
+		}
+		if err := StubTokenMetadata(
+			context.Background(),
+			row.ContractAddress,
+			row.TokenID,
+			rpc.StandardERC721,
+		); err != nil {
+			errs = append(errs, fmt.Errorf("upsert ERC-721 metadata stub: %w", err))
+		}
+	case rpc.StandardERC1155:
+		id, ok := new(big.Int).SetString(row.TokenID, 10)
+		if !ok {
+			return fmt.Errorf("invalid ERC-1155 token ID: %s", row.TokenID)
+		}
+		if err := StoreERC1155BalanceAtBlock(
+			row.ContractAddress,
+			row.From,
+			id,
+			row.BlockNumber,
+			row.BlockHash,
+		); err != nil {
+			errs = append(errs, fmt.Errorf("refresh ERC-1155 sender balance: %w", err))
+		}
+		if err := StoreERC1155BalanceAtBlock(
+			row.ContractAddress,
+			row.To,
+			id,
+			row.BlockNumber,
+			row.BlockHash,
+		); err != nil {
+			errs = append(errs, fmt.Errorf("refresh ERC-1155 recipient balance: %w", err))
+		}
+		if err := StubTokenMetadata(
+			context.Background(),
+			row.ContractAddress,
+			row.TokenID,
+			rpc.StandardERC1155,
+		); err != nil {
+			errs = append(errs, fmt.Errorf("upsert ERC-1155 metadata stub: %w", err))
+		}
+	default:
+		return fmt.Errorf("unsupported token standard: %s", standard)
+	}
+	return errors.Join(errs...)
+}
+
+// ProcessBlockTokenTransfers processes every token event from one exact
+// complete canonical block. All log identities and decodes finish before any
+// transfer, balance, or metadata write starts. Every failure reaches the
+// durable block retry state through the caller.
+func ProcessBlockTokenTransfers(block models.ZondDatabaseBlock) error {
+	return ProcessBlockTokenTransfersWithFence(block, nil)
+}
+
+// ProcessBlockTokenTransfersWithFence processes one exact block while
+// renewing and checking the caller's durable ownership fence before every
+// mutation phase. A nil fence retains the historical direct-call behavior.
+func ProcessBlockTokenTransfersWithFence(
+	block models.ZondDatabaseBlock,
+	processingFence func() error,
+) error {
+	identity, err := canonicalTokenBlockIdentity(block)
+	if err != nil {
+		return err
+	}
 	sigs := []string{
 		rpc.TransferEventSignature,       // ERC-20 + ERC-721
 		rpc.TransferSingleEventSignature, // ERC-1155
@@ -142,168 +613,93 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 	}
 
 	configs.Logger.Info("Searching for token transfers",
-		zap.String("blockNumber", blockNumber),
+		zap.String("blockNumber", identity.number),
+		zap.String("blockHash", identity.hash),
 		zap.Strings("eventSignatures", sigs))
 
-	response, err := rpc.ZondGetBlockLogs(blockNumber, sigs)
+	response, err := rpc.ZondGetBlockLogsForBlock(identity.number, identity.hash, sigs)
 	if err != nil {
-		configs.Logger.Error("Failed to get logs for block",
-			zap.String("blockNumber", blockNumber),
-			zap.Error(err))
 		return err
 	}
-
-	if response == nil || len(response.Result) == 0 {
+	if response == nil {
+		return fmt.Errorf("qrl_getLogs returned a nil response for block %s %s", identity.number, identity.hash)
+	}
+	if response.Result == nil {
+		return fmt.Errorf("qrl_getLogs returned a null result for block %s %s", identity.number, identity.hash)
+	}
+	logs, err := normalizeTokenBlockLogs(response.Result, identity)
+	if err != nil {
+		return err
+	}
+	if len(logs) == 0 {
 		configs.Logger.Debug("No token transfer logs found in block",
-			zap.String("blockNumber", blockNumber))
+			zap.String("blockNumber", identity.number))
 		return nil
 	}
+	plans, deadLetters, err := planTokenBlockLogs(logs, identity, processingFence)
+	if err != nil {
+		return err
+	}
+	for _, deadLetter := range deadLetters {
+		configs.Logger.Warn("Quarantined deterministic malformed token event",
+			zap.String("blockNumber", deadLetter.BlockNumber),
+			zap.String("blockHash", deadLetter.BlockHash),
+			zap.String("txHash", deadLetter.TxHash),
+			zap.String("logIndex", deadLetter.LogIndex),
+			zap.String("contract", deadLetter.Emitter),
+			zap.String("standard", deadLetter.TokenStandard),
+			zap.String("reason", deadLetter.Reason))
+	}
 
-	configs.Logger.Info("Found potential token transfer logs",
-		zap.String("blockNumber", blockNumber),
-		zap.Int("logCount", len(response.Result)))
-
-	tokenTransfersFound := 0
-	for _, log := range response.Result {
-		if len(log.Topics) < 3 {
-			configs.Logger.Debug("Skipping log with insufficient topics",
-				zap.String("txHash", log.TransactionHash),
-				zap.Int("topicCount", len(log.Topics)))
-			continue
-		}
-
-		contractAddress := log.Address
-		contract, standard := EnsureContractClassified(contractAddress, blockNumber, log.TransactionHash)
-		if standard == "" || contract == nil {
-			configs.Logger.Debug("Contract is not a recognised token standard, skipping",
-				zap.String("address", contractAddress))
-			continue
-		}
-
-		rows, decErr := decodeTransferLog(log, contract, standard, blockNumber, blockTimestamp)
-		if decErr != nil {
-			configs.Logger.Warn("Failed to decode transfer log",
-				zap.String("txHash", log.TransactionHash),
-				zap.String("contract", contractAddress),
-				zap.String("standard", standard),
-				zap.String("topic0", log.Topics[0]),
-				zap.Int("topicCount", len(log.Topics)),
-				zap.Error(decErr))
-			continue
-		}
-
-		for _, row := range rows {
+	stored := 0
+	var processingErrors []error
+	for _, plan := range plans {
+		for _, row := range plan.rows {
 			exists, err := TokenTransferExists(row.TxHash, row.ContractAddress, row.LogIndex, row.TokenID)
 			if err != nil {
-				configs.Logger.Error("Failed to check token transfer dedup",
-					zap.String("txHash", row.TxHash),
-					zap.Error(err))
+				processingErrors = append(processingErrors, fmt.Errorf(
+					"check token transfer %s %s: %w",
+					row.TxHash,
+					row.LogIndex,
+					err,
+				))
 				continue
 			}
-			if exists {
-				configs.Logger.Debug("Skipping duplicate token transfer",
-					zap.String("txHash", row.TxHash),
-					zap.String("logIndex", row.LogIndex),
-					zap.String("tokenID", row.TokenID))
-				continue
+			if err := checkTokenProcessingFence(processingFence, "store token transfer"); err != nil {
+				return errors.Join(errors.Join(processingErrors...), err)
 			}
-
 			if err := StoreTokenTransfer(row); err != nil {
-				configs.Logger.Error("Failed to store token transfer",
-					zap.String("txHash", row.TxHash),
-					zap.Error(err))
-				continue
+				processingErrors = append(processingErrors, fmt.Errorf(
+					"store token transfer %s %s: %w",
+					row.TxHash,
+					row.LogIndex,
+					err,
+				))
+			} else if !exists {
+				stored++
 			}
-			tokenTransfersFound++
-
-			// Per-standard balance maintenance.
-			//
-			// ERC-20: refresh sender + recipient via the existing helper
-			// (RPC-confirmed balanceOf, full-precision string storage).
-			//
-			// ERC-721: the row's transfer ALREADY happened on chain by the
-			// time we got the log. ownerOf is global truth, so a single
-			// StoreERC721Ownership call refreshes the (contract, tokenID)
-			// row to point at the new holder AND clears the prior holder's
-			// row through the single-owner-invariant branch.
-			//
-			// ERC-1155: refresh both sides of the transfer with balanceOf
-			// (per id). Zero balance deletes the row (sparse storage).
-			// Errors are logged but non-fatal, the underlying tokenTransfer
-			// row is already persisted, balance refresh is reconcilable
-			// next time the holder transacts.
-			switch standard {
-			case rpc.StandardERC20:
-				if err := StoreTokenBalance(contractAddress, row.From, row.Amount, blockNumber); err != nil {
-					configs.Logger.Error("Failed to update sender token balance",
-						zap.String("address", row.From),
-						zap.String("contractAddress", contractAddress),
-						zap.Error(err))
-				}
-				if err := StoreTokenBalance(contractAddress, row.To, row.Amount, blockNumber); err != nil {
-					configs.Logger.Error("Failed to update recipient token balance",
-						zap.String("address", row.To),
-						zap.String("contractAddress", contractAddress),
-						zap.Error(err))
-				}
-			case rpc.StandardERC721:
-				if id, ok := new(big.Int).SetString(row.TokenID, 10); ok {
-					if err := StoreERC721Ownership(contractAddress, id, blockNumber); err != nil {
-						configs.Logger.Warn("ERC-721 ownership refresh failed; will retry on next transfer",
-							zap.String("contractAddress", contractAddress),
-							zap.String("tokenID", row.TokenID),
-							zap.Error(err))
-					}
-					// Phase 3b: $setOnInsert a stub so the metadata fetcher
-					// finds this token on its next poll. Hot path; failure
-					// is non-fatal, the row already lives in tokenTransfers.
-					if err := StubTokenMetadata(context.Background(), contractAddress, row.TokenID, rpc.StandardERC721); err != nil {
-						configs.Logger.Debug("ERC-721 metadata stub upsert failed",
-							zap.String("contractAddress", contractAddress),
-							zap.String("tokenID", row.TokenID),
-							zap.Error(err))
-					}
-				} else {
-					configs.Logger.Warn("ERC-721 transfer row has unparseable tokenID; skipping ownership refresh",
-						zap.String("contractAddress", contractAddress),
-						zap.String("tokenID", row.TokenID))
-				}
-			case rpc.StandardERC1155:
-				if id, ok := new(big.Int).SetString(row.TokenID, 10); ok {
-					if err := StoreERC1155Balance(contractAddress, row.From, id, blockNumber); err != nil {
-						configs.Logger.Warn("ERC-1155 sender balance refresh failed",
-							zap.String("contractAddress", contractAddress),
-							zap.String("holder", row.From),
-							zap.String("tokenID", row.TokenID),
-							zap.Error(err))
-					}
-					if err := StoreERC1155Balance(contractAddress, row.To, id, blockNumber); err != nil {
-						configs.Logger.Warn("ERC-1155 recipient balance refresh failed",
-							zap.String("contractAddress", contractAddress),
-							zap.String("holder", row.To),
-							zap.String("tokenID", row.TokenID),
-							zap.Error(err))
-					}
-					if err := StubTokenMetadata(context.Background(), contractAddress, row.TokenID, rpc.StandardERC1155); err != nil {
-						configs.Logger.Debug("ERC-1155 metadata stub upsert failed",
-							zap.String("contractAddress", contractAddress),
-							zap.String("tokenID", row.TokenID),
-							zap.Error(err))
-					}
-				} else {
-					configs.Logger.Warn("ERC-1155 transfer row has unparseable tokenID; skipping balance refresh",
-						zap.String("contractAddress", contractAddress),
-						zap.String("tokenID", row.TokenID))
-				}
+			if err := checkTokenProcessingFence(processingFence, "refresh token state"); err != nil {
+				return errors.Join(errors.Join(processingErrors...), err)
+			}
+			if err := refreshTokenTransferState(row, plan.standard); err != nil {
+				processingErrors = append(processingErrors, fmt.Errorf(
+					"refresh token state %s %s: %w",
+					row.TxHash,
+					row.LogIndex,
+					err,
+				))
 			}
 		}
 	}
 
 	configs.Logger.Info("Finished processing token transfers",
-		zap.String("blockNumber", blockNumber),
-		zap.Int("transfersProcessed", tokenTransfersFound))
+		zap.String("blockNumber", identity.number),
+		zap.String("blockHash", identity.hash),
+		zap.Int("transfersStored", stored),
+		zap.Int("eventsQuarantined", len(deadLetters)),
+		zap.Int("errors", len(processingErrors)))
 
-	return nil
+	return errors.Join(processingErrors...)
 }
 
 // decodeTransferLog dispatches a transfer log to the correct per-standard
@@ -317,7 +713,7 @@ func ProcessBlockTokenTransfers(blockNumber string, blockTimestamp string) error
 func decodeTransferLog(
 	log models.Log,
 	contract *models.ContractInfo,
-	standard, blockNumber, blockTimestamp string,
+	standard, blockNumber, blockHash, blockTimestamp string,
 ) ([]models.TokenTransfer, error) {
 	if len(log.Topics) == 0 {
 		return nil, fmt.Errorf("log has no topics")
@@ -327,6 +723,7 @@ func decodeTransferLog(
 	base := models.TokenTransfer{
 		ContractAddress: log.Address,
 		BlockNumber:     blockNumber,
+		BlockHash:       blockHash,
 		TxHash:          log.TransactionHash,
 		LogIndex:        log.LogIndex,
 		Timestamp:       blockTimestamp,
@@ -408,13 +805,34 @@ func decodeERC1155TransferBatchRows(log models.Log, base models.TokenTransfer) (
 	}
 	fromQ := normalizeAddress(from)
 	toQ := normalizeAddress(to)
-	out := make([]models.TokenTransfer, len(ids))
+	type aggregate struct {
+		id    *big.Int
+		value *big.Int
+	}
+	aggregates := make([]aggregate, 0, len(ids))
+	positions := make(map[string]int, len(ids))
 	for i := range ids {
+		key := ids[i].String()
+		if position, exists := positions[key]; exists {
+			aggregates[position].value.Add(aggregates[position].value, values[i])
+			if aggregates[position].value.BitLen() > 256 {
+				return nil, fmt.Errorf("ERC-1155 batch value sum exceeds uint256 for token ID %s", key)
+			}
+			continue
+		}
+		positions[key] = len(aggregates)
+		aggregates = append(aggregates, aggregate{
+			id:    new(big.Int).Set(ids[i]),
+			value: new(big.Int).Set(values[i]),
+		})
+	}
+	out := make([]models.TokenTransfer, len(aggregates))
+	for i, item := range aggregates {
 		row := base
 		row.From = fromQ
 		row.To = toQ
-		row.Amount = values[i].String()
-		row.TokenID = ids[i].String()
+		row.Amount = item.value.String()
+		row.TokenID = item.id.String()
 		out[i] = row
 	}
 	return out, nil

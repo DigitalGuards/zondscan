@@ -2,6 +2,7 @@ package db
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -52,16 +53,18 @@ func TestNormalizeAddress(t *testing.T) {
 	// regardless of how the input arrived. Every Mongo query keyed by
 	// address goes through this, so it has to be air-tight against the
 	// three input forms users + RPC + frontend produce.
+	lower := strings.Repeat("abcdef01", 16)
+	upper := strings.ToUpper(lower)
 	cases := []struct {
 		name string
 		in   string
 		want string
 	}{
-		{"0x lowercase passes through stripped", "0xabcdef0123456789abcdef0123456789abcdef01", "Qabcdef0123456789abcdef0123456789abcdef01"},
-		{"0X uppercase prefix tolerated", "0XABCDEF0123456789ABCDEF0123456789ABCDEF01", "Qabcdef0123456789abcdef0123456789abcdef01"},
-		{"Q-prefix already canonical", "Qabcdef0123456789abcdef0123456789abcdef01", "Qabcdef0123456789abcdef0123456789abcdef01"},
-		{"q lowercase normalises to Q", "qABCDEF0123456789ABCDEF0123456789ABCDEF01", "Qabcdef0123456789abcdef0123456789abcdef01"},
-		{"bare hex gets Q prefix", "ABCDEF0123456789ABCDEF0123456789ABCDEF01", "Qabcdef0123456789abcdef0123456789abcdef01"},
+		{"0x lowercase passes through stripped", "0x" + lower, "Q" + lower},
+		{"0X uppercase prefix tolerated", "0X" + upper, "Q" + lower},
+		{"Q-prefix already canonical", "Q" + lower, "Q" + lower},
+		{"q lowercase normalises to Q", "q" + upper, "Q" + lower},
+		{"bare hex gets Q prefix", upper, "Q" + lower},
 		{"empty becomes Q", "", "Q"},
 	}
 	for _, tc := range cases {
@@ -77,8 +80,9 @@ func TestNormalizeAddress(t *testing.T) {
 func TestNormalizeAddressBoth(t *testing.T) {
 	// Slice form is used by Mongo $in queries; the canonical singleton
 	// shape lets us swap it in without touching call sites.
-	got := normalizeAddressBoth("0xabc")
-	want := []string{"Qabc"}
+	body := strings.Repeat("a", 128)
+	got := normalizeAddressBoth("0x" + body)
+	want := []string{"Q" + body}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("normalizeAddressBoth = %#v, want %#v", got, want)
 	}

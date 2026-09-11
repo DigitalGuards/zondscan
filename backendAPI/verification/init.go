@@ -5,7 +5,7 @@ import (
 	"sync"
 )
 
-// Process-wide default Verifier. nil when the runner isn't configured ,
+// Process-wide default Verifier. nil when the compiler registry is unavailable;
 // the routes layer must check Default() and return 503 in that case so
 // the rest of the backend boots normally.
 var (
@@ -23,9 +23,14 @@ func Init() error {
 		log.Printf("WARN: contract verification disabled, %v", err)
 		return err
 	}
+	next := &Verifier{Registry: reg}
 	defaultMu.Lock()
-	def = &Verifier{Registry: reg}
+	previous := def
+	def = next
 	defaultMu.Unlock()
+	if previous != nil {
+		_ = previous.Registry.Close()
+	}
 	return nil
 }
 
@@ -35,4 +40,17 @@ func Default() *Verifier {
 	defaultMu.RLock()
 	defer defaultMu.RUnlock()
 	return def
+}
+
+// Close releases the sealed compiler snapshots held by the process-wide
+// verifier. It is safe to call when verification was never initialized.
+func Close() error {
+	defaultMu.Lock()
+	previous := def
+	def = nil
+	defaultMu.Unlock()
+	if previous == nil {
+		return nil
+	}
+	return previous.Registry.Close()
 }

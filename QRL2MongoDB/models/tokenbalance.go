@@ -21,6 +21,8 @@ type TokenBalance struct {
 	HolderAddress   string             `bson:"holderAddress" json:"holderAddress"`
 	Balance         string             `bson:"balance" json:"balance"`         // decimal string for NFT counts, hex/decimal for ERC-20
 	BlockNumber     string             `bson:"blockNumber" json:"blockNumber"` // hex string
+	BlockNumberInt  int64              `bson:"blockNumberInt" json:"blockNumberInt"`
+	BlockHash       string             `bson:"blockHash,omitempty" json:"blockHash,omitempty"`
 	UpdatedAt       string             `bson:"updatedAt" json:"updatedAt"`
 	TokenID         string             `bson:"tokenID,omitempty" json:"tokenID,omitempty"`             // decimal uint256, empty for ERC-20
 	TokenStandard   string             `bson:"tokenStandard,omitempty" json:"tokenStandard,omitempty"` // ERC-20 | ERC-721 | ERC-1155

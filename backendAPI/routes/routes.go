@@ -12,7 +12,7 @@ import (
 )
 
 // routeCache absorbs concurrent traffic on read endpoints with a small TTL
-// (5-30 s depending on freshness needs). Singleflight inside the cache
+// (3-30 s depending on freshness needs). Singleflight inside the cache
 // guarantees only one goroutine recomputes a key when it expires, so
 // MongoDB never sees a "thundering herd" on cache miss.
 //
@@ -36,6 +36,8 @@ import (
 //	eta:<hash>                 5s  /pending-tx-eta/:hash     per-tx pending ETA, valid for one block window
 //	gas:summary                5s  /gas/summary              live gas snapshot
 //	gas:history:<range>       30s  /gas/history              precomputed time series; 30s is fine
+//	market:orderbook           3s  /market/orderbook         MEXC snapshot or short failure backoff
+//	qns:<deployment>:<name>   15s  /qns/resolve/:name        deployment checks and forward records
 //
 // Staleness contract:
 //   - Endpoints embedding `latestBlock` carry the cache window as their
@@ -110,11 +112,13 @@ func UserRoute(router *gin.Engine) {
 	// only verified contracts are analysed. Returns 503 when the
 	// Anthropic key isn't configured. Per-IP rate-limited (10/min).
 	RegisterContractExplainRoute(router)
+	RegisterQNSRoutes(router)
 
 	router.GET("/pending-transactions", handlePendingTransactions)
 	router.GET("/pending-transaction/:hash", handlePendingTransaction)
 	router.GET("/overview", handleOverview)
 	router.GET("/price-history", handlePriceHistory)
+	router.GET("/market/orderbook", handleMarketOrderBook)
 	router.POST("/getBalance", handleGetBalance)
 	router.GET("/txs", handleTxs)
 	router.GET("/walletdistribution/:query", handleWalletDistribution)

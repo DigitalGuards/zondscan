@@ -31,26 +31,54 @@ import {
 // canonical signature) so tests construct inputs the same way helpers.ts does.
 const keccakHex = (sig: string): string => bytesToHex(keccak_256(utf8ToBytes(sig)));
 
-// Pad a 20-byte address (without 0x / Q prefix) to a 32-byte topic slot.
-function addrTopic(hex40: string): string {
-  return '0x' + '0'.repeat(24) + hex40.toLowerCase();
+const ABI_WORD_HEX_LENGTH = 128;
+const UINT256_HEX_LENGTH = 64;
+const EVENT_TOPIC_PADDING = '0'.repeat(64);
+
+// A native QIP-55 address occupies a complete 64-byte word.
+function addrTopic(hex128: string): string {
+  return '0x' + hex128.toLowerCase();
 }
 
-// Encode a BigInt-able value as a 32-byte hex slot ("0x..."). Used for
+// Encode a BigInt-able uint256 in the low half of a 64-byte word. Used for
 // non-indexed event data + uint256 topics.
 function uintSlot(v: bigint | number): string {
-  return '0x' + BigInt(v).toString(16).padStart(64, '0');
+  return (
+    '0x' +
+    '0'.repeat(ABI_WORD_HEX_LENGTH - UINT256_HEX_LENGTH) +
+    BigInt(v).toString(16).padStart(UINT256_HEX_LENGTH, '0')
+  );
 }
 
-const TOPIC_TRANSFER = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
-const TOPIC_APPROVAL = '0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925';
-const TOPIC_APPROVAL_FOR_ALL = '0x17307eab39ab6107e8899845ad3d59bd9653f200f220920489ca2b5937696c31';
-const TOPIC_TRANSFER_SINGLE = '0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62';
-const TOPIC_TRANSFER_BATCH = '0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb';
+function fixedBytesSlot(hex: string): string {
+  return '0x' + hex.padEnd(ABI_WORD_HEX_LENGTH, '0');
+}
 
-const ADDR_A = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-const ADDR_B = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
-const ADDR_C = 'cccccccccccccccccccccccccccccccccccccccc';
+const TOPIC_TRANSFER =
+  '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' +
+  EVENT_TOPIC_PADDING;
+const TOPIC_APPROVAL =
+  '0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925' +
+  EVENT_TOPIC_PADDING;
+const TOPIC_APPROVAL_FOR_ALL =
+  '0x17307eab39ab6107e8899845ad3d59bd9653f200f220920489ca2b5937696c31' +
+  EVENT_TOPIC_PADDING;
+const TOPIC_TRANSFER_SINGLE =
+  '0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62' +
+  EVENT_TOPIC_PADDING;
+const TOPIC_TRANSFER_BATCH =
+  '0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb' +
+  EVENT_TOPIC_PADDING;
+
+const ADDR_A = 'a'.repeat(128);
+const ADDR_B = 'b'.repeat(128);
+const ADDR_C = 'c'.repeat(128);
+const Q_ADDR_A =
+  'QaaaAAaaaAAaAaaAaAAAAaAAAaAaAaAAaAaaAaaaaAAAAAAAAaAAAAaAaAAaaAAaaaaAaAAAAaaAaAAaaaaaaAaAAaaaaAaAaaaaAaaaAAAAaAAAAaAaAaaAAAaAaaaAA';
+const Q_ADDR_B =
+  'QBbBbbBBbBbBBBBbBbBbBBbBBBbBBBbBbBBBbbbBBbBBbBbbBBBBbBBbbbbbBbbBBbbBBBbbBBbbbBbBBbBBbbbbBBbBBBbBbBBbbBbbBBbBBBBbbBBbbbbBBBbbBbbBb';
+const Q_ADDR_C =
+  'QCCCccccCcCcCccCcCccCCCccCcCcCcccccCCccCccCccccCcCCcCcccCCcCcccccccCccCcCccccCCcCccCccCcccCcCCCccCcCccCcCccccccCcCcCcccCcCcCCCccC';
 
 // ─── decodeEventLog ─────────────────────────────────────────────────────
 
@@ -64,8 +92,8 @@ describe('decodeEventLog', () => {
     expect(decoded?.name).toBe('Transfer');
     expect(decoded?.standard).toBe('ERC-20');
     expect(decoded?.args).toHaveLength(3);
-    expect(decoded?.args[0]).toEqual({ label: 'from', type: 'address', value: 'Q' + ADDR_A });
-    expect(decoded?.args[1]).toEqual({ label: 'to', type: 'address', value: 'Q' + ADDR_B });
+    expect(decoded?.args[0]).toEqual({ label: 'from', type: 'address', value: Q_ADDR_A });
+    expect(decoded?.args[1]).toEqual({ label: 'to', type: 'address', value: Q_ADDR_B });
     expect(decoded?.args[2]).toEqual({ label: 'value', type: 'uint256', value: '1000' });
   });
 
@@ -123,7 +151,7 @@ describe('decodeEventLog', () => {
     );
     expect(decoded?.name).toBe('TransferSingle');
     expect(decoded?.standard).toBe('ERC-1155');
-    expect(decoded?.args[0]).toEqual({ label: 'operator', type: 'address', value: 'Q' + ADDR_C });
+    expect(decoded?.args[0]).toEqual({ label: 'operator', type: 'address', value: Q_ADDR_C });
     expect(decoded?.args[3]).toEqual({ label: 'id', type: 'uint256', value: '5' });
     expect(decoded?.args[4]).toEqual({ label: 'value', type: 'uint256', value: '100' });
   });
@@ -131,8 +159,8 @@ describe('decodeEventLog', () => {
   it('decodes TransferBatch (ERC-1155 dynamic arrays)', () => {
     // abi.encode(uint256[] ids, uint256[] values) with ids=[1,2], values=[10,20]
     // Layout (offsets in bytes from start of args block):
-    //   slot 0: ids offset      = 0x40 (64)
-    //   slot 1: values offset   = 0xa0 (160)
+    //   slot 0: ids offset      = 0x80 (128)
+    //   slot 1: values offset   = 0x140 (320)
     //   slot 2: ids length      = 2
     //   slot 3: ids[0]          = 1
     //   slot 4: ids[1]          = 2
@@ -140,8 +168,8 @@ describe('decodeEventLog', () => {
     //   slot 6: values[0]       = 10
     //   slot 7: values[1]       = 20
     const data = '0x' + [
-      uintSlot(0x40),
-      uintSlot(0xa0),
+      uintSlot(0x80),
+      uintSlot(0x140),
       uintSlot(2),
       uintSlot(1),
       uintSlot(2),
@@ -160,7 +188,7 @@ describe('decodeEventLog', () => {
   });
 
   it('returns null for an unknown signature when no ABI is provided', () => {
-    const unknown = '0x' + 'f'.repeat(64);
+    const unknown = '0x' + 'f'.repeat(ABI_WORD_HEX_LENGTH);
     expect(decodeEventLog([unknown, addrTopic(ADDR_A)], '0x')).toBeNull();
   });
 
@@ -173,7 +201,7 @@ describe('decodeEventLog', () => {
   // tests independent of any precomputed hash table.
   function eventTopic(name: string, types: string[]): string {
     const sig = `${name}(${types.join(',')})`;
-    return '0x' + keccakHex(sig);
+    return '0x' + keccakHex(sig) + EVENT_TOPIC_PADDING;
   }
 
   it('falls back to ABI decode when topic[0] matches a verified event', () => {
@@ -193,7 +221,7 @@ describe('decodeEventLog', () => {
     expect(decoded?.name).toBe('MyEvent');
     expect(decoded?.signature).toBe('MyEvent(address,uint256)');
     expect(decoded?.args).toEqual([
-      { label: 'who', type: 'address', value: 'Q' + ADDR_A },
+      { label: 'who', type: 'address', value: Q_ADDR_A },
       { label: 'amount', type: 'uint256', value: '99' },
     ]);
   });
@@ -219,7 +247,7 @@ describe('decodeEventLog', () => {
     const decoded = decodeEventLog([topic, addrTopic(ADDR_B)], data, abi);
     expect(decoded?.args).toEqual([
       { label: 'a', type: 'uint256', value: '42' },
-      { label: 'b', type: 'address', value: 'Q' + ADDR_B },
+      { label: 'b', type: 'address', value: Q_ADDR_B },
       { label: 'c', type: 'bool', value: 'true' },
     ]);
   });
@@ -275,18 +303,55 @@ describe('decodeEventLog', () => {
     expect(decoded?.name).toBe('Mixed');
     expect(decoded?.args[0].value).toBe('7');
   });
+
+  it('requires the QRVM event hash padding', () => {
+    const unpadded = TOPIC_TRANSFER.slice(0, 66);
+    expect(decodeEventLog([unpadded, addrTopic(ADDR_A), addrTopic(ADDR_B)], uintSlot(1))).toBeNull();
+  });
+
+  it('rejects noncanonical uint256 high bytes and bool values', () => {
+    const highByteValue = '0x01' + '0'.repeat(ABI_WORD_HEX_LENGTH - 2);
+    expect(
+      decodeEventLog(
+        [TOPIC_TRANSFER, addrTopic(ADDR_A), addrTopic(ADDR_B)],
+        highByteValue,
+      ),
+    ).toBeNull();
+    expect(
+      decodeEventLog(
+        [TOPIC_APPROVAL_FOR_ALL, addrTopic(ADDR_A), addrTopic(ADDR_B)],
+        uintSlot(2),
+      ),
+    ).toBeNull();
+  });
+
+  it('decodes fixed bytes from the high end of an ABI fallback word', () => {
+    const abi = JSON.stringify([
+      {
+        type: 'event',
+        name: 'Marker',
+        inputs: [{ name: 'tag', type: 'bytes4', indexed: false }],
+      },
+    ]);
+    const decoded = decodeEventLog(
+      [eventTopic('Marker', ['bytes4'])],
+      fixedBytesSlot('deadbeef'),
+      abi,
+    );
+    expect(decoded?.args[0]).toEqual({ label: 'tag', type: 'raw', value: '0xdeadbeef' });
+  });
 });
 
 // ─── decodeTokenTransferInput ───────────────────────────────────────────
 
 describe('decodeTokenTransferInput', () => {
   it('decodes ERC-20 transfer(address,uint256)', () => {
-    // 0xa9059cbb + addr(32) + amount(32) = 138 chars total
+    // Selector + a 64-byte address word + a 64-byte uint256 word.
     const input = '0xa9059cbb' + addrTopic(ADDR_A).slice(2) + uintSlot(500).slice(2);
     const decoded = decodeTokenTransferInput(input);
     expect(decoded?.standard).toBe('ERC-20');
     expect(decoded?.methodName).toBe('transfer');
-    expect(decoded?.to).toBe('Q' + ADDR_A);
+    expect(decoded?.to).toBe(Q_ADDR_A);
     expect(decoded?.amount).toBe('500');
   });
 
@@ -294,8 +359,8 @@ describe('decodeTokenTransferInput', () => {
     const input = '0x23b872dd' + addrTopic(ADDR_A).slice(2) + addrTopic(ADDR_B).slice(2) + uintSlot(7).slice(2);
     const decoded = decodeTokenTransferInput(input);
     expect(decoded?.methodName).toBe('transferFrom');
-    expect(decoded?.from).toBe('Q' + ADDR_A);
-    expect(decoded?.to).toBe('Q' + ADDR_B);
+    expect(decoded?.from).toBe(Q_ADDR_A);
+    expect(decoded?.to).toBe(Q_ADDR_B);
     expect(decoded?.amount).toBe('7');
   });
 
@@ -307,16 +372,30 @@ describe('decodeTokenTransferInput', () => {
     expect(decoded?.tokenID).toBe('99');
   });
 
+  it('decodes ERC-721 safeTransferFrom(address,address,uint256,bytes)', () => {
+    const input =
+      '0xb88d4fde' +
+      addrTopic(ADDR_A).slice(2) +
+      addrTopic(ADDR_B).slice(2) +
+      uintSlot(99).slice(2) +
+      uintSlot(0x100).slice(2);
+    const decoded = decodeTokenTransferInput(input);
+    expect(decoded?.standard).toBe('ERC-721');
+    expect(decoded?.from).toBe(Q_ADDR_A);
+    expect(decoded?.to).toBe(Q_ADDR_B);
+    expect(decoded?.tokenID).toBe('99');
+  });
+
   it('decodes ERC-1155 safeTransferFrom(address,address,uint256,uint256,bytes)', () => {
-    // Static head only: from(32) to(32) id(32) value(32) dataOffset(32) → 5*32 = 160 bytes
-    // We can append empty `bytes` (offset 0xa0, length 0) but the decoder
+    // Static head: five 64-byte words. Empty bytes begins at offset 0x140.
+    // The decoder
     // only reads the static head, so a truncated tail is fine.
     const head = '0xf242432a' +
       addrTopic(ADDR_A).slice(2) +
       addrTopic(ADDR_B).slice(2) +
       uintSlot(5).slice(2) +
       uintSlot(42).slice(2) +
-      uintSlot(0xa0).slice(2); // dataOffset
+      uintSlot(0x140).slice(2); // dataOffset
     const decoded = decodeTokenTransferInput(head);
     expect(decoded?.standard).toBe('ERC-1155');
     expect(decoded?.tokenID).toBe('5');
@@ -327,8 +406,44 @@ describe('decodeTokenTransferInput', () => {
     const input = '0xa22cb465' + addrTopic(ADDR_A).slice(2) + uintSlot(1).slice(2);
     const decoded = decodeTokenTransferInput(input);
     expect(decoded?.methodName).toBe('setApprovalForAll');
-    expect(decoded?.operator).toBe('Q' + ADDR_A);
+    expect(decoded?.operator).toBe(Q_ADDR_A);
     expect(decoded?.approved).toBe(true);
+  });
+
+  it('decodes ERC-1155 safeBatchTransferFrom dynamic arrays', () => {
+    const input =
+      '0x2eb2c2d6' +
+      addrTopic(ADDR_A).slice(2) +
+      addrTopic(ADDR_B).slice(2) +
+      uintSlot(0x140).slice(2) +
+      uintSlot(0x200).slice(2) +
+      uintSlot(0x2c0).slice(2) +
+      uintSlot(2).slice(2) +
+      uintSlot(1).slice(2) +
+      uintSlot(2).slice(2) +
+      uintSlot(2).slice(2) +
+      uintSlot(10).slice(2) +
+      uintSlot(20).slice(2) +
+      uintSlot(0).slice(2);
+    const decoded = decodeTokenTransferInput(input);
+    expect(decoded?.standard).toBe('ERC-1155');
+    expect(decoded?.ids).toEqual(['1', '2']);
+    expect(decoded?.values).toEqual(['10', '20']);
+  });
+
+  it('rejects non-hex addresses, noncanonical uint256 words, and bool values above one', () => {
+    const malformedAddress =
+      '0xa9059cbb' + 'g'.repeat(ABI_WORD_HEX_LENGTH) + uintSlot(1).slice(2);
+    const highByteAmount =
+      '0xa9059cbb' +
+      addrTopic(ADDR_A).slice(2) +
+      '01' +
+      '0'.repeat(ABI_WORD_HEX_LENGTH - 2);
+    const invalidBool =
+      '0xa22cb465' + addrTopic(ADDR_A).slice(2) + uintSlot(2).slice(2);
+    expect(decodeTokenTransferInput(malformedAddress)).toBeNull();
+    expect(decodeTokenTransferInput(highByteAmount)).toBeNull();
+    expect(decodeTokenTransferInput(invalidBool)).toBeNull();
   });
 
   it('returns null for empty / 0x / short input', () => {
@@ -345,7 +460,7 @@ describe('decodeTokenTransferInput', () => {
   });
 
   it('returns null when the calldata length is wrong for the matched selector', () => {
-    // 0xa9059cbb expects exactly 138 chars; truncate one slot.
+    // 0xa9059cbb expects exactly two 64-byte words; omit the amount.
     const truncated = '0xa9059cbb' + addrTopic(ADDR_A).slice(2); // missing amount
     expect(decodeTokenTransferInput(truncated)).toBeNull();
   });
@@ -366,8 +481,8 @@ describe('decodeContractCall', () => {
   ]);
 
   it('returns null when called without ABI', () => {
-    expect(decodeContractCall('0xdeadbeef' + '0'.repeat(64), undefined)).toBeNull();
-    expect(decodeContractCall('0xdeadbeef' + '0'.repeat(64), '')).toBeNull();
+    expect(decodeContractCall('0xdeadbeef' + '0'.repeat(ABI_WORD_HEX_LENGTH), undefined)).toBeNull();
+    expect(decodeContractCall('0xdeadbeef' + '0'.repeat(ABI_WORD_HEX_LENGTH), '')).toBeNull();
   });
 
   it('returns null for empty / short input', () => {
@@ -411,7 +526,7 @@ describe('decodeContractCall', () => {
     expect(decoded?.name).toBe('setMatka1');
     expect(decoded?.signature).toBe('setMatka1(address)');
     expect(decoded?.args).toHaveLength(1);
-    expect(decoded?.args[0]).toEqual({ label: 'matka1', type: 'address', value: 'Q' + ADDR_A });
+    expect(decoded?.args[0]).toEqual({ label: 'matka1', type: 'address', value: Q_ADDR_A });
   });
 
   it('decodes a multi-arg static function (address, uint256, bool)', () => {
@@ -436,14 +551,23 @@ describe('decodeContractCall', () => {
     expect(decoded?.name).toBe('multi');
     expect(decoded?.signature).toBe(sig);
     expect(decoded?.args).toEqual([
-      { label: 'who', type: 'address', value: 'Q' + ADDR_A },
+      { label: 'who', type: 'address', value: Q_ADDR_A },
       { label: 'amount', type: 'uint256', value: '123' },
       { label: 'flag', type: 'bool', value: 'true' },
     ]);
   });
 
+  it('decodes fixed bytes from the high end of a function-call word', () => {
+    const abi = JSON.stringify([
+      { type: 'function', name: 'mark', inputs: [{ name: 'tag', type: 'bytes4' }] },
+    ]);
+    const selector = '0x' + keccakHex('mark(bytes4)').slice(0, 8);
+    const decoded = decodeContractCall(selector + fixedBytesSlot('deadbeef').slice(2), abi);
+    expect(decoded?.args[0]).toEqual({ label: 'tag', type: 'raw', value: '0xdeadbeef' });
+  });
+
   it('returns null when calldata is truncated below what the ABI requires', () => {
-    // ABI declares 3 args (3*32 bytes); supply only 2*32 bytes after the
+    // ABI declares three args; supply only two 64-byte words after the
     // selector. Decoder should bail rather than mis-decode an out-of-range slot.
     const abi = JSON.stringify([
       {
@@ -470,13 +594,13 @@ describe('decodeContractCall', () => {
       },
     ]);
     const selector = '0x' + keccakHex('setName(string)').slice(0, 8);
-    // Head: pointer to string at offset 0x20 (32 bytes into args block).
-    // Then length (5 = "hello".length), then "hello" padded to 32 bytes.
+    // Head: pointer to string at offset 0x40 (64 bytes into args block).
+    // Then length (5 = "hello".length), then "hello" padded to 64 bytes.
     const helloHex = bytesToHex(utf8ToBytes('hello')); // 68656c6c6f
     const input = selector +
-      uintSlot(0x20).slice(2) +
+      uintSlot(0x40).slice(2) +
       uintSlot(5).slice(2) +
-      helloHex + '0'.repeat(64 - helloHex.length);
+      helloHex + '0'.repeat(ABI_WORD_HEX_LENGTH - helloHex.length);
     const decoded = decodeContractCall(input, abi);
     expect(decoded?.args[0]).toEqual({ label: 'who', type: 'string', value: 'hello' });
   });

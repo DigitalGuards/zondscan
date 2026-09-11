@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import config from '../../../config';
 import Link from 'next/link';
 import { formatAmount, truncateHash, timeAgo, formatPlanckAdaptive, formatNumberWithCommas, hexToNumber } from '../../lib/helpers';
+import AddressFingerprint from '../../components/AddressFingerprint';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import DetailRow from '../../components/DetailRow';
 import CopyButton from '../../components/CopyButton';
@@ -385,7 +386,7 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
                           className="text-text-secondary hover:text-accent font-mono text-xs transition-colors"
                           title={tx.from}
                         >
-                          {truncateHash(tx.from, 8, 6)}
+                          <AddressFingerprint address={tx.from} />
                         </Link>
                       </td>
                       <td className="px-4 sm:px-6 py-3 hidden sm:table-cell">
@@ -394,7 +395,7 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
                           className="text-text-secondary hover:text-accent font-mono text-xs transition-colors"
                           title={tx.to}
                         >
-                          {truncateHash(tx.to, 8, 6)}
+                          <AddressFingerprint address={tx.to} />
                         </Link>
                       </td>
                       <td className="px-4 sm:px-6 py-3 text-text-secondary tabular-nums whitespace-nowrap">
