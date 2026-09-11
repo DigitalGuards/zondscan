@@ -7,7 +7,6 @@ import {
   resolveTheme,
   unixSeconds,
 } from './preferences';
-import { canonicalizeQrlAddress, compactQrlAddress } from './qrlAddress';
 
 describe('saved explorer preferences', () => {
   it.each([
@@ -60,17 +59,10 @@ describe('display formatting', () => {
     expect(displayAddress(address, 'back')).toBe('Qaaaaaaaaaaaaa...');
     expect(displayAddress('short', 'back')).toBe('short');
   });
-  it('keeps the QIP-55 fingerprint for canonical 64-byte addresses in middle mode', () => {
+  it('keeps compact lists on one line: two segments for 64-byte addresses in middle mode', () => {
     const address = `Q${'0123456789abcdef'.repeat(8)}`;
-    const canonical = canonicalizeQrlAddress(address);
-    expect(canonical).not.toBeNull();
-    const body = (canonical as string).slice(1);
-    // First, middle, and final 8 checksummed characters, per compactQrlAddress.
-    expect(displayAddress(address, 'middle')).toBe(
-      `Q${body.slice(0, 8)}...${body.slice(60, 68)}...${body.slice(-8)}`
-    );
-    expect(displayAddress(address, 'middle')).toBe(compactQrlAddress(address));
-    expect(displayAddress(address, 'back')).toBe('Q0123456789abc...');
+    expect(displayAddress(address, 'middle')).toBe(`${address.slice(0, 8)}...${address.slice(-6)}`);
+    expect(displayAddress(address, 'back')).toBe(`${address.slice(0, 14)}...`);
   });
   it('accepts decimal and hex timestamps and rejects invalid dates', () => {
     expect(unixSeconds('0x6553f100')).toBe(1700000000);

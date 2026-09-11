@@ -1,5 +1,3 @@
-import { compactQrlAddress } from './qrlAddress';
-
 export const PREFERENCES_KEY = 'zondscan.preferences.v1';
 export const PREFERENCES_EVENT = 'zondscan:preferences';
 
@@ -70,12 +68,9 @@ export function displayAddress(
   leading = 8,
   trailing = 6
 ): string {
-  if (mode === 'middle') {
-    // Canonical 64-byte QRL addresses keep their QIP-55 first, middle, and
-    // final fingerprint. Other values fall back to plain truncation.
-    const fingerprint = compactQrlAddress(address);
-    if (fingerprint !== address) return fingerprint;
-  }
+  // Compact lists keep the short two-segment form on every address length so
+  // rows stay on one line; detail pages render the full QIP-55 fingerprint
+  // through AddressFingerprint where there is room for it.
   if (address.length <= leading + trailing + 3) return address;
   return mode === 'back'
     ? `${address.slice(0, leading + trailing)}...`
