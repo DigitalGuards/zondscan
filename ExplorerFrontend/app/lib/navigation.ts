@@ -155,3 +155,12 @@ export const EXPLORER_NETWORKS: ReadonlyArray<{
 export const CURRENT_EXPLORER_NETWORK_NAME =
   EXPLORER_NETWORKS.find((network) => network.status === "active")?.name ??
   "QRL Testnet v2";
+
+const EXPLORER_CHAIN_ID_HEX: Record<ExplorerNetworkId, string | null> = {
+  'testnet-v2': '0x539',
+  'testnet-v3': '0x301825',
+  mainnet: null,
+};
+
+/** Hex chain id of the network this build serves, null while unknown. */
+export const CURRENT_EXPLORER_CHAIN_ID_HEX = EXPLORER_CHAIN_ID_HEX[CURRENT_EXPLORER_NETWORK];

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import axios from 'axios';
 import { redirect } from 'next/navigation';
+import { CURRENT_EXPLORER_CHAIN_ID_HEX } from '../../../lib/navigation';
 import config from '../../../../config';
 import type { PendingTransaction } from '@/app/types';
 import { sharedMetadata } from '@/app/lib/seo/metaData';
@@ -94,7 +95,7 @@ async function getTransactionStatus(hash: string): Promise<{
               blockNumber: tx.blockNumber?.toString(),
               accessList: [],
               blockHash: null,
-              chainId: '0x539', // QRL testnet v2 chainId (1337)
+              chainId: CURRENT_EXPLORER_CHAIN_ID_HEX ?? '0x0',
               from: tx.from || '',
               gas: tx.gas || '0x0',
               gasPrice: tx.gasPrice || '0x0',
