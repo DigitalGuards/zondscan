@@ -223,11 +223,20 @@ func exactBlockContractCallParams(
 }
 
 // isConfirmedContractRevert identifies the QRVM's explicit revert error.
-// Other JSON-RPC errors, including unavailable historical state and server
-// failures, must remain retryable.
+// go-qrl reports a revert that carries return data as code 3 and a bare
+// revert (no reason, for example a missing function selector on a contract
+// without ERC-165) as code -32000 with the message "execution reverted".
+// Both are deterministic contract answers. Other JSON-RPC errors, including
+// unavailable historical state and server failures, must remain retryable.
 func isConfirmedContractRevert(err error) bool {
 	var rpcErr *RPCError
-	return errors.As(err, &rpcErr) && rpcErr.Code == 3
+	if !errors.As(err, &rpcErr) {
+		return false
+	}
+	if rpcErr.Code == 3 {
+		return true
+	}
+	return rpcErr.Code == -32000 && strings.HasPrefix(strings.TrimSpace(rpcErr.Message), "execution reverted")
 }
 
 // optionalTokenString treats a confirmed contract-level revert or malformed
