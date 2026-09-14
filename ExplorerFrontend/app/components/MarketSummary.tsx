@@ -1,5 +1,6 @@
 'use client';
 
+import { CURRENT_EXPLORER_NETWORK_NAME } from '../lib/navigation';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { BoltIcon } from '@heroicons/react/24/outline';
@@ -85,7 +86,7 @@ export default function MarketSummary() {
         className="inline-flex items-center gap-1 whitespace-nowrap text-text-secondary hover:text-accent"
         title={
           validGas
-            ? `Average recent transaction gas price on QRL Testnet v2: ${gasValue} ${gasUnit}`
+            ? `Average recent transaction gas price on ${CURRENT_EXPLORER_NETWORK_NAME}: ${gasValue} ${gasUnit}`
             : 'Testnet gas price is temporarily unavailable'
         }
       >

@@ -84,9 +84,8 @@ test('horizontal menus support keyboard navigation, active sections, and escape'
   await page.getByRole('button', { name: 'Network: QRL Testnet v2' }).click();
   const currentNetwork = page.getByRole('menuitem', { name: 'QRL Testnet v2', exact: true });
   await expect(currentNetwork).toHaveAttribute('aria-current', 'true');
-  const upcomingNetwork = page.getByRole('menuitem', { name: /QRL Testnet v3 Upcoming/ });
-  await expect(upcomingNetwork).toBeDisabled();
-  await expect(upcomingNetwork).not.toHaveAttribute('href');
+  const devnetNetwork = page.getByRole('menuitem', { name: /QRL Testnet v3 Devnet/ });
+  await expect(devnetNetwork).toHaveAttribute('href', 'https://v3.zondscan.com');
   await expect(page.getByRole('menuitem', { name: /QRL Mainnet/ })).toBeDisabled();
   await page.keyboard.press('Escape');
 });
