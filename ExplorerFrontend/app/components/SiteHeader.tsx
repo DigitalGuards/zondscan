@@ -15,7 +15,11 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { Bars3Icon, ChevronDownIcon, Cog6ToothIcon, XMarkIcon } from '@heroicons/react/24/outline';
-import { NAVIGATION_GROUPS, isNavigationActive } from '../lib/navigation';
+import {
+  CURRENT_EXPLORER_NETWORK_NAME,
+  NAVIGATION_GROUPS,
+  isNavigationActive,
+} from '../lib/navigation';
 import AppearanceMenu from './AppearanceMenu';
 import NetworkMenu from './NetworkMenu';
 import MarketSummary from './MarketSummary';
@@ -401,7 +405,7 @@ export default function SiteHeader() {
                 ZondScan
               </span>
               <span className="block text-[10px] uppercase tracking-[0.13em] text-text-muted">
-                {t('QRL Testnet v2')}
+                {t(CURRENT_EXPLORER_NETWORK_NAME)}
               </span>
             </span>
           </Link>
