@@ -19,7 +19,7 @@ interface BaseTransaction {
   TxHash: string;
   TimeStamp: number;
   Amount: number | string;
-  PaidFees?: number;
+  PaidFees?: string;
   gasUsed?: string;
   gasPrice?: string;
   gasUsedStr?: string;
@@ -122,7 +122,7 @@ export interface TransactionDetails {
   gasPrice?: string;
   nonce?: number;
   latestBlock?: number;
-  PaidFees?: number;
+  PaidFees?: string;
   contractCreated?: {
     address: string;
     isToken: boolean;
@@ -140,7 +140,7 @@ export interface TransactionDetails {
   targetContract?: ContractMeta;
   /** Internal calls captured under this tx by the syncer (CALL / DELEGATECALL / STATICCALL sub-frames). */
   internalTransactions?: InternalTx[];
-  /** Receipt-level status from the live RPC. "0x1" = success, "0x0" = reverted, undefined when RPC fetch failed. */
+  /** Stored or live receipt status. Undefined means execution status is unavailable. */
   receiptStatus?: string;
 }
 

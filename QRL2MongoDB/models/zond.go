@@ -58,8 +58,11 @@ type Transaction struct {
 	ChainID          string `json:"chainId"`
 	Signature        string `json:"signature"`
 	PublicKey        string `json:"publicKey"`
-	Data             string `json:"data"`
-	Status           string `json:"status"`
+	// The node calls calldata input; existing MongoDB rows use data.
+	Data              string `json:"input" bson:"data"`
+	Status            string `json:"status"`
+	GasUsed           string `json:"gasUsed,omitempty" bson:"gasUsed,omitempty"`
+	EffectiveGasPrice string `json:"effectiveGasPrice,omitempty" bson:"effectiveGasPrice,omitempty"`
 }
 
 type Result struct {

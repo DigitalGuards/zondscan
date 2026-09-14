@@ -1133,6 +1133,27 @@ func GetCanonicalBlockHash(blockNumber string) (string, error) {
 	return expected, nil
 }
 
+func refreshPendingBlockTransactions(
+	block models.ZondDatabaseBlock,
+	update func(context.Context, interface{}, interface{}, ...*options.UpdateOptions) (*mongo.UpdateResult, error),
+) error {
+	filter, err := blockIdentityFilter(block.Result.Number, block.Result.Hash)
+	if err != nil {
+		return err
+	}
+	filter["ingestionState"] = bson.M{"$ne": BlockIngestionComplete}
+	ctx, cancel := context.WithTimeout(context.Background(), DBTimeout)
+	defer cancel()
+	updated, err := update(ctx, filter, bson.M{"$set": bson.M{"result.transactions": block.Result.Transactions}})
+	if err != nil {
+		return err
+	}
+	if updated.MatchedCount != 1 {
+		return ErrBlockWriteUnresolved
+	}
+	return nil
+}
+
 // InsertManyBlockDocuments writes blocks in ascending order and confirms the
 // exact stored height and hash identities afterward. Ordered writes ensure a
 // server-side partial outcome can only create a prefix of the new candidates.
@@ -1166,6 +1187,18 @@ func InsertManyBlockDocuments(blocks []models.ZondDatabaseBlock) (BlockBatchWrit
 		if len(found) > 0 {
 			if err := hashStateConflict(number, candidate.block.Result.Hash, found); err != nil {
 				return BlockBatchWriteResult{Attempted: len(candidates)}, err
+			}
+			complete, err := blockCompanionsComplete(number, found)
+			if err != nil {
+				return BlockBatchWriteResult{Attempted: len(candidates)}, err
+			}
+			if !complete {
+				// A legacy or interrupted block is replayed from a fresh exact
+				// block and validated receipts. Persist that enrichment before
+				// the existing companion completion gate can publish this row.
+				if err := refreshPendingBlockTransactions(candidate.block, configs.BlocksCollections.UpdateOne); err != nil {
+					return BlockBatchWriteResult{Attempted: len(candidates)}, err
+				}
 			}
 			existedBefore[number] = true
 			continue

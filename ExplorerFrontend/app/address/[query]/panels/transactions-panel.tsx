@@ -1,5 +1,7 @@
 'use client';
 
+import { formatTransactionAmount } from '../../../lib/transactionAmount';
+
 import AddressText from '../../../components/AddressText';
 
 import TimeDisplay from '../../../components/TimeDisplay';
@@ -111,20 +113,8 @@ export default function TransactionsPanel({
     () =>
       rows.map((tx) => {
         const [amount, amountUnit] = formatAmount(tx.Amount);
-        // PaidFees comes off the wire as a decimal-Quanta string
-        // ("0.0000787..."). Render in Quanta with up to 8 decimals,
-        // Etherscan-style ("0.00428184 Quanta"). Cast via unknown because
-        // the type still says `number?` even though the wire shape is
-        // a string. Trailing zeros trim out via parseFloat round-trip
-        // so 0.10000000 displays as 0.1, not 0.10000000.
-        const rawFees = tx.PaidFees as unknown;
-        const feeQuanta =
-          typeof rawFees === 'string' || typeof rawFees === 'number'
-            ? parseFloat(String(rawFees))
-            : 0;
-        const formattedFees = Number.isFinite(feeQuanta)
-          ? `${parseFloat(feeQuanta.toFixed(8))} ${NATIVE_UNIT}`
-          : `0 ${NATIVE_UNIT}`;
+        const fee = formatTransactionAmount(tx.PaidFees);
+        const formattedFees = fee ? `${fee.quanta} ${NATIVE_UNIT}` : 'Unavailable';
         return {
           ...tx,
           formattedAmount: `${amount} ${amountUnit}`,

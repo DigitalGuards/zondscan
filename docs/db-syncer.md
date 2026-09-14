@@ -92,6 +92,16 @@ The migration rejects every repeated height, including rows with the same hash. 
    - Contract reprocessing (every 1 hour)
    - Durable token block retry drain (immediately, then every 30 seconds)
 
+### Receipt accounting and calldata compatibility
+
+Receipt enrichment validates transaction hash, canonical block number/hash, execution status, gas consumption within the transaction limit, and effective gas price before block insertion. The block transaction retains `status`, `gasUsed`, and `effectiveGasPrice`. Companion fees are computed from those retained receipt quantities; missing accounting remains retryable. Zero effective gas price produces an exact zero fee. Newly written history rows carry `feeSource: "receipt"` and `receiptStatus`.
+
+RPC calldata is decoded from `input` and stored under the existing BSON `data` key. Old BSON rows remain readable. The block API exposes `input` and preserves `data` as a compatibility alias. Retrying an incomplete block refreshes its transaction payload from the fetched block and validated receipts before companion completion. Already complete historical blocks are preserved.
+
+Previously indexed `paidFees` and `paidFeesWei` may contain gas-limit estimates. The API omits their `PaidFees` field until receipt provenance is established. It can use a matching live receipt to enrich an individual historical transaction response without modifying stored rows. Missing gas, fee, or execution status is displayed as unavailable. This release performs no automatic replay or retention change.
+
+For a later historical repair, first snapshot the database and record the exact canonical range while writers are stopped. Inventory complete blocks whose transactions lack receipt accounting or calldata, then refetch each selected block and its matching receipts using an explicit bounded range and an exclusive writer lease. A reviewed repair must atomically update the block transaction payload and corresponding fee/status companion fields only when the stored block number/hash still match; it must preserve unrelated token, contract, and verification state. Validate row counts, identities, fee products, and a resume checkpoint before activation. The existing `reindex-block-companions` command skips complete blocks, so it is not a repair command for these historical gaps. Use the separately invoked [receipt and calldata backfill tool](../scripts/receipt-backfill.md), following its topology, backup, pause, journal, and verification requirements. Preserve completion markers and existing history throughout the repair.
+
 ### Module Structure
 
 | Directory | Purpose |

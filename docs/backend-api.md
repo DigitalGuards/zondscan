@@ -261,7 +261,7 @@ Paginated network-wide transactions list.
 
 **Notes:**
 - Fixed page size of 5 transactions per page.
-- Amount and PaidFees are serialized with 18 decimal places.
+- Amount and verified PaidFees are serialized with 18 decimal places. PaidFees is optional: legacy rows without receipt provenance omit it. Status is optional and contains receipt execution status (`0x1` success or `0x0` revert) when indexed.
 - BlockNumber is converted from hex to decimal in JSON output.
 
 #### `GET /tx/:query`
@@ -968,7 +968,7 @@ type Transaction struct {
     Value       string `json:"value"`
     Signature   string `json:"signature"`
     PublicKey   string `json:"publicKey"`
-    Data        string `json:"data"`
+    Data        string `json:"input" bson:"data"`
     Status      string `json:"status"`
 }
 ```
@@ -989,7 +989,7 @@ type TransactionByAddress struct {
 }
 ```
 
-**Note:** Custom `MarshalJSON` converts `Amount` and `PaidFees` to `"%.18f"` format and `BlockNumber` from hex to decimal string.
+**Note:** Custom `MarshalJSON` renders exact integer amounts and receipt-derived fees as Quanta decimals, retaining a float fallback only for legacy amounts. Fees without receipt provenance are omitted. `BlockNumber` is converted from hex to a decimal string. Transaction detail preserves indexed execution status, actual gas use, effective gas price, and calldata when the node is unavailable. Missing historical gas and fee data remains unavailable; the gas limit is exposed separately.
 
 ### Transfer
 ```go

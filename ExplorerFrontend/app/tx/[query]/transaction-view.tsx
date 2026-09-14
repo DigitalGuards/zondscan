@@ -23,6 +23,7 @@ import PreferenceDetails from '../../components/PreferenceDetails';
 import { usePreferences } from '../../components/PreferencesProvider';
 import { isZeroTokenTransfer } from '../../lib/preferences';
 import { useDisplayCurrency } from '../../components/useDisplayCurrency';
+import { formatTransactionAmount } from '../../lib/transactionAmount';
 
 // Once a tx has this many confirmations we stop polling /latestblock for
 // it; further refinement is just visual noise (most chain UIs treat
@@ -124,29 +125,15 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
 
   const [formattedValue, unit] = formatAmount(transaction.value);
 
-  const calculatePaidFees = (): string => {
-    if (typeof transaction.PaidFees === 'number') {
-      return transaction.PaidFees.toFixed(18);
-    }
-    if (!transaction.gasUsed || !transaction.gasPrice) return '0';
-    try {
-      const gasUsed = BigInt(transaction.gasUsed);
-      const gasPrice = BigInt(transaction.gasPrice);
-      const paidFees = gasUsed * gasPrice;
-      return (Number(paidFees) / 1e18).toFixed(18);
-    } catch {
-      return '0';
-    }
-  };
-
-  const paidFees = calculatePaidFees();
+  const paidFees = formatTransactionAmount(transaction.PaidFees)?.quanta ?? 'Unavailable';
   // Receipt-level revert flag takes priority over confirmation count: a
   // tx that mined but reverted is "Confirmed" by the confirmations
   // metric yet failed by the EVM's measure. Surface the real state.
   const isReverted = transaction.receiptStatus === '0x0';
+  const isExecutionUnknown = transaction.receiptStatus !== '0x0' && transaction.receiptStatus !== '0x1';
   const effectiveStatus = isReverted
     ? { text: 'Reverted', color: 'bg-red-500' }
-    : status;
+    : isExecutionUnknown ? { text: 'Execution status unavailable', color: 'bg-yellow-500' } : status;
   const badgeVariant = isReverted ? 'error' as const
     : effectiveStatus.color === 'bg-green-500' ? 'success' as const
     : effectiveStatus.color === 'bg-blue-500' ? 'info' as const
@@ -274,26 +261,24 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             <span className="font-semibold text-accent">{formattedValue}</span>
             <span className="text-text-muted ml-1">{unit}</span>
           </DetailRow>
-          {(transaction.gasUsed || transaction.gasPrice) && (
-            <DetailRow label="Transaction Fee">
-              {paidFees}
-              <span className="text-text-muted ml-1">{NATIVE_UNIT}</span>
-              {(() => {
-                const usd = latestBlockQuery.data?.qrlUsdPrice;
-                const qrlFee = parseFloat(paidFees);
-                if (!usd || usd <= 0 || !Number.isFinite(qrlFee) || qrlFee <= 0) return null;
-                return (
-                  <span
-                    className="text-text-muted text-xs ml-2"
-                    data-fee-currency={fiat.currency}
-                    title={`QRL market reference: ${fiat.format(usd, { maximumFractionDigits: 4 })}/QRL. Testnet Quanta has no market value.`}
-                  >
-                    ≈ {fiat.format(qrlFee * usd, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
-                  </span>
-                );
-              })()}
-            </DetailRow>
-          )}
+          <DetailRow label="Transaction Fee">
+            {paidFees}
+            {paidFees !== 'Unavailable' && <span className="text-text-muted ml-1">{NATIVE_UNIT}</span>}
+            {(() => {
+              const usd = latestBlockQuery.data?.qrlUsdPrice;
+              const qrlFee = parseFloat(paidFees);
+              if (!usd || usd <= 0 || !Number.isFinite(qrlFee) || qrlFee <= 0) return null;
+              return (
+                <span
+                  className="text-text-muted text-xs ml-2"
+                  data-fee-currency={fiat.currency}
+                  title={`QRL market reference: ${fiat.format(usd, { maximumFractionDigits: 4 })}/QRL. Testnet Quanta has no market value.`}
+                >
+                  ≈ {fiat.format(qrlFee * usd, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                </span>
+              );
+            })()}
+          </DetailRow>
         </div>
       </section>
 

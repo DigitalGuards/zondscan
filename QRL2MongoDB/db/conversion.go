@@ -7,21 +7,28 @@ import (
 	"QRL2MongoDB/validation"
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 
 	"go.uber.org/zap"
 )
 
-// UpdateTransactionStatuses updates transaction receipt statuses before the
+// UpdateTransactionStatuses retains validated receipt accounting before the
 // block and its companion rows cross the durable ingestion boundary.
 func UpdateTransactionStatuses(block *models.ZondDatabaseBlock) error {
+	return enrichTransactionReceipts(block, rpc.GetTransactionReceipt)
+}
+
+func enrichTransactionReceipts(block *models.ZondDatabaseBlock, getReceipt func(string) (*models.TransactionReceipt, error)) error {
 	if block == nil {
 		return errors.New("cannot update transaction statuses for a nil block")
 	}
 	var errs []error
 	for index := range block.Result.Transactions {
 		tx := &block.Result.Transactions[index]
-		receipt, err := rpc.GetTransactionReceipt(tx.Hash)
+		// Never retain enrichment from a failed retry or an untrusted block RPC.
+		tx.Status, tx.GasUsed, tx.EffectiveGasPrice = "", "", ""
+		receipt, err := getReceipt(tx.Hash)
 		if err != nil {
 			configs.Logger.Warn("Failed to get transaction receipt",
 				zap.String("hash", tx.Hash),
@@ -35,6 +42,8 @@ func UpdateTransactionStatuses(block *models.ZondDatabaseBlock) error {
 			continue
 		}
 		tx.Status = receipt.Result.Status
+		tx.GasUsed = receipt.Result.GasUsed
+		tx.EffectiveGasPrice = receipt.Result.EffectiveGasPrice
 	}
 	return errors.Join(errs...)
 }
@@ -62,9 +71,48 @@ func validateTransactionReceipt(
 		return fmt.Errorf("transaction %s receipt reports block hash %s, want %s",
 			tx.Hash, receipt.Result.BlockHash, block.Result.Hash)
 	}
-	if receipt.Result.Status == "" || !validation.IsValidHexString(receipt.Result.Status) {
+	if receipt.Result.Status != "0x0" && receipt.Result.Status != "0x1" {
 		return fmt.Errorf("transaction %s receipt has invalid status %q",
 			tx.Hash, receipt.Result.Status)
 	}
+	gasUsed, err := receiptQuantity(receipt.Result.GasUsed)
+	if err != nil {
+		return fmt.Errorf("transaction %s receipt has invalid gas used: %w", tx.Hash, err)
+	}
+	gasLimit, err := receiptQuantity(tx.Gas)
+	if err != nil || gasUsed.Cmp(gasLimit) > 0 {
+		return fmt.Errorf("transaction %s receipt gas exceeds or lacks its transaction gas limit", tx.Hash)
+	}
+	if _, err := receiptQuantity(receipt.Result.EffectiveGasPrice); err != nil {
+		return fmt.Errorf("transaction %s receipt has invalid effective gas price: %w", tx.Hash, err)
+	}
 	return nil
+}
+
+func receiptQuantity(value string) (*big.Int, error) {
+	if !validation.IsValidHexString(value) {
+		return nil, fmt.Errorf("invalid hex quantity %q", value)
+	}
+	number, ok := new(big.Int).SetString(value[2:], 16)
+	if !ok || number.Sign() < 0 || number.BitLen() > 256 {
+		return nil, fmt.Errorf("invalid receipt quantity %q", value)
+	}
+	return number, nil
+}
+
+// transactionReceiptFee fails before companion writes if enrichment is absent.
+// Zero-priced receipts remain zero; gas limits and trace gas are never billed.
+func transactionReceiptFee(tx *models.Transaction) (*big.Int, error) {
+	if tx.Status != "0x0" && tx.Status != "0x1" {
+		return nil, fmt.Errorf("transaction %s lacks validated receipt status", tx.Hash)
+	}
+	gasUsed, err := receiptQuantity(tx.GasUsed)
+	if err != nil {
+		return nil, fmt.Errorf("transaction %s lacks receipt gas used: %w", tx.Hash, err)
+	}
+	gasPrice, err := receiptQuantity(tx.EffectiveGasPrice)
+	if err != nil {
+		return nil, fmt.Errorf("transaction %s lacks receipt effective gas price: %w", tx.Hash, err)
+	}
+	return new(big.Int).Mul(gasUsed, gasPrice), nil
 }

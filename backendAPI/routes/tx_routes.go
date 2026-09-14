@@ -10,6 +10,7 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,19 +32,16 @@ type receiptLog struct {
 	Removed  bool     `json:"removed"`
 }
 
-// receiptSummary is the subset of a tx receipt the /tx/:hash route
-// surfaces alongside the events. Status is the EVM revert flag
-// ("0x1" success, "0x0" reverted); the syncer's Transaction.Status
-// field is empty for every historical row, so we resolve it from
-// the live receipt here. Same RPC call that already fetches logs.
+// receiptSummary includes canonical identity so live enrichment cannot replace
+// indexed data with a receipt from a different block during a reorganization.
 type receiptSummary struct {
-	Status string `json:"status"`
-	// GasUsed is the actual gas consumed (hex), distinct from the tx's gas
-	// limit. ReturnSingleTransfer fills Transfer.GasUsed from the block's
-	// `gas` field (the LIMIT) because the block doc has no receipt data; the
-	// /tx route overrides it with this value when the receipt fetch succeeds.
-	GasUsed string       `json:"gasUsed"`
-	Logs    []receiptLog `json:"logs"`
+	TransactionHash   string       `json:"transactionHash"`
+	BlockHash         string       `json:"blockHash"`
+	BlockNumber       string       `json:"blockNumber"`
+	Status            string       `json:"status"`
+	GasUsed           string       `json:"gasUsed"`
+	EffectiveGasPrice string       `json:"effectiveGasPrice"`
+	Logs              []receiptLog `json:"logs"`
 }
 
 // fetchReceipt pulls a tx's receipt over JSON-RPC and returns the
@@ -72,11 +70,8 @@ func fetchReceipt(ctx context.Context, txHash string) receiptSummary {
 	return summary
 }
 
-// fetchTxInput pulls a tx's calldata from the node. The historical block
-// docs in MongoDB carry an empty `data` field because the syncer's
-// Transaction struct uses the wrong JSON tag (`data`, where the node
-// returns `input`), so we resolve it over RPC instead. Best-effort:
-// returns "" when the node is unreachable so the page still renders.
+// fetchTxInput repairs missing legacy calldata for this response only. Newly
+// indexed rows retain input under the compatible BSON data field.
 func fetchTxInput(ctx context.Context, txHash string) string {
 	raw, rpcErr, transportErr := db.NodeRPC(ctx, "qrl_getTransactionByHash", []interface{}{txHash})
 	if transportErr != nil {
@@ -98,6 +93,75 @@ func fetchTxInput(ctx context.Context, txHash string) string {
 		return ""
 	}
 	return tx.Input
+}
+
+func enrichTransfer(
+	ctx context.Context,
+	query *models.Transfer,
+	getReceipt func(context.Context, string) receiptSummary,
+	getInput func(context.Context, string) string,
+) []receiptLog {
+	var receipt receiptSummary
+	input := query.Input
+	var workers sync.WaitGroup
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		receipt = getReceipt(ctx, query.TxHash)
+	}()
+	if input == "" {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			input = getInput(ctx, query.TxHash)
+		}()
+	}
+	workers.Wait()
+	query.Input = input
+	var logs []receiptLog
+	if receipt.TransactionHash != "" && receipt.BlockHash != "" &&
+		strings.EqualFold(receipt.TransactionHash, query.TxHash) &&
+		strings.EqualFold(receipt.BlockHash, query.BlockHash) && receipt.BlockNumber == query.BlockNumber {
+		if query.Status == "" && (receipt.Status == "0x0" || receipt.Status == "0x1") {
+			query.Status = receipt.Status
+		}
+		if query.GasUsed == "" && receiptGasWithinLimit(receipt.GasUsed, query.GasLimit) {
+			query.GasUsed = receipt.GasUsed
+		}
+		if query.EffectiveGasPrice == "" && validReceiptQuantity(receipt.EffectiveGasPrice) {
+			query.EffectiveGasPrice = receipt.EffectiveGasPrice
+		}
+		logs = receipt.Logs
+	}
+	query.PaidFees = ""
+	if validReceiptQuantity(query.GasUsed) && validReceiptQuantity(query.EffectiveGasPrice) {
+		gas, _ := new(big.Int).SetString(query.GasUsed[2:], 16)
+		price, _ := new(big.Int).SetString(query.EffectiveGasPrice[2:], 16)
+		fee := new(big.Int).Mul(gas, price)
+		query.PaidFees = new(big.Rat).SetFrac(fee, big.NewInt(1_000_000_000_000_000_000)).FloatString(18)
+	}
+	return logs
+}
+
+func validReceiptQuantity(value string) bool {
+	if !strings.HasPrefix(value, "0x") || len(value) <= 2 || len(value) > 66 {
+		return false
+	}
+	for _, digit := range value[2:] {
+		if !(digit >= '0' && digit <= '9' || digit >= 'a' && digit <= 'f' || digit >= 'A' && digit <= 'F') {
+			return false
+		}
+	}
+	return true
+}
+
+func receiptGasWithinLimit(used, limit string) bool {
+	if !validReceiptQuantity(used) || !validReceiptQuantity(limit) {
+		return false
+	}
+	gasUsed, _ := new(big.Int).SetString(used[2:], 16)
+	gasLimit, _ := new(big.Int).SetString(limit[2:], 16)
+	return gasUsed.Cmp(gasLimit) <= 0
 }
 
 // handlePendingTransactions serves GET /pending-transactions with pagination.
@@ -304,38 +368,12 @@ func handleTx(c *gin.Context) {
 		log.Printf("Error checking for internal txs %s: %v", value, err)
 	}
 
-	// Receipt logs power the Event Logs panel on the tx page; tx input
-	// powers the Input Data card. Best-effort RPC fetches in parallel
-	// with a shared 6s budget so the page still renders if the node is
-	// briefly unreachable. Tx input has to come from the node because
-	// the syncer's Transaction struct uses the wrong JSON tag (`data`
-	// where the node returns `input`), leaving the persisted field
-	// empty for every historical tx.
+	// Preserve indexed receipt accounting and calldata during an RPC outage.
+	// Live receipt logs and missing legacy input share a bounded request budget.
 	rpcCtx, cancelRPC := context.WithTimeout(c.Request.Context(), 6*time.Second)
 	defer cancelRPC()
-	var receipt receiptSummary
-	var txInput string
-	var rpcWG sync.WaitGroup
-	rpcWG.Add(2)
-	go func() {
-		defer rpcWG.Done()
-		receipt = fetchReceipt(rpcCtx, value)
-	}()
-	go func() {
-		defer rpcWG.Done()
-		txInput = fetchTxInput(rpcCtx, value)
-	}()
-	rpcWG.Wait()
-	logs := receipt.Logs
-
-	// ReturnSingleTransfer fills query.GasUsed from the block's gas LIMIT
-	// (the block doc carries no receipt). Override it with the actual gas
-	// consumed from the receipt when present so the tx page shows the real
-	// figure. For a plain transfer this equals the limit (21000), so the
-	// simple-transfer case is unaffected.
-	if receipt.GasUsed != "" {
-		query.GasUsed = receipt.GasUsed
-	}
+	logs := enrichTransfer(rpcCtx, &query, fetchReceipt, fetchTxInput)
+	txInput := query.Input
 
 	// Attach per-log + per-target contract metadata so the frontend
 	// can decode unknown event signatures + method selectors when the
@@ -362,13 +400,8 @@ func handleTx(c *gin.Context) {
 		"response":    query,
 		"latestBlock": latestBlockNum,
 	}
-	// Receipt status is "0x1" on success, "0x0" on revert. Surface it
-	// so the frontend can render a "Reverted" badge instead of falsely
-	// labelling a failed-but-confirmed tx as confirmed. Empty when
-	// the RPC fetch failed; the frontend treats absent as success
-	// (matches the existing fallback).
-	if receipt.Status != "" {
-		response["receiptStatus"] = receipt.Status
+	if query.Status == "0x0" || query.Status == "0x1" {
+		response["receiptStatus"] = query.Status
 	}
 	if len(logs) > 0 {
 		// Re-emit logs with the optional contract field attached so the

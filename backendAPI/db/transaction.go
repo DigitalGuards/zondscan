@@ -33,6 +33,8 @@ func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
 		{Key: "amountWei", Value: 1},
 		{Key: "paidFees", Value: 1},
 		{Key: "paidFeesWei", Value: 1},
+		{Key: "feeSource", Value: 1},
+		{Key: "receiptStatus", Value: 1},
 		{Key: "blockNumber", Value: 1},
 	}
 
@@ -155,6 +157,8 @@ func ReturnAllTransactionsByAddress(address string, page, limit int) ([]models.T
 		{Key: "to", Value: 1},
 		{Key: "paidFees", Value: 1},
 		{Key: "paidFeesWei", Value: 1},
+		{Key: "feeSource", Value: 1},
+		{Key: "receiptStatus", Value: 1},
 		{Key: "blockNumber", Value: 1},
 	}
 
@@ -225,6 +229,8 @@ func ReturnTransactionsNetwork(page, limit int) ([]models.TransactionByAddress, 
 		{Key: "amountWei", Value: 1},
 		{Key: "paidFees", Value: 1},
 		{Key: "paidFeesWei", Value: 1},
+		{Key: "feeSource", Value: 1},
+		{Key: "receiptStatus", Value: 1},
 		{Key: "blockNumber", Value: 1},
 	}
 
@@ -418,6 +424,31 @@ func FirstSeen(address string) int64 {
 	return first
 }
 
+func transferFromIndexedTransaction(block models.ZondDatabaseBlock, tx models.Transaction) models.Transfer {
+	// Keep the legacy response normalization for block/transaction quantities.
+	// Receipt quantities remain empty when their actual values are unavailable.
+	ensureHexPrefix := func(value string) string {
+		if value == "" || value == "0x" || value == "0x0" {
+			return "0x0"
+		}
+		if !strings.HasPrefix(value, "0x") {
+			return "0x" + value
+		}
+		return value
+	}
+	return models.Transfer{
+		ID:             primitive.NewObjectID(),
+		BlockNumber:    ensureHexPrefix(block.Result.Number),
+		BlockHash:      block.Result.Hash,
+		BlockTimestamp: ensureHexPrefix(block.Result.Timestamp),
+		From:           tx.From, To: tx.To, TxHash: tx.Hash, Value: ensureHexPrefix(tx.Value),
+		GasLimit: tx.Gas, GasUsed: tx.GasUsed, GasPrice: ensureHexPrefix(tx.GasPrice),
+		EffectiveGasPrice: tx.EffectiveGasPrice, Status: tx.Status,
+		Nonce: ensureHexPrefix(tx.Nonce), Signature: tx.Signature, Pk: tx.PublicKey,
+		Size: ensureHexPrefix(block.Result.Size), Input: tx.Data,
+	}
+}
+
 func ReturnSingleTransfer(query string) (models.Transfer, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -440,55 +471,7 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 		// Found in blocks collection, convert to Transfer model
 		for _, tx := range block.Result.Transactions {
 			if tx.Hash == query {
-				// Use hex strings directly
-				from := tx.From
-				to := tx.To
-				txHash := tx.Hash
-
-				// Store original hex value
-				valueStr := tx.Value
-				if valueStr == "" || valueStr == "0x0" {
-					valueStr = "0x0"
-				}
-
-				// Store original gas values
-				gasUsedStr := tx.Gas
-				if gasUsedStr == "" || gasUsedStr == "0x0" {
-					gasUsedStr = "0x0"
-				}
-
-				gasPriceStr := tx.GasPrice
-				if gasPriceStr == "" || gasPriceStr == "0x0" {
-					gasPriceStr = "0x0"
-				}
-
-				ensureHexPrefix := func(s string) string {
-					if s == "" || s == "0x" || s == "0x0" {
-						return "0x0"
-					}
-					if !strings.HasPrefix(s, "0x") {
-						return "0x" + s
-					}
-					return s
-				}
-
-				result = models.Transfer{
-					ID:             primitive.NewObjectID(),
-					BlockNumber:    ensureHexPrefix(block.Result.Number),
-					BlockTimestamp: ensureHexPrefix(block.Result.Timestamp),
-					From:           from,
-					To:             to,
-					TxHash:         txHash,
-					Value:          ensureHexPrefix(valueStr),
-					GasUsed:        ensureHexPrefix(gasUsedStr),
-					GasPrice:       ensureHexPrefix(gasPriceStr),
-					Nonce:          ensureHexPrefix(tx.Nonce),
-					Signature:      tx.Signature,
-					Pk:             tx.PublicKey,
-					Size:           ensureHexPrefix(block.Result.Size),
-					Input:          tx.Data,
-				}
-				return result, nil
+				return transferFromIndexedTransaction(block, tx), nil
 			}
 		}
 	}
@@ -657,6 +640,9 @@ func ReturnNonZeroTransactions(address string, page, limit int) ([]models.Transa
 		{Key: "timeStamp", Value: 1},
 		{Key: "amount", Value: 1},
 		{Key: "amountWei", Value: 1},
+		{Key: "paidFeesWei", Value: 1},
+		{Key: "feeSource", Value: 1},
+		{Key: "receiptStatus", Value: 1},
 		{Key: "from", Value: 1},
 		{Key: "to", Value: 1},
 		{Key: "blockNumber", Value: 1},

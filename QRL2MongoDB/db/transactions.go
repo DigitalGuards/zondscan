@@ -718,11 +718,14 @@ func processTokenContract(pending pendingTokenContractWork) error {
 }
 
 func processTransactionData(tx *models.Transaction, blockTimestamp string, to string, contractAddress string, statusTx string, isContract bool, size string) error {
+	feesBig, err := transactionReceiptFee(tx)
+	if err != nil {
+		return err
+	}
 	var errs []error
 	from := tx.From
 	txHash := tx.Hash
 	blockNumber := tx.BlockNumber
-	gasPrice := tx.GasPrice
 	pk := tx.PublicKey
 	signature := tx.Signature
 	data := tx.Data
@@ -803,52 +806,6 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 		errs = append(errs, err)
 	}
 
-	// Calculate fees using hex strings. Guard against empty/short
-	// gasPrice, slicing [2:] on those panics; treat too-short as zero.
-	gasPriceBig := new(big.Int)
-	if len(gasPrice) > 2 {
-		if _, ok := gasPriceBig.SetString(gasPrice[2:], 16); !ok {
-			gasPriceBig.SetInt64(0)
-		}
-	}
-
-	gasUsedBig := new(big.Int)
-	// If trace.GasUsed is 0, try to use gasUsed from the transaction receipt
-	if trace.GasUsed == 0 {
-		// Get transaction receipt to obtain actual gas used
-		receipt, err := rpc.GetTransactionReceipt(txHash)
-		if err == nil && receipt != nil && receipt.Result.GasUsed != "" && len(receipt.Result.GasUsed) > 2 {
-			gasUsedBig.SetString(receipt.Result.GasUsed[2:], 16)
-			configs.Logger.Debug("Using gasUsed from receipt",
-				zap.String("txHash", txHash),
-				zap.String("gasUsed", receipt.Result.GasUsed))
-		} else {
-			// If receipt isn't available, use gas limit as a fallback
-			// This is not accurate but better than 0
-			if tx.Gas != "" && len(tx.Gas) > 2 {
-				gasUsedBig.SetString(tx.Gas[2:], 16)
-				configs.Logger.Debug("Using gas limit as fallback",
-					zap.String("txHash", txHash),
-					zap.String("gas", tx.Gas))
-			} else {
-				gasUsedBig.SetString(fmt.Sprintf("%x", trace.GasUsed), 16)
-			}
-		}
-	} else {
-		gasUsedBig.SetString(fmt.Sprintf("%x", trace.GasUsed), 16)
-	}
-
-	feesBig := new(big.Int).Mul(gasPriceBig, gasUsedBig)
-
-	// Ensure fees are never zero for successful transactions. Apply the
-	// minimal-fee floor to the wei integer (0.000001 QRL = 1e12 wei) so the
-	// exact paidFeesWei string and the legacy paidFees float stay consistent.
-	if feesBig.Sign() == 0 && statusTx == "0x1" {
-		configs.Logger.Warn("Calculated fees is zero for a successful transaction, using minimal fee",
-			zap.String("txHash", txHash))
-		feesBig = big.NewInt(1_000_000_000_000)
-	}
-
 	// Legacy float fields, kept for backward-compatible numeric queries (e.g.
 	// amount $gt 0). The exact, drift-free value travels alongside them as the
 	// amountWei / paidFeesWei base-10 integer strings (value and feesBig).
@@ -857,7 +814,7 @@ func processTransactionData(tx *models.Transaction, blockTimestamp string, to st
 	feesResult := new(big.Float).Quo(feesFloat, divisor)
 	fees, _ := feesResult.Float64()
 
-	if _, err := TransactionByAddressCollection(blockTimestamp, txType, from, to, txHash, valueFloat64, fees, blockNumber, value.String(), feesBig.String()); err != nil {
+	if _, err := TransactionByAddressCollection(blockTimestamp, txType, from, to, txHash, valueFloat64, fees, blockNumber, value.String(), feesBig.String(), tx.Status); err != nil {
 		errs = append(errs, fmt.Errorf("store transactionByAddress row for %s: %w", txHash, err))
 	}
 	if _, err := TransferCollection(blockNumber, blockTimestamp, from, to, txHash, pk, signature, nonce, valueFloat64, data, contractAddress, statusTx, size, fees); err != nil {
@@ -995,7 +952,7 @@ func InternalTransactionByAddressCollection(transactionType string, callType str
 // amount/paidFees are the legacy float64 columns (kept for backward-compatible
 // numeric queries); amountWei/paidFeesWei are the exact base-10 wei integer
 // strings the API uses to render QRL without float64 precision drift.
-func TransactionByAddressCollection(timeStamp string, txType string, from string, to string, hash string, amount float64, paidFees float64, blockNumber string, amountWei string, paidFeesWei string) (*mongo.InsertOneResult, error) {
+func TransactionByAddressCollection(timeStamp string, txType string, from string, to string, hash string, amount float64, paidFees float64, blockNumber string, amountWei string, paidFeesWei string, receiptStatus string) (*mongo.InsertOneResult, error) {
 	// Normalize addresses to canonical Q-prefix form
 	from = validation.ConvertToQAddress(from)
 	if to != "" {
@@ -1012,6 +969,8 @@ func TransactionByAddressCollection(timeStamp string, txType string, from string
 		{Key: "amountWei", Value: amountWei},
 		{Key: "paidFees", Value: paidFees},
 		{Key: "paidFeesWei", Value: paidFeesWei},
+		{Key: "feeSource", Value: "receipt"},
+		{Key: "receiptStatus", Value: receiptStatus},
 		{Key: "blockNumber", Value: blockNumber},
 	}
 

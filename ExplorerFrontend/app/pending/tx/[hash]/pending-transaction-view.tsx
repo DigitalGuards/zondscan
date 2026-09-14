@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import type { PendingTransaction, ContractMeta } from '@/app/types';
 import config from '../../../../config';
+import { fetchPendingTransactionStatus, pendingStatusPollInterval, type PendingStatus } from '../../../lib/pendingTransaction';
 import { formatAmount, formatGasPrice, decodeTokenTransferInput, decodeContractCall, formatTokenAmount, hexToBigInt, type DecodedTokenTransfer } from '../../../lib/helpers';
 import Badge from '../../../components/Badge';
 import Breadcrumbs from '../../../components/Breadcrumbs';
@@ -27,8 +28,6 @@ interface PendingTransactionViewProps {
    */
   targetContract?: ContractMeta;
 }
-
-type LiveStatus = 'pending' | 'mined' | 'dropped';
 
 interface EtaResponse {
   etaSec: number;
@@ -99,32 +98,13 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
   const isTokenTransfer = decodedTransfer !== null;
 
   // ── Status poll ─────────────────────────────────────────────────────────
-  // /pending-transaction returns 404 once the tx is tombstoned. On 404 we
-  // probe /tx to distinguish "mined → redirect" from "dropped → notice".
-  const statusQuery = useQuery<{ status: LiveStatus }>({
+  // A mined tombstone redirects immediately. Other 404 responses probe /tx;
+  // temporary failures keep polling and display an unavailable notice.
+  const statusQuery = useQuery<{ status: PendingStatus }>({
     queryKey: ['pending-tx-status', pendingTx.hash],
-    queryFn: async () => {
-      try {
-        const res = await axios.get(`${config.handlerUrl}/pending-transaction/${pendingTx.hash}`);
-        if (res.data?.transaction?.status === 'pending') {
-          return { status: 'pending' };
-        }
-        return { status: 'mined' };
-      } catch (err: unknown) {
-        if (axios.isAxiosError(err) && err.response?.status === 404) {
-          try {
-            const tx = await axios.get(`${config.handlerUrl}/tx/${pendingTx.hash}`);
-            if (tx.data?.response) return { status: 'mined' };
-          } catch {
-            /* fallthrough */
-          }
-          return { status: 'dropped' };
-        }
-        return { status: 'pending' };
-      }
-    },
+    queryFn: () => fetchPendingTransactionStatus(pendingTx.hash),
     initialData: { status: 'pending' },
-    refetchInterval: (query) => (query.state.data?.status === 'pending' ? 5000 : false),
+    refetchInterval: (query) => pendingStatusPollInterval(query.state.data?.status),
   });
 
   // ── ETA poll ────────────────────────────────────────────────────────────
@@ -218,6 +198,11 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
 
   return (
     <div className="py-4 sm:py-6 lg:py-8">
+      {statusQuery.data?.status === 'unavailable' && (
+        <p role="status" className="mb-4 text-sm text-text-secondary">
+          Transaction status is temporarily unavailable. Checking again shortly.
+        </p>
+      )}
       <Breadcrumbs items={[
         { label: 'Pending', translateLabel: true, href: '/pending/1' },
         { label: `${pendingTx.hash.slice(0, 10)}...${pendingTx.hash.slice(-6)}` },

@@ -550,7 +550,7 @@
         "tags": ["Transactions & Mempool"],
         "operationId": "getTransaction",
         "summary": "Transaction detail",
-        "description": "Full detail for one confirmed transaction: transfer record, live receipt status and event logs, calldata, token transfers, internal calls, and contract metadata for decoding. This endpoint is deliberately uncached so a newly mined transaction shows its true confirmation count immediately.",
+        "description": "Full detail for one confirmed transaction: transfer record, indexed receipt accounting with live enrichment for legacy gaps, event logs, calldata, token transfers, internal calls, and contract metadata for decoding. This endpoint is deliberately uncached so a newly mined transaction shows its true confirmation count immediately.",
         "parameters": [
           { "name": "query", "in": "path", "required": true, "description": "Transaction hash: 0x followed by 64 hex characters.", "schema": { "type": "string", "pattern": "^0x[0-9a-fA-F]{64}$" } }
         ],
@@ -564,7 +564,7 @@
                   "properties": {
                     "response": { "$ref": "#/components/schemas/Transfer" },
                     "latestBlock": { "type": "integer", "description": "Latest indexed block height as a decimal integer." },
-                    "receiptStatus": { "type": "string", "description": "EVM receipt status: 0x1 success, 0x0 reverted. Absent when the receipt fetch failed." },
+                    "receiptStatus": { "type": "string", "description": "EVM receipt status: 0x1 success, 0x0 reverted. Indexed status survives receipt fetch failure. Absent only when neither storage nor a matching live receipt supplies it." },
                     "logs": {
                       "type": "array",
                       "items": {
@@ -2721,13 +2721,16 @@
           "chainId": { "type": "string" },
           "signature": { "type": "string" },
           "publicKey": { "type": "string" },
-          "data": { "type": "string" },
-          "status": { "type": "string" }
+          "input": { "type": "string", "description": "Transaction calldata, stored internally under the legacy BSON data key." },
+          "data": { "type": "string", "description": "Compatibility alias of input for existing block-response clients." },
+          "status": { "type": "string" },
+          "gasUsed": { "type": "string", "description": "Optional indexed actual receipt gas consumption." },
+          "effectiveGasPrice": { "type": "string", "description": "Optional indexed effective gas price." }
         }
       },
       "Transfer": {
         "type": "object",
-        "description": "Stored transfer record for one transaction. BlockNumber, BlockTimestamp, Value, GasUsed, GasPrice, Nonce, and Size are 0x-prefixed hex strings. Signature is the transaction's ML-DSA-87 signature and Pk is the signer's public key.",
+        "description": "Transaction detail projected from the indexed block. Available numeric quantities are 0x-prefixed hex strings; receipt quantities are empty when unavailable. PaidFees is an optional exact Quanta decimal string. Signature is the transaction's ML-DSA-87 signature and Pk is the signer's public key.",
         "properties": {
           "ID": { "type": "string", "description": "Internal record id." },
           "BlockNumber": { "type": "string" },
@@ -2736,8 +2739,13 @@
           "To": { "type": "string" },
           "TxHash": { "type": "string" },
           "Value": { "type": "string" },
-          "GasUsed": { "type": "string", "description": "Actual gas consumed when the receipt is available, the gas limit otherwise." },
+          "GasUsed": { "type": "string", "description": "Actual receipt gas consumed, or an empty string when unavailable." },
+          "GasLimit": { "type": "string", "description": "Transaction gas limit, separate from consumption." },
           "GasPrice": { "type": "string" },
+          "EffectiveGasPrice": { "type": "string", "description": "Receipt effective gas price, or an empty string when unavailable." },
+          "Status": { "type": "string", "description": "Receipt execution status: 0x1 success, 0x0 revert, empty when unavailable." },
+          "PaidFees": { "type": "string", "description": "Exact Quanta fee from receipt accounting. Omitted when unavailable." },
+          "BlockHash": { "type": "string" },
           "Nonce": { "type": "string" },
           "Signature": { "type": "string" },
           "Pk": { "type": "string" },
@@ -2747,7 +2755,7 @@
       },
       "TransactionByAddress": {
         "type": "object",
-        "description": "One indexed transaction row. Amount and PaidFees are exact decimal strings denominated in Quanta with 18 fractional digits. BlockNumber and TimeStamp are decimal strings.",
+        "description": "One indexed transaction row. Amount and verified PaidFees are decimal strings denominated in Quanta with 18 fractional digits. PaidFees is omitted for legacy rows lacking receipt provenance. BlockNumber and TimeStamp are decimal strings.",
         "properties": {
           "ID": { "type": "string", "description": "Internal record id." },
           "InOut": { "type": "integer", "description": "Direction flag relative to the indexed address." },
@@ -2758,7 +2766,8 @@
           "TxHash": { "type": "string" },
           "TimeStamp": { "type": "string" },
           "Amount": { "type": "string" },
-          "PaidFees": { "type": "string" },
+          "PaidFees": { "type": "string", "description": "Exact receipt-derived fee. Omitted when unavailable." },
+          "Status": { "type": "string", "description": "Optional receipt execution status: 0x1 success or 0x0 revert. Legacy rows may omit it." },
           "BlockNumber": { "type": "string" }
         }
       },

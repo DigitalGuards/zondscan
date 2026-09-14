@@ -90,9 +90,7 @@ func ReturnValidators(pageToken string) (*models.ValidatorResponse, error) {
 	}, nil
 }
 
-// CountValidators returns the total validator count. Uses
-// countDocumentsResilient (fast metadata read with an exact-count fallback when
-// the metadata reads 0, which it currently does on this deployment).
+// CountValidators returns the exact total validator count using the _id_ index.
 func CountValidators() (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -279,9 +277,7 @@ func GetEpochs(page, limit int) (*models.EpochsResponse, error) {
 	finalizedEpoch := parseEpoch(epochInfo.FinalizedEpoch)
 	justifiedEpoch := parseEpoch(epochInfo.JustifiedEpoch)
 
-	// Count total epoch records for "total pages" pagination. Uses
-	// countDocumentsResilient: the fast metadata read collapses to 0 on this
-	// deployment, which would wrongly show a single page.
+	// Count total epoch records exactly for "total pages" pagination.
 	total, err := countDocumentsResilient(ctx, configs.ValidatorHistoryCollection)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count epochs: %v", err)
@@ -470,10 +466,8 @@ func GetValidatorStats() (*models.ValidatorStatsResponse, error) {
 	}
 	currentEpoch := HexToInt(latestBlock) / 128
 
-	// Check whether the collection has any documents at all. Uses
-	// countDocumentsResilient because the EstimatedDocumentCount metadata reads
-	// 0 for populated collections on this deployment, which would wrongly short
-	// circuit to an empty stats response below.
+	// Check whether the collection has any documents using an exact count;
+	// metadata estimates can be stale for populated collections.
 	totalCount, err := countDocumentsResilient(ctx, configs.ValidatorsCollections)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count validators: %v", err)

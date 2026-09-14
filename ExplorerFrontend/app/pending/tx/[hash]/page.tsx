@@ -1,9 +1,6 @@
 import type { Metadata } from 'next';
-import axios from 'axios';
 import { redirect } from 'next/navigation';
-import { CURRENT_EXPLORER_CHAIN_ID_HEX } from '../../../lib/navigation';
-import config from '../../../../config';
-import type { PendingTransaction } from '@/app/types';
+import { fetchPendingTransactionStatus } from '../../../lib/pendingTransaction';
 import { sharedMetadata } from '@/app/lib/seo/metaData';
 import { isTxHash } from '@/app/lib/helpers';
 import PendingTransactionView from './pending-transaction-view';
@@ -54,71 +51,6 @@ function validateTransactionHash(hash: string): boolean {
   return isTxHash(hash);
 }
 
-async function getTransactionStatus(hash: string): Promise<{
-  status: 'pending' | 'mined' | 'dropped';
-  transaction: PendingTransaction | null;
-  blockNumber?: string;
-  // Verified-contract metadata for the tx's recipient, propagated from
-  // /pending-transaction/:hash so the pending view can ABI-decode the
-  // calldata when the target contract is source-verified.
-  targetContract?: import('@/app/types').ContractMeta;
-}> {
-  try {
-    // First try pending transactions endpoint
-    const response = await axios.get(`${config.handlerUrl}/pending-transaction/${hash}`);
-
-    if (!response.data?.transaction) {
-      return { status: 'dropped', transaction: null };
-    }
-
-    const tx = response.data.transaction;
-    return {
-      status: tx.status,
-      transaction: tx,
-      blockNumber: tx.blockNumber,
-      targetContract: response.data.targetContract,
-    };
-  } catch (error) {
-    console.error('Error fetching transaction status:', error);
-
-    // If we got a 404, check if it exists in regular transactions
-    if (axios.isAxiosError(error) && error.response?.status === 404) {
-      try {
-        const txResponse = await axios.get(`${config.handlerUrl}/tx/${hash}`);
-        if (txResponse.data?.response) {
-          const tx = txResponse.data.response;
-          return {
-            status: 'mined',
-            transaction: {
-              hash: hash,
-              status: 'mined',
-              blockNumber: tx.blockNumber?.toString(),
-              accessList: [],
-              blockHash: null,
-              chainId: CURRENT_EXPLORER_CHAIN_ID_HEX ?? '0x0',
-              from: tx.from || '',
-              gas: tx.gas || '0x0',
-              gasPrice: tx.gasPrice || '0x0',
-              input: tx.input || '0x',
-              nonce: tx.nonce?.toString() || '0',
-              publicKey: tx.publicKey || '',
-              to: tx.to,
-              transactionIndex: null,
-              type: tx.type || '0x0',
-              value: tx.value || '0x0',
-              lastSeen: Math.floor(Date.now() / 1000),
-              createdAt: Math.floor(Date.now() / 1000)
-            }
-          };
-        }
-      } catch (txError) {
-        console.error('Error checking regular transaction:', txError);
-      }
-    }
-    
-    return { status: 'dropped', transaction: null };
-  }
-}
 
 function ErrorCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -144,11 +76,19 @@ export default async function PendingTransactionPage({ params }: PageProps): Pro
     );
   }
 
-  const { status, transaction, targetContract } = await getTransactionStatus(hash);
+  const { status, transaction, targetContract } = await fetchPendingTransactionStatus(hash);
 
   // If transaction is mined, redirect to the confirmed transaction page
-  if (status === 'mined' && transaction) {
+  if (status === 'mined') {
     redirect(`/tx/${hash}`);
+  }
+
+  if (status === 'unavailable') {
+    return (
+      <ErrorCard title="Transaction Status Unavailable">
+        The explorer could not check this transaction. Please refresh to try again.
+      </ErrorCard>
+    );
   }
 
   // If transaction is dropped
