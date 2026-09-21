@@ -12,6 +12,7 @@ import {
   parseAuthorizedQrlAccount,
   requestAuthorizedQrlAccount,
 } from "../lib/qrlAccounts";
+import AddressFingerprint from "./AddressFingerprint";
 
 interface ConnectButtonProps {
   /** Called whenever the connected account changes (or null on disconnect). */
@@ -250,12 +251,12 @@ export default function ConnectButton({
   }, [disconnecting]);
 
   if (account) {
-    const short = `${account.slice(0, 8)}…${account.slice(-6)}`;
     return (
       <div className="space-y-2">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/15 text-green-300 text-xs font-mono">
-            <span className="h-1.5 w-1.5 rounded-full bg-green-400" /> {short}
+            <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
+            <AddressFingerprint address={account} />
           </span>
           <button
             type="button"

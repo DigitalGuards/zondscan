@@ -1,4 +1,9 @@
 "use client";
+import InterfaceText from '../../components/InterfaceText';
+
+import TimeDisplay from '../../components/TimeDisplay';
+import AddressText from '../../components/AddressText';
+import PreferenceDetails from '../../components/PreferenceDetails';
 
 import axios from 'axios';
 import React, { useState, useEffect, Suspense } from 'react';
@@ -6,7 +11,7 @@ import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import config from '../../../config';
 import Link from 'next/link';
-import { formatAmount, truncateHash, timeAgo, formatPlanckAdaptive, formatNumberWithCommas, hexToNumber } from '../../lib/helpers';
+import { formatAmount, truncateHash, formatPlanckAdaptive, formatNumberWithCommas, hexToNumber } from '../../lib/helpers';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import DetailRow from '../../components/DetailRow';
 import CopyButton from '../../components/CopyButton';
@@ -67,21 +72,6 @@ interface BlockDetailClientProps {
   blockNumber: string;
 }
 
-const formatTimestampUTC = (timestamp: string | null | undefined): string => {
-  if (!timestamp) return 'N/A';
-  const ts = typeof timestamp === 'string' && timestamp.startsWith('0x')
-    ? parseInt(timestamp, 16)
-    : parseInt(timestamp);
-  if (isNaN(ts)) return 'N/A';
-  const date = new Date(ts * 1000);
-  const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
-  const day = date.getUTCDate().toString().padStart(2, '0');
-  const year = date.getUTCFullYear();
-  const hours = date.getUTCHours().toString().padStart(2, '0');
-  const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-  const seconds = date.getUTCSeconds().toString().padStart(2, '0');
-  return `${month}/${day}/${year}, ${hours}:${minutes}:${seconds} UTC`;
-};
 
 export default function BlockDetailClient({ blockNumber }: BlockDetailClientProps): JSX.Element {
   // Reject obviously-bad inputs before hitting the API: negative numbers,
@@ -241,7 +231,7 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
   return (
     <main className="py-4 sm:py-6 lg:py-8" aria-labelledby="block-heading">
       <Breadcrumbs items={[
-        { label: 'Blocks', href: '/blocks/1' },
+        { label: 'Blocks', translateLabel: true, href: '/blocks/1' },
         { label: `Block #${blockNumber}` },
       ]} />
 
@@ -316,8 +306,8 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
             )}
           </DetailRow>
           <DetailRow label="Timestamp">
-            {timeAgo(tsNum)}
-            <span className="text-text-muted ml-2">({formatTimestampUTC(blockData.timestamp)})</span>
+            <TimeDisplay timestamp={tsNum} relative />
+            <span className="text-text-muted ml-2">(<TimeDisplay timestamp={blockData.timestamp} />)</span>
           </DetailRow>
           <DetailRow label="Transactions">
             {blockData.transactions?.length ?? 0}
@@ -330,6 +320,8 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
               return <>{val} {unit}</>;
             })()}
           </DetailRow>
+          <PreferenceDetails key={blockData.hash} className="group mt-3 rounded-lg border border-border p-3">
+            <summary className="cursor-pointer text-sm font-medium text-text-secondary hover:text-accent"><InterfaceText text="Additional block details" /></summary>
           {blockData.prevRandao && (
             <DetailRow label="Prev Randao" mono>{blockData.prevRandao}</DetailRow>
           )}
@@ -338,6 +330,7 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
           {blockData.extraData && blockData.extraData !== '0x' && (
             <DetailRow label="Extra Data" mono>{blockData.extraData}</DetailRow>
           )}
+          </PreferenceDetails>
         </div>
       </section>
 
@@ -354,11 +347,11 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border/50">
-                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Hash</th>
-                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">From</th>
-                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">To</th>
-                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Value</th>
-                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:table-cell">Activity</th>
+                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider"><InterfaceText text="Hash" /></th>
+                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell"><InterfaceText text="From" /></th>
+                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell"><InterfaceText text="To" /></th>
+                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider"><InterfaceText text="Value" /></th>
+                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:table-cell"><InterfaceText text="Activity" /></th>
                 </tr>
               </thead>
               <tbody>
@@ -385,7 +378,7 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
                           className="text-text-secondary hover:text-accent font-mono text-xs transition-colors"
                           title={tx.from}
                         >
-                          {truncateHash(tx.from, 8, 6)}
+                          <AddressText address={tx.from} />
                         </Link>
                       </td>
                       <td className="px-4 sm:px-6 py-3 hidden sm:table-cell">
@@ -394,7 +387,7 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
                           className="text-text-secondary hover:text-accent font-mono text-xs transition-colors"
                           title={tx.to}
                         >
-                          {truncateHash(tx.to, 8, 6)}
+                          <AddressText address={tx.to} />
                         </Link>
                       </td>
                       <td className="px-4 sm:px-6 py-3 text-text-secondary tabular-nums whitespace-nowrap">

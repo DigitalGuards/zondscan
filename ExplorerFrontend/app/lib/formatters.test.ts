@@ -13,11 +13,13 @@ import {
   formatStaked,
   formatTokenAmount,
   truncateHash,
+  compactQrlAddress,
   formatAddress,
   smallestUnitToDecimal,
   decimalToSmallestUnit,
   compactTokenIDLabel,
   qNormaliseAbiValue,
+  isValidQrlAddressFormat,
   formatNumberWithCommas,
   normalizeHexString,
   convertUnits,
@@ -192,25 +194,58 @@ describe('truncateHash', () => {
   });
 });
 
+describe('compactQrlAddress', () => {
+  it('renders the first, centered, and final eight body characters', () => {
+    const body = Array.from({ length: 128 }, (_, index) => (index % 10).toString()).join('');
+
+    expect(compactQrlAddress(`Q${body}`)).toBe('Q01234567...01234567...01234567');
+  });
+
+  it('canonicalizes supported aliases before building a fingerprint', () => {
+    const checksum =
+      'QaaaAAaaaAAaAaaAaAAAAaAAAaAaAaAAaAaaAaaaaAAAAAAAAaAAAAaAaAAaaAAaaaaAaAAAAaaAaAAaaaaaaAaAAaaaaAaAaaaaAaaaAAAAaAAAAaAaAaaAAAaAaaaAA';
+    const body = checksum.slice(1);
+    const middleStart = Math.floor((body.length - 8) / 2);
+    const expected =
+      `Q${body.slice(0, 8)}...` +
+      `${body.slice(middleStart, middleStart + 8)}...` +
+      body.slice(-8);
+
+    expect(compactQrlAddress(`0X${'A'.repeat(128)}`)).toBe(expected);
+  });
+
+  it.each([
+    ['a legacy address', `Q${'a'.repeat(40)}`],
+    ['a non-hex character', `Q${'a'.repeat(127)}z`],
+    ['an invalid mixed-case checksum', `Q${'Ab'.repeat(64)}`],
+  ])('leaves %s unchanged', (_label, value) => {
+    expect(compactQrlAddress(value)).toBe(value);
+  });
+
+  it('returns an empty string for missing input', () => {
+    expect(compactQrlAddress(null)).toBe('');
+    expect(compactQrlAddress(undefined)).toBe('');
+    expect(compactQrlAddress('')).toBe('');
+  });
+});
+
 describe('formatAddress', () => {
-  it('canonicalises q-prefix to Q', () => {
-    expect(formatAddress('qabc123')).toBe('Qabc123');
+  it('canonicalizes a complete current-format address', () => {
+    const expected =
+      'QaaaAAaaaAAaAaaAaAAAAaAAAaAaAaAAaAaaAaaaaAAAAAAAAaAAAAaAaAAaaAAaaaaAaAAAAaaAaAAaaaaaaAaAAaaaaAaAaaaaAaaaAAAAaAAAAaAaAaaAAAaAaaaAA';
+    expect(formatAddress(`0x${'a'.repeat(128)}`)).toBe(expected);
   });
 
-  it('keeps 0x-prefixed contract addresses on 0x', () => {
-    expect(formatAddress('0x7abcdef')).toBe('0x7abcdef');
-  });
+  it.each(['qabc123', '0x7abcdef', '0xabc', 'abcdef', 'not!hex'])(
+    'returns invalid or legacy value %s unchanged',
+    (value) => {
+      expect(formatAddress(value)).toBe(value);
+    },
+  );
 
-  it('converts 0x non-7 to Q', () => {
-    expect(formatAddress('0xabc')).toBe('Qabc');
-  });
-
-  it('adds Q to a bare hex string', () => {
-    expect(formatAddress('abcdef')).toBe('Qabcdef');
-  });
-
-  it('returns invalid input unchanged', () => {
-    expect(formatAddress('not!hex')).toBe('not!hex');
+  it('returns an invalid mixed-case checksum unchanged', () => {
+    const value = `Q${'Ab'.repeat(64)}`;
+    expect(formatAddress(value)).toBe(value);
   });
 
   it('returns empty string for null / undefined / empty', () => {
@@ -244,9 +279,15 @@ describe('compactTokenIDLabel', () => {
 });
 
 describe('qNormaliseAbiValue', () => {
+  const hexA = 'a'.repeat(128);
+  const hexB = 'b'.repeat(128);
+  const checksumA =
+    'QaaaAAaaaAAaAaaAaAAAAaAAAaAaAaAAaAaaAaaaaAAAAAAAAaAAAAaAaAAaaAAaaaaAaAAAAaaAaAAaaaaaaAaAAaaaaAaAaaaaAaaaAAAAaAAAAaAaAaaAAAaAaaaAA';
+  const checksumB =
+    'QBbBbbBBbBbBBBBbBbBbBBbBBBbBBBbBbBBBbbbBBbBBbBbbBBBBbBBbbbbbBbbBBbbBBBbbBBbbbBbBBbBBbbbbBBbBBBbBbBBbbBbbBBbBBBBbbBBbbbbBBBbbBbbBb';
+
   it('rewrites Z-prefixed addresses to Q', () => {
-    expect(qNormaliseAbiValue('Z0123456789abcdef0123456789abcdef01234567', 'address'))
-      .toBe('Q0123456789abcdef0123456789abcdef01234567');
+    expect(qNormaliseAbiValue(`Z${hexA}`, 'address')).toBe(checksumA);
   });
 
   it('leaves non-address types untouched', () => {
@@ -255,29 +296,55 @@ describe('qNormaliseAbiValue', () => {
   });
 
   it('recurses into address arrays', () => {
-    const addrs = ['Z0123456789abcdef0123456789abcdef01234567', 'Z9999999999999999999999999999999999999999'];
+    const addrs = [`Z${hexA}`, `Z${hexB}`];
     expect(qNormaliseAbiValue(addrs, 'address[]')).toEqual([
-      'Q0123456789abcdef0123456789abcdef01234567',
-      'Q9999999999999999999999999999999999999999',
+      checksumA,
+      checksumB,
     ]);
   });
 
   it('recurses into nested address[][]', () => {
-    const nested = [
-      ['Z0123456789abcdef0123456789abcdef01234567'],
-      ['Z9999999999999999999999999999999999999999'],
-    ];
+    const nested = [[`Z${hexA}`], [`Z${hexB}`]];
     expect(qNormaliseAbiValue(nested, 'address[][]')).toEqual([
-      ['Q0123456789abcdef0123456789abcdef01234567'],
-      ['Q9999999999999999999999999999999999999999'],
+      [checksumA],
+      [checksumB],
     ]);
   });
 
   it('returns Z-string unchanged when type doesn\'t mark it as address', () => {
-    // Defensive: don't rewrite arbitrary strings that happen to start
-    // with "Z" + 40 hex chars unless the ABI type says address.
-    expect(qNormaliseAbiValue('Z0123456789abcdef0123456789abcdef01234567', 'bytes'))
-      .toBe('Z0123456789abcdef0123456789abcdef01234567');
+    expect(qNormaliseAbiValue(`Z${hexA}`, 'bytes')).toBe(`Z${hexA}`);
+  });
+
+  it.each([
+    ['127 hexadecimal characters', `Z${'a'.repeat(127)}`],
+    ['129 hexadecimal characters', `Z${'a'.repeat(129)}`],
+    ['a non-hex character', `Z${'a'.repeat(127)}z`],
+    ['a legacy 20-byte value', `Z${'a'.repeat(40)}`],
+    ['an invalid mixed-case checksum', `Z${'Ab'.repeat(64)}`],
+  ])('leaves an address value with %s unchanged', (_label, value) => {
+    expect(qNormaliseAbiValue(value, 'address')).toBe(value);
+  });
+});
+
+describe('isValidQrlAddressFormat', () => {
+  const hex = 'a'.repeat(128);
+
+  it('accepts the supported Q, q, 0x, 0X, and bare aliases', () => {
+    expect(isValidQrlAddressFormat(`Q${hex}`)).toBe(true);
+    expect(isValidQrlAddressFormat(`q${hex.toUpperCase()}`)).toBe(true);
+    expect(isValidQrlAddressFormat(`0x${hex}`)).toBe(true);
+    expect(isValidQrlAddressFormat(`0X${hex.toUpperCase()}`)).toBe(true);
+    expect(isValidQrlAddressFormat(`  ${hex}  `)).toBe(true);
+  });
+
+  it.each([
+    ['127 hexadecimal characters', `Q${'a'.repeat(127)}`],
+    ['129 hexadecimal characters', `Q${'a'.repeat(129)}`],
+    ['a non-hex character', `Q${'a'.repeat(127)}z`],
+    ['a legacy 20-byte address', `Q${'a'.repeat(40)}`],
+    ['an invalid mixed-case checksum', `Q${'Ab'.repeat(64)}`],
+  ])('rejects an address with %s', (_label, address) => {
+    expect(isValidQrlAddressFormat(address)).toBe(false);
   });
 });
 
@@ -368,12 +435,11 @@ describe('convertUnits', () => {
 // ─── beacon withdrawal credentials ───────────────────────────────────────
 
 describe('withdrawalCredentialsToAddress', () => {
-  // Live sample from the validators API (0x00 prefix + 11 zero bytes +
-  // 20-byte execution address).
-  const creds = '000000000000000000000000c0e6dd0e844e0048dcb0bd3fdcc44a970beca38d';
-  const address = 'Qc0e6dd0e844e0048dcb0bd3fdcc44a970beca38d';
+  const creds = 'c0'.repeat(64);
+  const address =
+    'QC0C0c0c0c0c0C0c0C0c0C0C0C0c0c0C0C0C0C0C0C0c0C0C0c0c0C0C0C0c0c0c0c0C0c0C0c0C0C0c0C0c0c0C0c0C0C0C0C0C0C0c0c0c0c0c0C0C0C0c0C0c0c0C0';
 
-  it('decodes zero-prefixed credentials to the Q address', () => {
+  it('decodes a raw 64-byte withdrawal address', () => {
     expect(withdrawalCredentialsToAddress(creds)).toBe(address);
   });
 
@@ -381,8 +447,8 @@ describe('withdrawalCredentialsToAddress', () => {
     expect(withdrawalCredentialsToAddress(`0x${creds}`)).toBe(address);
   });
 
-  it('returns null when the prefix bytes are non-zero', () => {
-    expect(withdrawalCredentialsToAddress(`01${creds.slice(2)}`)).toBeNull();
+  it('rejects the incoherent 12-byte-prefix plus 64-byte address shape', () => {
+    expect(withdrawalCredentialsToAddress(`${'00'.repeat(12)}${creds}`)).toBeNull();
   });
 
   it('returns null on wrong-length input', () => {

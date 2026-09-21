@@ -1,4 +1,5 @@
 'use client';
+import AddressText from '../../components/AddressText';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
@@ -323,10 +324,10 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
                       className="text-accent hover:underline font-mono"
                     >
                       <span className="hidden md:inline">
-                        {validator.withdrawalAddress.slice(0, 12)}...{validator.withdrawalAddress.slice(-8)}
+                        <AddressText address={validator.withdrawalAddress} leading={12} trailing={8} />
                       </span>
                       <span className="md:hidden">
-                        {validator.withdrawalAddress.slice(0, 8)}...
+                        <AddressText address={validator.withdrawalAddress} leading={8} trailing={4} />
                       </span>
                     </Link>
                   ) : (

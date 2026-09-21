@@ -2,7 +2,7 @@
 
 ## `build-dapp-example.sh`
 
-Stages the [QRL Connect](https://github.com/DigitalGuards/myqrlwallet-connect) test dApp into `public/dapp-example/` so ZondScan serves it as a static SPA at [`/dapp-example`](https://zondscan.com/dapp-example). Invoked automatically via the `prebuild` npm hook, so every `npm run build` (and by extension every `update-frontend.sh` / PM2 restart) refreshes the hosted example against the latest connect repo.
+Stages the [QRL Connect](https://github.com/DigitalGuards/myqrlwallet-connect) test dApp into `public/dapp-example/` so ZondScan serves it as a static SPA at [`/dapp-example`](https://zondscan.com/dapp-example). Invoked automatically via the `prebuild` npm hook, so every `npm run build` (and by extension every `update-frontend.sh` / PM2 restart) refreshes the hosted example against the pinned Connect release.
 
 ### What @qrlwallet/connect is
 
@@ -36,7 +36,7 @@ A Next.js rewrite in `next.config.js` maps `/dapp-example` (no trailing slash) t
 | Variable              | Default                                                       | Purpose                                    |
 | --------------------- | ------------------------------------------------------------- | ------------------------------------------ |
 | `QRL_CONNECT_REPO`    | `https://github.com/DigitalGuards/myqrlwallet-connect.git`    | Alternate remote.                          |
-| `QRL_CONNECT_REF`     | `main`                                                        | Branch or tag to clone. Pin to a tag for stable deploys. |
+| `QRL_CONNECT_REF`     | `v5.0.0`                                                      | Branch or tag to clone. The default supports 64-byte QIP-55 addresses. |
 | `QRL_CONNECT_LOCAL`   | _(unset)_                                                     | Absolute path to a local connect checkout. Rsyncs instead of cloning, useful when developing against uncommitted SDK changes. |
 | `SKIP_DAPP_EXAMPLE`   | `0`                                                           | Set to `1` to bypass entirely (fast local builds). |
 
@@ -44,7 +44,7 @@ A Next.js rewrite in `next.config.js` maps `/dapp-example` (no trailing slash) t
 
 ```bash
 # Pin to a specific SDK release tag
-QRL_CONNECT_REF=v0.2.0 npm run build
+QRL_CONNECT_REF=v5.0.0 npm run build
 
 # Build against a local connect checkout (no git required)
 QRL_CONNECT_LOCAL=/home/you/myqrlwallet-connect npm run build

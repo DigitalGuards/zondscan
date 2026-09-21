@@ -1,5 +1,11 @@
 'use client';
 
+import { formatTransactionAmount } from '../../../lib/transactionAmount';
+
+import AddressText from '../../../components/AddressText';
+
+import TimeDisplay from '../../../components/TimeDisplay';
+
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
@@ -12,7 +18,6 @@ import type { ColumnDef, Row } from '@tanstack/react-table';
 import {
   formatAddress,
   formatAmount,
-  formatTimestamp,
   normalizeHexString,
   NATIVE_UNIT,
 } from '../../../lib/helpers';
@@ -108,20 +113,8 @@ export default function TransactionsPanel({
     () =>
       rows.map((tx) => {
         const [amount, amountUnit] = formatAmount(tx.Amount);
-        // PaidFees comes off the wire as a decimal-Quanta string
-        // ("0.0000787..."). Render in Quanta with up to 8 decimals,
-        // Etherscan-style ("0.00428184 Quanta"). Cast via unknown because
-        // the type still says `number?` even though the wire shape is
-        // a string. Trailing zeros trim out via parseFloat round-trip
-        // so 0.10000000 displays as 0.1, not 0.10000000.
-        const rawFees = tx.PaidFees as unknown;
-        const feeQuanta =
-          typeof rawFees === 'string' || typeof rawFees === 'number'
-            ? parseFloat(String(rawFees))
-            : 0;
-        const formattedFees = Number.isFinite(feeQuanta)
-          ? `${parseFloat(feeQuanta.toFixed(8))} ${NATIVE_UNIT}`
-          : `0 ${NATIVE_UNIT}`;
+        const fee = formatTransactionAmount(tx.PaidFees);
+        const formattedFees = fee ? `${fee.quanta} ${NATIVE_UNIT}` : 'Unavailable';
         return {
           ...tx,
           formattedAmount: `${amount} ${amountUnit}`,
@@ -164,7 +157,7 @@ export default function TransactionsPanel({
                 <div className="flex items-center gap-1">
                   <span className="text-text-secondary text-sm">From:</span>
                   <Link href={'/address/' + fromAddress} title={fromAddress}>
-                    {truncateMiddle(fromAddress)}
+                    <AddressText address={fromAddress} />
                   </Link>
                 </div>
               )}
@@ -172,7 +165,7 @@ export default function TransactionsPanel({
                 <div className="flex items-center gap-1">
                   <span className="text-text-secondary text-sm">To:</span>
                   <Link href={'/address/' + toAddress} title={toAddress}>
-                    {truncateMiddle(toAddress)}
+                    <AddressText address={toAddress} />
                   </Link>
                 </div>
               )}
@@ -196,7 +189,7 @@ export default function TransactionsPanel({
       }),
       columnHelper.accessor('TimeStamp', {
         header: 'Timestamp',
-        cell: (info) => <span>{formatTimestamp(info.getValue())}</span>,
+        cell: (info) => <span><TimeDisplay timestamp={info.getValue()} /></span>,
       }),
       columnHelper.accessor('formattedAmount', {
         header: 'Amount',
@@ -269,7 +262,7 @@ export default function TransactionsPanel({
                 href={'/address/' + formatAddress('0x' + normalizeHexString(r.From))}
                 className="text-sm text-accent hover:text-accent-hover break-all"
               >
-                {truncateMiddle(formatAddress('0x' + normalizeHexString(r.From)))}
+                <AddressText address={formatAddress('0x' + normalizeHexString(r.From))} />
               </Link>
             </div>
           )}
@@ -281,7 +274,7 @@ export default function TransactionsPanel({
                 href={'/address/' + formatAddress('0x' + normalizeHexString(r.To))}
                 className="text-sm text-accent hover:text-accent-hover break-all"
               >
-                {truncateMiddle(formatAddress('0x' + normalizeHexString(r.To)))}
+                <AddressText address={formatAddress('0x' + normalizeHexString(r.To))} />
               </Link>
             </div>
           )}
@@ -299,7 +292,7 @@ export default function TransactionsPanel({
 
           <div>
             <div className="text-xs text-text-secondary">Time</div>
-            <div className="text-sm text-text-primary">{formatTimestamp(r.TimeStamp)}</div>
+            <div className="text-sm text-text-primary"><TimeDisplay timestamp={r.TimeStamp} /></div>
           </div>
         </div>
       </div>

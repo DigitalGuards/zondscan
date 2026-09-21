@@ -1,4 +1,7 @@
 'use client';
+import InterfaceText from '../../components/InterfaceText';
+
+import TimeDisplay from '../../components/TimeDisplay';
 
 import React from 'react';
 import Link from 'next/link';
@@ -7,7 +10,7 @@ import config from '../../../config';
 import { useQuery } from '@tanstack/react-query';
 import type { BlocksResponse } from '@/app/types';
 import { useRouter } from 'next/navigation';
-import { timeAgo, truncateHash } from '../../lib/helpers';
+import { truncateHash } from '../../lib/helpers';
 import SearchBar from '../../components/SearchBar';
 import Pagination from '../../components/Pagination';
 
@@ -61,7 +64,7 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
 
   return (
     <div className="py-4 sm:py-6 lg:py-8">
-      <h1 className="section-title mb-4">Blocks</h1>
+      <h1 className="section-title mb-4"><InterfaceText text="Blocks" /></h1>
 
       <div className="mb-6">
         <SearchBar />
@@ -72,12 +75,12 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Block</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">Hash</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider"><InterfaceText text="Block" /></th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell"><InterfaceText text="Hash" /></th>
                 <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Txns</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden lg:table-cell">Activity</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Time</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:table-cell">Gas Used</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden lg:table-cell"><InterfaceText text="Activity" /></th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider"><InterfaceText text="Time" /></th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:table-cell"><InterfaceText text="Gas Used" /></th>
               </tr>
             </thead>
             <tbody>
@@ -151,7 +154,7 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
                         )}
                       </td>
                       <td className="px-4 py-3 text-text-secondary tabular-nums">
-                        {timeAgo(block.timestamp)}
+                        <TimeDisplay timestamp={block.timestamp} relative />
                       </td>
                       <td className="px-4 py-3 text-text-secondary tabular-nums hidden md:table-cell">
                         {block.gasUsed ? parseInt(block.gasUsed, 16).toLocaleString() : '0'}

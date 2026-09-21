@@ -1,6 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import AddressText from '../../../components/AddressText';
+import { usePreferences } from '../../../components/PreferencesProvider';
+import { isZeroTokenTransfer } from '../../../lib/preferences';
+
+import TimeDisplay from '../../../components/TimeDisplay';
+
+import { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import Link from 'next/link';
 import {
@@ -11,8 +17,9 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import type { ColumnDef, Row } from '@tanstack/react-table';
-import { formatTimestamp, formatTokenAmount } from '../../../lib/helpers';
+import { formatTokenAmount } from '../../../lib/helpers';
 import CopyButton from '../../../components/CopyButton';
+import AddressFingerprint from '../../../components/AddressFingerprint';
 import DebouncedInput from '../../../components/DebouncedInput';
 import config from '../../../../config';
 import {
@@ -74,6 +81,7 @@ export default function TokenTransfersPanel({
   address,
   onLoaded,
 }: TokenTransfersPanelProps): JSX.Element {
+  const { preferences, updatePreferences, ready } = usePreferences();
   const [rows, setRows] = useState<TokenTransferRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loaded, setLoaded] = useState(false);
@@ -85,8 +93,16 @@ export default function TokenTransfersPanel({
   // rows arrive; autoResetPageIndex is off below because the post-mount
   // fetch swapping `data` in would otherwise clobber the restored page.
   const [pageParam, setPageParam] = useUrlIntParam('ttPage', 1);
-  const pagination = { pageIndex: pageParam - 1, pageSize: TRANSFERS_PAGE_SIZE };
   const isMobile = useIsMobile();
+  const previousHideZero = useRef<boolean | undefined>(undefined);
+  useEffect(() => {
+    if (!ready) return;
+    if (previousHideZero.current !== undefined && previousHideZero.current !== preferences.hideZeroTokenTransfers) {
+      setPageParam(1);
+    }
+    previousHideZero.current = preferences.hideZeroTokenTransfers;
+  }, [preferences.hideZeroTokenTransfers, ready, setPageParam]);
+
 
   useEffect(() => {
     let cancelled = false;
@@ -129,7 +145,7 @@ export default function TokenTransfersPanel({
 
   const data = useMemo(
     () =>
-      rows.map((row) => {
+      rows.filter(row => !preferences.hideZeroTokenTransfers || !isZeroTokenTransfer(row)).map((row) => {
         const decimals = typeof row.tokenDecimals === 'number' ? row.tokenDecimals : 0;
         let tsSeconds = 0;
         if (row.timestamp) {
@@ -148,8 +164,13 @@ export default function TokenTransfersPanel({
           tsSeconds,
         };
       }),
-    [rows],
+    [rows, preferences.hideZeroTokenTransfers],
   );
+  const hiddenTransfers = rows.length - data.length;
+  const pagination = {
+    pageIndex: Math.min(pageParam - 1, Math.max(0, Math.ceil(data.length / TRANSFERS_PAGE_SIZE) - 1)),
+    pageSize: TRANSFERS_PAGE_SIZE,
+  };
 
   const columns = useMemo(
     () => [
@@ -166,8 +187,7 @@ export default function TokenTransfersPanel({
           header: 'Token',
           cell: (info) => {
             const { name, symbol, standard, tokenID, contractAddress } = info.getValue();
-            const label =
-              name || symbol || (contractAddress ? truncateMiddle(contractAddress) : 'Token');
+            const label = name || symbol;
             // Surface QRC-X branding on the row (DB rows stay ERC-X).
             const badge = standard ? standard.replace(/^ERC-/, 'QRC-') : 'Token';
             return (
@@ -177,7 +197,9 @@ export default function TokenTransfersPanel({
                   className="text-accent hover:text-accent-hover font-medium"
                   title={contractAddress}
                 >
-                  {label}
+                  {label || (contractAddress ? (
+                    <AddressFingerprint address={contractAddress} />
+                  ) : 'Token')}
                 </Link>
                 <div className="flex items-center gap-2 text-xs text-text-secondary">
                   <span className="font-mono">{badge}</span>
@@ -206,7 +228,7 @@ export default function TokenTransfersPanel({
                     title={from}
                     className="text-accent hover:text-accent-hover"
                   >
-                    {truncateMiddle(from)}
+                    <AddressText address={from} />
                   </Link>
                 </div>
               )}
@@ -218,7 +240,7 @@ export default function TokenTransfersPanel({
                     title={to}
                     className="text-accent hover:text-accent-hover"
                   >
-                    {truncateMiddle(to)}
+                    <AddressText address={to} />
                   </Link>
                 </div>
               )}
@@ -258,7 +280,7 @@ export default function TokenTransfersPanel({
       }),
       columnHelper.accessor('tsSeconds', {
         header: 'Timestamp',
-        cell: (info) => <span>{formatTimestamp(info.getValue())}</span>,
+        cell: (info) => <span><TimeDisplay timestamp={info.getValue()} /></span>,
       }),
     ],
     [],
@@ -300,7 +322,7 @@ export default function TokenTransfersPanel({
   ): JSX.Element => {
     const r = row.original;
     const badge = r.tokenStandard ? r.tokenStandard.replace(/^ERC-/, 'QRC-') : 'Token';
-    const label = r.tokenName || r.tokenSymbol || r.contractAddress;
+    const label = r.tokenName || r.tokenSymbol;
     return (
       <div key={row.id} className="p-4 border-b border-border last:border-b-0">
         <div className="space-y-3">
@@ -311,7 +333,7 @@ export default function TokenTransfersPanel({
                 href={`/address/${r.contractAddress}`}
                 className="text-sm text-accent hover:text-accent-hover break-all"
               >
-                {label}
+                {label || <AddressFingerprint address={r.contractAddress} />}
               </Link>
               <div className="text-xs text-text-secondary font-mono">
                 {badge}
@@ -346,7 +368,7 @@ export default function TokenTransfersPanel({
                 href={`/address/${r.from}`}
                 className="text-sm text-accent hover:text-accent-hover break-all"
               >
-                {truncateMiddle(r.from)}
+                <AddressText address={r.from} />
               </Link>
             </div>
           )}
@@ -358,14 +380,14 @@ export default function TokenTransfersPanel({
                 href={`/address/${r.to}`}
                 className="text-sm text-accent hover:text-accent-hover break-all"
               >
-                {truncateMiddle(r.to)}
+                <AddressText address={r.to} />
               </Link>
             </div>
           )}
 
           <div>
             <div className="text-xs text-text-secondary">Time</div>
-            <div className="text-sm text-text-primary">{formatTimestamp(r.tsSeconds)}</div>
+            <div className="text-sm text-text-primary"><TimeDisplay timestamp={r.tsSeconds} /></div>
           </div>
         </div>
       </div>
@@ -375,6 +397,10 @@ export default function TokenTransfersPanel({
   return (
     <div className="w-full">
       <div className="p-4 border-b border-border">
+        {hiddenTransfers > 0 && <p className="mb-3 text-xs text-text-muted">
+          {hiddenTransfers} zero-quantity transfer{hiddenTransfers === 1 ? '' : 's'} hidden from the loaded records.
+          {' '}<button type="button" className="text-accent hover:underline" onClick={() => updatePreferences({ hideZeroTokenTransfers: false })}>Show zero transfers</button>
+        </p>}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="text-sm text-text-secondary">
             {total.toLocaleString('en-US')} transfer{total === 1 ? '' : 's'}
@@ -399,6 +425,7 @@ export default function TokenTransfersPanel({
       </div>
 
       <div className="overflow-x-auto">
+        {data.length === 0 && rows.length > 0 && <p className="p-6 text-sm text-text-muted">All loaded transfers are hidden by your display settings.</p>}
         {isMobile ? (
           <div className="overflow-hidden">
             {table.getRowModel().rows.map((row) => renderCard(row))}

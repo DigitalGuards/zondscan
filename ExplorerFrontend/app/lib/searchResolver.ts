@@ -7,9 +7,10 @@
  *   - "0x"-prefixed hex block number     → /block/0x<hex>     (≤ 16 hex chars)
  *   - 66-char tx hash ("0x" + 64 hex)    → /tx/<hash>
  *   - 64-char bare tx hash (no 0x)       → /tx/0x<hash>
- *   - Q + 40 hex chars (case-insensitive Q prefix)            → /address/Q<hex>
- *   - 0x + 40 hex chars (contract / hex-form address)          → /address/<addr>
- *   - 40 bare hex chars (no prefix, ambiguous: treat as Q address)
+ *   - Q/q + 128 hex chars                                     → /address/Q<checksum>
+ *   - 0x/0X + 128 hex chars                                   → /address/Q<checksum>
+ *   - 128 bare hex chars                                      → /address/Q<checksum>
+ *   - conservative ASCII name below .qrl                      → /address/<normalized-name>
  *
  * Anything else returns an `error` string explaining which shape failed
  * and what was expected, so users can self-correct instead of seeing a
@@ -17,6 +18,8 @@
  */
 
 import { TX_HASH_RE } from './helpers';
+import { canonicalizeQrlAddress, hasQrlAddressShape } from './qrlAddress';
+import { hasQnsSuffix, normalizeQnsName } from './qns';
 
 export type SearchResolution =
   | { path: string }
@@ -26,9 +29,6 @@ const RE_DECIMAL = /^[0-9]+$/;
 const RE_HEX_BLOCK = /^0x[0-9a-fA-F]{1,16}$/;
 const RE_TX_HASH = TX_HASH_RE;
 const RE_BARE_TX_HASH = /^[0-9a-fA-F]{64}$/;
-const RE_Q_ADDR = /^[Qq][0-9a-fA-F]{40}$/;
-const RE_HEX_ADDR = /^0x[0-9a-fA-F]{40}$/;
-const RE_BARE_ADDR = /^[0-9a-fA-F]{40}$/;
 
 export function resolveSearchPath(raw: string): SearchResolution {
   // Trim whitespace + strip a single leading slash so pasted /tx/<hash>
@@ -59,17 +59,22 @@ export function resolveSearchPath(raw: string): SearchResolution {
     return { path: `/tx/0x${cleaned}` };
   }
 
-  if (RE_Q_ADDR.test(cleaned)) {
-    const normalized = 'Q' + cleaned.slice(1).toLowerCase();
-    return { path: `/address/${normalized}` };
+  const canonicalAddress = canonicalizeQrlAddress(cleaned);
+  if (canonicalAddress) {
+    return { path: `/address/${canonicalAddress}` };
   }
 
-  if (RE_HEX_ADDR.test(cleaned)) {
-    return { path: `/address/${cleaned}` };
+  if (hasQrlAddressShape(cleaned)) {
+    return { error: 'Address has an invalid QIP-55 mixed-case checksum.' };
   }
 
-  if (RE_BARE_ADDR.test(cleaned)) {
-    return { path: `/address/Q${cleaned.toLowerCase()}` };
+  const normalizedName = normalizeQnsName(cleaned);
+  if (normalizedName) {
+    return { path: `/address/${normalizedName}` };
+  }
+
+  if (hasQnsSuffix(cleaned)) {
+    return { error: 'Invalid QNS name. Use the conservative ASCII .qrl name format.' };
   }
 
   // Per-shape diagnostics so the user knows what they almost got right.
@@ -80,11 +85,14 @@ export function resolveSearchPath(raw: string): SearchResolution {
   if (cleaned.length === 67 && cleaned.startsWith('0x')) {
     return { error: 'Transaction hash is one character too long (need 64 hex chars after 0x).' };
   }
-  if (cleaned.length === 41 && (cleaned.startsWith('Q') || cleaned.startsWith('q'))) {
+  if (cleaned.length === 129 && /^[Qq]/.test(cleaned)) {
     return { error: 'Address has a non-hex character after the Q prefix.' };
   }
-  if (cleaned.length === 42 && cleaned.startsWith('0x')) {
+  if (cleaned.length === 130 && /^0[xX]/.test(cleaned)) {
     return { error: 'Address has a non-hex character after the 0x prefix.' };
   }
-  return { error: 'Unrecognised input. Expected a block number, transaction hash (0x + 64 hex), or address (Q + 40 hex).' };
+  return {
+    error:
+      'Unrecognised input. Expected a block number, transaction hash (0x + 64 hex), address (Q + 128 hex), or .qrl name.',
+  };
 }

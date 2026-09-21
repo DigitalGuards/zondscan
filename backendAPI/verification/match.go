@@ -3,6 +3,7 @@ package verification
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,23 @@ import (
 
 	"backendAPI/db"
 )
+
+// RuntimeCodeSHA256 returns the SHA-256 digest of canonical runtime-code
+// bytes. Prefix and hex-letter case are representation details and do not
+// change the deployment identity.
+func RuntimeCodeSHA256(code string) (string, error) {
+	canonical := strings.ToLower(strings.TrimSpace(code))
+	canonical = strings.TrimPrefix(canonical, "0x")
+	if canonical == "" || canonical == "0" {
+		return "", errors.New("runtime code is empty")
+	}
+	decoded, err := hex.DecodeString(canonical)
+	if err != nil {
+		return "", fmt.Errorf("decode runtime code: %w", err)
+	}
+	digest := sha256.Sum256(decoded)
+	return hex.EncodeToString(digest[:]), nil
+}
 
 // MatchOutcome is the result of comparing fresh-compile bytecode against
 // on-chain runtime code. NotFound separates "no contract code at this

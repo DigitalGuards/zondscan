@@ -1,40 +1,35 @@
-/**
- * Canonical palette for JS-land consumers (SVG charts, third-party widgets,
- * inline styles) that can't read the Tailwind tokens in globals.css.
- * Keep these in sync with the @theme block; components must import from here
- * instead of hardcoding hex values.
- */
+/** Semantic CSS colors keep SVG charts and inline styles in sync with appearance. */
 export const palette = {
-  background: '#0b0d13',
-  backgroundSecondary: '#12151d',
-  backgroundTertiary: '#0e1118',
+  background: 'var(--color-background)',
+  backgroundSecondary: 'var(--color-background-secondary)',
+  backgroundTertiary: 'var(--color-background-tertiary)',
 
-  accent: '#ffa729',
-  accentHover: '#ffbc57',
-  accentDark: '#f29414',
-  quantum: '#2ee6c8',
+  accent: 'var(--color-accent)',
+  accentHover: 'var(--color-accent-hover)',
+  accentDark: 'var(--color-accent-dark)',
+  quantum: 'var(--color-quantum)',
 
-  textPrimary: '#e9ecf2',
-  textSecondary: '#9aa3b2',
-  textMuted: '#79839b',
+  textPrimary: 'var(--color-text-primary)',
+  textSecondary: 'var(--color-text-secondary)',
+  textMuted: 'var(--color-text-muted)',
 
-  success: '#34d399',
-  warning: '#fbbf24',
-  error: '#f87171',
-  info: '#60a5fa',
+  success: 'var(--color-success)',
+  warning: 'var(--color-warning)',
+  error: 'var(--color-error)',
+  info: 'var(--color-info)',
 } as const;
 
 /** Shared visx/SVG chart styling derived from the palette. */
 export const chartTheme = {
   axis: palette.textMuted,
   tickLabel: palette.textSecondary,
-  grid: 'rgba(255, 255, 255, 0.07)',
+  grid: 'var(--color-border)',
   line: palette.accent,
   area: palette.accent,
   fontFamily: 'IBM Plex Mono, ui-monospace, monospace',
   tooltip: {
-    background: 'rgba(18, 21, 29, 0.96)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    background: palette.backgroundSecondary,
+    border: '1px solid var(--color-border)',
     color: palette.textPrimary,
     padding: '8px 12px',
     borderRadius: '10px',

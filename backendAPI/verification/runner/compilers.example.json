@@ -1,14 +1,21 @@
 [
   {
-    "buildId": "0.2.0-develop.2026.4.13+commit.d5d1b977.Linux.g++",
-    "nodeBin": "/bin/sh",
-    "runner": "/home/ops/zondscan/backendAPI/verification/runner/hypc-native.sh",
-    "bin": "/usr/local/bin/hypc-0.2.0",
+    "kind": "native",
+    "buildId": "0.2.0-develop.2026.8.27+commit.6f862206.mod.Linux.g++",
+    "bin": "/absolute/path/to/hypc-6f862206-static",
+    "sha256": "ac24ccbb53fa6200dc6ca9a3bb87aac5dbb8dd7a23a3f91c3a7563f6275882dd",
     "default": true
   },
   {
+    "kind": "native",
+    "buildId": "0.2.0-develop.2026.4.13+commit.d5d1b977.Linux.g++",
+    "bin": "/absolute/path/to/hypc-d5d1b977",
+    "sha256": "7e6e9b1703321e19a51e5076dce85388845549d8415c94ce8e47ea1a45aad9b0",
+    "disabled": true
+  },
+  {
+    "kind": "npm",
     "buildId": "0.0.2+commit.3e18e55d.Emscripten.clang",
-    "nodeBin": "node",
-    "runner": "/home/ops/zondscan/backendAPI/verification/runner/hypc-runner.js"
+    "disabled": true
   }
 ]

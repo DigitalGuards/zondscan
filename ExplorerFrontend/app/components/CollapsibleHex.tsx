@@ -43,7 +43,7 @@ export default function CollapsibleHex({ label, hex, copyLabel = 'Copy hex' }: C
                 </div>
             </div>
             <div
-                className={`rounded-lg bg-black/40 border border-border p-3 font-mono text-xs text-text-secondary
+                className={`rounded-lg bg-background-tertiary border border-border p-3 font-mono text-xs text-text-secondary
                             break-all overflow-y-auto transition-[max-height] duration-200
                             ${expanded ? 'max-h-[32rem]' : 'max-h-24'}`}
             >

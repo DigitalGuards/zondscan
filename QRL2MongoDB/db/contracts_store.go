@@ -5,6 +5,8 @@ import (
 	"QRL2MongoDB/models"
 	"QRL2MongoDB/validation"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -73,10 +75,11 @@ func sanitizeTokenString(s string) string {
 // **Merge-safety invariant**: the syncer is the only writer of the
 // syncer-owned fields enumerated by `syncerOwnedSet` below; the backend
 // verify endpoint is the only writer of the verification fields
-// (verified / sourceCode / abi / contractName / compilerVersion /
-// optimizationEnabled / optimizationRuns / evmVersion /
-// constructorArguments / libraries / license / verificationMethod /
-// verifiedAt). The two write paths NEVER overlap.
+// (verified / verificationRecordSchema / sourceCode / abi / contractName /
+// compilerVersion / compilerProvenance / optimizationEnabled /
+// optimizationRuns / evmVersion / constructorArguments / libraries / imports /
+// sourceBundleDigest / license / verificationMethod / verifiedAt). The two
+// write paths NEVER overlap.
 //
 // Previously this function did `$set: updateData` (whole-doc), which
 // re-introduced a race: if the syncer's FindOne read predated a
@@ -98,6 +101,13 @@ func StoreContract(contract models.ContractInfo) error {
 	// classifier) persists a control-char-free, length-capped value.
 	contract.Name = sanitizeTokenString(contract.Name)
 	contract.Symbol = sanitizeTokenString(contract.Symbol)
+	if contract.ContractCode != "" && contract.ContractCode != "0x" && contract.ContractCode != "0x0" {
+		codeDigest, err := runtimeCodeSHA256(contract.ContractCode)
+		if err != nil {
+			return fmt.Errorf("invalid contract code for %s: %w", contract.Address, err)
+		}
+		contract.ContractCodeSHA256 = codeDigest
+	}
 
 	collection := configs.GetContractsCollection()
 	filter := bson.M{"address": contract.Address}
@@ -113,18 +123,11 @@ func StoreContract(contract models.ContractInfo) error {
 		configs.Logger.Debug("Found existing contract, merging data", zap.String("address", contract.Address))
 		merged = existingContract
 
-		// Merge fields from the new 'contract' object, only if the new value is non-empty/non-zero
-		// and the existing value *is* empty/zero. This prioritizes data from the creation tx.
-		// Treat bare "Q" (from legacy ConvertToQAddress("")) as empty.
-		if (merged.CreatorAddress == "" || merged.CreatorAddress == "Q") && contract.CreatorAddress != "" && contract.CreatorAddress != "Q" {
-			merged.CreatorAddress = contract.CreatorAddress
-		}
-		if merged.CreationTransaction == "" && contract.CreationTransaction != "" {
-			merged.CreationTransaction = contract.CreationTransaction
-		}
-		if merged.CreationBlockNumber == "" && contract.CreationBlockNumber != "" {
-			merged.CreationBlockNumber = contract.CreationBlockNumber
-		}
+		// Creation evidence is gap-filled at equal confidence and may only be
+		// replaced by stronger provenance. This lets a later receipt or CREATE
+		// trace repair an earlier mint heuristic without allowing a heuristic
+		// pass to overwrite authoritative creator identity.
+		mergeCreationEvidence(&merged, contract)
 		// GenesisContract latches true forever, mirroring HasERC165: code at
 		// block 0 is an immutable chain fact, a later pass with a zero-valued
 		// flag must never clear it.
@@ -270,10 +273,16 @@ func syncerOwnedSet(c models.ContractInfo) bson.M {
 		"decimals":            c.Decimals,
 		"totalSupply":         c.TotalSupply,
 		"contractCode":        c.ContractCode,
+		"contractCodeSha256":  c.ContractCodeSHA256,
 		"creatorAddress":      c.CreatorAddress,
 		"creationTransaction": c.CreationTransaction,
 		"creationBlockNumber": c.CreationBlockNumber,
+		"creationBlockHash":   c.CreationBlockHash,
+		"chainId":             c.ChainID,
 		"updatedAt":           c.UpdatedAt,
+	}
+	if c.CreatorAddressProvenance != "" {
+		m["creatorAddressProvenance"] = c.CreatorAddressProvenance
 	}
 	if c.MaxSupply != "" {
 		m["maxSupply"] = c.MaxSupply
@@ -313,6 +322,72 @@ func syncerOwnedSet(c models.ContractInfo) bson.M {
 	return m
 }
 
+func mergeCreationEvidence(existing *models.ContractInfo, incoming models.ContractInfo) {
+	existingRank := creatorAddressProvenanceRank(existing.CreatorAddressProvenance)
+	incomingRank := creatorAddressProvenanceRank(incoming.CreatorAddressProvenance)
+	if incomingRank > existingRank {
+		existing.CreatorAddress = incoming.CreatorAddress
+		existing.CreatorAddressProvenance = incoming.CreatorAddressProvenance
+		existing.CreationTransaction = incoming.CreationTransaction
+		existing.CreationBlockNumber = incoming.CreationBlockNumber
+		existing.CreationBlockHash = incoming.CreationBlockHash
+		existing.ChainID = incoming.ChainID
+		return
+	}
+	if existing.CreatorAddress == "" || existing.CreatorAddress == "Q" {
+		if incoming.CreatorAddress != "" && incoming.CreatorAddress != "Q" {
+			existing.CreatorAddress = incoming.CreatorAddress
+		}
+	}
+	if existing.CreatorAddressProvenance == "" && incoming.CreatorAddressProvenance != "" {
+		existing.CreatorAddressProvenance = incoming.CreatorAddressProvenance
+	}
+	if existing.CreationTransaction == "" && incoming.CreationTransaction != "" {
+		existing.CreationTransaction = incoming.CreationTransaction
+	}
+	if existing.CreationBlockNumber == "" && incoming.CreationBlockNumber != "" {
+		existing.CreationBlockNumber = incoming.CreationBlockNumber
+	}
+	if existing.CreationBlockHash == "" && incoming.CreationBlockHash != "" {
+		existing.CreationBlockHash = incoming.CreationBlockHash
+	}
+	if existing.ChainID == "" && incoming.ChainID != "" {
+		existing.ChainID = incoming.ChainID
+	}
+}
+
+func runtimeCodeSHA256(code string) (string, error) {
+	canonical := strings.ToLower(strings.TrimSpace(code))
+	canonical = strings.TrimPrefix(canonical, "0x")
+	if canonical == "" || canonical == "0" {
+		return "", errors.New("runtime code is empty")
+	}
+	decoded, err := hex.DecodeString(canonical)
+	if err != nil {
+		return "", fmt.Errorf("decode runtime code: %w", err)
+	}
+	digest := sha256.Sum256(decoded)
+	return hex.EncodeToString(digest[:]), nil
+}
+
+func creatorAddressProvenanceRank(value string) int {
+	switch value {
+	case models.CreatorAddressProvenanceDirectDeployment,
+		models.CreatorAddressProvenanceCreateTraceOuter:
+		return 5
+	case models.CreatorAddressProvenanceGenesis:
+		return 4
+	case models.CreatorAddressProvenanceCreateTraceCaller:
+		return 3
+	case models.CreatorAddressProvenanceMintHeuristic:
+		return 2
+	case models.CreatorAddressProvenanceUnclassified:
+		return 1
+	default:
+		return 0
+	}
+}
+
 // standardRank orders TokenStandard values for promote-only merging.
 // Higher rank = stricter / more specific classification. Promotions go
 // up the ladder; demotions are silently dropped.
@@ -340,7 +415,7 @@ func GetContract(address string) (*models.ContractInfo, error) {
 	var contract models.ContractInfo
 	err := configs.GetContractsCollection().FindOne(ctx, bson.M{"address": address}).Decode(&contract)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get contract: %v", err)
+		return nil, fmt.Errorf("failed to get contract: %w", err)
 	}
 
 	return &contract, nil

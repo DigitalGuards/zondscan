@@ -42,7 +42,7 @@ async function getTransactions(page: string): Promise<TransactionsResponse> {
 
 function LoadingUI(): JSX.Element {
   return (
-    <div className="flex items-center justify-center min-h-screen">
+    <div className="flex items-center justify-center min-h-[24rem]">
       <div className="text-lg">Loading transactions...</div>
     </div>
   );

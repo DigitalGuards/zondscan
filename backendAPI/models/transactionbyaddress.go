@@ -24,10 +24,12 @@ type TransactionByAddress struct {
 	// string (e.g. "3300000000000000000"). The syncer writes these so the API
 	// can render QRL without ever routing the value through a float64, which
 	// can't represent 3.3 and used to leak as "3.299999999999999822". Older
-	// documents predate these fields; MarshalJSON falls back to the float
-	// columns above when they are empty.
+	// documents predate these fields; only Amount retains a float fallback.
+	// PaidFees additionally requires receipt provenance.
 	AmountWei   string `bson:"amountWei" json:"-"`
 	PaidFeesWei string `bson:"paidFeesWei" json:"-"`
+	FeeSource   string `bson:"feeSource" json:"-"`
+	Status      string `bson:"receiptStatus" json:"Status,omitempty"`
 	BlockNumber string `bson:"blockNumber" json:"BlockNumber"`
 }
 
@@ -87,9 +89,9 @@ func formatBlockNumber(blockNum string) string {
 }
 
 // MarshalJSON implements custom JSON marshaling. Amount and PaidFees are
-// emitted as exact QRL decimal strings, preferring the raw-wei integer fields
-// and falling back to the legacy float columns for documents that predate
-// them.
+// emitted as exact QRL decimal strings. Legacy amounts retain their float
+// fallback. Fees require receipt provenance because older writers could store
+// gas-limit estimates in both the float and exact-integer columns.
 func (t TransactionByAddress) MarshalJSON() ([]byte, error) {
 	type Alias TransactionByAddress
 
@@ -97,15 +99,15 @@ func (t TransactionByAddress) MarshalJSON() ([]byte, error) {
 	if !ok {
 		amount = formatFloat(t.Amount)
 	}
-	paidFees, ok := quantaFromWei(t.PaidFeesWei)
-	if !ok {
-		paidFees = formatFloat(t.PaidFees)
+	paidFees := ""
+	if t.FeeSource == "receipt" {
+		paidFees, _ = quantaFromWei(t.PaidFeesWei)
 	}
 
 	return json.Marshal(struct {
 		Alias
 		Amount      string `json:"Amount"`
-		PaidFees    string `json:"PaidFees"`
+		PaidFees    string `json:"PaidFees,omitempty"`
 		BlockNumber string `json:"BlockNumber"`
 	}{
 		Alias:       Alias(t),

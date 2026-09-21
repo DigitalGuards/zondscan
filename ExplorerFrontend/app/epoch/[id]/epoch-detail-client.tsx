@@ -1,10 +1,13 @@
 'use client';
 
+import TimeDisplay from '../../components/TimeDisplay';
+import AddressText from '../../components/AddressText';
+
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
 import config from '../../../config';
-import { formatNumberWithCommas, truncateHash, formatAddress, formatTimestamp, timeAgo, formatStaked } from '../../lib/helpers';
+import { formatNumberWithCommas, truncateHash, formatAddress, formatStaked } from '../../lib/helpers';
 import SearchBar from '../../components/SearchBar';
 import StatusBadge from '../../components/StatusBadge';
 
@@ -56,7 +59,7 @@ function formatGasUsed(hex: string): string {
 // The execution coinbase is always the zero address on this network, so
 // linking it as "proposer" would be misleading. Render a dash for it until
 // proposer-index enrichment lands (the column stays so it can slot in).
-const ZERO_ADDRESS = 'Q0000000000000000000000000000000000000000';
+const ZERO_ADDRESS = 'Q' + '0'.repeat(128);
 
 // ── Summary Row ──────────────────────────────────────────────────────────────
 
@@ -167,8 +170,8 @@ export default function EpochDetailClient({ epochId }: { epochId: string }): JSX
               <SummaryRow label="Time">
                 {data.timestamp > 0 ? (
                   <span>
-                    {timeAgo(data.timestamp)}
-                    <span className="text-text-muted ml-2">({formatTimestamp(data.timestamp)})</span>
+                    <TimeDisplay timestamp={data.timestamp} relative />
+                    <span className="text-text-muted ml-2">(<TimeDisplay timestamp={data.timestamp} />)</span>
                   </span>
                 ) : '…'}
               </SummaryRow>
@@ -239,12 +242,12 @@ export default function EpochDetailClient({ epochId }: { epochId: string }): JSX
                           <StatusBadge status={slot.status} />
                         </td>
                         <td className="px-4 py-2 text-text-secondary tabular-nums">
-                          {isProposed ? timeAgo(timestamp) : '…'}
+                          {isProposed ? <TimeDisplay timestamp={timestamp} relative /> : '…'}
                         </td>
                         <td className="px-4 py-2 hidden sm:table-cell">
                           {isProposed && proposer && proposer !== ZERO_ADDRESS ? (
                             <Link href={`/address/${proposer}`} className="text-text-secondary hover:text-accent hover:underline font-mono text-xs transition-colors">
-                              {truncateHash(proposer, 8, 6)}
+                              <AddressText address={proposer} />
                             </Link>
                           ) : isProposed ? (
                             <span className="text-text-muted">-</span>

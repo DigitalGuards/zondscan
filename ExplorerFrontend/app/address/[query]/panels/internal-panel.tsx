@@ -1,5 +1,9 @@
 'use client';
 
+import AddressText from '../../../components/AddressText';
+
+import TimeDisplay from '../../../components/TimeDisplay';
+
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
@@ -12,7 +16,6 @@ import type { ColumnDef, Row } from '@tanstack/react-table';
 import {
   formatAddress,
   formatAmount,
-  formatTimestamp,
   hexToNumber,
   normalizeHexString,
 } from '../../../lib/helpers';
@@ -122,7 +125,7 @@ export default function InternalPanel({
           const a = formatAddress(String(raw));
           return (
             <Link href={'/address/' + a} title={a}>
-              {truncateMiddle(a)}
+              <AddressText address={a} />
             </Link>
           );
         },
@@ -135,7 +138,7 @@ export default function InternalPanel({
           const a = formatAddress(String(raw));
           return (
             <Link href={'/address/' + a} title={a}>
-              {truncateMiddle(a)}
+              <AddressText address={a} />
             </Link>
           );
         },
@@ -168,7 +171,7 @@ export default function InternalPanel({
       }),
       columnHelper.accessor('BlockTimestamp', {
         header: 'Timestamp',
-        cell: (info) => <span>{formatTimestamp(info.getValue())}</span>,
+        cell: (info) => <span><TimeDisplay timestamp={info.getValue()} /></span>,
       }),
     ],
     [knownTotal, page, rows.length],
@@ -230,7 +233,7 @@ export default function InternalPanel({
                 href={'/address/' + formatAddress(String(r.From))}
                 className="text-sm text-accent hover:text-accent-hover break-all"
               >
-                {truncateMiddle(formatAddress(String(r.From)))}
+                <AddressText address={formatAddress(String(r.From))} />
               </Link>
             ) : (
               <div className="text-sm text-text-primary">-</div>
@@ -244,7 +247,7 @@ export default function InternalPanel({
                 href={'/address/' + formatAddress(String(r.To))}
                 className="text-sm text-accent hover:text-accent-hover break-all"
               >
-                {truncateMiddle(formatAddress(String(r.To)))}
+                <AddressText address={formatAddress(String(r.To))} />
               </Link>
             ) : (
               <div className="text-sm text-text-primary">-</div>
@@ -264,7 +267,7 @@ export default function InternalPanel({
 
           <div>
             <div className="text-xs text-text-secondary">Time</div>
-            <div className="text-sm text-text-primary">{formatTimestamp(r.BlockTimestamp)}</div>
+            <div className="text-sm text-text-primary"><TimeDisplay timestamp={r.BlockTimestamp} /></div>
           </div>
         </div>
       </div>

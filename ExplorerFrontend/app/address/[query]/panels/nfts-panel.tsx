@@ -13,6 +13,8 @@ import {
 import Badge from '../../../components/Badge';
 import DebouncedInput from '../../../components/DebouncedInput';
 import ImageWithFallback from '../../../components/ImageWithFallback';
+import AddressFingerprint from '../../../components/AddressFingerprint';
+import { canonicalizeQrlAddress } from '../../../lib/qrlAddress';
 import config from '../../../../config';
 import {
   PAGE_SIZE,
@@ -74,7 +76,13 @@ export default function NftsPanel({ address, onLoaded }: NftsPanelProps): JSX.El
         const res = await axios.get(`${config.handlerUrl}/address/${address}/nfts`);
         if (cancelled) return;
         const arr: NFTBalanceRow[] = Array.isArray(res.data?.nfts) ? res.data.nfts : [];
-        const next = arr.filter((n) => NFT_STANDARDS.has(n.tokenStandard));
+        const next = arr
+          .filter((n) => NFT_STANDARDS.has(n.tokenStandard))
+          .map((nft) => ({
+            ...nft,
+            contractAddress:
+              canonicalizeQrlAddress(nft.contractAddress) ?? nft.contractAddress,
+          }));
         setRows(next);
         setLoaded(true);
         onLoaded?.(next.length);
@@ -102,8 +110,7 @@ export default function NftsPanel({ address, onLoaded }: NftsPanelProps): JSX.El
           cell: (info) => {
             const r = info.row.original;
             const tokenLabel = r.name || `#${r.tokenID}`;
-            const collectionLabel =
-              r.collectionName || r.collectionSymbol || r.contractAddress;
+            const collectionLabel = r.collectionName || r.collectionSymbol;
             return (
               <div className="flex items-center gap-3 min-w-0">
                 {r.image ? (
@@ -134,7 +141,7 @@ export default function NftsPanel({ address, onLoaded }: NftsPanelProps): JSX.El
                     className="text-sm text-accent hover:text-accent-hover transition-colors font-medium break-all"
                     title={r.contractAddress}
                   >
-                    {collectionLabel}
+                    {collectionLabel || <AddressFingerprint address={r.contractAddress} />}
                   </Link>
                   <div className="text-xs text-text-secondary font-mono break-all">
                     {tokenLabel}

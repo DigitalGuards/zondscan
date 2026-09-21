@@ -1,16 +1,24 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useTranslation } from './InterfaceText';
+
+import { useState, useCallback, useId } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { resolveSearchPath } from '../lib/searchResolver';
 
-export default function SearchBar(): JSX.Element {
+export default function SearchBar({
+  placement = 'page',
+}: {
+  placement?: 'page' | 'header';
+}): JSX.Element {
   const [searchValue, setSearchValue] = useState<string>('');
   const [error, setError] = useState<string>('');
   const router = useRouter();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const errorId = useId();
+  const compact = placement === 'header';
+  const { t, locale } = useTranslation();
 
   function handleInputChange(event: ChangeEvent<HTMLInputElement>): void {
     setSearchValue(event.target.value);
@@ -29,74 +37,70 @@ export default function SearchBar(): JSX.Element {
     router.push(result.path);
   }, [searchValue, router]);
 
-  useEffect(() => {
-    const listener = (event: KeyboardEvent): void => {
-      if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
-        event.preventDefault();
-        inputRef.current?.focus();
-      }
-    };
-    window.addEventListener("keydown", listener);
-    return () => {
-      window.removeEventListener("keydown", listener);
-    };
-  }, []);
-
   return (
-    <div className="relative w-full">
+    <div lang={locale} className="relative w-full">
       {/* One integrated pill: icon, input, kbd hint, action. The glow on
           focus-within is the page's primary "you are here" moment. */}
       <form
+        role="search"
+        aria-label={t(compact ? 'Header search' : 'Page search')}
+        data-search-placement={placement}
         onSubmit={(e: FormEvent<HTMLFormElement>) => {
           e.preventDefault();
           navigateHandler();
         }}
-        className="group relative flex items-center gap-2 rounded-2xl
+        className={`group relative flex items-center gap-2
                    bg-background-secondary/80 backdrop-blur-sm
                    border border-border
-                   shadow-card
                    transition-all duration-300
                    hover:border-border-hover
                    focus-within:border-accent/60
                    focus-within:shadow-[0_0_0_1px_rgba(255,167,41,0.25),0_0_40px_-8px_rgba(255,167,41,0.25)]
-                   p-2 pl-4"
+                   ${compact ? 'h-9 rounded-lg px-2.5' : 'rounded-2xl p-2 pl-4 shadow-card'}`}
       >
         <MagnifyingGlassIcon
-          className="w-5 h-5 flex-shrink-0 text-text-muted transition-colors
-                     group-focus-within:text-accent"
+          className={`${compact ? 'size-4' : 'size-5'} flex-shrink-0 text-text-muted transition-colors group-focus-within:text-accent`}
           aria-hidden="true"
         />
         <input
-          ref={inputRef}
           type="text"
-          aria-label="Search by address, transaction hash, or block number"
-          placeholder="Search by address / txn hash / block number"
-          className="flex-1 min-w-0 bg-transparent py-2.5 text-sm sm:text-base
+          aria-label={t('Search by address, transaction hash, or block number')}
+          placeholder={t(
+            compact ? 'Search address / txn / block' : 'Search by address / txn hash / block number'
+          )}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? errorId : undefined}
+          className={`flex-1 min-w-0 bg-transparent ${compact ? 'py-1.5 text-xs' : 'py-2.5 text-sm sm:text-base'}
                      text-text-primary placeholder-text-muted
-                     outline-none border-none focus:ring-0"
+                     outline-none border-none focus:ring-0`}
           value={searchValue}
           onChange={handleInputChange}
         />
         <kbd
-          className="hidden md:inline-flex items-center gap-1 px-2 py-1 rounded-md
+          className={`${compact ? 'hidden xl:inline-flex' : 'hidden md:inline-flex'} items-center gap-1 px-2 py-1 rounded-md
                      bg-surface-2 border border-border text-[11px] font-mono
-                     text-text-muted select-none"
+                     text-text-muted select-none`}
           aria-hidden="true"
         >
           Ctrl K
         </kbd>
         <button
           type="submit"
-          className="btn-primary px-5 sm:px-7 py-2.5 text-sm sm:text-base rounded-xl
-                     whitespace-nowrap"
+          aria-label={compact ? t('Submit header search') : undefined}
+          className={
+            compact
+              ? 'rounded p-1 text-text-muted hover:text-accent focus-visible:outline-2 focus-visible:outline-accent'
+              : 'btn-primary px-5 sm:px-7 py-2.5 text-sm sm:text-base rounded-xl whitespace-nowrap'
+          }
         >
-          Search
+          {compact ? <MagnifyingGlassIcon className="size-4" aria-hidden="true" /> : t('Search')}
         </button>
       </form>
       {error && (
         <div
-          className="mt-3 px-4 py-3 text-xs sm:text-sm text-error rounded-xl
-                     bg-error/10 border border-error/25"
+          id={errorId}
+          lang="en"
+          className={`${compact ? 'absolute left-0 right-0 top-full z-10 mt-2 bg-background-secondary shadow-lg' : 'mt-3 bg-error/10'} px-4 py-3 text-xs sm:text-sm text-error rounded-xl border border-error/25`}
           role="alert"
         >
           <span className="font-medium">{error}</span>

@@ -1,7 +1,5 @@
 @import 'tailwindcss';
 
-@custom-variant dark (&:is(.dark *));
-
 /* ────────────────────────────────────────────────────────────────────────────
    ZondScan design system: "Quantum Observatory"
 
@@ -9,6 +7,8 @@
    panels with hairline borders, a single amber accent, and mono data type.
    Every surface derives from these tokens; components must not hardcode hex.
    ──────────────────────────────────────────────────────────────────────────── */
+
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   /* Canvas */
@@ -62,15 +62,10 @@
   );
 
   /* Shadow language: soft ambient drop + machined top edge highlight */
-  --shadow-card:
-    0 1px 0 0 rgba(255, 255, 255, 0.04) inset,
-    0 12px 32px -16px rgba(0, 0, 0, 0.5);
-  --shadow-card-hover:
-    0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
-    0 16px 40px -16px rgba(0, 0, 0, 0.55),
-    0 0 24px -8px rgba(255, 167, 41, 0.12);
+  --shadow-card: var(--elevation-card);
+  --shadow-card-hover: var(--elevation-card-hover);
   --shadow-sidebar: 8px 0 32px -12px rgba(0, 0, 0, 0.55);
-  --shadow-glow-accent: 0 0 28px -6px rgba(255, 167, 41, 0.4);
+  --shadow-glow-accent: var(--elevation-glow-accent);
 
   /* Typography: Chakra Petch display / IBM Plex Sans body / IBM Plex Mono data.
      The --font-zs-* vars are injected on <html> by next/font in layout.tsx. */
@@ -87,6 +82,45 @@
   --animate-rise: rise 0.5s var(--ease-out-soft) both;
   --animate-shimmer: shimmer 1.8s linear infinite;
   --animate-pulse-dot: pulse-dot 2.4s ease-in-out infinite;
+
+  /* Arena motion. The order book updates every 3 s, so without an idle
+     animation the field is frozen between polls and then jumps. Each layer
+     animates a different property, so they compose instead of overwriting
+     each other: position transitions on the outer group, opacity fades on
+     the middle one, and the idle bob owns transform on the inner one. */
+  --animate-arena-enter: arena-enter 0.42s var(--ease-out-soft) both;
+  --animate-arena-idle: arena-idle 3s ease-in-out infinite;
+  --animate-arena-ripple: arena-ripple 1.1s var(--ease-out-soft) forwards;
+
+  @keyframes arena-enter {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes arena-idle {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-2.5px);
+    }
+  }
+
+  @keyframes arena-ripple {
+    from {
+      opacity: 0.55;
+      transform: scale(0.6);
+    }
+    to {
+      opacity: 0;
+      transform: scale(3.2);
+    }
+  }
 
   @keyframes rise {
     from {
@@ -147,7 +181,7 @@
   body {
     @apply bg-background text-text-primary font-sans antialiased;
     /* Base vertical wash so the canvas isn't one flat slab */
-    background-image: linear-gradient(180deg, #0c0e15 0%, #0b0d13 40%, #0a0c11 100%);
+    background-image: linear-gradient(180deg, var(--color-background-tertiary) 0%, var(--color-background) 40%);
     background-attachment: fixed;
   }
 
@@ -265,7 +299,7 @@
   background-image: linear-gradient(
     100deg,
     var(--color-accent) 0%,
-    #ffd58a 55%,
+    var(--color-accent-hover) 55%,
     var(--color-accent-hover) 100%
   );
   -webkit-background-clip: text;
@@ -279,6 +313,17 @@
 }
 
 /* ── Controls ──────────────────────────────────────────────────────────────── */
+
+/* A native <select> popup is drawn by the operating system on its own light
+   surface, so the options never inherit the dark theme the closed control
+   wears. Left alone, the site's near-white text renders on a white popup and
+   the list is close to unreadable. These two properties are the part of a
+   native option list that is reliably stylable, so every select on the site
+   gets them rather than each page rediscovering the problem. */
+select option {
+  background-color: var(--color-background-secondary);
+  color: var(--color-text-primary);
+}
 
 @utility nav-link {
   @apply text-text-secondary hover:text-accent transition-colors;
@@ -349,7 +394,7 @@
 /* ── Layout ────────────────────────────────────────────────────────────────── */
 
 @utility page-container {
-  @apply w-full min-h-screen;
+  @apply w-full;
 }
 
 @utility page-content {
@@ -410,6 +455,21 @@
   animation: var(--animate-rise);
 }
 
+@utility arena-enter {
+  animation: var(--animate-arena-enter);
+}
+
+@utility arena-idle {
+  animation: var(--animate-arena-idle);
+}
+
+@utility arena-ripple {
+  /* Scales about its own centre. Without this the SVG default origin (the
+     centre of the viewBox) would fling the ripple across the field. */
+  transform-origin: 0 0;
+  animation: var(--animate-arena-ripple);
+}
+
 @utility stagger-children {
   /* Staggered entrance for direct children (first 12) */
   > * {
@@ -456,7 +516,7 @@
 /* ── Scrollbars ────────────────────────────────────────────────────────────── */
 
 @utility scrollbar-dark {
-  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+  scrollbar-color: var(--color-border-hover) transparent;
 
   &::-webkit-scrollbar {
     @apply w-3;
@@ -467,7 +527,7 @@
   }
 
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.14);
+    background: var(--color-border-hover);
     border-radius: 6px;
   }
 }
@@ -475,7 +535,7 @@
 * {
   /* Firefox */
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+  scrollbar-color: var(--color-border-hover) transparent;
 }
 
 /* Chrome, Safari, Opera */
@@ -489,12 +549,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--color-border-hover);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--color-text-muted);
 }
 
 /* Hide scrollbar utilities */
@@ -520,3 +580,403 @@
     @apply flex-col;
   }
 }
+
+/* ── Learn long-form prose ─────────────────────────────────────────────────── */
+
+/* Typography for /learn article bodies. Scoped under .learn-prose so guides
+   can use plain semantic HTML (p, ul, ol, a, code, pre, table, blockquote)
+   without per-element utility classes. Structural pieces (steps, callouts,
+   code blocks, FAQ) are rendered by app/learn/components/LearnArticle.tsx
+   and styled by the learn-* classes below. */
+
+.learn-prose {
+  font-size: 1rem;
+  line-height: 1.75;
+  color: var(--color-text-secondary);
+}
+
+.learn-prose h2 {
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-text-primary);
+  margin: 2.25rem 0 0.875rem;
+}
+
+.learn-prose h3 {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 1.75rem 0 0.625rem;
+}
+
+.learn-prose p {
+  margin: 0 0 1rem;
+}
+
+.learn-prose ul,
+.learn-prose ol {
+  margin: 0 0 1.25rem;
+  padding-left: 1.5rem;
+}
+
+.learn-prose ul {
+  list-style: disc;
+}
+
+.learn-prose ol {
+  list-style: decimal;
+}
+
+.learn-prose li {
+  margin: 0.375rem 0;
+}
+
+.learn-prose li::marker {
+  color: var(--color-text-muted);
+}
+
+.learn-prose a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 167, 41, 0.35);
+  text-underline-offset: 3px;
+  transition: color 0.2s;
+}
+
+.learn-prose a:hover {
+  color: var(--color-accent-hover);
+  text-decoration-color: currentColor;
+}
+
+.learn-prose strong {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.learn-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  color: var(--color-text-primary);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 0.375rem;
+  padding: 0.125rem 0.375rem;
+  /* Q addresses and tx hashes must wrap instead of overflowing on mobile */
+  overflow-wrap: anywhere;
+}
+
+.learn-prose pre {
+  background: var(--color-background-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  padding: 0.875rem 1rem;
+  margin: 0 0 1.25rem;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--color-text-primary);
+}
+
+.learn-prose pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: inherit;
+  overflow-wrap: normal;
+}
+
+.learn-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 1.25rem;
+  font-size: 0.875rem;
+}
+
+.learn-prose th {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.learn-prose td {
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.learn-prose blockquote {
+  border-left: 2px solid var(--color-accent);
+  padding: 0.25rem 0 0.25rem 1rem;
+  margin: 0 0 1.25rem;
+  color: var(--color-text-muted);
+}
+
+.learn-prose > :first-child,
+.learn-prose section:first-child > h2 {
+  margin-top: 0;
+}
+
+.learn-prose > :last-child {
+  margin-bottom: 0;
+}
+
+/* Numbered step lists (StepList / Step) */
+.learn-prose ol.learn-steps {
+  list-style: none;
+  padding-left: 0;
+  counter-reset: learn-step;
+}
+
+.learn-prose ol.learn-steps > li {
+  counter-increment: learn-step;
+  position: relative;
+  padding-left: 2.75rem;
+  margin: 0 0 1.25rem;
+}
+
+.learn-prose ol.learn-steps > li::before {
+  content: counter(learn-step);
+  position: absolute;
+  left: 0;
+  top: 0.125rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-accent);
+  background: rgba(255, 167, 41, 0.08);
+  border: 1px solid rgba(255, 167, 41, 0.3);
+  border-radius: 9999px;
+}
+
+.learn-prose .learn-step-title {
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 0.375rem;
+}
+
+/* Code blocks with a header row (CodeBlock): the figure carries the well
+   chrome, so the inner pre drops its bare-pre border and radius. */
+.learn-prose .learn-codeblock {
+  background: var(--color-background-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  margin: 0 0 1.25rem;
+}
+
+.learn-prose .learn-codeblock pre {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+}
+
+/* Callouts (Callout): colored left border per type */
+.learn-prose .learn-callout {
+  border-left: 2px solid;
+  border-radius: 0 0.75rem 0.75rem 0;
+  padding: 0.875rem 1rem;
+  margin: 0 0 1.25rem;
+}
+
+.learn-prose .learn-callout > :last-child {
+  margin-bottom: 0;
+}
+
+.learn-prose .learn-callout-title {
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.learn-prose .learn-callout-info {
+  border-left-color: var(--color-info);
+  background: rgba(96, 165, 250, 0.07);
+}
+
+.learn-prose .learn-callout-warning {
+  border-left-color: var(--color-warning);
+  background: rgba(251, 191, 36, 0.07);
+}
+
+.learn-prose .learn-callout-tip {
+  border-left-color: var(--color-quantum);
+  background: rgba(46, 230, 200, 0.06);
+}
+
+/* FAQ (LearnFAQ): native disclosure widgets */
+.learn-prose details {
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: var(--color-surface);
+  margin: 0 0 0.625rem;
+}
+
+.learn-prose details[open] {
+  border-color: var(--color-border-hover);
+}
+
+.learn-prose summary {
+  cursor: pointer;
+  padding: 0.875rem 2.5rem 0.875rem 1rem;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  list-style: none;
+  position: relative;
+}
+
+.learn-prose summary::-webkit-details-marker {
+  display: none;
+}
+
+.learn-prose summary::after {
+  content: '+';
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  translate: 0 -50%;
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+  transition: rotate 0.2s var(--ease-out-soft);
+}
+
+.learn-prose details[open] summary::after {
+  rotate: 45deg;
+}
+
+.learn-prose .learn-faq-answer {
+  padding: 0 1rem 0.875rem;
+}
+
+.learn-prose .learn-faq-answer > :last-child {
+  margin-bottom: 0;
+}
+
+/* Appearance tokens are shared by the header, pages, charts, and native controls. */
+:root {
+  --elevation-card:
+    0 1px 0 0 rgba(255, 255, 255, 0.04) inset,
+    0 12px 32px -16px rgba(0, 0, 0, 0.5);
+  --elevation-card-hover:
+    0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
+    0 16px 40px -16px rgba(0, 0, 0, 0.55),
+    0 0 24px -8px rgba(255, 167, 41, 0.12);
+  --elevation-glow-accent: 0 0 28px -6px rgba(255, 167, 41, 0.4);
+  color-scheme: dark;
+  scroll-padding-top: calc(var(--explorer-header-height, 8rem) + 1rem);
+}
+
+:root[data-theme='dim'] {
+  --color-background: #152034;
+  --color-background-secondary: #1c2940;
+  --color-background-tertiary: #172238;
+  --color-primary-dark: #152034;
+  --color-secondary-dark: #1c2940;
+  --color-border: rgba(199, 214, 239, 0.13);
+  --color-border-hover: rgba(199, 214, 239, 0.28);
+  --color-text-primary: #edf2fa;
+  --color-text-secondary: #b7c3d7;
+  --color-text-muted: #96a6c0;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --color-background: #f6f8fc;
+  --color-background-secondary: #ffffff;
+  --color-background-tertiary: #edf1f7;
+  --color-primary-dark: #f6f8fc;
+  --color-secondary-dark: #ffffff;
+  --color-surface: rgba(21, 36, 60, 0.025);
+  --color-surface-2: rgba(21, 36, 60, 0.045);
+  --color-surface-3: rgba(21, 36, 60, 0.08);
+  --color-border: rgba(35, 51, 75, 0.13);
+  --color-border-hover: rgba(35, 51, 75, 0.27);
+  --color-text-primary: #172238;
+  --color-text-secondary: #43516a;
+  --color-text-muted: #59677d;
+  --color-accent: #965000;
+  --color-accent-hover: #773b00;
+  --color-accent-dark: #773b00;
+  --color-quantum: #007065;
+  --color-success: #087448;
+  --color-warning: #875600;
+  --color-error: #c03232;
+  --color-info: #2463ac;
+  --background-image-card-gradient: linear-gradient(180deg, #ffffff, #fafbfd);
+  --background-image-sidebar-gradient: linear-gradient(to bottom, #ffffff, #f6f8fc);
+  --elevation-card: 0 1px 2px rgba(21, 36, 60, 0.04), 0 8px 24px -16px rgba(21, 36, 60, 0.16);
+  --elevation-card-hover: 0 2px 6px rgba(21, 36, 60, 0.06), 0 12px 28px -12px rgba(21, 36, 60, 0.12);
+  --elevation-glow-accent: 0 0 20px -8px rgba(150, 80, 0, 0.2);
+}
+
+:root[data-theme='light'] body::before { opacity: 0.2; }
+:root[data-theme='light'] body::after { opacity: 0.025; }
+
+@utility header-control {
+  @apply inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-border
+    bg-surface text-text-secondary transition-colors hover:border-border-hover hover:bg-surface-2
+    hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
+}
+
+@utility header-menu {
+  @apply z-[70] max-h-[70dvh] overflow-y-auto rounded-xl border border-border bg-background-secondary
+    p-1.5 text-text-primary shadow-xl outline-none;
+}
+
+@utility menu-option {
+  @apply flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm text-text-secondary
+    data-focus:bg-surface-2 data-focus:text-text-primary;
+}
+
+@utility nav-trigger {
+  @apply inline-flex h-10 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-text-secondary
+    hover:bg-surface hover:text-accent data-open:text-accent
+    focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
+}
+
+@utility settings-card {
+  @apply rounded-2xl border border-border bg-background-secondary p-5 shadow-card sm:p-7;
+}
+
+@utility form-select {
+  @apply rounded-lg border border-border bg-background-tertiary px-3 py-2.5 text-sm text-text-primary
+    focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
+}
+
+[data-address-highlight] {
+  background-color: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  color: var(--color-accent);
+  border-radius: 3px;
+  outline: 1px solid color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+
+.theme-preview {
+  display: block;
+  height: 76px;
+  overflow: hidden;
+  border: 1px solid rgba(120, 130, 150, 0.2);
+  border-radius: 6px;
+  background: #0b0d13;
+  --preview-line: #43516a;
+}
+.theme-preview-light { background: #f6f8fc; --preview-line: #bdc7d8; }
+.theme-preview-dim { background: #152034; --preview-line: #53647e; }
+.theme-preview-system { background: linear-gradient(115deg, #f6f8fc 50%, #0b0d13 50%); --preview-line: #8793a8; }
+.theme-preview-bar { display: block; height: 12px; border-bottom: 1px solid rgba(120, 130, 150, 0.25); }
+.theme-preview-body { display: block; padding: 12px 10px; }
+.theme-preview-body span { display: block; height: 5px; margin-bottom: 6px; border-radius: 2px; background: var(--preview-line); }
+.theme-preview-body span:first-child { width: 45%; background: #cc872a; }
+.theme-preview-body span:last-child { width: 72%; }

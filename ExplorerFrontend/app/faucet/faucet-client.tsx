@@ -5,7 +5,8 @@ import type { FormEvent, ChangeEvent } from 'react';
 import Link from 'next/link';
 import Script from 'next/script';
 
-import { formatDuration, isValidQrlAddressFormat, NATIVE_UNIT } from '../lib/helpers';
+import { formatDuration, NATIVE_UNIT } from '../lib/helpers';
+import { canonicalizeQrlAddress } from '../lib/qrlAddress';
 
 interface FaucetStatus {
   configured: boolean;
@@ -133,14 +134,9 @@ export default function FaucetClient(): JSX.Element {
     // Reject obviously malformed addresses up front so we don't burn a network
     // round-trip or a one-time Turnstile token on a typo.
     const cleanAddress = address.replace(/\s/g, '');
-    if (!isValidQrlAddressFormat(cleanAddress)) {
-      // Common mix-up: pasting a 0x-prefixed (Ethereum/hash) form. QRL wallet
-      // addresses are Q-prefixed, so point the user at that specifically.
-      setError(
-        /^0x/i.test(cleanAddress)
-          ? 'QRL addresses start with “Q”, not “0x”. Paste your Q… wallet address.'
-          : 'Enter a valid QRL address (Q… followed by 40 hex characters).',
-      );
+    const canonicalAddress = canonicalizeQrlAddress(cleanAddress);
+    if (!canonicalAddress) {
+      setError('Enter a valid QRL address with exactly 128 hex characters.');
       setIsLoading(false);
       return;
     }
@@ -151,7 +147,7 @@ export default function FaucetClient(): JSX.Element {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          address: cleanAddress,
+          address: canonicalAddress,
           turnstileToken: tokenRef.current || undefined,
         }),
       });
@@ -286,7 +282,7 @@ export default function FaucetClient(): JSX.Element {
                     Sending...
                   </div>
                 ) : (
-                  'Request testnet QRL'
+                  `Request testnet ${NATIVE_UNIT}`
                 )}
               </button>
             </form>

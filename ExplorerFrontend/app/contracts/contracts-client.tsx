@@ -1,5 +1,7 @@
 'use client';
 
+import AddressText from '../components/AddressText';
+
 import { useState, useEffect, useCallback } from 'react';
 import ImageWithFallback from '../components/ImageWithFallback';
 import Link from 'next/link';
@@ -143,13 +145,6 @@ function formatBlockNumber(blockNum: string | undefined): string {
   } catch {
     return '-';
   }
-}
-
-// Truncate address for display
-function truncateAddress(addr: string, start = 8, end = 6): string {
-  if (!addr) return '';
-  if (addr.length <= start + end) return addr;
-  return `${addr.slice(0, start)}...${addr.slice(-end)}`;
 }
 
 export default function ContractsClient({ initialData, totalContracts }: ContractsClientProps) {
@@ -520,11 +515,11 @@ function ContractRow({
     : 'Contract';
   const displayName = (contract.metadataName?.trim() || contract.name || '').trim();
   const primary = isToken
-    ? (displayName || truncateAddress(contract.address, 10, 8))
+    ? (displayName || <AddressText address={contract.address} leading={10} trailing={8} />)
     : 'Smart Contract';
   const secondary = isToken
     ? (contract.symbol || standardFallback)
-    : truncateAddress(contract.address, 6, 4);
+    : <AddressText address={contract.address} leading={6} trailing={4} />;
 
   const typeBadge = (() => {
     if (variant === 'erc20') return <Badge variant="success">QRC-20</Badge>;
@@ -545,10 +540,10 @@ function ContractRow({
       <td className={TD_BASE}>
         <div className="flex items-center gap-3">
           {metaImage ? (
-            <div className="relative w-8 h-8 rounded-full overflow-hidden border border-border bg-black/30 shrink-0">
+            <div className="relative w-8 h-8 rounded-full overflow-hidden border border-border bg-background-tertiary shrink-0">
               <ImageWithFallback
                 src={metaImage}
-                alt={primary}
+                alt={displayName || contract.address}
                 fill
                 sizes="32px"
                 className="object-cover"
@@ -579,8 +574,8 @@ function ContractRow({
           href={`/address/${contract.address}`}
           className="text-accent hover:underline font-mono text-sm"
         >
-          <span className="hidden sm:inline">{truncateAddress(contract.address, 10, 8)}</span>
-          <span className="sm:hidden">{truncateAddress(contract.address, 6, 4)}</span>
+          <span className="hidden sm:inline"><AddressText address={contract.address} leading={10} trailing={8} /></span>
+          <span className="sm:hidden"><AddressText address={contract.address} leading={6} trailing={4} /></span>
         </Link>
       </td>
       <td className={`hidden sm:table-cell ${TD_BASE}`}>{typeBadge}</td>
@@ -600,7 +595,7 @@ function ContractRow({
             href={`/address/${contract.creatorAddress}`}
             className="text-text-secondary hover:text-accent font-mono text-sm"
           >
-            {truncateAddress(contract.creatorAddress, 6, 4)}
+            <AddressText address={contract.creatorAddress} leading={6} trailing={4} />
           </Link>
         ) : (
           <span className="text-text-muted text-sm">-</span>

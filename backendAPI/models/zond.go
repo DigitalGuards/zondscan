@@ -1,5 +1,7 @@
 package models
 
+import "encoding/json"
+
 type ZondDatabaseBlock struct {
 	Jsonrpc string `json:"jsonrpc"`
 	ID      int    `json:"id"`
@@ -14,22 +16,34 @@ type Withdrawal struct {
 }
 
 type Transaction struct {
-	BlockHash        string `json:"blockHash"`
-	BlockNumber      string `json:"blockNumber"`
-	From             string `json:"from"`
-	Gas              string `json:"gas"`
-	GasPrice         string `json:"gasPrice"`
-	Hash             string `json:"hash"`
-	Nonce            string `json:"nonce"`
-	To               string `json:"to"`
-	TransactionIndex string `json:"transactionIndex"`
-	Type             string `json:"type"`
-	Value            string `json:"value"`
-	ChainID          string `json:"chainId"`
-	Signature        string `json:"signature"`
-	PublicKey        string `json:"publicKey"`
-	Data             string `json:"data"`
-	Status           string `json:"status"`
+	BlockHash         string `json:"blockHash"`
+	BlockNumber       string `json:"blockNumber"`
+	From              string `json:"from"`
+	Gas               string `json:"gas"`
+	GasPrice          string `json:"gasPrice"`
+	Hash              string `json:"hash"`
+	Nonce             string `json:"nonce"`
+	To                string `json:"to"`
+	TransactionIndex  string `json:"transactionIndex"`
+	Type              string `json:"type"`
+	Value             string `json:"value"`
+	ChainID           string `json:"chainId"`
+	Signature         string `json:"signature"`
+	PublicKey         string `json:"publicKey"`
+	Data              string `json:"input" bson:"data"`
+	Status            string `json:"status"`
+	GasUsed           string `json:"gasUsed,omitempty" bson:"gasUsed,omitempty"`
+	EffectiveGasPrice string `json:"effectiveGasPrice,omitempty" bson:"effectiveGasPrice,omitempty"`
+}
+
+// MarshalJSON preserves the documented data alias for existing block clients.
+// RPC input decoding and BSON data storage use the explicit struct tags above.
+func (tx Transaction) MarshalJSON() ([]byte, error) {
+	type Alias Transaction
+	return json.Marshal(struct {
+		Alias
+		LegacyData string `json:"data"`
+	}{Alias: Alias(tx), LegacyData: tx.Data})
 }
 
 type Result struct {

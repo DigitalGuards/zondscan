@@ -10,7 +10,7 @@ import { NATIVE_UNIT } from '../lib/helpers';
 
 export default function Loading(): JSX.Element {
   return (
-    <div role="status" aria-label="Loading rich list" className="min-h-screen">
+    <div role="status" aria-label="Loading rich list" className="min-h-[24rem]">
       <div className="page-content py-4 md:py-8">
         <div className="mb-6 md:mb-8">
           <h1 className="section-title">Richlist</h1>

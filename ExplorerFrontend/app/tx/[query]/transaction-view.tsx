@@ -1,4 +1,5 @@
 'use client';
+import InterfaceText from '../../components/InterfaceText';
 
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -13,6 +14,16 @@ import CopyButton from '../../components/CopyButton';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import DetailRow from '../../components/DetailRow';
 import Badge from '../../components/Badge';
+import AddressFingerprint from '../../components/AddressFingerprint';
+import ContractMetadataProvenanceNotice, {
+  trustedContractMetadataABI,
+} from '../../components/ContractMetadataProvenanceNotice';
+import TimeDisplay from '../../components/TimeDisplay';
+import PreferenceDetails from '../../components/PreferenceDetails';
+import { usePreferences } from '../../components/PreferencesProvider';
+import { isZeroTokenTransfer } from '../../lib/preferences';
+import { useDisplayCurrency } from '../../components/useDisplayCurrency';
+import { formatTransactionAmount } from '../../lib/transactionAmount';
 
 // Once a tx has this many confirmations we stop polling /latestblock for
 // it; further refinement is just visual noise (most chain UIs treat
@@ -40,23 +51,9 @@ function BackToTransactionsLink(): JSX.Element | null {
   );
 }
 
-const formatTimestamp = (timestamp: number): string => {
-  if (!timestamp) return 'Unknown';
-  const date = new Date(timestamp * 1000);
-  if (date.getUTCFullYear() === 1970) return 'Pending';
-
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const month = months[date.getUTCMonth()];
-  const day = date.getUTCDate();
-  const year = date.getUTCFullYear();
-  const hours = date.getUTCHours().toString().padStart(2, '0');
-  const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-  const seconds = date.getUTCSeconds().toString().padStart(2, '0');
-  return `${month} ${day}, ${year}, ${hours}:${minutes}:${seconds} UTC`;
-};
 
 const isZeroAddress = (addr: string): boolean =>
-  addr === 'Q0' || addr === 'Q' + '0'.repeat(40);
+  addr === 'Q0' || addr === 'Q' + '0'.repeat(128);
 
 // QRC badge label for a token standard. Keeps the contract-created header
 // and per-row transfer header in lock-step, both branch on the same
@@ -86,6 +83,11 @@ interface TransactionViewProps {
 
 export default function TransactionView({ transaction }: TransactionViewProps): JSX.Element {
   const isMobile = useIsMobile();
+  const fiat = useDisplayCurrency();
+  const { preferences, updatePreferences } = usePreferences();
+  const tokenTransfers = (transaction.tokenTransfers || []).filter(transfer =>
+    !preferences.hideZeroTokenTransfers || !isZeroTokenTransfer(transfer));
+  const hiddenTransfers = (transaction.tokenTransfers?.length || 0) - tokenTransfers.length;
 
   // Poll /latestblock so the confirmation count ticks up live; stops
   // once we cross the terminal-confirmations threshold to bound load
@@ -123,41 +125,24 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
 
   const [formattedValue, unit] = formatAmount(transaction.value);
 
-  const calculatePaidFees = (): string => {
-    if (typeof transaction.PaidFees === 'number') {
-      return transaction.PaidFees.toFixed(18);
-    }
-    if (!transaction.gasUsed || !transaction.gasPrice) return '0';
-    try {
-      const gasUsed = BigInt(transaction.gasUsed);
-      const gasPrice = BigInt(transaction.gasPrice);
-      const paidFees = gasUsed * gasPrice;
-      return (Number(paidFees) / 1e18).toFixed(18);
-    } catch {
-      return '0';
-    }
-  };
-
-  const paidFees = calculatePaidFees();
+  const paidFees = formatTransactionAmount(transaction.PaidFees)?.quanta ?? 'Unavailable';
   // Receipt-level revert flag takes priority over confirmation count: a
   // tx that mined but reverted is "Confirmed" by the confirmations
   // metric yet failed by the EVM's measure. Surface the real state.
   const isReverted = transaction.receiptStatus === '0x0';
+  const isExecutionUnknown = transaction.receiptStatus !== '0x0' && transaction.receiptStatus !== '0x1';
   const effectiveStatus = isReverted
     ? { text: 'Reverted', color: 'bg-red-500' }
-    : status;
+    : isExecutionUnknown ? { text: 'Execution status unavailable', color: 'bg-yellow-500' } : status;
   const badgeVariant = isReverted ? 'error' as const
     : effectiveStatus.color === 'bg-green-500' ? 'success' as const
     : effectiveStatus.color === 'bg-blue-500' ? 'info' as const
     : 'warning' as const;
 
-  const displayAddr = (addr: string): string =>
-    isMobile ? `${addr.slice(0, 10)}...${addr.slice(-8)}` : addr;
-
   return (
     <main className="detail-content" aria-labelledby="tx-detail-heading">
       <Breadcrumbs items={[
-        { label: 'Transactions', href: '/transactions/1' },
+        { label: 'Transactions', translateLabel: true, href: '/transactions/1' },
         { label: `${transaction.hash.slice(0, 10)}...${transaction.hash.slice(-6)}` },
       ]} />
 
@@ -171,21 +156,20 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
         className="card overflow-hidden mb-6"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border">
+        <div className="flex items-center p-4 sm:p-6 border-b border-border">
           <div className="flex items-center gap-3">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-accent" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
             </svg>
-            <h1 id="tx-detail-heading" className="section-title">Transaction Details</h1>
+            <h1 id="tx-detail-heading" className="section-title"><InterfaceText text="Transaction Details" /></h1>
           </div>
-          <Badge variant={badgeVariant} size="md" dot>{effectiveStatus.text}</Badge>
         </div>
 
         {/* Content */}
         <div className="p-4 sm:p-6">
           <DetailRow label="Transaction Hash" mono>
             <div className="flex items-start gap-2">
-              <span>{isMobile ? displayAddr(transaction.hash) : transaction.hash}</span>
+              <span>{isMobile ? `${transaction.hash.slice(0, 10)}...${transaction.hash.slice(-8)}` : transaction.hash}</span>
               <CopyButton value={transaction.hash} label="Copy hash" size="sm" />
             </div>
           </DetailRow>
@@ -209,17 +193,17 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                 #{transaction.blockNumber}
               </Link>
             ) : (
-              <span className="text-text-secondary">Pending</span>
+              <span className="text-text-secondary"><InterfaceText text="Pending" /></span>
             )}
           </DetailRow>
-          <DetailRow label="Timestamp">{formatTimestamp(transaction.timestamp)}</DetailRow>
+          <DetailRow label="Timestamp"><TimeDisplay timestamp={transaction.timestamp} /></DetailRow>
           <DetailRow label="From" mono>
             <div className="flex items-start gap-2">
               <Link
                 href={`/address/${transaction.from}`}
                 className="text-text-primary hover:text-accent transition-colors break-all"
               >
-                {displayAddr(transaction.from)}
+                <AddressFingerprint address={transaction.from} />
               </Link>
               <CopyButton value={transaction.from} label="Copy address" size="sm" />
             </div>
@@ -251,7 +235,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                   href={`/address/${transaction.contractCreated.address}`}
                   className="text-text-primary hover:text-accent transition-colors break-all"
                 >
-                  {displayAddr(transaction.contractCreated.address)}
+                  <AddressFingerprint address={transaction.contractCreated.address} />
                 </Link>
                 <CopyButton
                   value={transaction.contractCreated.address}
@@ -265,7 +249,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                   href={`/address/${transaction.to}`}
                   className="text-text-primary hover:text-accent transition-colors break-all"
                 >
-                  {displayAddr(transaction.to)}
+                  <AddressFingerprint address={transaction.to} />
                 </Link>
                 <CopyButton value={transaction.to} label="Copy address" size="sm" />
               </div>
@@ -277,28 +261,24 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             <span className="font-semibold text-accent">{formattedValue}</span>
             <span className="text-text-muted ml-1">{unit}</span>
           </DetailRow>
-          {(transaction.gasUsed || transaction.gasPrice) && (
-            <DetailRow label="Transaction Fee">
-              {paidFees}
-              <span className="text-text-muted ml-1">{NATIVE_UNIT}</span>
-              {(() => {
-                // USD conversion is opt-in: requires both a fee > 0 and a
-                // price from the polled /latestblock response. Skips the
-                // 18-decimal precision of paidFees and just rounds to the
-                // amount that's actually visible at human resolution.
-                const usd = latestBlockQuery.data?.qrlUsdPrice;
-                const qrlFee = parseFloat(paidFees);
-                if (!usd || usd <= 0 || !Number.isFinite(qrlFee) || qrlFee <= 0) return null;
-                const dollars = qrlFee * usd;
-                // < $0.001 renders as "<$0.001" so we don't display $0.00
-                // when there's a real (but tiny) fee.
-                const display = dollars < 0.001
-                  ? '<$0.001'
-                  : `≈ $${dollars < 1 ? dollars.toFixed(4) : dollars.toFixed(2)}`;
-                return <span className="text-text-muted text-xs ml-2" title={`@${usd.toFixed(4)} USD/QRL`}>{display}</span>;
-              })()}
-            </DetailRow>
-          )}
+          <DetailRow label="Transaction Fee">
+            {paidFees}
+            {paidFees !== 'Unavailable' && <span className="text-text-muted ml-1">{NATIVE_UNIT}</span>}
+            {(() => {
+              const usd = latestBlockQuery.data?.qrlUsdPrice;
+              const qrlFee = parseFloat(paidFees);
+              if (!usd || usd <= 0 || !Number.isFinite(qrlFee) || qrlFee <= 0) return null;
+              return (
+                <span
+                  className="text-text-muted text-xs ml-2"
+                  data-fee-currency={fiat.currency}
+                  title={`QRL market reference: ${fiat.format(usd, { maximumFractionDigits: 4 })}/QRL. Testnet Quanta has no market value.`}
+                >
+                  ≈ {fiat.format(qrlFee * usd, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                </span>
+              );
+            })()}
+          </DetailRow>
         </div>
       </section>
 
@@ -325,8 +305,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               <h2 id="contract-created-heading" className="text-[15px] font-semibold text-success">Contract Created</h2>
               {cc.isToken && (
                 <Badge variant={ccStandard === 'ERC-721' || ccStandard === 'ERC-1155' ? 'warning' : 'brand'}>
-                  {qrcBadgeText(ccStandard)} Token
-                </Badge>
+                  {qrcBadgeText(ccStandard)}<InterfaceText text="Token" /></Badge>
               )}
             </div>
           </div>
@@ -336,7 +315,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                 href={`/address/${cc.address}`}
                 className="text-accent hover:text-accent-hover transition-colors break-all"
               >
-                {displayAddr(cc.address)}
+                <AddressFingerprint address={cc.address} />
               </Link>
             </DetailRow>
             {cc.isToken && (
@@ -352,8 +331,12 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
       {/* Token Transfer Section(s). A single tx can emit several Transfer
           events (DEX swaps, ERC-1155 TransferBatch fan-out), each persisted
           as its own row, so we render one card per row. */}
-      {transaction.tokenTransfers && transaction.tokenTransfers.length > 0 &&
-        transaction.tokenTransfers.map((tt, idx) => {
+      {hiddenTransfers > 0 && <p className="mb-4 text-sm text-text-muted">
+        {hiddenTransfers} zero-quantity token transfer{hiddenTransfers === 1 ? '' : 's'} hidden.
+        {' '}<button type="button" className="text-accent hover:underline" onClick={() => updatePreferences({ hideZeroTokenTransfers: false })}><InterfaceText text="Show zero transfers" /></button>
+      </p>}
+      {tokenTransfers.length > 0 &&
+        tokenTransfers.map((tt, idx) => {
           const standard = tt.tokenStandard;
           const headerLabel =
             standard === 'ERC-721' ? 'NFT Transfer'
@@ -361,6 +344,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             : 'Token Transfer';
           const isNFT = standard === 'ERC-721' || standard === 'ERC-1155';
           const rowKey = tt.logIndex || `${tt.contractAddress}-${idx}`;
+          const tokenLabel = tt.tokenName || tt.tokenSymbol;
           return (
         <section
           key={rowKey}
@@ -382,8 +366,16 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                 href={`/address/${tt.contractAddress}`}
                 className="text-accent hover:text-accent-hover font-medium transition-colors"
               >
-                {tt.tokenName || tt.tokenSymbol || tt.contractAddress}
-                {tt.tokenName && tt.tokenSymbol && tt.tokenSymbol !== tt.tokenName ? ` (${tt.tokenSymbol})` : ''}
+                {tokenLabel ? (
+                  <>
+                    {tokenLabel}
+                    {tt.tokenName && tt.tokenSymbol && tt.tokenSymbol !== tt.tokenName
+                      ? ` (${tt.tokenSymbol})`
+                      : ''}
+                  </>
+                ) : (
+                  <AddressFingerprint address={tt.contractAddress} />
+                )}
               </Link>
             </DetailRow>
             {tt.tokenID && (
@@ -422,7 +414,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                   href={`/address/${tt.from}`}
                   className="text-text-primary hover:text-accent transition-colors break-all"
                 >
-                  {displayAddr(tt.from)}
+                  <AddressFingerprint address={tt.from} />
                 </Link>
               )}
             </DetailRow>
@@ -434,7 +426,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                   href={`/address/${tt.to}`}
                   className="text-text-primary hover:text-accent transition-colors break-all"
                 >
-                  {displayAddr(tt.to)}
+                  <AddressFingerprint address={tt.to} />
                 </Link>
               )}
             </DetailRow>
@@ -463,7 +455,11 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               // Pass the per-log ABI (when the emitting contract is verified)
               // so the decoder can fall through from the five known
               // signatures to a full ABI-driven decode.
-              const decoded = decodeEventLog(logEntry.topics, logEntry.data, logEntry.contract?.abi);
+              const decoded = decodeEventLog(
+                logEntry.topics,
+                logEntry.data,
+                trustedContractMetadataABI(logEntry.contract)
+              );
               const idxLabel = (() => { try { return parseInt(logEntry.logIndex || '0x0', 16).toString(); } catch { return logEntry.logIndex; } })();
               const decodedViaAbi = !!decoded && !decoded.standard;
               return (
@@ -489,9 +485,10 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                       href={`/address/${logEntry.address}`}
                       className="text-accent hover:text-accent-hover transition-colors break-all text-xs font-mono"
                     >
-                      {logEntry.address}
+                      <AddressFingerprint address={logEntry.address} />
                     </Link>
                   </div>
+                  <ContractMetadataProvenanceNotice contract={logEntry.contract} />
                   {decoded ? (
                     <>
                       <p className="text-xs text-text-muted font-mono mb-2">{decoded.signature}</p>
@@ -504,7 +501,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                                 href={`/address/${arg.value}`}
                                 className="text-text-primary hover:text-accent transition-colors break-all font-mono"
                               >
-                                {arg.value}
+                                <AddressFingerprint address={arg.value} />
                               </Link>
                             ) : arg.type === 'bool' ? (
                               <Badge variant={arg.value === 'true' ? 'success' : 'error'}>{arg.value}</Badge>
@@ -582,7 +579,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-accent" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 17.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
               </svg>
-              <h2 id="internal-tx-heading" className="text-[15px] font-display font-semibold text-text-primary">Internal Transactions</h2>
+              <h2 id="internal-tx-heading" className="text-[15px] font-display font-semibold text-text-primary"><InterfaceText text="Internal Transactions" /></h2>
               <Badge variant="neutral">{transaction.internalTransactions.length}</Badge>
             </div>
           </div>
@@ -614,7 +611,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                       <div className="flex flex-wrap items-start gap-2">
                         <span className="text-text-secondary font-mono min-w-[60px]">from:</span>
                         <Link href={`/address/${itx.from}`} className="text-text-primary hover:text-accent transition-colors break-all font-mono">
-                          {itx.from}
+                          <AddressFingerprint address={itx.from} />
                         </Link>
                       </div>
                     )}
@@ -622,7 +619,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                       <div className="flex flex-wrap items-start gap-2">
                         <span className="text-text-secondary font-mono min-w-[60px]">to:</span>
                         <Link href={`/address/${itx.to}`} className="text-accent hover:text-accent-hover transition-colors break-all font-mono">
-                          {itx.to}
+                          <AddressFingerprint address={itx.to} />
                         </Link>
                       </div>
                     )}
@@ -659,14 +656,15 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
           3. Raw calldata fallback so users can copy it into any decoder. */}
       {transaction.input && transaction.input !== '0x' && (() => {
         const decodedInput = decodeTokenTransferInput(transaction.input);
+        const targetABI = trustedContractMetadataABI(transaction.targetContract);
         const decodedCall = !decodedInput
-          ? decodeContractCall(transaction.input, transaction.targetContract?.abi)
+          ? decodeContractCall(transaction.input, targetABI)
           : null;
         return (
           <section aria-labelledby="input-data-heading" className="card overflow-hidden mb-6">
             <div className="px-4 sm:px-6 py-4 border-b border-border">
               <div className="flex items-center gap-2">
-                <h2 id="input-data-heading" className="text-[15px] font-display font-semibold text-text-primary">Input Data</h2>
+                <h2 id="input-data-heading" className="text-[15px] font-display font-semibold text-text-primary"><InterfaceText text="Input Data" /></h2>
                 {decodedInput && (
                   <Badge variant={decodedInput.standard === 'ERC-20' ? 'brand' : 'warning'}>
                     {decodedInput.methodName}
@@ -682,6 +680,9 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                 )}
               </div>
             </div>
+            <div className="px-4 sm:px-6 pt-3">
+              <ContractMetadataProvenanceNotice contract={transaction.targetContract} />
+            </div>
             {/* Whole body of the card is a native <details> disclosure
                 so the only visible row when collapsed is the toggle
                 row directly under the header - no empty padded body
@@ -691,8 +692,8 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                 preserved: decoded view (if any) renders first, raw
                 hex below, matching the "default to decoded when
                 verified" intent. */}
-            <details className="group">
-              <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center gap-2 px-4 sm:px-6 py-3 hover:bg-white/5 transition-colors">
+            <PreferenceDetails key={transaction.hash} className="group">
+              <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center gap-2 px-4 sm:px-6 py-3 hover:bg-surface-2 transition-colors">
                 {/* Heroicons-style chevron-right; rotates 90° to point
                     down when the disclosure is open. currentColor so
                     the surrounding text-text-secondary / group-hover accent
@@ -730,7 +731,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                               href={`/address/${arg.value}`}
                               className="text-text-primary hover:text-accent transition-colors break-all font-mono"
                             >
-                              {arg.value}
+                              <AddressFingerprint address={arg.value} />
                             </Link>
                           ) : arg.type === 'bool' ? (
                             <Badge variant={arg.value === 'true' ? 'success' : 'error'}>{arg.value}</Badge>
@@ -780,7 +781,7 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
                   </p>
                 )}
               </div>
-            </details>
+            </PreferenceDetails>
           </section>
         );
       })()}

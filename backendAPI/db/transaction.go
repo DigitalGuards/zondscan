@@ -4,7 +4,6 @@ import (
 	"backendAPI/configs"
 	"backendAPI/models"
 	"context"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"math"
@@ -15,7 +14,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
@@ -35,15 +33,18 @@ func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
 		{Key: "amountWei", Value: 1},
 		{Key: "paidFees", Value: 1},
 		{Key: "paidFeesWei", Value: 1},
+		{Key: "feeSource", Value: 1},
+		{Key: "receiptStatus", Value: 1},
 		{Key: "blockNumber", Value: 1},
 	}
 
-	opts := options.Find().
-		SetProjection(projection).
-		SetSort(primitive.D{{Key: "timeStamp", Value: -1}}).
-		SetLimit(100)
-
-	results, err := configs.TransactionByAddressCollection.Find(ctx, primitive.D{}, opts)
+	pipeline := canonicalCompanionPipeline(primitive.D{})
+	pipeline = append(pipeline,
+		bson.M{"$sort": primitive.D{{Key: "timeStamp", Value: -1}}},
+		bson.M{"$limit": 100},
+		bson.M{"$project": projection},
+	)
+	results, err := configs.TransactionByAddressCollection.Aggregate(ctx, pipeline)
 	if err != nil {
 		log.Printf("error querying latest transactions: %v", err)
 		return nil, err
@@ -57,6 +58,9 @@ func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
 			continue
 		}
 		transactions = append(transactions, singleTransaction)
+	}
+	if err := results.Err(); err != nil {
+		return nil, err
 	}
 
 	return transactions, nil
@@ -98,13 +102,14 @@ func ReturnAllInternalTransactionsByAddress(address string, page, limit int) ([]
 		{Key: "blockTimestamp", Value: 1},
 	}
 
-	opts := options.Find().
-		SetProjection(projection).
-		SetSort(primitive.D{{Key: "blockTimestamp", Value: -1}}).
-		SetSkip(int64(page-1) * int64(limit)).
-		SetLimit(int64(limit))
-
-	results, err := configs.InternalTransactionByAddressCollection.Find(ctx, filter, opts)
+	pipeline := canonicalCompanionPipeline(filter)
+	pipeline = append(pipeline,
+		bson.M{"$sort": primitive.D{{Key: "blockTimestamp", Value: -1}}},
+		bson.M{"$skip": int64(page-1) * int64(limit)},
+		bson.M{"$limit": int64(limit)},
+		bson.M{"$project": projection},
+	)
+	results, err := configs.InternalTransactionByAddressCollection.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, err
 	}
@@ -117,6 +122,9 @@ func ReturnAllInternalTransactionsByAddress(address string, page, limit int) ([]
 		}
 
 		transactions = append(transactions, singleTransaction)
+	}
+	if err := results.Err(); err != nil {
+		return nil, err
 	}
 
 	return transactions, nil
@@ -149,16 +157,19 @@ func ReturnAllTransactionsByAddress(address string, page, limit int) ([]models.T
 		{Key: "to", Value: 1},
 		{Key: "paidFees", Value: 1},
 		{Key: "paidFeesWei", Value: 1},
+		{Key: "feeSource", Value: 1},
+		{Key: "receiptStatus", Value: 1},
 		{Key: "blockNumber", Value: 1},
 	}
 
-	opts := options.Find().
-		SetProjection(projection).
-		SetSort(primitive.D{{Key: "timeStamp", Value: -1}}).
-		SetSkip(int64(page-1) * int64(limit)).
-		SetLimit(int64(limit))
-
-	results, err := configs.TransactionByAddressCollection.Find(ctx, filter, opts)
+	pipeline := canonicalCompanionPipeline(filter)
+	pipeline = append(pipeline,
+		bson.M{"$sort": primitive.D{{Key: "timeStamp", Value: -1}}},
+		bson.M{"$skip": int64(page-1) * int64(limit)},
+		bson.M{"$limit": int64(limit)},
+		bson.M{"$project": projection},
+	)
+	results, err := configs.TransactionByAddressCollection.Aggregate(ctx, pipeline)
 	if err != nil {
 		log.Printf("error querying transactions: %v", err)
 		return nil, err
@@ -181,6 +192,9 @@ func ReturnAllTransactionsByAddress(address string, page, limit int) ([]models.T
 		}
 
 		transactions = append(transactions, singleTransaction)
+	}
+	if err := results.Err(); err != nil {
+		return nil, err
 	}
 
 	if len(transactions) == 0 {
@@ -215,20 +229,22 @@ func ReturnTransactionsNetwork(page, limit int) ([]models.TransactionByAddress, 
 		{Key: "amountWei", Value: 1},
 		{Key: "paidFees", Value: 1},
 		{Key: "paidFeesWei", Value: 1},
+		{Key: "feeSource", Value: 1},
+		{Key: "receiptStatus", Value: 1},
 		{Key: "blockNumber", Value: 1},
 	}
-
-	opts := options.Find().
-		SetProjection(projection).
-		SetSort(primitive.D{{Key: "timeStamp", Value: -1}})
 
 	if page == 0 {
 		page = 1
 	}
-	opts.SetSkip(int64((page - 1) * limit))
-	opts.SetLimit(int64(limit))
-
-	results, err := configs.TransactionByAddressCollection.Find(ctx, primitive.D{}, opts)
+	pipeline := canonicalCompanionPipeline(primitive.D{})
+	pipeline = append(pipeline,
+		bson.M{"$sort": primitive.D{{Key: "timeStamp", Value: -1}}},
+		bson.M{"$skip": int64((page - 1) * limit)},
+		bson.M{"$limit": int64(limit)},
+		bson.M{"$project": projection},
+	)
+	results, err := configs.TransactionByAddressCollection.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query transactions: %v", err)
 	}
@@ -241,20 +257,25 @@ func ReturnTransactionsNetwork(page, limit int) ([]models.TransactionByAddress, 
 		}
 		transactions = append(transactions, singleTransaction)
 	}
+	if err := results.Err(); err != nil {
+		return nil, err
+	}
 
 	return transactions, nil
 }
 
-// CountTransactionsNetwork returns the total transactionByAddress row count.
-// Uses countDocumentsResilient (fast metadata read with an exact-count fallback
-// when the metadata reads 0, which it currently does on this deployment).
-// Returns int64 to match sibling count helpers and to avoid an implicit cap
-// at 2^31-1 on long-running chains.
+// CountTransactionsNetwork returns the exact number of transactionByAddress
+// rows whose owning blocks are complete. Returns int64 to match sibling count
+// helpers and avoid an implicit cap at 2^31-1 on long-running chains.
 func CountTransactionsNetwork() (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	count, err := countDocumentsResilient(ctx, configs.TransactionByAddressCollection)
+	count, err := aggregateCanonicalCount(
+		ctx,
+		configs.TransactionByAddressCollection,
+		canonicalCompanionPipeline(primitive.D{}),
+	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count transactions: %v", err)
 	}
@@ -271,7 +292,11 @@ func CountTransactions(address string) (int, error) {
 
 	filter := addressOrFilter(normalizedAddress)
 
-	count, err := configs.TransactionByAddressCollection.CountDocuments(ctx, filter)
+	count, err := aggregateCanonicalCount(
+		ctx,
+		configs.TransactionByAddressCollection,
+		canonicalCompanionPipeline(filter),
+	)
 	if err != nil {
 		log.Printf("error counting transactions: %v", err)
 		return 0, err
@@ -293,7 +318,11 @@ func CountInternalTransactionsByAddress(address string) (int, error) {
 
 	filter := addressOrFilter(normalizedAddress)
 
-	count, err := configs.InternalTransactionByAddressCollection.CountDocuments(ctx, filter)
+	count, err := aggregateCanonicalCount(
+		ctx,
+		configs.InternalTransactionByAddressCollection,
+		canonicalCompanionPipeline(filter),
+	)
 	if err != nil {
 		log.Printf("error counting internal transactions: %v", err)
 		return 0, err
@@ -346,11 +375,24 @@ func fetchActivityBoundary(ctx context.Context, filter bson.M, order int) (int64
 	var doc struct {
 		TimeStamp string `bson:"timeStamp"`
 	}
-	opts := options.FindOne().
-		SetProjection(primitive.D{{Key: "timeStamp", Value: 1}}).
-		SetSort(primitive.D{{Key: "timeStamp", Value: order}})
-	err := configs.TransactionByAddressCollection.FindOne(ctx, filter, opts).Decode(&doc)
+	pipeline := canonicalCompanionPipeline(filter)
+	pipeline = append(pipeline,
+		bson.M{"$sort": primitive.D{{Key: "timeStamp", Value: order}}},
+		bson.M{"$limit": 1},
+		bson.M{"$project": primitive.D{{Key: "timeStamp", Value: 1}}},
+	)
+	cursor, err := configs.TransactionByAddressCollection.Aggregate(ctx, pipeline)
 	if err != nil {
+		return 0, err
+	}
+	defer cursor.Close(ctx)
+	if !cursor.Next(ctx) {
+		if err := cursor.Err(); err != nil {
+			return 0, err
+		}
+		return 0, mongo.ErrNoDocuments
+	}
+	if err := cursor.Decode(&doc); err != nil {
 		return 0, err
 	}
 	ts, err := strconv.ParseInt(strings.TrimPrefix(doc.TimeStamp, "0x"), 16, 64)
@@ -382,6 +424,31 @@ func FirstSeen(address string) int64 {
 	return first
 }
 
+func transferFromIndexedTransaction(block models.ZondDatabaseBlock, tx models.Transaction) models.Transfer {
+	// Keep the legacy response normalization for block/transaction quantities.
+	// Receipt quantities remain empty when their actual values are unavailable.
+	ensureHexPrefix := func(value string) string {
+		if value == "" || value == "0x" || value == "0x0" {
+			return "0x0"
+		}
+		if !strings.HasPrefix(value, "0x") {
+			return "0x" + value
+		}
+		return value
+	}
+	return models.Transfer{
+		ID:             primitive.NewObjectID(),
+		BlockNumber:    ensureHexPrefix(block.Result.Number),
+		BlockHash:      block.Result.Hash,
+		BlockTimestamp: ensureHexPrefix(block.Result.Timestamp),
+		From:           tx.From, To: tx.To, TxHash: tx.Hash, Value: ensureHexPrefix(tx.Value),
+		GasLimit: tx.Gas, GasUsed: tx.GasUsed, GasPrice: ensureHexPrefix(tx.GasPrice),
+		EffectiveGasPrice: tx.EffectiveGasPrice, Status: tx.Status,
+		Nonce: ensureHexPrefix(tx.Nonce), Signature: tx.Signature, Pk: tx.PublicKey,
+		Size: ensureHexPrefix(block.Result.Size), Input: tx.Data,
+	}
+}
+
 func ReturnSingleTransfer(query string) (models.Transfer, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -391,6 +458,7 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 	// First try to find the transaction in the blocks collection
 	var block models.ZondDatabaseBlock
 	blockFilter := bson.M{
+		"ingestionState": completedBlockIngestionState,
 		"result.transactions": bson.M{
 			"$elemMatch": bson.M{
 				"hash": query,
@@ -403,55 +471,7 @@ func ReturnSingleTransfer(query string) (models.Transfer, error) {
 		// Found in blocks collection, convert to Transfer model
 		for _, tx := range block.Result.Transactions {
 			if tx.Hash == query {
-				// Use hex strings directly
-				from := tx.From
-				to := tx.To
-				txHash := tx.Hash
-
-				// Store original hex value
-				valueStr := tx.Value
-				if valueStr == "" || valueStr == "0x0" {
-					valueStr = "0x0"
-				}
-
-				// Store original gas values
-				gasUsedStr := tx.Gas
-				if gasUsedStr == "" || gasUsedStr == "0x0" {
-					gasUsedStr = "0x0"
-				}
-
-				gasPriceStr := tx.GasPrice
-				if gasPriceStr == "" || gasPriceStr == "0x0" {
-					gasPriceStr = "0x0"
-				}
-
-				ensureHexPrefix := func(s string) string {
-					if s == "" || s == "0x" || s == "0x0" {
-						return "0x0"
-					}
-					if !strings.HasPrefix(s, "0x") {
-						return "0x" + s
-					}
-					return s
-				}
-
-				result = models.Transfer{
-					ID:             primitive.NewObjectID(),
-					BlockNumber:    ensureHexPrefix(block.Result.Number),
-					BlockTimestamp: ensureHexPrefix(block.Result.Timestamp),
-					From:           from,
-					To:             to,
-					TxHash:         txHash,
-					Value:          ensureHexPrefix(valueStr),
-					GasUsed:        ensureHexPrefix(gasUsedStr),
-					GasPrice:       ensureHexPrefix(gasPriceStr),
-					Nonce:          ensureHexPrefix(tx.Nonce),
-					Signature:      tx.Signature,
-					Pk:             tx.PublicKey,
-					Size:           ensureHexPrefix(block.Result.Size),
-					Input:          tx.Data,
-				}
-				return result, nil
+				return transferFromIndexedTransaction(block, tx), nil
 			}
 		}
 	}
@@ -483,8 +503,9 @@ func CountInternalTxsByTxHashes(txHashes []string) (map[string]int, error) {
 
 	pipeline := []bson.M{
 		{"$match": bson.M{"hash": bson.M{"$in": txHashes}}},
-		{"$group": bson.M{"_id": "$hash", "count": bson.M{"$sum": 1}}},
 	}
+	pipeline = append(pipeline, canonicalCompleteBlockFenceStages("$blockNumber")...)
+	pipeline = append(pipeline, bson.M{"$group": bson.M{"_id": "$hash", "count": bson.M{"$sum": 1}}})
 	cursor, err := configs.InternalTransactionByAddressCollection.Aggregate(ctx, pipeline)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -504,6 +525,9 @@ func CountInternalTxsByTxHashes(txHashes []string) (map[string]int, error) {
 		}
 		out[row.ID] = row.Count
 	}
+	if err := cursor.Err(); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -520,11 +544,9 @@ func GetInternalTransactionsByTxHash(txHash string) ([]models.InternalTx, error)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cursor, err := configs.InternalTransactionByAddressCollection.Find(
-		ctx,
-		bson.M{"hash": txHash},
-		options.Find().SetSort(bson.D{{Key: "traceAddress", Value: 1}}),
-	)
+	pipeline := canonicalCompanionPipeline(bson.M{"hash": txHash})
+	pipeline = append(pipeline, bson.M{"$sort": bson.D{{Key: "traceAddress", Value: 1}}})
+	cursor, err := configs.InternalTransactionByAddressCollection.Aggregate(ctx, pipeline)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return []models.InternalTx{}, nil
@@ -564,19 +586,26 @@ func GetTransactionByHash(hash string) (*models.Transaction, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Remove "0x" prefix if present and decode hex to bytes
-	hash = strings.TrimPrefix(hash, "0x")
-	hashBytes, err := hex.DecodeString(hash)
-	if err != nil {
-		return nil, fmt.Errorf("invalid hash format: %v", err)
+	normalizedHash := strings.ToLower(hash)
+	if !strings.HasPrefix(normalizedHash, "0x") {
+		normalizedHash = "0x" + normalizedHash
 	}
 
 	var transfer models.Transfer
-	err = collection.FindOne(ctx, bson.M{"txhash": hashBytes}).Decode(&transfer)
+	pipeline := canonicalCompanionPipeline(bson.M{"txHash": normalizedHash})
+	pipeline = append(pipeline, bson.M{"$limit": 1})
+	cursor, err := collection.Aggregate(ctx, pipeline)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, nil // Return nil if not found
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	if !cursor.Next(ctx) {
+		if err := cursor.Err(); err != nil {
+			return nil, err
 		}
+		return nil, nil
+	}
+	if err := cursor.Decode(&transfer); err != nil {
 		return nil, err
 	}
 
@@ -611,15 +640,13 @@ func ReturnNonZeroTransactions(address string, page, limit int) ([]models.Transa
 		{Key: "timeStamp", Value: 1},
 		{Key: "amount", Value: 1},
 		{Key: "amountWei", Value: 1},
+		{Key: "paidFeesWei", Value: 1},
+		{Key: "feeSource", Value: 1},
+		{Key: "receiptStatus", Value: 1},
 		{Key: "from", Value: 1},
 		{Key: "to", Value: 1},
 		{Key: "blockNumber", Value: 1},
 	}
-
-	// Sort by timestamp, newest first
-	opts := options.Find().
-		SetProjection(projection).
-		SetSort(primitive.D{{Key: "timeStamp", Value: -1}})
 
 	// Normalize to canonical Q-prefix form stored by the syncer.
 	normalizedAddress := normalizeAddress(address)
@@ -630,17 +657,24 @@ func ReturnNonZeroTransactions(address string, page, limit int) ([]models.Transa
 		},
 	}
 
-	// Apply pagination
+	pipeline := canonicalCompanionPipeline(filter)
+	pipeline = append(pipeline, bson.M{"$sort": primitive.D{{Key: "timeStamp", Value: -1}}})
+
+	// Apply pagination after the canonical fence so pending rows cannot create
+	// short or shifting pages.
 	if limit != 0 {
 		if page == 0 {
 			page = 1
 		}
-		opts.SetSkip(int64((page - 1) * limit))
-		opts.SetLimit(int64(limit))
+		pipeline = append(pipeline,
+			bson.M{"$skip": int64((page - 1) * limit)},
+			bson.M{"$limit": int64(limit)},
+		)
 	}
+	pipeline = append(pipeline, bson.M{"$project": projection})
 
 	// Execute the query
-	results, err := configs.TransactionByAddressCollection.Find(ctx, filter, opts)
+	results, err := configs.TransactionByAddressCollection.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, err
 	}

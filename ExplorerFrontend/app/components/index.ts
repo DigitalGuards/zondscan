@@ -9,4 +9,3 @@ export { default as EmptyState } from "./EmptyState";
 export { default as Icons, SearchIcon, DownloadIcon } from "./Icons";
 export { default as QRLIconSvgComponent } from "./QRLIconSvgComponent";
 export { default as SearchBar } from "./SearchBar";
-export { default as Sidebar } from "./Sidebar";

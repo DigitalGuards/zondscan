@@ -1,7 +1,7 @@
 // Package cache provides a tiny in-process TTL cache with singleflight
 // deduplication, used to absorb concurrent traffic on hot read endpoints
 // (/overview, /blocks, /txs, /pending-transactions, /latestblock,
-// /address/aggregate).
+// /address/aggregate, /market/orderbook).
 //
 // Without this layer, every page-view fans out into 1-8 MongoDB queries,
 // and the homepage polls every 30 s, so at modest concurrency the same
@@ -16,6 +16,7 @@
 package cache
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -47,21 +48,55 @@ func (c *TTLCache) GetOrCompute(key string, ttl time.Duration, fn func() (interf
 		return v, nil
 	}
 	v, err, _ := c.sf.Do(key, func() (interface{}, error) {
-		// Re-check under singleflight in case another caller just populated
-		// the entry while we were queued.
-		if v, ok := c.get(key); ok {
-			return v, nil
-		}
-		val, err := fn()
-		if err != nil {
-			return nil, err
-		}
-		c.mu.Lock()
-		c.store[key] = entry{val: val, expires: time.Now().Add(ttl)}
-		c.mu.Unlock()
-		return val, nil
+		return c.computeAndStore(key, ttl, fn)
 	})
 	return v, err
+}
+
+// GetOrComputeContext is the cancelable-wait counterpart of GetOrCompute.
+// Canceling one waiter never cancels the shared computation. The supplied fn
+// must carry its own finite execution budget when it performs blocking work.
+func (c *TTLCache) GetOrComputeContext(
+	ctx context.Context,
+	key string,
+	ttl time.Duration,
+	fn func() (interface{}, error),
+) (interface{}, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if v, ok := c.get(key); ok {
+		return v, nil
+	}
+	result := c.sf.DoChan(key, func() (interface{}, error) {
+		return c.computeAndStore(key, ttl, fn)
+	})
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case completed := <-result:
+		return completed.Val, completed.Err
+	}
+}
+
+func (c *TTLCache) computeAndStore(
+	key string,
+	ttl time.Duration,
+	fn func() (interface{}, error),
+) (interface{}, error) {
+	// Re-check under singleflight in case another caller just populated the
+	// entry while this caller was queued.
+	if v, ok := c.get(key); ok {
+		return v, nil
+	}
+	val, err := fn()
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	c.store[key] = entry{val: val, expires: time.Now().Add(ttl)}
+	c.mu.Unlock()
+	return val, nil
 }
 
 func (c *TTLCache) get(key string) (interface{}, bool) {

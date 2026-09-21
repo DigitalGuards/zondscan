@@ -17,6 +17,8 @@ const (
 	validatorsCollName                   = "validators"
 	contractCodeCollName                 = "contractCode"
 	contractVerificationsCollName        = "contractVerifications"
+	contractExplainChallengesCollName    = "contractExplainAuthChallenges"
+	contractExplainUsageCollName         = "contractExplainProviderUsage"
 	blockSizesCollName                   = "averageBlockSize"
 	totalCirculatingSupplyCollName       = "totalCirculatingSupply"
 	coinGeckoCollName                    = "coingecko"
@@ -31,6 +33,7 @@ const (
 	gasHistoryCollName                   = "gasHistory"
 	syncStateCollName                    = "sync_state"
 	tokenMetadataCollName                = "tokenMetadata"
+	marketTradesCollName                 = "marketTrades"
 )
 
 // Collection handles. These are populated by ConnectDB once the client is
@@ -51,6 +54,8 @@ var (
 	ValidatorsCollections                  *mongo.Collection
 	ContractInfoCollection                 *mongo.Collection
 	ContractVerificationsCollection        *mongo.Collection
+	ContractExplainChallengesCollection    *mongo.Collection
+	ContractExplainUsageCollection         *mongo.Collection
 	BlockSizesCollection                   *mongo.Collection
 	TotalCirculatingSupplyCollection       *mongo.Collection
 	CoinGeckoCollection                    *mongo.Collection
@@ -65,4 +70,5 @@ var (
 	GasHistoryCollection                   *mongo.Collection
 	SyncStateCollection                    *mongo.Collection
 	TokenMetadataCollection                *mongo.Collection
+	MarketTradesCollection                 *mongo.Collection
 )

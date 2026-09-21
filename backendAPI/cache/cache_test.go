@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"sync/atomic"
@@ -90,6 +91,64 @@ func TestGetOrComputeSingleflight(t *testing.T) {
 
 	if got := atomic.LoadInt32(&calls); got != 1 {
 		t.Fatalf("fn called %d times across %d concurrent callers, want 1", got, workers)
+	}
+}
+
+func TestGetOrComputeContextCanceledWaiterDoesNotCancelSharedFill(t *testing.T) {
+	c := New()
+	fillStarted := make(chan struct{})
+	releaseFill := make(chan struct{})
+	fillCompleted := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+
+	result := make(chan error, 1)
+	go func() {
+		_, err := c.GetOrComputeContext(ctx, "k", time.Second, func() (interface{}, error) {
+			close(fillStarted)
+			defer close(fillCompleted)
+			select {
+			case <-releaseFill:
+				return "shared", nil
+			case <-time.After(time.Second):
+				return nil, errors.New("timed out waiting to release shared fill")
+			}
+		})
+		result <- err
+	}()
+
+	select {
+	case <-fillStarted:
+	case <-time.After(time.Second):
+		t.Fatal("shared fill did not start within 1s")
+	}
+	cancel()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled waiter error = %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("canceled waiter did not return within 1s")
+	}
+	close(releaseFill)
+	select {
+	case <-fillCompleted:
+	case <-time.After(time.Second):
+		t.Fatal("shared fill did not complete within 1s")
+	}
+
+	deadline := time.Now().Add(time.Second)
+	for {
+		v, err := c.GetOrCompute("k", time.Second, func() (interface{}, error) {
+			return "unexpected recompute", nil
+		})
+		if err == nil && v == "shared" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("shared fill was not cached after waiter cancellation: value=%v error=%v", v, err)
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
 

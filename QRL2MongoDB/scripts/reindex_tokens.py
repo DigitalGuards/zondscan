@@ -5,10 +5,25 @@ import time
 from datetime import datetime
 import json
 import requests
-from pymongo import MongoClient
 from dotenv import load_dotenv
-from web3 import Web3
 import logging
+
+if __package__:
+    from .maintenance_lease import (
+        MaintenanceInterrupted,
+        MaintenanceLease,
+        MaintenanceLeaseError,
+        maintenance_shutdown_signals,
+        require_mongo_uri,
+    )
+else:
+    from maintenance_lease import (
+        MaintenanceInterrupted,
+        MaintenanceLease,
+        MaintenanceLeaseError,
+        maintenance_shutdown_signals,
+        require_mongo_uri,
+    )
 
 # Load environment variables
 load_dotenv()
@@ -29,12 +44,17 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# MongoDB connection
-MONGO_URI = os.getenv('MONGOURI', 'mongodb://localhost:27017')
 NODE_URL = os.getenv('NODE_URL', 'https://qrlwallet.com/api/zond-rpc/testnet')
 
 # Constants
-TRANSFER_EVENT_SIGNATURE = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+ABI_WORD_HEX_LENGTH = 128
+UINT256_HEX_LENGTH = 64
+ADDRESS_HEX_LENGTH = 128
+ZERO_ADDRESS = "Q" + ("0" * ADDRESS_HEX_LENGTH)
+TRANSFER_EVENT_SIGNATURE = (
+    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+    + ("0" * 64)
+)
 BATCH_SIZE = 50
 
 def make_rpc_call(method, params, max_retries=3, retry_delay=1):
@@ -63,15 +83,17 @@ def make_rpc_call(method, params, max_retries=3, retry_delay=1):
 
 def get_token_balance(contract_address, holder_address):
     """Get token balance for a specific address."""
-    # balanceOf(address) signature
-    method_sig = "0x70a08231000000000000000000000000" + holder_address[2:].lower().zfill(40)
+    normalized_holder = normalize_address(holder_address)
+    if not is_valid_address(normalized_holder):
+        raise ValueError(f"Invalid QIP-55 holder address: {holder_address}")
+    method_sig = "0x70a08231" + normalized_holder[1:].lower()
     result = make_rpc_call("qrl_call", [{
         "to": contract_address,
         "data": method_sig
     }, "latest"])
     
     if result:
-        return Web3.to_int(hexstr=result)
+        return decode_uint256_word(result)
     return 0
 
 def get_logs(contract_address, from_block, to_block):
@@ -83,19 +105,28 @@ def get_logs(contract_address, from_block, to_block):
         "toBlock": hex(to_block)
     }])
 
-def process_transfer_logs(logs, contract_address, token_balances_collection, token_transfers_collection, contract):
+def process_transfer_logs(
+    logs,
+    contract_address,
+    token_balances_collection,
+    token_transfers_collection,
+    contract,
+    lease,
+):
     """Process Transfer event logs and update balances."""
     for log in logs:
+        block_number = log.get('blockNumber')
         # Extract transfer details
         topics = log.get('topics', [])
         if len(topics) != 3:  # Transfer event has 3 topics
             continue
         
         try:
-            from_addr = 'Q' + topics[1][-40:]  # Remove padding
-            to_addr = 'Q' + topics[2][-40:]  # Remove padding
-            amount = int(log.get('data', '0x0'), 16)
-            block_number = log.get('blockNumber')
+            if topics[0].lower() != TRANSFER_EVENT_SIGNATURE:
+                continue
+            from_addr = address_from_topic(topics[1])
+            to_addr = address_from_topic(topics[2])
+            amount = decode_uint256_word(log.get('data', ''))
             tx_hash = log.get('transactionHash')
             
             # Get block timestamp
@@ -124,13 +155,17 @@ def process_transfer_logs(logs, contract_address, token_balances_collection, tok
             }
             
             try:
-                token_transfers_collection.insert_one(transfer)
+                lease.guard_write(
+                    lambda: token_transfers_collection.insert_one(transfer)
+                )
+            except MaintenanceLeaseError:
+                raise
             except Exception as e:
                 if 'duplicate key error' not in str(e):  # Ignore duplicates
                     logger.error(f"Failed to store transfer {tx_hash}: {e}")
             
             # Update balances as strings to avoid integer overflow
-            if from_addr != '0x0000000000000000000000000000000000000000' and from_addr != 'Q0000000000000000000000000000000000000000':
+            if from_addr != ZERO_ADDRESS:
                 # Get current balance
                 current_from_balance_doc = token_balances_collection.find_one(
                     {'contractAddress': contract_address, 'holderAddress': from_addr}
@@ -149,13 +184,15 @@ def process_transfer_logs(logs, contract_address, token_balances_collection, tok
                         
                 # Calculate new balance and store as string
                 new_from_balance = max(0, current_from_balance - amount)
-                token_balances_collection.update_one(
-                    {'contractAddress': contract_address, 'holderAddress': from_addr},
-                    {'$set': {'balance': str(new_from_balance)}},
-                    upsert=True
+                lease.guard_write(
+                    lambda: token_balances_collection.update_one(
+                        {'contractAddress': contract_address, 'holderAddress': from_addr},
+                        {'$set': {'balance': str(new_from_balance)}},
+                        upsert=True
+                    )
                 )
             
-            if to_addr != '0x0000000000000000000000000000000000000000' and to_addr != 'Q0000000000000000000000000000000000000000':
+            if to_addr != ZERO_ADDRESS:
                 # Get current balance
                 current_to_balance_doc = token_balances_collection.find_one(
                     {'contractAddress': contract_address, 'holderAddress': to_addr}
@@ -174,19 +211,25 @@ def process_transfer_logs(logs, contract_address, token_balances_collection, tok
                         
                 # Calculate new balance and store as string
                 new_to_balance = current_to_balance + amount
-                token_balances_collection.update_one(
-                    {'contractAddress': contract_address, 'holderAddress': to_addr},
-                    {'$set': {'balance': str(new_to_balance)}},
-                    upsert=True
+                lease.guard_write(
+                    lambda: token_balances_collection.update_one(
+                        {'contractAddress': contract_address, 'holderAddress': to_addr},
+                        {'$set': {'balance': str(new_to_balance)}},
+                        upsert=True
+                    )
                 )
             
             # Update last processed block
-            token_balances_collection.update_one(
-                {'contractAddress': contract_address, 'holderAddress': 'lastProcessedBlock'},
-                {'$set': {'balance': int(block_number, 16)}},
-                upsert=True
+            lease.guard_write(
+                lambda: token_balances_collection.update_one(
+                    {'contractAddress': contract_address, 'holderAddress': 'lastProcessedBlock'},
+                    {'$set': {'balance': int(block_number, 16)}},
+                    upsert=True
+                )
             )
             
+        except MaintenanceLeaseError:
+            raise
         except Exception as e:
             logger.error(f"Error processing transfer in block {block_number}: {str(e)}", exc_info=True)
             continue
@@ -204,44 +247,59 @@ def get_last_processed_block(token_balances_collection, contract_address):
             return 0
     return 0
 
-# Helper function to validate address format
-def is_valid_address(address):
-    # Check for Q-prefix format
-    if address.startswith('Q'):
-        # Check if the rest is valid hex
-        try:
-            int(address[1:], 16)
-            return len(address) == 41  # Z + 40 hex chars
-        except ValueError:
-            return False
-    
-    # Check for 0x format
-    if address.startswith('0x'):
-        try:
-            int(address[2:], 16)
-            return len(address) == 42  # 0x + 40 hex chars
-        except ValueError:
-            return False
-    
-    return False
-
-# Helper function to normalize address format
-def normalize_address(address):
-    # If it's already a valid address, return it
-    if is_valid_address(address):
-        return address
-    
-    # Try to add 0x prefix if it's a valid hex string
+def address_hex(address):
+    """Return the 128-character address body, or None for malformed input."""
+    if not isinstance(address, str):
+        return None
+    value = address.strip()
+    if value.startswith(('Q', 'q')):
+        value = value[1:]
+    elif value.startswith('0x'):
+        value = value[2:]
+    if len(value) != ADDRESS_HEX_LENGTH:
+        return None
     try:
-        int(address, 16)
-        if len(address) == 40:
-            return '0x' + address
+        int(value, 16)
     except ValueError:
-        pass
-    
-    return address
+        return None
+    return value.lower()
 
-def update_missing_creation_blocks(contracts_collection):
+
+def is_valid_address(address):
+    return address_hex(address) is not None
+
+
+def normalize_address(address):
+    body = address_hex(address)
+    return 'Q' + body if body is not None else address
+
+
+def address_from_topic(topic):
+    if not isinstance(topic, str) or not topic.startswith('0x'):
+        raise ValueError("Address topic must have a 0x prefix")
+    body = address_hex(topic)
+    if body is None:
+        raise ValueError(f"Invalid QIP-55 address topic: {topic}")
+    return 'Q' + body
+
+
+def decode_uint256_word(value):
+    if not isinstance(value, str) or not value.startswith('0x'):
+        raise ValueError("ABI uint256 word must have a 0x prefix")
+    word = value[2:]
+    if len(word) != ABI_WORD_HEX_LENGTH:
+        raise ValueError(
+            f"ABI uint256 word has {len(word)} hex characters, expected {ABI_WORD_HEX_LENGTH}"
+        )
+    try:
+        int(word, 16)
+    except ValueError as error:
+        raise ValueError("ABI uint256 word is not hexadecimal") from error
+    if int(word[:-UINT256_HEX_LENGTH], 16) != 0:
+        raise ValueError("ABI uint256 word has nonzero high bytes")
+    return int(word[-UINT256_HEX_LENGTH:], 16)
+
+def update_missing_creation_blocks(contracts_collection, lease):
     """Update contracts with missing creation block numbers."""
     logger.info("Checking for contracts with missing creation block numbers...")
     
@@ -271,26 +329,26 @@ def update_missing_creation_blocks(contracts_collection):
                     block_number = receipt['blockNumber']
                     
                     # Update the contract
-                    contracts_collection.update_one(
-                        {"address": contract['address']},
-                        {"$set": {"creationBlockNumber": block_number}}
+                    lease.guard_write(
+                        lambda: contracts_collection.update_one(
+                            {"address": contract['address']},
+                            {"$set": {"creationBlockNumber": block_number}}
+                        )
                     )
                     
                     logger.info(f"Updated creation block number for {contract['address']} to {block_number}")
                     updated_count += 1
                 else:
                     logger.warning(f"Could not find block number for transaction {tx_hash}")
+            except MaintenanceLeaseError:
+                raise
             except Exception as e:
                 logger.error(f"Error updating creation block for {contract['address']}: {str(e)}")
     
     logger.info(f"Updated creation block numbers for {updated_count} contracts.")
 
-def main():
+def reindex_tokens(client, lease):
     logger.info("Starting token reindexing...")
-    
-    # Connect to MongoDB
-    logger.info(f"Connecting to MongoDB at {MONGO_URI}")
-    client = MongoClient(MONGO_URI)
     db = client['qrldata-z']  # Changed from qrldata to qrldata-z to match Go code
     
     # Get collections
@@ -299,10 +357,26 @@ def main():
     token_transfers_collection = db.tokenTransfers  # New collection for token transfers
     
     # Create indexes for token transfers collection
-    token_transfers_collection.create_index([("contractAddress", 1), ("blockNumber", 1)])
-    token_transfers_collection.create_index([("from", 1), ("blockNumber", 1)])
-    token_transfers_collection.create_index([("to", 1), ("blockNumber", 1)])
-    token_transfers_collection.create_index([("txHash", 1)], unique=True)
+    lease.guard_write(
+        lambda: token_transfers_collection.create_index(
+            [("contractAddress", 1), ("blockNumber", 1)]
+        )
+    )
+    lease.guard_write(
+        lambda: token_transfers_collection.create_index(
+            [("from", 1), ("blockNumber", 1)]
+        )
+    )
+    lease.guard_write(
+        lambda: token_transfers_collection.create_index(
+            [("to", 1), ("blockNumber", 1)]
+        )
+    )
+    lease.guard_write(
+        lambda: token_transfers_collection.create_index(
+            [("txHash", 1)], unique=True
+        )
+    )
     
     # Check all contracts
     logger.info("\nChecking all contracts in database:")
@@ -311,7 +385,7 @@ def main():
     logger.info(f"Total contracts found: {all_count}")
     
     # Update missing creation block numbers
-    update_missing_creation_blocks(contracts_collection)
+    update_missing_creation_blocks(contracts_collection, lease)
     
     token_contracts = list(contracts_collection.find({"isToken": True}))
     token_count = len(token_contracts)
@@ -323,6 +397,7 @@ def main():
     logger.info(f"Latest block: {latest_block}")
     
     for i, contract in enumerate(token_contracts, 1):
+        lease.ensure_held()
         contract_address = contract['address']
         logger.info(f"\nProcessing token {i}/{token_count}: {contract.get('name', 'Unknown')} ({contract_address})")
         
@@ -352,6 +427,7 @@ def main():
         current_block = start_block
         
         while current_block < latest_block:
+            lease.ensure_held()
             end_block = min(current_block + BATCH_SIZE, latest_block)
             
             logger.info(f"Processing blocks {current_block} to {end_block} ({((end_block - start_block) / (latest_block - start_block)) * 100:.1f}% complete)...")
@@ -361,12 +437,46 @@ def main():
                 transfer_count = len(logs)
                 total_transfers += transfer_count
                 logger.info(f"Found {transfer_count} transfer events (total: {total_transfers})")
-                process_transfer_logs(logs, contract_address, token_balances_collection, token_transfers_collection, contract)
+                process_transfer_logs(
+                    logs,
+                    contract_address,
+                    token_balances_collection,
+                    token_transfers_collection,
+                    contract,
+                    lease,
+                )
             
             current_block = end_block + 1
             time.sleep(0.1)  # Rate limiting
         
         logger.info(f"Completed processing for {contract_address} - Total transfers: {total_transfers}")
 
+
+def main():
+    from pymongo import MongoClient
+
+    mongo_uri = require_mongo_uri()
+    logger.info("Connecting to the configured MongoDB replica set")
+    client = MongoClient(
+        mongo_uri,
+        serverSelectionTimeoutMS=5_000,
+        connectTimeoutMS=5_000,
+        socketTimeoutMS=10_000,
+    )
+    try:
+        with maintenance_shutdown_signals():
+            with MaintenanceLease(client, "reindex-tokens") as lease:
+                reindex_tokens(client, lease)
+    finally:
+        client.close()
+
+
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except MaintenanceInterrupted as error:
+        logger.warning("Token reindex interrupted: %s", error)
+        raise SystemExit(130) from error
+    except MaintenanceLeaseError as error:
+        logger.critical("Token reindex stopped by lease enforcement: %s", error)
+        raise SystemExit(1) from error

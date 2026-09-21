@@ -496,6 +496,22 @@ func InitializePendingTokenContractsCollection() error {
 			},
 			Options: options.Index().SetName("processed_idx"),
 		},
+		{
+			Keys: bson.D{
+				{Key: "processed", Value: 1},
+				{Key: "nextAttemptAt", Value: 1},
+				{Key: "processingUntil", Value: 1},
+				{Key: "createdAt", Value: 1},
+				{Key: "_id", Value: 1},
+			},
+			Options: options.Index().SetName("pending_token_claim_idx"),
+		},
+		{
+			Keys: bson.D{{Key: "processedAt", Value: 1}},
+			Options: options.Index().
+				SetName("pending_token_completed_ttl_idx").
+				SetExpireAfterSeconds(30 * 24 * 60 * 60),
+		},
 	}
 
 	_, err := collection.Indexes().CreateMany(ctx, indexes)

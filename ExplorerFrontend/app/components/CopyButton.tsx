@@ -4,31 +4,36 @@ import { useState } from 'react'
 import type { MouseEvent } from 'react'
 
 interface CopyButtonProps {
-  value: string
+  /** String written to the clipboard. Preferred prop name. */
+  text?: string
+  /** Back-compat alias for `text`; older call sites pass `value`. */
+  value?: string
   label?: string
   size?: 'sm' | 'md'
   stopPropagation?: boolean
 }
 
 // Usage examples:
+// <CopyButton text={code} label="Copy code" size="sm" />
 // <CopyButton value={address} label="Copy address" />
-// <CopyButton value={hash} label="Copy hash" stopPropagation />
 // <CopyButton value={hash} label="Copy hash" size="sm" stopPropagation />
 
 export default function CopyButton({
+  text,
   value,
   label = 'Copy to clipboard',
   size = 'md',
   stopPropagation = false,
 }: CopyButtonProps): JSX.Element {
   const [copySuccess, setCopySuccess] = useState(false)
+  const clipboardText = text ?? value ?? ''
 
   const copyToClipboard = (e: MouseEvent<HTMLButtonElement>): void => {
     if (stopPropagation) {
       e.stopPropagation()
     }
     navigator.clipboard
-      .writeText(value)
+      .writeText(clipboardText)
       .then(() => {
         setCopySuccess(true)
         setTimeout(() => setCopySuccess(false), 2000)
@@ -61,7 +66,8 @@ export default function CopyButton({
         onClick={copyToClipboard}
         aria-label={label}
         // p-1.5 + 14px icon keeps the target at ~26px, above the WCAG 2.2
-        // 24px minimum for inline controls.
+        // 24px minimum for inline controls. Compact enough to sit inside
+        // code block headers and next to monospace paths.
         className="inline-flex items-center p-1.5 rounded-md
                   bg-surface-2 border border-border hover:border-accent/50 hover:bg-surface-3
                   transition-all duration-200 group"

@@ -65,8 +65,10 @@ type Service struct {
 	retryMax     time.Duration
 	refreshTTL   time.Duration
 
-	stopOnce sync.Once
-	stopCh   chan struct{}
+	startOnce sync.Once
+	stopOnce  sync.Once
+	stopCh    chan struct{}
+	doneCh    chan struct{}
 }
 
 // metadataServiceConfig holds the tunables sourced from the environment.
@@ -147,6 +149,7 @@ func NewService() *Service {
 		retryMax:     cfg.retryMax,
 		refreshTTL:   cfg.refreshTTL,
 		stopCh:       make(chan struct{}),
+		doneCh:       make(chan struct{}),
 	}
 }
 
@@ -172,40 +175,41 @@ func nextRetryDelay(base, max time.Duration, retryCount int) time.Duration {
 	return d
 }
 
-// Start launches the polling goroutine. Idempotent in the sense that
-// calling Start twice will spawn two pollers; callers should construct one
-// service per process. The caller-passed context cancels the loop in
-// addition to Stop().
+// Start launches the polling goroutine once. The caller-passed context
+// cancels the loop in addition to Stop().
 func (s *Service) Start(ctx context.Context) {
 	if s == nil {
 		return
 	}
-	configs.Logger.Info("Starting metadata fetcher service",
-		zap.String("gateway", s.gatewayURL),
-		zap.Duration("pollInterval", s.pollInterval),
-		zap.Int64("maxBodyBytes", s.maxBodyBytes),
-		zap.Int("batchSize", s.batchSize),
-		zap.Duration("retryBase", s.retryBase),
-		zap.Duration("retryMax", s.retryMax),
-		zap.Duration("refreshTTL", s.refreshTTL))
+	s.startOnce.Do(func() {
+		configs.Logger.Info("Starting metadata fetcher service",
+			zap.String("gateway", s.gatewayURL),
+			zap.Duration("pollInterval", s.pollInterval),
+			zap.Int64("maxBodyBytes", s.maxBodyBytes),
+			zap.Int("batchSize", s.batchSize),
+			zap.Duration("retryBase", s.retryBase),
+			zap.Duration("retryMax", s.retryMax),
+			zap.Duration("refreshTTL", s.refreshTTL))
 
-	go func() {
-		// First tick immediately so the first batch lands without waiting
-		// for the full pollInterval after startup.
-		s.tick(ctx)
-		t := time.NewTicker(s.pollInterval)
-		defer t.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-s.stopCh:
-				return
-			case <-t.C:
-				s.tick(ctx)
+		go func() {
+			defer close(s.doneCh)
+			// First tick immediately so the first batch lands without waiting
+			// for the full pollInterval after startup.
+			s.tick(ctx)
+			t := time.NewTicker(s.pollInterval)
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-s.stopCh:
+					return
+				case <-t.C:
+					s.tick(ctx)
+				}
 			}
-		}
-	}()
+		}()
+	})
 }
 
 // Stop signals the polling goroutine to exit. Safe to call multiple times,
@@ -219,6 +223,19 @@ func (s *Service) Stop() {
 	s.stopOnce.Do(func() {
 		close(s.stopCh)
 	})
+}
+
+// Wait blocks until the polling goroutine exits or ctx expires.
+func (s *Service) Wait(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	select {
+	case <-s.doneCh:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // tick runs one batch of metadata fetches. Errors per row are logged and

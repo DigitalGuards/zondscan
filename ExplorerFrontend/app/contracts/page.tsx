@@ -9,6 +9,9 @@ interface ContractResponse {
   total: number;
 }
 
+// The private backend URL is resolved from the container's runtime environment.
+export const dynamic = 'force-dynamic';
+
 async function getContracts(page: number = 0, limit: number = 15, isToken: boolean = true): Promise<ContractResponse> {
   try {
     const response = await fetch(`${config.handlerUrl}/contracts?page=${page}&limit=${limit}&isToken=${isToken}`, {

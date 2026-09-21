@@ -32,6 +32,16 @@ import { resolveSearchPath } from './searchResolver';
 // Mirrors the production selector computation (keccak256 of the utf8
 // canonical signature) so fuzz cases construct valid calldata.
 const keccakHex = (sig: string): string => bytesToHex(keccak_256(utf8ToBytes(sig)));
+const ABI_WORD_HEX_LENGTH = 128;
+const UINT256_HEX_LENGTH = 64;
+const EVENT_TOPIC_PADDING = '0'.repeat(64);
+
+function uintWord(value: bigint | number): string {
+  return (
+    '0'.repeat(ABI_WORD_HEX_LENGTH - UINT256_HEX_LENGTH) +
+    BigInt(value).toString(16).padStart(UINT256_HEX_LENGTH, '0')
+  );
+}
 
 // Tiny seeded RNG so fuzz iterations are reproducible. mulberry32 from
 // public-domain references; no crypto strength needed.
@@ -66,7 +76,7 @@ function randomJunk(rng: () => number, len: number): string {
   return out;
 }
 
-const ADDR40 = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const ADDR128 = 'a'.repeat(128);
 
 // ─── decodeTokenTransferInput ───────────────────────────────────────────
 
@@ -79,27 +89,21 @@ describe('decodeTokenTransferInput adversarial inputs', () => {
     }
   });
 
-  it('non-hex bodies pass through as displayed strings without throwing', () => {
-    // 138-char "transfer" input where the address slot is non-hex. The
-    // decoder's contract is "no throw, stable shape": the address slot
-    // gets sliced verbatim into the Q-prefix output and the caller sees
-    // junk in the UI rather than a crash. (Node-emitted calldata is
-    // always valid hex; this exercises the defensive boundary.)
-    const bad = '0xa9059cbb' + 'g'.repeat(64) + '0'.repeat(64);
+  it('rejects a non-hex address word without throwing', () => {
+    const bad =
+      '0xa9059cbb' + 'g'.repeat(ABI_WORD_HEX_LENGTH) + uintWord(0);
     expect(() => decodeTokenTransferInput(bad)).not.toThrow();
-    const result = decodeTokenTransferInput(bad);
-    expect(result).not.toBeNull();
-    expect(result?.standard).toBe('ERC-20');
-    expect(result?.methodName).toBe('transfer');
-    expect(typeof result?.to).toBe('string');
-    expect(typeof result?.amount).toBe('string');
+    expect(decodeTokenTransferInput(bad)).toBeNull();
   });
 
   it('returns null when the amount slot is BigInt-unparseable', () => {
     // BigInt rejects mixed-radix bodies; the try/catch in the decoder
     // bails to null. Use 'g' in the amount slot, which contains the
     // BigInt call.
-    const bad = '0xa9059cbb' + '0'.repeat(64) + 'g'.repeat(64);
+    const bad =
+      '0xa9059cbb' +
+      '0'.repeat(ABI_WORD_HEX_LENGTH) +
+      'g'.repeat(ABI_WORD_HEX_LENGTH);
     expect(() => decodeTokenTransferInput(bad)).not.toThrow();
     expect(decodeTokenTransferInput(bad)).toBeNull();
   });
@@ -107,7 +111,7 @@ describe('decodeTokenTransferInput adversarial inputs', () => {
   it('survives 100 random-hex selector-prefixed inputs without throwing', () => {
     const rng = seededRand(0xc0ffee);
     for (let i = 0; i < 100; i++) {
-      const lengths = [10, 50, 138, 202, 500, 1024];
+      const lengths = [10, 100, 266, 394, 650, 1024];
       const total = lengths[Math.floor(rng() * lengths.length)];
       const input = randomHex(rng, total - 2); // -2 because randomHex prepends "0x"
       expect(() => decodeTokenTransferInput(input)).not.toThrow();
@@ -143,7 +147,13 @@ describe('decodeEventLog adversarial inputs', () => {
   });
 
   it('survives malformed topic strings without throwing', () => {
-    const malformed = ['', '0x', 'not-hex', '0xZZZZ', '0x' + 'g'.repeat(64)];
+    const malformed = [
+      '',
+      '0x',
+      'not-hex',
+      '0xZZZZ',
+      '0x' + 'g'.repeat(ABI_WORD_HEX_LENGTH),
+    ];
     for (const t of malformed) {
       expect(() => decodeEventLog([t], '0x')).not.toThrow();
       // Result may be null OR a decoded shape; either is valid.
@@ -155,7 +165,9 @@ describe('decodeEventLog adversarial inputs', () => {
     for (let i = 0; i < 200; i++) {
       const topicCount = 1 + Math.floor(rng() * 4);
       const topics: string[] = [];
-      for (let j = 0; j < topicCount; j++) topics.push(randomHex(rng, 64));
+      for (let j = 0; j < topicCount; j++) {
+        topics.push(randomHex(rng, ABI_WORD_HEX_LENGTH));
+      }
       const dataLen = Math.floor(rng() * 400);
       const data = randomHex(rng, dataLen);
       expect(() => decodeEventLog(topics, data)).not.toThrow();
@@ -165,31 +177,26 @@ describe('decodeEventLog adversarial inputs', () => {
   it('declines a malformed ABI string without throwing', () => {
     const malformed = ['', '{', 'null', '[]', '[{"type":"event"}]', '[{"type":"event","name":"X"}]', '[{"type":"event","name":"X","inputs":null}]'];
     for (const abi of malformed) {
-      expect(() => decodeEventLog(['0x' + 'f'.repeat(64)], '0x', abi)).not.toThrow();
+      expect(() =>
+        decodeEventLog(['0x' + 'f'.repeat(ABI_WORD_HEX_LENGTH)], '0x', abi),
+      ).not.toThrow();
     }
   });
 
   it('caps array-length bombs in TransferBatch data', () => {
-    // TransferBatch with a length prefix of 2^256-1 in the ids array.
-    // The dataUintArray helper caps at 1024; the decoder should return
-    // the well-known-event shape with `[]` arrays, not loop forever.
-    const TOPIC_TRANSFER_BATCH = '0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb';
-    const addrSlot = '0x' + '0'.repeat(24) + ADDR40;
+    // TransferBatch with a length prefix of 2^256-1 in both arrays.
+    const TOPIC_TRANSFER_BATCH =
+      '0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb' +
+      EVENT_TOPIC_PADDING;
+    const addrSlot = '0x' + ADDR128;
     // Offsets pointing to two arrays whose length prefix is a huge value.
     const huge = 'ff'.repeat(32); // 2^256-1
-    const data = '0x' +
-      '0'.repeat(62) + '40' +  // ids offset = 0x40
-      '0'.repeat(62) + '80' +  // values offset = 0x80
-      huge +                    // ids[].length (bomb)
-      huge;                     // values[].length (bomb)
+    const hugeWord = '0'.repeat(64) + huge;
+    const data = '0x' + uintWord(0x80) + uintWord(0xc0) + hugeWord + hugeWord;
     expect(() => decodeEventLog([TOPIC_TRANSFER_BATCH, addrSlot, addrSlot, addrSlot], data)).not.toThrow();
-    const decoded = decodeEventLog([TOPIC_TRANSFER_BATCH, addrSlot, addrSlot, addrSlot], data);
-    // Decoded structure exists but the bombed arrays come back empty.
-    expect(decoded?.name).toBe('TransferBatch');
-    const idsArg = decoded?.args.find(a => a.label === 'ids');
-    const valuesArg = decoded?.args.find(a => a.label === 'values');
-    expect(idsArg?.values).toEqual([]);
-    expect(valuesArg?.values).toEqual([]);
+    expect(
+      decodeEventLog([TOPIC_TRANSFER_BATCH, addrSlot, addrSlot, addrSlot], data),
+    ).toBeNull();
   });
 });
 
@@ -211,7 +218,7 @@ describe('decodeContractCall adversarial inputs', () => {
     const abi = JSON.stringify([
       { type: 'function', name: 'foo', inputs: [{ name: 'x', type: 'uint256' }] },
     ]);
-    // Selector + only 8 chars of the expected 64-char slot.
+    // Selector + only 8 chars of the expected 128-char word.
     const truncated = selector + '00ff00ff';
     expect(() => decodeContractCall(truncated, abi)).not.toThrow();
     expect(decodeContractCall(truncated, abi)).toBeNull();
@@ -219,7 +226,7 @@ describe('decodeContractCall adversarial inputs', () => {
 
   it('declines a JSON array of garbage entries', () => {
     const garbage = JSON.stringify([{ a: 1 }, 'string', 42, null, [], { type: 'unknown' }]);
-    const input = '0xdeadbeef' + '0'.repeat(64);
+    const input = '0xdeadbeef' + '0'.repeat(ABI_WORD_HEX_LENGTH);
     expect(() => decodeContractCall(input, garbage)).not.toThrow();
     expect(decodeContractCall(input, garbage)).toBeNull();
   });
@@ -230,10 +237,10 @@ describe('decodeContractCall adversarial inputs', () => {
     const abi = JSON.stringify([
       { type: 'function', name: 'setName', inputs: [{ name: 'who', type: 'string' }] },
     ]);
-    // Head points to offset 0x20; length claims 1000 bytes but only ~64 follow.
+    // Head points to offset 0x40; length claims 1000 bytes but only 16 follow.
     const input = selector +
-      '0'.repeat(62) + '20' + // dynamic head offset = 0x20
-      '0'.repeat(60) + '03e8' + // length = 1000
+      uintWord(0x40) + // dynamic head offset = 0x40
+      uintWord(1000) + // length = 1000
       '00'.repeat(16); // not enough payload
     expect(() => decodeContractCall(input, abi)).not.toThrow();
     // Decoder should fall through to null or to a raw arg, not throw.

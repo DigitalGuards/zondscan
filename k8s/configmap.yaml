@@ -10,7 +10,9 @@ data:
   HTTP_PORT: ":8080"
 
   # Frontend configuration
-  NEXT_PUBLIC_HANDLER_URL: "http://backend:8080"
+  HANDLER_URL: "http://backend:8080"
+  NEXT_PUBLIC_HANDLER_URL: "/api"
+  DOMAIN_NAME: "https://explorer.zond.network"
   NEXT_PUBLIC_DOMAIN_NAME: "explorer.zond.network"
 
   # Zond node configuration - replace with your actual node URLs

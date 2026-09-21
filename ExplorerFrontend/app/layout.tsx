@@ -1,10 +1,11 @@
 import './globals.css'
-import Sidebar from "./components/Sidebar"
+import SiteHeader from './components/SiteHeader';
 import Providers from './providers'
 import type { Metadata } from 'next';
 import { Chakra_Petch, IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google';
 import { sharedMetadata } from './lib/seo/metaData';
 import Footer from './components/Footer';
+import { THEME_BOOTSTRAP } from './lib/preferences';
 
 const displayFont = Chakra_Petch({
   weight: ['500', '600', '700'],
@@ -197,6 +198,42 @@ const structuredData = {
           description: 'Top QRL 2.0 holders',
           url: 'https://zondscan.com/richlist',
         },
+        {
+          '@type': 'WebPage',
+          name: 'Learn QRL 2.0',
+          description: 'Plain English guides to QRL 2.0, wallets, staking, and smart contracts',
+          url: 'https://zondscan.com/learn',
+        },
+        {
+          '@type': 'WebPage',
+          name: 'FAQ',
+          description: 'Frequently asked questions about QRL 2.0 and ZondScan',
+          url: 'https://zondscan.com/faq',
+        },
+        {
+          '@type': 'WebPage',
+          name: 'API Documentation',
+          description: 'Interactive reference for the ZondScan REST API',
+          url: 'https://zondscan.com/api-explorer',
+        },
+        {
+          '@type': 'WebPage',
+          name: 'Gas Tracker',
+          description: 'Live gas prices and network usage on QRL 2.0',
+          url: 'https://zondscan.com/gas',
+        },
+        {
+          '@type': 'WebPage',
+          name: 'QRL Order Book Arena',
+          description: 'Live visualization of the MEXC QRL/USDT spot order book',
+          url: 'https://zondscan.com/orderbook',
+        },
+        {
+          '@type': 'WebPage',
+          name: 'Verify Contract',
+          description: 'Publish verified smart contract source code',
+          url: 'https://zondscan.com/verify-contract',
+        },
       ],
     },
   ],
@@ -208,28 +245,31 @@ interface RootLayoutProps {
 
 export default function RootLayout({ children }: RootLayoutProps): JSX.Element {
   return (
-    <html lang="en" className={`dark ${displayFont.variable} ${sansFont.variable} ${monoFont.variable}`}>
-      <head>
+    <html lang="en" data-theme="dark" suppressHydrationWarning className={`dark ${displayFont.variable} ${sansFont.variable} ${monoFont.variable}`}>
+      <body className="min-h-screen bg-background text-text-secondary">
+        <script id="explorer-appearance" dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
+        {/* Keep JSON-LD in the rendered body. Next's metadata pipeline owns
+            <head>, and mixing a manual head child into that stream can cause
+            a React hydration mismatch in development. Search engines accept
+            structured data in either document section. */}
         <script
           id="schema-org"
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
-      </head>
-      <body className="min-h-screen bg-background text-text-secondary">
         <Providers>
           <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-accent focus:text-background focus:rounded-lg focus:text-sm focus:font-medium">
             Skip to main content
           </a>
-          <div className="flex min-h-screen">
-            <Sidebar />
+          <div className="flex min-h-screen flex-col">
+            <SiteHeader />
             {/* min-w-0 is load-bearing: without it this flex item refuses to
                 shrink below its content's intrinsic width (flexbox min-width:
                 auto), so any wide table or long unbroken hash stretches the
                 whole page beyond the mobile viewport instead of scrolling
                 inside its own overflow-x-auto container. */}
-            <div className="flex-1 min-w-0 lg:ml-64 min-h-screen relative transition-all duration-300 mt-14 lg:mt-4 flex flex-col">
-              <main id="main-content" className="flex-1 relative">
+            <div className="flex-1 min-w-0 relative flex flex-col">
+              <main id="main-content" lang="en" className="flex-1 relative">
                 {children}
               </main>
               <Footer />

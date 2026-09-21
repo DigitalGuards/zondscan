@@ -32,6 +32,17 @@ func GetLatestBlock() (string, error) {
 	return Zond.Result, nil
 }
 
+func GetChainID() (string, error) {
+	var response models.RPC
+	if err := rpcCall("qrl_chainId", []interface{}{}, &response); err != nil {
+		return "", err
+	}
+	if !validation.IsValidHexString(response.Result) {
+		return "", fmt.Errorf("invalid chain ID format in response: %s", response.Result)
+	}
+	return strings.ToLower(response.Result), nil
+}
+
 func GetBlockByNumberMainnet(blockNumber string) (*models.ZondDatabaseBlock, error) {
 	// Validate block number format
 	if !validation.IsValidHexString(blockNumber) {
@@ -77,6 +88,13 @@ func GetContractAddress(txHash string) (string, string, error) {
 		zap.L().Info("Failed to execute request", zap.Error(err))
 		return "", "", err
 	}
+	if ContractAddress.Result.TransactionHash == "" {
+		return "", "", fmt.Errorf("transaction receipt for %s is not available yet", txHash)
+	}
+	if !strings.EqualFold(ContractAddress.Result.TransactionHash, txHash) {
+		return "", "", fmt.Errorf("transaction receipt hash mismatch: requested %s, got %s",
+			txHash, ContractAddress.Result.TransactionHash)
+	}
 
 	// Validate contract address if present
 	if ContractAddress.Result.ContractAddress != "" {
@@ -86,7 +104,7 @@ func GetContractAddress(txHash string) (string, string, error) {
 	}
 
 	// Validate status format
-	if ContractAddress.Result.Status != "" && !validation.IsValidHexString(ContractAddress.Result.Status) {
+	if ContractAddress.Result.Status == "" || !validation.IsValidHexString(ContractAddress.Result.Status) {
 		return "", "", fmt.Errorf("invalid status format in response: %s", ContractAddress.Result.Status)
 	}
 
@@ -240,8 +258,10 @@ func emptyTrace(err error) DebugTraceResult {
 
 // CallDebugTraceTransaction calls debug_traceTransaction and returns the parsed
 // result as a DebugTraceResult struct.
-// On Testnet V2+, debug_ APIs are not available. Set ENABLE_DEBUG_TRACE=true to
-// re-enable if the node supports it.
+// Public Testnet V2 endpoints commonly omit debug_ APIs. Set
+// ENABLE_DEBUG_TRACE=true and point TRACE_NODE_URL at a private debug-enabled
+// HTTP or WebSocket endpoint. TRACE_NODE_URL falls back to the primary NODE_URL
+// for backwards compatibility.
 func CallDebugTraceTransaction(hash string) DebugTraceResult {
 	// Skip debug tracing when disabled (default for V2 nodes without debug_ API)
 	if os.Getenv("ENABLE_DEBUG_TRACE") != "true" {
@@ -274,15 +294,9 @@ func CallDebugTraceTransaction(hash string) DebugTraceResult {
 		return emptyTrace(err)
 	}
 
-	// debug_traceTransaction is a primary-only method, public/foundation nodes
-	// don't expose the debug_ namespace. Pin to the primary URL so we don't
-	// surface a misleading "method not found" by failing over.
-	primary := Endpoints().PrimaryURL()
-	if primary == "" {
-		zap.L().Error("No node endpoint configured for debug trace")
-		return emptyTrace(fmt.Errorf("no node endpoint configured"))
-	}
-	body, err := postWithRetry(context.Background(), primary, b, 1)
+	traceCtx, cancel := context.WithTimeout(context.Background(), traceRPCTimeout)
+	defer cancel()
+	body, err := traceRPC(traceCtx, b)
 	if err != nil {
 		zap.L().Error("Failed to execute request", zap.Error(err))
 		return emptyTrace(err)
@@ -393,7 +407,7 @@ func CallDebugTraceTransaction(hash string) DebugTraceResult {
 			hexStr := strings.TrimPrefix(tracerResponse.Result.Output, "0x")
 			hexStr = strings.TrimLeft(hexStr, "0")
 
-			if len(tracerResponse.Result.Output) == 42 { // "0x" + 40 chars, an address
+			if len(tracerResponse.Result.Output) == 2+abiWordHexLength { // "0x" + one native address word
 				res.Output = 1
 			} else if hexStr == "" {
 				res.Output = 0
@@ -415,45 +429,14 @@ func CallDebugTraceTransaction(hash string) DebugTraceResult {
 		copy(res.TraceAddress, tracerResponse.Result.TraceAddress)
 	}
 
-	// Process input data if it exists and has sufficient length
-	const prefixLength = 2
-	const methodIDLength = 8
-	const addressLength = 64
-	const minimumLength = prefixLength + methodIDLength + addressLength
-
-	if len(tracerResponse.Result.Input) > minimumLength {
-		if !validation.IsValidHexString(tracerResponse.Result.Input) {
-			zap.L().Error("Invalid input format", zap.String("input", tracerResponse.Result.Input))
+	if tracerResponse.Result.Input != "" {
+		address, amount, err := decodeAddressAndAmountInput(tracerResponse.Result.Input)
+		if err != nil {
+			zap.L().Debug("Input does not contain a canonical address and amount pair",
+				zap.String("input", tracerResponse.Result.Input), zap.Error(err))
 		} else {
-			// Strip the '0x' prefix and method ID (first 4 bytes = 8 hex chars)
-			data := tracerResponse.Result.Input[10:]
-
-			if len(data) >= 64 {
-				extractedAddr := "0x" + data[24:64]
-				if err := validation.ValidateAddress(extractedAddr); err == nil {
-					res.AddressFunctionIdentifier = validation.ConvertToQAddress(extractedAddr)
-				} else {
-					zap.L().Error("Invalid extracted address", zap.Error(err))
-				}
-
-				if len(data) >= 128 {
-					amountHex := data[64:128]
-					if !validation.IsValidHexString("0x" + amountHex) {
-						zap.L().Error("Invalid amount format", zap.String("amount_hex", amountHex))
-					} else if amountBigInt := new(big.Int); func() bool {
-						_, ok := amountBigInt.SetString(amountHex, 16)
-						return ok
-					}() {
-						if amountBigInt.IsUint64() {
-							res.AmountFunctionIdentifier = amountBigInt.Uint64()
-						} else {
-							zap.L().Warn("Amount exceeds uint64 range")
-						}
-					} else {
-						zap.L().Warn("Failed to parse amount", zap.String("amount_hex", amountHex))
-					}
-				}
-			}
+			res.AddressFunctionIdentifier = address
+			res.AmountFunctionIdentifier = amount
 		}
 	}
 
@@ -463,6 +446,35 @@ func CallDebugTraceTransaction(hash string) DebugTraceResult {
 	res.Input = 0
 
 	return res
+}
+
+// decodeAddressAndAmountInput reads the first two arguments after a four-byte
+// selector as address and uint256. Both values occupy complete 64-byte words.
+func decodeAddressAndAmountInput(input string) (string, uint64, error) {
+	const prefixHexLength = 2
+	const selectorHexLength = 8
+	minimumLength := prefixHexLength + selectorHexLength + 2*abiWordHexLength
+	if len(input) < minimumLength {
+		return "", 0, fmt.Errorf("input has %d characters, want at least %d", len(input), minimumLength)
+	}
+	if !validation.IsValidHexString(input) {
+		return "", 0, fmt.Errorf("input is not hexadecimal")
+	}
+
+	data := input[prefixHexLength+selectorHexLength:]
+	address := "0x" + data[:abiWordHexLength]
+	if err := validation.ValidateAddress(address); err != nil {
+		return "", 0, fmt.Errorf("invalid address argument: %w", err)
+	}
+
+	amount, err := parseUint256HexWord(data[abiWordHexLength : 2*abiWordHexLength])
+	if err != nil {
+		return "", 0, fmt.Errorf("invalid amount argument: %w", err)
+	}
+	if !amount.IsUint64() {
+		return "", 0, fmt.Errorf("amount exceeds uint64 range")
+	}
+	return validation.ConvertToQAddress(address), amount.Uint64(), nil
 }
 
 func GetBalance(address string) (string, error) {
@@ -661,6 +673,66 @@ func ZondGetBlockLogs(blockNumber string, topic0Filters []string) (*models.ZondL
 	}
 
 	return &responseData, nil
+}
+
+// ZondGetBlockLogsForBlock requests logs by block hash and carries the
+// expected canonical height alongside the request. A number-only range can
+// silently switch forks between the database read and qrl_getLogs. The hash
+// selector binds the response to the block identity that the synchronizer
+// claimed, while the caller validates every returned log against both fields.
+func ZondGetBlockLogsForBlock(
+	blockNumber string,
+	blockHash string,
+	topic0Filters []string,
+) (*models.ZondLogsResponse, error) {
+	filter, err := exactBlockLogsFilter(blockNumber, blockHash, topic0Filters)
+	if err != nil {
+		return nil, err
+	}
+
+	var responseData models.ZondLogsResponse
+	if err := rpcCall("qrl_getLogs", []interface{}{filter}, &responseData); err != nil {
+		return nil, fmt.Errorf("get logs for block %s %s: %w", blockNumber, blockHash, err)
+	}
+	return &responseData, nil
+}
+
+func exactBlockLogsFilter(
+	blockNumber string,
+	blockHash string,
+	topic0Filters []string,
+) (map[string]interface{}, error) {
+	if !validation.IsValidHexString(blockNumber) {
+		return nil, fmt.Errorf("invalid block number format: %s", blockNumber)
+	}
+	number := new(big.Int)
+	if _, ok := number.SetString(strings.TrimPrefix(strings.ToLower(blockNumber), "0x"), 16); !ok {
+		return nil, fmt.Errorf("invalid block number format: %s", blockNumber)
+	}
+	canonicalNumber := "0x" + number.Text(16)
+	if strings.ToLower(blockNumber) != canonicalNumber {
+		return nil, fmt.Errorf("block number is not canonical: %s", blockNumber)
+	}
+
+	blockHash = strings.ToLower(blockHash)
+	if err := validation.ValidateHexString(blockHash, validation.HashLength); err != nil {
+		return nil, fmt.Errorf("invalid block hash: %w", err)
+	}
+
+	filter := map[string]interface{}{"blockHash": blockHash}
+	if len(topic0Filters) == 0 {
+		return filter, nil
+	}
+	canonicalTopics := make([]string, len(topic0Filters))
+	for index, topic := range topic0Filters {
+		topic = strings.ToLower(topic)
+		if err := validation.ValidateHexString(topic, validation.AddressLength); err != nil {
+			return nil, fmt.Errorf("invalid topic[0] filter %d: %w", index, err)
+		}
+		canonicalTopics[index] = topic
+	}
+	filter["topics"] = [][]string{canonicalTopics}
+	return filter, nil
 }
 
 // GetTxDetailsByHash retrieves transaction details by hash

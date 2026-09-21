@@ -1,5 +1,23 @@
 import type { Transaction, InternalTransaction } from './transaction';
 
+export interface CompilerProvenanceComponent {
+  name: string;
+  sha256: string;
+}
+
+/**
+ * Exact compiler artifact identity recorded when source verification ran.
+ * Older verified records legitimately omit this field; the UI labels that
+ * state as legacy-unrecorded and never derives it from today's registry.
+ */
+export interface CompilerProvenance {
+  schema: string;
+  kind: string;
+  buildId: string;
+  executionDigest: string;
+  components: CompilerProvenanceComponent[];
+}
+
 /**
  * Contract data associated with an address.
  *
@@ -10,9 +28,16 @@ import type { Transaction, InternalTransaction } from './transaction';
  */
 export interface ContractData {
   creatorAddress: string;
+  creatorAddressProvenance?: string;
   address: string;
   contractCode: string;
+  /** Lowercase SHA-256 of the exact deployed runtime bytecode. */
+  contractCodeSha256?: string;
   creationTransaction: string;
+  creationBlockNumber?: string;
+  creationBlockHash?: string;
+  chainId?: string;
+  genesisContract?: boolean;
   isToken: boolean;
   /** ERC-20 / ERC-721 / ERC-1155 / empty for unclassified. Drives the
    *  "Token Contract" / "NFT Collection" / "Multi-Token Collection"
@@ -41,10 +66,17 @@ export interface ContractData {
 
   // Source verification (added by M1, populated by M2+)
   verified: boolean;
+  verificationRecordSchema?: string | null;
   sourceCode?: string;
+  /** Canonical import filename to exact verified source content. */
+  imports?: Record<string, string>;
   abi?: string;
   contractName?: string;
   compilerVersion?: string;
+  compilerProvenance?: CompilerProvenance | null;
+  sourceBundleDigest?: string | null;
+  /** V2 digest binding source, ABI, compiler settings, and deployment identity. */
+  verificationArtifactDigest?: string;
   optimizationEnabled?: boolean;
   optimizationRuns?: number;
   evmVersion?: string;
@@ -60,6 +92,7 @@ export interface ContractData {
   aiExplanation?: string;
   aiExplanationAt?: string;
   aiExplanationModel?: string;
+  aiExplanationSourceDigest?: string;
 }
 
 /**

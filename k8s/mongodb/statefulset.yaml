@@ -30,6 +30,10 @@ spec:
           # 8.2 matches prod. Existing PVCs created by mongo:7 need an FCV
           # step-up (via mongo:8.0) or a wipe + re-sync; see docker-compose.yml.
           image: mongo:8.2
+          args:
+            - --replSet
+            - rs0
+            - --bind_ip_all
           env:
             # REQUIRED on kernels 6.19+/7.0 with CET user shadow stack: mongod
             # 8.x segfaults ~30s after start with no backtrace (SERVER-120238).
@@ -55,6 +59,9 @@ spec:
             exec:
               command:
                 - mongosh
+                - --quiet
+                - --host
+                - 127.0.0.1
                 - --eval
                 - "db.adminCommand('ping')"
             initialDelaySeconds: 30
@@ -65,8 +72,39 @@ spec:
             exec:
               command:
                 - mongosh
+                - --quiet
+                - --host
+                - 127.0.0.1
                 - --eval
-                - "db.adminCommand('ping')"
+                - |
+                  const memberHost = "mongodb-0.mongodb.zond-explorer.svc.cluster.local:27017";
+                  try {
+                    const status = rs.status();
+                    const expectedMember = Array.isArray(status.members) && status.members.some(
+                      (member) => member.self === true && member.name === memberHost
+                    );
+                    quit(
+                      status.ok === 1 && status.set === "rs0" && status.myState === 1 && expectedMember
+                        ? 0
+                        : 1
+                    );
+                  } catch (error) {
+                    if (error.code !== 94 && error.codeName !== "NotYetInitialized") {
+                      print(error);
+                      quit(1);
+                    }
+                    const result = rs.initiate({
+                      _id: "rs0",
+                      members: [{
+                        _id: 0,
+                        host: memberHost
+                      }]
+                    });
+                    if (result.ok !== 1) {
+                      printjson(result);
+                    }
+                    quit(1);
+                  }
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 5

@@ -97,10 +97,34 @@ This is the Golang implementation of the QRL blockchain synchronizer to MongoDB.
 MONGOURI=mongodb://localhost:27017
 NODE_URL=http://localhost:8545
 MEMPOOL_NODE_URL=http://localhost:8545  # Optional: separate endpoint for mempool detection
+ENABLE_DEBUG_TRACE=false               # Set true to index internal native transfers
+# TRACE_NODE_URL=ws://127.0.0.1:8546   # Private debug-enabled RPC endpoint
 BEACONCHAIN_API=http://beaconnodehttpapi:3500
 ```
 
 **Note:** `MEMPOOL_NODE_URL` is optional. If not set, it falls back to `NODE_URL`. This is useful when using a public RPC for block sync but a local node (with txpool access) for mempool detection.
+
+### Internal transaction tracing
+
+Internal native transfers require `debug_traceTransaction` with `callTracer`.
+Public RPC endpoints should keep the `debug` namespace disabled because traces
+are resource intensive. Run a separate loopback-only WebSocket listener on the
+execution node and configure the syncer to use it:
+
+```text
+--ws --ws.addr=127.0.0.1 --ws.port=8546 --ws.api=debug
+```
+
+```env
+ENABLE_DEBUG_TRACE=true
+TRACE_NODE_URL=ws://127.0.0.1:8546
+```
+
+`TRACE_NODE_URL` accepts `http`, `https`, `ws`, and `wss`. When it is absent,
+the syncer uses the primary `NODE_URL` for compatibility. With tracing enabled,
+startup fails if the selected endpoint does not expose `debug`; this prevents a
+configuration change from silently creating permanent gaps in internal
+transactions.
 
 2. Build the application:
 ```bash

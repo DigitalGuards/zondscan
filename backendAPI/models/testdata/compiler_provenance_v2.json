@@ -1,0 +1,23 @@
+{
+  "compilerVersion": "0.2.0-develop.2026.8.27+commit.6f862206.mod.Linux.g++",
+  "provenance": {
+    "schema": "qrl.contract-compiler-provenance.v2",
+    "kind": "native",
+    "buildId": "0.2.0-develop.2026.8.27+commit.6f862206.mod.Linux.g++",
+    "executionDigest": "fd84c18ce627b6e90bd2bc482e2033283ff7e8d2aeeb422a96be2f2921e669bf",
+    "components": [
+      {
+        "name": "hypc",
+        "sha256": "fe8e2344dbd902d6fc8c8cbb24114378c2de3a996b0d58f642d303c8bf30e930"
+      },
+      {
+        "name": "nsjail",
+        "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      {
+        "name": "policy",
+        "sha256": "cc2c6d14e943c9b4b9252e69c2fbf9a5a4313938cd561594a255746393baaa8c"
+      }
+    ]
+  }
+}

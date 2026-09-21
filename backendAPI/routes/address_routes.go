@@ -3,11 +3,11 @@ package routes
 import (
 	"backendAPI/db"
 	"backendAPI/models"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,7 +16,10 @@ import (
 
 // handleGetBalance serves POST /getBalance.
 func handleGetBalance(c *gin.Context) {
-	address := c.PostForm("address")
+	address, ok := requireAddressValue(c, c.PostForm("address"))
+	if !ok {
+		return
+	}
 
 	balance, message := db.GetBalance(address)
 	if message == "" {
@@ -28,6 +31,21 @@ func handleGetBalance(c *gin.Context) {
 			"balance": message,
 		})
 	}
+}
+
+func addressAggregateCacheKey(address string, page, limit int) string {
+	return fmt.Sprintf("addr:%s:%d:%d", db.NormalizeAddress(address), page, limit)
+}
+
+func respondAddressAggregateError(c *gin.Context, err error) {
+	if errors.Is(err, db.ErrStaleIndexedBalance) {
+		c.Header("Retry-After", "5")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "balance is being reconciled after a chain reorganization",
+		})
+		return
+	}
+	respondInternal(c)
 }
 
 // handleWalletDistribution serves GET /walletdistribution/:query.
@@ -62,12 +80,13 @@ func handleAddressAggregate(c *gin.Context) {
 	// hostile caller can't push limit=10000.
 	page, limit := getPaginationParams(c, 1, 10)
 
-	key := fmt.Sprintf("addr:%s:%d:%d", strings.ToLower(param), page, limit)
+	key := addressAggregateCacheKey(param, page, limit)
 	v, err := routeCache.GetOrCompute(key, 10*time.Second, func() (interface{}, error) {
 		addressData, err := db.ReturnSingleAddress(param)
 		if err != nil && err != mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("error querying address: %w", err)
 		}
+		addressData.ID = param
 
 		countTransactions, err := db.CountTransactions(param)
 		if err != nil {
@@ -158,7 +177,7 @@ func handleAddressAggregate(c *gin.Context) {
 	})
 	if err != nil {
 		log.Printf("error aggregating address %s: %v", param, err)
-		respondInternal(c)
+		respondAddressAggregateError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, v)

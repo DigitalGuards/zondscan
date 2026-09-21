@@ -11,7 +11,7 @@ ExplorerFrontend/
 │   │   ├── Alert.tsx      # Alert component for notifications
 │   │   ├── AreaChart.tsx  # Chart component for data visualization
 │   │   ├── SearchBar.tsx  # Global search component
-│   │   └── Sidebar.tsx    # Main navigation sidebar
+│   │   └── SiteHeader.tsx # Horizontal navigation and market bar
 │   │
 │   ├── lib/               # Utility functions
 │   │   └── helpers.ts     # Common helper functions (formatting, conversion)
@@ -119,8 +119,10 @@ The frontend uses a single `.env` file for all environment variables.
 | ------ | ------ |
 | DATABASE_URL | mongodb://localhost:27017/qrldata-z?readPreference=primary |
 | DOMAIN_NAME | http://localhost:3000 (dev) OR http://your_domain_name.io (prod) |
-| HANDLER_URL | http://127.0.0.1:8082 (dev) OR http://your_domain_name.io:8443 (prod) |
-| NEXT_PUBLIC_HANDLER_URL | http://localhost:3000/api (dev) OR http://your_domain_name.io/api (prod) |
+| HANDLER_URL | http://127.0.0.1:8080 (local server) OR http://backend:8080 (container network) |
+| NEXT_PUBLIC_HANDLER_URL | /api (same-origin browser proxy) |
+
+`HANDLER_URL` is server-only. Server components read it when the container starts, while the Next rewrite target is fixed during the production build and must receive the same internal backend URL as a Docker build argument. Browser code uses `NEXT_PUBLIC_HANDLER_URL=/api` so links and requests stay on the explorer origin.
 
 ## Features
 
@@ -187,11 +189,13 @@ The frontend uses a single `.env` file for all environment variables.
 
 ## Key Components
 
-### Sidebar (`components/Sidebar.tsx`)
-- Main navigation component
-- Fixed position with width of 256px
-- Dynamic menu items
-- Responsive design
+### SiteHeader (`components/SiteHeader.tsx`)
+- Sticky price, gas, search, appearance, and network controls
+- Horizontal navigation with grouped submenus
+- Mobile navigation dialog with keyboard support
+- Browser preferences at `/settings`
+
+See [local UI preview and browser checks](../docs/HORIZONTAL-UI.md).
 
 ### SearchBar (`components/SearchBar.tsx`)
 - Global search functionality

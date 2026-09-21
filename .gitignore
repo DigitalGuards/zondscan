@@ -70,3 +70,7 @@ backendAPI/syncer
 
 # Local operating notes; never tracked (private infrastructure detail)
 CLAUDE.md
+
+# Local browser-test artifacts
+ExplorerFrontend/test-results/
+ExplorerFrontend/playwright-report/

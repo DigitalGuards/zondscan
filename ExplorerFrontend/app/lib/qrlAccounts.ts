@@ -1,4 +1,4 @@
-const CURRENT_QRL_ADDRESS = /^Q[0-9a-fA-F]{40}$/;
+import { canonicalizeQrlAddress } from './qrlAddress';
 
 interface WalletAccountProvider {
   request(args: { method: string; params?: unknown[] }): Promise<unknown>;
@@ -12,15 +12,14 @@ export interface RestorableWalletSession {
 }
 
 export function parseAuthorizedQrlAccount(accounts: unknown): string {
-  if (
-    !Array.isArray(accounts) ||
-    accounts.length !== 1 ||
-    typeof accounts[0] !== 'string' ||
-    !CURRENT_QRL_ADDRESS.test(accounts[0])
-  ) {
+  if (!Array.isArray(accounts) || accounts.length !== 1 || typeof accounts[0] !== 'string') {
     throw new Error('Wallet authorization must return exactly one current-format QRL address');
   }
-  return accounts[0];
+  const account = canonicalizeQrlAddress(accounts[0]);
+  if (!account) {
+    throw new Error('Wallet authorization must return exactly one current-format QRL address');
+  }
+  return account;
 }
 
 export async function requestAuthorizedQrlAccount(

@@ -7,6 +7,9 @@ type Address struct {
 	ID       string             `json:"id"` // Changed from []byte to string
 	Balance  float64            `json:"balance"`
 	Nonce    uint64             `json:"nonce"`
+	// BalanceStale is an internal rollback fence. API readers fail closed or
+	// exclude the row until the syncer refreshes canonical RPC state.
+	BalanceStale bool `json:"-" bson:"balanceStale,omitempty"`
 }
 
 // RichlistEntry is one row of the /richlist response. Deliberately separate

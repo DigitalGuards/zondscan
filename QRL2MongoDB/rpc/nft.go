@@ -22,18 +22,39 @@ import (
 // at high NFT volume would want an event-delta accumulator with periodic
 // reconciliation instead.
 func GetERC721Owner(contractAddress string, tokenID *big.Int) (string, error) {
+	return getERC721OwnerWithCaller(contractAddress, tokenID, CallContractMethod)
+}
+
+// GetERC721OwnerAtBlock queries ownerOf against the exact state selected by
+// blockHash.
+func GetERC721OwnerAtBlock(
+	contractAddress string,
+	tokenID *big.Int,
+	blockHash string,
+) (string, error) {
+	return getERC721OwnerWithCaller(contractAddress, tokenID,
+		func(address string, calldata string) (string, error) {
+			return callContractMethodAtBlockHash(address, calldata, blockHash)
+		})
+}
+
+func getERC721OwnerWithCaller(
+	contractAddress string,
+	tokenID *big.Int,
+	call contractMethodCaller,
+) (string, error) {
 	idWord, err := encodeUint256ForABI(tokenID)
 	if err != nil {
 		return "", fmt.Errorf("encode tokenID: %w", err)
 	}
 	calldata := SIG_OWNER_OF + idWord
 
-	result, callErr := CallContractMethod(contractAddress, calldata)
+	result, callErr := call(contractAddress, calldata)
 	if callErr != nil {
 		// JSON-RPC error => contract reverted (typical for burned/unminted ids).
 		// Anything else (transport, marshalling) is transient; propagate so the
 		// caller can preserve existing state.
-		if isNodeRPCError(callErr) {
+		if isConfirmedContractRevert(callErr) {
 			return "", nil
 		}
 		return "", callErr
@@ -57,7 +78,7 @@ func GetERC721Owner(contractAddress string, tokenID *big.Int) (string, error) {
 func GetContractURI(contractAddress string) (string, error) {
 	result, callErr := CallContractMethod(contractAddress, SIG_CONTRACT_URI)
 	if callErr != nil {
-		if isNodeRPCError(callErr) {
+		if isConfirmedContractRevert(callErr) {
 			return "", nil
 		}
 		return "", callErr
@@ -92,7 +113,7 @@ func GetTokenURI(contractAddress string, tokenID *big.Int) (string, error) {
 
 	result, callErr := CallContractMethod(contractAddress, calldata)
 	if callErr != nil {
-		if isNodeRPCError(callErr) {
+		if isConfirmedContractRevert(callErr) {
 			return "", nil
 		}
 		return "", callErr
@@ -124,7 +145,7 @@ func GetERC1155URI(contractAddress string, tokenID *big.Int) (string, error) {
 
 	result, callErr := CallContractMethod(contractAddress, calldata)
 	if callErr != nil {
-		if isNodeRPCError(callErr) {
+		if isConfirmedContractRevert(callErr) {
 			return "", nil
 		}
 		return "", callErr
@@ -168,6 +189,29 @@ func substituteERC1155IDTemplate(uri string, tokenID *big.Int) string {
 // TODO(scale): one RPC call per (from, to) side of an ERC-1155 transfer.
 // Same accumulator/reconciliation concern as GetERC721Owner above.
 func GetERC1155Balance(contractAddress, holderAddress string, tokenID *big.Int) (*big.Int, error) {
+	return getERC1155BalanceWithCaller(contractAddress, holderAddress, tokenID, CallContractMethod)
+}
+
+// GetERC1155BalanceAtBlock queries balanceOf(address,uint256) against the
+// exact state selected by blockHash.
+func GetERC1155BalanceAtBlock(
+	contractAddress string,
+	holderAddress string,
+	tokenID *big.Int,
+	blockHash string,
+) (*big.Int, error) {
+	return getERC1155BalanceWithCaller(contractAddress, holderAddress, tokenID,
+		func(address string, calldata string) (string, error) {
+			return callContractMethodAtBlockHash(address, calldata, blockHash)
+		})
+}
+
+func getERC1155BalanceWithCaller(
+	contractAddress string,
+	holderAddress string,
+	tokenID *big.Int,
+	call contractMethodCaller,
+) (*big.Int, error) {
 	if !validation.IsValidAddress(holderAddress) {
 		return nil, fmt.Errorf("invalid holder address: %s", holderAddress)
 	}
@@ -177,9 +221,9 @@ func GetERC1155Balance(contractAddress, holderAddress string, tokenID *big.Int) 
 	}
 	calldata := SIG_BALANCE_OF_1155 + encodeAddressForABI(holderAddress) + idWord
 
-	result, callErr := CallContractMethod(contractAddress, calldata)
+	result, callErr := call(contractAddress, calldata)
 	if callErr != nil {
-		if isNodeRPCError(callErr) {
+		if isConfirmedContractRevert(callErr) {
 			return big.NewInt(0), nil
 		}
 		return nil, callErr

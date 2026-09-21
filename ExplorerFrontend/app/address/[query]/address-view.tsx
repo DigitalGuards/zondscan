@@ -1,4 +1,5 @@
 import CopyButton from "../../components/CopyButton";
+import AddressFingerprint from "../../components/AddressFingerprint";
 import QRCodeButton from "../../components/QRCodeButton";
 import ContractTabs from "../../components/ContractTabs";
 import VerifiedBadge from "../../components/VerifiedBadge";
@@ -8,24 +9,26 @@ import AddressTabs from "./address-tabs";
 import type { AddressData } from "@/app/types";
 import Link from "next/link";
 import Breadcrumbs from "../../components/Breadcrumbs";
+import { compactQrlAddress } from "../../lib/helpers";
+import { canonicalizeQrlAddress } from "../../lib/qrlAddress";
+import ResolvedQnsIdentity from "./resolved-qns-identity";
 
 interface AddressViewProps {
     addressData: AddressData;
     addressSegment: string;
+    qnsName?: string;
 }
 
-// Show the full address on every screen size. The container wraps
-// long values (`break-all`) so even on a narrow phone there's room to
-// display the complete address rather than a truncated form.
 const AddressDisplay = ({ address }: { address: string }): JSX.Element => {
     return (
-        <div className="text-sm lg:text-base font-mono text-text-secondary break-all">
-            {address}
-        </div>
+        <AddressFingerprint
+            address={address}
+            className="text-sm lg:text-base font-mono text-text-secondary"
+        />
     );
 };
 
-export default function AddressView({ addressData, addressSegment }: AddressViewProps): JSX.Element {
+export default function AddressView({ addressData, addressSegment, qnsName }: AddressViewProps): JSX.Element {
     const { balance } = addressData.address;
     const { rank } = addressData;
 
@@ -48,6 +51,9 @@ export default function AddressView({ addressData, addressSegment }: AddressView
     let addressType = "";
     let addressIcon = null;
     const contractData = addressData.contract_code;
+    const creatorAddress = contractData?.creatorAddress
+        ? canonicalizeQrlAddress(contractData.creatorAddress) ?? contractData.creatorAddress
+        : '';
 
     if (contractData && contractData.contractCode) {
         addressType = "Contract";
@@ -92,11 +98,16 @@ export default function AddressView({ addressData, addressSegment }: AddressView
     return (
         <main className="detail-content" aria-labelledby={addressHeadingId}>
             <h1 id={addressHeadingId} className="sr-only">
-                {addressType || 'Address'} {addressSegment}
+                {qnsName
+                    ? `${qnsName} resolves to ${addressSegment}`
+                    : `${addressType || 'Address'} ${addressSegment}`}
             </h1>
             <Breadcrumbs items={[
-                { label: 'Address' },
-                { label: `${addressSegment.slice(0, 10)}...${addressSegment.slice(-6)}` },
+                { label: 'Address', translateLabel: true },
+                {
+                    label: qnsName ?? compactQrlAddress(addressSegment),
+                    fullLabel: qnsName ? undefined : addressSegment,
+                },
             ]} />
             <section
                 aria-labelledby={addressHeadingId}
@@ -112,15 +123,19 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                     <div className="block lg:hidden mr-2">{decorativeIcon}</div>
                                     <div className="text-xs md:text-sm font-medium text-text-secondary">{addressType}</div>
                                 </div>
-                                <div className="flex flex-col lg:flex-row lg:items-center mt-1 gap-2">
-                                    <AddressDisplay address={addressSegment} />
-                                    {addressSegment && (
-                                        <div className="flex items-center gap-2 mb-2 lg:mb-0 lg:ml-4">
-                                            <CopyButton value={addressSegment} label="Copy address" />
-                                            <QRCodeButton address={addressSegment} />
-                                        </div>
-                                    )}
-                                </div>
+                                {qnsName ? (
+                                    <ResolvedQnsIdentity name={qnsName} address={addressSegment} />
+                                ) : (
+                                    <div className="flex flex-col lg:flex-row lg:items-center mt-1 gap-2">
+                                        <AddressDisplay address={addressSegment} />
+                                        {addressSegment && (
+                                            <div className="flex items-center gap-2 mb-2 lg:mb-0 lg:ml-4">
+                                                <CopyButton value={addressSegment} label="Copy address" />
+                                                <QRCodeButton address={addressSegment} />
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </div>
                         <div className="px-2 md:px-3 lg:px-4 py-1 md:py-1.5 lg:py-2 rounded-lg md:rounded-xl bg-surface-2 self-start lg:self-center">
@@ -148,7 +163,11 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                                 ? 'Token Contract'
                                                 : 'Contract'} Information
                                     </h3>
-                                    {contractData.verified && <VerifiedBadge />}
+                                    {contractData.verified && (
+                                        <VerifiedBadge
+                                            record={contractData}
+                                        />
+                                    )}
                                 </div>
                                 
                                 <div className="space-y-3">
@@ -156,10 +175,10 @@ export default function AddressView({ addressData, addressSegment }: AddressView
                                     <div>
                                         <div className="text-xs md:text-sm text-text-secondary mb-1">Creator Address</div>
                                         <div className="flex items-center space-x-2">
-                                            {contractData.creatorAddress ? (
+                                            {creatorAddress ? (
                                                 <>
-                                                    <AddressDisplay address={contractData.creatorAddress} />
-                                                    <CopyButton value={contractData.creatorAddress} label="Copy address" />
+                                                    <AddressDisplay address={creatorAddress} />
+                                                    <CopyButton value={creatorAddress} label="Copy address" />
                                                 </>
                                             ) : (
                                                 <span className="text-xs md:text-sm text-text-secondary">Unknown</span>
