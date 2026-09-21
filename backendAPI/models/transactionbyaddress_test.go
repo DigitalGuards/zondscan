@@ -55,6 +55,7 @@ func TestMarshalJSONPrefersWei(t *testing.T) {
 		AmountWei:   "3300000000000000000", // exact
 		PaidFees:    0.000001,
 		PaidFeesWei: "1000000000000", // 0.000001 QRL
+		FeeSource:   "receipt",
 		BlockNumber: "0x10",
 	}
 	got := marshalToStrings(t, tx)
@@ -78,8 +79,19 @@ func TestMarshalJSONFallbackCleansLegacyFloat(t *testing.T) {
 	if got["Amount"] != "3.300000000000000000" {
 		t.Errorf("Amount = %q, want 3.300000000000000000", got["Amount"])
 	}
-	if got["PaidFees"] != "6.180000000000000000" {
-		t.Errorf("PaidFees = %q, want 6.180000000000000000", got["PaidFees"])
+	if _, exists := got["PaidFees"]; exists {
+		t.Errorf("unverified legacy paid fee was published: %q", got["PaidFees"])
+	}
+}
+
+func TestUnverifiedExactFeeIsUnavailable(t *testing.T) {
+	got := marshalToStrings(t, TransactionByAddress{PaidFeesWei: "1000000000000"})
+	if _, exists := got["PaidFees"]; exists {
+		t.Fatal("unverified integer fee was published")
+	}
+	got = marshalToStrings(t, TransactionByAddress{PaidFeesWei: "0", FeeSource: "receipt", Status: "0x0"})
+	if got["PaidFees"] != "0.000000000000000000" || got["Status"] != "0x0" {
+		t.Fatalf("verified zero/revert lost: %v", got)
 	}
 }
 

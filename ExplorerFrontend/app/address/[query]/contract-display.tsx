@@ -1,6 +1,7 @@
 import React from 'react';
 import { decodeToHex, formatAddress } from '../../lib/helpers';
 import CopyButton from '../../components/CopyButton';
+import AddressFingerprint from '../../components/AddressFingerprint';
 
 interface ContractDisplayProps {
   contractCode: {
@@ -24,7 +25,10 @@ export default function ContractDisplay({ contractCode }: ContractDisplayProps):
         <div>
           <div className="text-sm text-text-secondary mb-1">Creator Address</div>
           <div className="flex items-center space-x-2">
-            <span className="text-sm font-mono text-text-secondary break-all">{creatorAddress}</span>
+            <AddressFingerprint
+              address={creatorAddress}
+              className="text-sm font-mono text-text-secondary"
+            />
             <CopyButton value={creatorAddress} label="Copy address" />
           </div>
         </div>

@@ -9,14 +9,17 @@ import { useState, useEffect, useCallback } from 'react';
 import ImageWithFallback from '../../components/ImageWithFallback';
 import Link from 'next/link';
 import CopyButton from "../../components/CopyButton";
+import AddressFingerprint from "../../components/AddressFingerprint";
 import QRCodeButton from "../../components/QRCodeButton";
 import ContractTabs from "../../components/ContractTabs";
 import TabPillBar from "../../components/TabPillBar";
 import VerifiedBadge from "../../components/VerifiedBadge";
 import type { ContractData } from "../../types/address";
-import { compactTokenIDLabel, formatAmount, NATIVE_UNIT } from "../../lib/helpers";
+import { compactQrlAddress, compactTokenIDLabel, formatAmount, NATIVE_UNIT } from "../../lib/helpers";
+import { canonicalizeQrlAddress } from "../../lib/qrlAddress";
 import Breadcrumbs from "../../components/Breadcrumbs";
 import { setUrlParams, useUrlIntParam, useUrlParam } from "../../lib/use-url-param";
+import ResolvedQnsIdentity from "./resolved-qns-identity";
 
 // Tab set for the pill bar below. ?tab values outside this list (hand-edited
 // URLs) fall back to the overview pane.
@@ -95,6 +98,7 @@ interface CreationTxData {
 
 interface TokenContractViewProps {
     address: string;
+    qnsName?: string;
     // Accept the shared ContractData shape so verification fields flow
     // through to the Code/Read/Write tabs alongside the existing
     // creator/symbol/decimals metadata.
@@ -116,13 +120,13 @@ interface TokenContractViewProps {
     handlerUrl: string;
 }
 
-const AddressDisplay = ({ address, truncate = false }: { address: string; truncate?: boolean }) => {
+const AddressDisplay = ({ address }: { address: string }) => {
     if (!address) return <span className="text-text-muted">Unknown</span>;
 
-    const display = truncate ? <AddressText address={address} leading={10} trailing={8} /> : address;
+    const canonicalAddress = canonicalizeQrlAddress(address) ?? address;
     return (
-        <Link href={`/address/${address}`} className={`text-accent hover:text-accent-hover font-mono text-xs md:text-sm${truncate ? '' : ' break-all'}`}>
-            {display}
+        <Link href={`/address/${canonicalAddress}`} className="text-accent hover:text-accent-hover font-mono text-xs md:text-sm min-w-0 max-w-full">
+            <AddressText address={canonicalAddress} />
         </Link>
     );
 };
@@ -164,7 +168,7 @@ const formatTokenAmount = (amount: string, decimals: number): string => {
 const isHttpUrl = (u?: string): boolean => !!u && /^https?:\/\//i.test(u);
 
 
-export default function TokenContractView({ address, contractData, handlerUrl }: TokenContractViewProps) {
+export default function TokenContractView({ address, contractData, handlerUrl, qnsName }: TokenContractViewProps) {
     const { preferences, updatePreferences } = usePreferences();
     const tokenStandard = contractData.tokenStandard;
     const isNFT = tokenStandard === 'ERC-721' || tokenStandard === 'ERC-1155';
@@ -339,7 +343,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
     const metaExternalURL = contractData.metadataExternalURL?.trim() || '';
     // ERC-1155 collections often omit name()/symbol(), so fall back to a
     // truncated address rather than rendering "Unknown Token" / "TOKEN".
-    const addrShort = `${address.slice(0, 10)}...${address.slice(-6)}`;
+    const addrShort = compactQrlAddress(address);
     const symbol = rawSymbol || addrShort;
     const name = metaName || rawName || addrShort;
     const totalSupply = tokenInfo?.totalSupply ?? contractData.totalSupply ?? '0';
@@ -393,7 +397,10 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
             <Breadcrumbs items={[
                 { label: 'Contracts', translateLabel: true, href: '/contracts' },
                 { label: tabLabel, href: tabHref },
-                { label: `${symbol || address.slice(0, 10) + '...' + address.slice(-6)}` },
+                {
+                    label: qnsName ?? (symbol || compactQrlAddress(address)),
+                    fullLabel: qnsName || symbol ? undefined : address,
+                },
             ]} />
             {/* Token Header Card */}
             <div className="relative overflow-hidden rounded-xl md:card mb-4 md:mb-6">
@@ -451,11 +458,18 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                         {metaDescription}
                                     </p>
                                 )}
-                                <div className="flex items-center gap-2 mt-1 min-w-0">
-                                    <span className="text-xs md:text-sm text-text-secondary font-mono break-all">{address}</span>
-                                    <CopyButton value={address} label="Copy address" />
-                                    <QRCodeButton address={address} />
-                                </div>
+                                {qnsName ? (
+                                    <ResolvedQnsIdentity name={qnsName} address={address} />
+                                ) : (
+                                    <div className="flex items-center gap-2 mt-1 min-w-0">
+                                        <AddressFingerprint
+                                            address={address}
+                                            className="text-xs md:text-sm text-text-secondary font-mono"
+                                        />
+                                        <CopyButton value={address} label="Copy address" />
+                                        <QRCodeButton address={address} />
+                                    </div>
+                                )}
                             </div>
                         </div>
                         <div className={`px-3 py-1.5 rounded-lg text-sm font-medium self-start ${badgeClasses}`}>
@@ -553,7 +567,11 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                             <div>
                                 <div className="flex items-center gap-2 flex-wrap mb-4">
                                     <h3 className="font-display text-lg font-semibold text-text-primary">Contract</h3>
-                                    {contractData.verified && <VerifiedBadge />}
+                                    {contractData.verified && (
+                                        <VerifiedBadge
+                                            record={contractData}
+                                        />
+                                    )}
                                 </div>
                                 <ContractTabs
                                     // Forward the whole contractData and only override
@@ -795,7 +813,7 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                             {holdersPage * limit + idx + 1}
                                                         </td>
                                                         <td className="px-4 py-3">
-                                                            <AddressDisplay address={holder.holderAddress} truncate />
+                                                            <AddressDisplay address={holder.holderAddress} />
                                                         </td>
                                                         {isNFT && holderTokenIDFilter === '' && (
                                                             <td className="px-4 py-3 text-left text-sm text-text-secondary font-mono hidden md:table-cell">
@@ -1001,10 +1019,10 @@ export default function TokenContractView({ address, contractData, handlerUrl }:
                                                         </Link>
                                                     </td>
                                                     <td className="px-4 py-3">
-                                                        <AddressDisplay address={transfer.from} truncate />
+                                                        <AddressDisplay address={transfer.from} />
                                                     </td>
                                                     <td className="px-4 py-3">
-                                                        <AddressDisplay address={transfer.to} truncate />
+                                                        <AddressDisplay address={transfer.to} />
                                                     </td>
                                                     <td className="px-4 py-3 text-right text-sm text-text-primary font-mono">
                                                         {formatTokenAmount(transfer.amount, transfer.tokenDecimals || decimals)}{rawSymbol ? ' ' + rawSymbol : ''}

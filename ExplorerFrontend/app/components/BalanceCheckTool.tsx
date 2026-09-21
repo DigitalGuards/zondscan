@@ -5,6 +5,7 @@ import type { FormEvent, ChangeEvent } from 'react';
 import axios, { AxiosError } from 'axios';
 import config from '../../config';
 import { NATIVE_UNIT, toFixed } from '../lib/helpers';
+import { canonicalizeQrlAddress } from '../lib/qrlAddress';
 
 interface BalanceResponse {
   balance: string;
@@ -21,8 +22,16 @@ export default function BalanceCheckTool(): JSX.Element {
         setIsLoading(true);
         setError(null);
 
+        const canonicalAddress = canonicalizeQrlAddress(address.replace(/\s/g, ''));
+        if (!canonicalAddress) {
+            setBalance(null);
+            setError('Enter a valid QRL address with exactly 128 hex characters.');
+            setIsLoading(false);
+            return;
+        }
+
         const formData = new URLSearchParams();
-        formData.append('address', address.replace(/\s/g, ''));
+        formData.append('address', canonicalAddress);
 
         try {
             const response = await axios.post<BalanceResponse>(

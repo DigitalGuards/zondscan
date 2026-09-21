@@ -11,7 +11,9 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import { formatTokenAmount } from '../../../lib/helpers';
+import { canonicalizeQrlAddress } from '../../../lib/qrlAddress';
 import DebouncedInput from '../../../components/DebouncedInput';
+import AddressFingerprint from '../../../components/AddressFingerprint';
 import config from '../../../../config';
 import {
   PAGE_SIZE,
@@ -75,7 +77,13 @@ export default function TokensPanel({ address, onLoaded }: TokensPanelProps): JS
         // /address/:addr/tokens returns ERC-20 balances AND legacy untagged
         // rows from before tokenStandard existed. Filter to ERC-20 / untagged
         // so NFT rows (which have their own panel) don't appear twice.
-        const next = arr.filter((t) => !t.tokenStandard || t.tokenStandard === 'ERC-20');
+        const next = arr
+          .filter((t) => !t.tokenStandard || t.tokenStandard === 'ERC-20')
+          .map((token) => ({
+            ...token,
+            contractAddress:
+              canonicalizeQrlAddress(token.contractAddress) ?? token.contractAddress,
+          }));
         setRows(next);
         setLoaded(true);
         onLoaded?.(next.length);
@@ -99,7 +107,7 @@ export default function TokensPanel({ address, onLoaded }: TokensPanelProps): JS
         header: 'Token',
         cell: (info) => {
           const r = info.row.original;
-          const label = r.name || r.symbol || r.contractAddress;
+          const label = r.name || r.symbol;
           return (
             <div className="min-w-0">
               <Link
@@ -107,7 +115,7 @@ export default function TokensPanel({ address, onLoaded }: TokensPanelProps): JS
                 className="text-sm text-accent hover:text-accent-hover transition-colors font-medium break-all"
                 title={r.contractAddress}
               >
-                {label}
+                {label || <AddressFingerprint address={r.contractAddress} />}
               </Link>
               {r.symbol && r.symbol !== r.name && (
                 <span className="text-text-muted ml-2 font-mono text-xs">({r.symbol})</span>

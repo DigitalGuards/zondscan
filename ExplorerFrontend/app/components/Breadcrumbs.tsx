@@ -5,6 +5,7 @@ import { ChevronRightIcon } from '@heroicons/react/20/solid';
 export interface BreadcrumbItem {
   label: string;
   href?: string;
+  fullLabel?: string;
   translateLabel?: boolean;
 }
 
@@ -30,11 +31,18 @@ export default function Breadcrumbs({ items }: BreadcrumbsProps): JSX.Element {
                 <span
                   className="text-text-secondary truncate max-w-[200px] sm:max-w-[300px]"
                   aria-current="page"
+                  aria-label={item.fullLabel}
+                  title={item.fullLabel}
                 >
                   {item.translateLabel ? <InterfaceText text={item.label} /> : item.label}
                 </span>
               ) : (
-                <Link href={item.href} className="hover:text-accent transition-colors">
+                <Link
+                  href={item.href}
+                  className="hover:text-accent transition-colors"
+                  aria-label={item.fullLabel}
+                  title={item.fullLabel}
+                >
                   {item.translateLabel ? <InterfaceText text={item.label} /> : item.label}
                 </Link>
               )}

@@ -300,11 +300,11 @@ function BlockTable({ blocks, loading }: { blocks: BlockResult[]; loading: boole
 
                   <div className="flex-1 min-w-0 hidden sm:block">
                     {miner ? (
-                      <div className="flex items-center gap-1 text-[12px] truncate">
+                      <div className="flex items-start gap-1 text-[12px] min-w-0">
                         <span className="text-text-muted">Miner</span>
                         <Link
                           href={`/address/${miner}`}
-                          className="text-text-secondary hover:text-accent hover:underline font-mono truncate"
+                          className="text-text-secondary hover:text-accent hover:underline font-mono min-w-0 max-w-full"
                         >
                           <AddressText address={miner} />
                         </Link>
@@ -358,18 +358,18 @@ function TransactionTable({ txs, loading }: { txs: TxResult[]; loading: boolean 
                   </div>
 
                   <div className="flex-1 min-w-0 hidden sm:block">
-                    <div className="flex items-center gap-1 text-[12px] truncate">
+                    <div className="flex items-start gap-1 text-[12px] min-w-0">
                       <span className="text-text-muted w-8 flex-shrink-0">From</span>
                       {from ? (
-                        <Link href={`/address/${from}`} className="text-text-secondary hover:text-accent hover:underline font-mono truncate">
+                        <Link href={`/address/${from}`} className="text-text-secondary hover:text-accent hover:underline font-mono min-w-0 max-w-full">
                           <AddressText address={from} />
                         </Link>
                       ) : <span className="text-text-muted">…</span>}
                     </div>
-                    <div className="flex items-center gap-1 text-[12px] truncate">
+                    <div className="flex items-start gap-1 text-[12px] min-w-0">
                       <span className="text-text-muted w-8 flex-shrink-0">To</span>
                       {to ? (
-                        <Link href={`/address/${to}`} className="text-text-secondary hover:text-accent hover:underline font-mono truncate">
+                        <Link href={`/address/${to}`} className="text-text-secondary hover:text-accent hover:underline font-mono min-w-0 max-w-full">
                           <AddressText address={to} />
                         </Link>
                       ) : <span className="text-text-muted">…</span>}

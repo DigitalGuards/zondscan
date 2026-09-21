@@ -7,11 +7,16 @@ import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import type { PendingTransaction, ContractMeta } from '@/app/types';
 import config from '../../../../config';
+import { fetchPendingTransactionStatus, pendingStatusPollInterval, type PendingStatus } from '../../../lib/pendingTransaction';
 import { formatAmount, formatGasPrice, decodeTokenTransferInput, decodeContractCall, formatTokenAmount, hexToBigInt, type DecodedTokenTransfer } from '../../../lib/helpers';
 import Badge from '../../../components/Badge';
 import Breadcrumbs from '../../../components/Breadcrumbs';
 import DetailRow from '../../../components/DetailRow';
 import CopyButton from '../../../components/CopyButton';
+import AddressFingerprint from '../../../components/AddressFingerprint';
+import ContractMetadataProvenanceNotice, {
+  trustedContractMetadataABI,
+} from '../../../components/ContractMetadataProvenanceNotice';
 
 interface PendingTransactionViewProps {
   pendingTx: PendingTransaction;
@@ -23,8 +28,6 @@ interface PendingTransactionViewProps {
    */
   targetContract?: ContractMeta;
 }
-
-type LiveStatus = 'pending' | 'mined' | 'dropped';
 
 interface EtaResponse {
   etaSec: number;
@@ -82,44 +85,26 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
   const decodedTransfer = useMemo(() => {
     return decodeTokenTransferInput(pendingTx.input);
   }, [pendingTx.input]);
+  const targetABI = trustedContractMetadataABI(targetContract);
 
   // ABI fallback: if the calldata didn't match a known token selector,
   // try the recipient's verified ABI. Same machinery as the confirmed
   // tx page's Input Data card.
   const decodedCall = useMemo(() => {
     if (decodedTransfer) return null;
-    return decodeContractCall(pendingTx.input, targetContract?.abi);
-  }, [decodedTransfer, pendingTx.input, targetContract?.abi]);
+    return decodeContractCall(pendingTx.input, targetABI);
+  }, [decodedTransfer, pendingTx.input, targetABI]);
 
   const isTokenTransfer = decodedTransfer !== null;
 
   // ── Status poll ─────────────────────────────────────────────────────────
-  // /pending-transaction returns 404 once the tx is tombstoned. On 404 we
-  // probe /tx to distinguish "mined → redirect" from "dropped → notice".
-  const statusQuery = useQuery<{ status: LiveStatus }>({
+  // A mined tombstone redirects immediately. Other 404 responses probe /tx;
+  // temporary failures keep polling and display an unavailable notice.
+  const statusQuery = useQuery<{ status: PendingStatus }>({
     queryKey: ['pending-tx-status', pendingTx.hash],
-    queryFn: async () => {
-      try {
-        const res = await axios.get(`${config.handlerUrl}/pending-transaction/${pendingTx.hash}`);
-        if (res.data?.transaction?.status === 'pending') {
-          return { status: 'pending' };
-        }
-        return { status: 'mined' };
-      } catch (err: unknown) {
-        if (axios.isAxiosError(err) && err.response?.status === 404) {
-          try {
-            const tx = await axios.get(`${config.handlerUrl}/tx/${pendingTx.hash}`);
-            if (tx.data?.response) return { status: 'mined' };
-          } catch {
-            /* fallthrough */
-          }
-          return { status: 'dropped' };
-        }
-        return { status: 'pending' };
-      }
-    },
+    queryFn: () => fetchPendingTransactionStatus(pendingTx.hash),
     initialData: { status: 'pending' },
-    refetchInterval: (query) => (query.state.data?.status === 'pending' ? 5000 : false),
+    refetchInterval: (query) => pendingStatusPollInterval(query.state.data?.status),
   });
 
   // ── ETA poll ────────────────────────────────────────────────────────────
@@ -213,6 +198,11 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
 
   return (
     <div className="py-4 sm:py-6 lg:py-8">
+      {statusQuery.data?.status === 'unavailable' && (
+        <p role="status" className="mb-4 text-sm text-text-secondary">
+          Transaction status is temporarily unavailable. Checking again shortly.
+        </p>
+      )}
       <Breadcrumbs items={[
         { label: 'Pending', translateLabel: true, href: '/pending/1' },
         { label: `${pendingTx.hash.slice(0, 10)}...${pendingTx.hash.slice(-6)}` },
@@ -275,7 +265,7 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
               href={`/address/${pendingTx.from}`}
               className="text-text-primary hover:text-accent transition-colors break-all"
             >
-              {pendingTx.from}
+              <AddressFingerprint address={pendingTx.from} />
             </Link>
           </DetailRow>
           <DetailRow label="To" mono>
@@ -284,7 +274,7 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
                 href={`/address/${pendingTx.to}`}
                 className="text-text-primary hover:text-accent transition-colors break-all"
               >
-                {pendingTx.to}
+                <AddressFingerprint address={pendingTx.to} />
               </Link>
             ) : (
               <span className="text-text-secondary">Contract Creation</span>
@@ -328,14 +318,16 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
               {/* setApprovalForAll(operator, approved) */}
               {isApproval && (
                 <>
-                  <DetailRow label="Operator" mono>
-                    <Link
-                      href={`/address/${decodedTransfer.operator}`}
-                      className="text-accent hover:text-accent-hover transition-colors break-all"
-                    >
-                      {decodedTransfer.operator}
-                    </Link>
-                  </DetailRow>
+                  {decodedTransfer.operator && (
+                    <DetailRow label="Operator" mono>
+                      <Link
+                        href={`/address/${decodedTransfer.operator}`}
+                        className="text-accent hover:text-accent-hover transition-colors break-all"
+                      >
+                        <AddressFingerprint address={decodedTransfer.operator} />
+                      </Link>
+                    </DetailRow>
+                  )}
                   <DetailRow label="Approved">
                     <Badge variant={decodedTransfer.approved ? 'success' : 'error'}>
                       {decodedTransfer.approved ? 'true (granted)' : 'false (revoked)'}
@@ -351,7 +343,7 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
                     href={`/address/${decodedTransfer.from}`}
                     className="text-text-primary hover:text-accent transition-colors break-all"
                   >
-                    {decodedTransfer.from}
+                    <AddressFingerprint address={decodedTransfer.from} />
                   </Link>
                 </DetailRow>
               )}
@@ -361,7 +353,7 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
                     href={`/address/${decodedTransfer.to}`}
                     className="text-accent hover:text-accent-hover transition-colors break-all"
                   >
-                    {decodedTransfer.to}
+                    <AddressFingerprint address={decodedTransfer.to} />
                   </Link>
                 </DetailRow>
               )}
@@ -435,7 +427,7 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
                   <span className="text-text-secondary font-mono min-w-[80px]">{arg.label}:</span>
                   {arg.type === 'address' && arg.value ? (
                     <Link href={`/address/${arg.value}`} className="text-text-primary hover:text-accent transition-colors break-all font-mono">
-                      {arg.value}
+                      <AddressFingerprint address={arg.value} />
                     </Link>
                   ) : arg.type === 'bool' ? (
                     <Badge variant={arg.value === 'true' ? 'success' : 'error'}>{arg.value}</Badge>
@@ -474,6 +466,7 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
             </h2>
           </div>
           <div className="p-4 sm:p-6">
+            <ContractMetadataProvenanceNotice contract={targetContract} />
             <p className="font-mono text-text-secondary break-all text-xs leading-relaxed">{pendingTx.input}</p>
           </div>
         </div>

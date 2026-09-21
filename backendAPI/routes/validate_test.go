@@ -2,6 +2,8 @@ package routes
 
 import "testing"
 
+const qip55ChecksumA = "QaaaAAaaaAAaAaaAaAAAAaAAAaAaAaAAaAaaAaaaaAAAAAAAAaAAAAaAaAAaaAAaaaaAaAAAAaaAaAAaaaaaaAaAAaaaaAaAaaaaAaaaAAAAaAAAAaAaAaaAAAaAaaaAA"
+
 // These cover the path-param format guards added to reject malformed
 // input at the route boundary (HTTP 400) before it reaches the db layer.
 // The accepted shapes mirror the frontend search resolver
@@ -19,7 +21,7 @@ func TestIsValidTxHash(t *testing.T) {
 		{"one char short", "0x" + repeat("a", 63), false},
 		{"one char too long", "0x" + repeat("a", 65), false},
 		{"non-hex char", "0x" + repeat("g", 64), false},
-		{"address mistaken for hash", "Q" + repeat("a", 40), false},
+		{"address mistaken for hash", "Q" + repeat("a", 128), false},
 		{"empty", "", false},
 		{"mongo-operator injection attempt", `0x"; return true; //`, false},
 	}
@@ -38,21 +40,50 @@ func TestIsValidAddressParam(t *testing.T) {
 		in   string
 		want bool
 	}{
-		{"Q + 40 hex", "Q" + repeat("a", 40), true},
-		{"lowercase q + 40 hex", "q" + repeat("a", 40), true},
-		{"0x + 40 hex contract form", "0x" + repeat("a", 40), true},
-		{"uppercase 0X prefix", "0X" + repeat("AB", 20), true},
-		{"bare 40 hex rejected", repeat("a", 40), false},
-		{"too short", "Q" + repeat("a", 39), false},
-		{"too long", "Q" + repeat("a", 41), false},
+		{"Q + 128 hex", "Q" + repeat("a", 128), true},
+		{"lowercase q + 128 hex", "q" + repeat("a", 128), true},
+		{"0x + 128 hex contract form", "0x" + repeat("a", 128), true},
+		{"uppercase 0X prefix", "0X" + repeat("AB", 64), true},
+		{"valid mixed-case checksum", qip55ChecksumA, true},
+		{"invalid mixed-case checksum", "Q" + repeat("Ab", 64), false},
+		{"bare 128 hex rejected", repeat("a", 128), false},
+		{"legacy 20-byte address", "Q" + repeat("a", 40), false},
+		{"too short", "Q" + repeat("a", 127), false},
+		{"too long", "Q" + repeat("a", 129), false},
 		{"tx hash rejected", "0x" + repeat("a", 64), false},
-		{"non-hex body", "Q" + repeat("z", 40), false},
+		{"non-hex body", "Q" + repeat("z", 128), false},
 		{"empty", "", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := isValidAddressParam(tc.in); got != tc.want {
 				t.Errorf("isValidAddressParam(%q) = %v, want %v", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestIsValidAddress(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{"Q + 128 hex", "Q" + repeat("a", 128), true},
+		{"valid mixed-case checksum", qip55ChecksumA, true},
+		{"invalid mixed-case checksum", "Q" + repeat("Ab", 64), false},
+		{"lowercase q prefix", "q" + repeat("a", 128), false},
+		{"0x prefix", "0x" + repeat("a", 128), false},
+		{"legacy 20-byte address", "Q" + repeat("a", 40), false},
+		{"one character short", "Q" + repeat("a", 127), false},
+		{"one character long", "Q" + repeat("a", 129), false},
+		{"non-hex body", "Q" + repeat("z", 128), false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isValidAddress(tc.in); got != tc.want {
+				t.Errorf("isValidAddress(%q) = %v, want %v", tc.in, got, tc.want)
 			}
 		})
 	}

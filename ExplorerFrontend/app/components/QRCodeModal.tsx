@@ -2,6 +2,8 @@
 
 import { useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import { canonicalizeQrlAddress } from '../lib/qrlAddress';
+import AddressFingerprint from './AddressFingerprint';
 
 interface QRCodeModalProps {
   address: string;
@@ -9,28 +11,35 @@ interface QRCodeModalProps {
   onClose: () => void;
 }
 
+interface ClipboardWriter {
+  writeText(value: string): Promise<void>;
+}
+
+export function copyQrlAddress(
+  address: string,
+  clipboard: ClipboardWriter,
+): Promise<void> {
+  return clipboard.writeText(address);
+}
+
 export default function QRCodeModal({ address, isOpen, onClose }: QRCodeModalProps): JSX.Element | null {
   if (!isOpen) return null;
 
-  // The QR encodes the bare address (explorer convention, wallet-scannable),
-  // not the page URL: wallets validate the payload as an address. Normalize
-  // the prefix to a capital Q since the route segment may be lowercased.
-  const qrAddress = address.replace(/^q/, 'Q');
+  // QR and copy surfaces only expose a validated canonical address. Route
+  // aliases such as 0x are accepted and converted before reaching a wallet.
+  const canonicalAddress = canonicalizeQrlAddress(address);
+  if (!canonicalAddress) return null;
 
-  // Format address for display (first 6 and last 4 chars)
-  const displayAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
-
-  return <ModalContent address={address} displayAddress={displayAddress} qrAddress={qrAddress} onClose={onClose} />;
+  return <ModalContent address={canonicalAddress} qrAddress={canonicalAddress} onClose={onClose} />;
 }
 
 interface ModalContentProps {
   address: string;
-  displayAddress: string;
   qrAddress: string;
   onClose: () => void;
 }
 
-function ModalContent({ address, displayAddress, qrAddress, onClose }: ModalContentProps): JSX.Element {
+function ModalContent({ address, qrAddress, onClose }: ModalContentProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -124,7 +133,10 @@ function ModalContent({ address, displayAddress, qrAddress, onClose }: ModalCont
         <div className="text-center">
           {/* M3: id for aria-labelledby */}
           <h3 id="qrcode-modal-title" className="text-lg font-medium text-accent mb-4">Scan Address</h3>
-          <div className="bg-white p-4 rounded-lg inline-block mb-4">
+          <div
+            className="bg-white p-4 rounded-lg inline-block mb-4"
+            data-qr-address={qrAddress}
+          >
             <QRCodeSVG
               value={qrAddress}
               size={240}
@@ -133,10 +145,12 @@ function ModalContent({ address, displayAddress, qrAddress, onClose }: ModalCont
             />
           </div>
           <div className="text-sm text-text-secondary mb-2">
-            <span className="inline-block">{displayAddress}</span>
+            <AddressFingerprint address={address} className="font-mono" />
             {/* M7: Replace title with aria-label */}
             <button
-              onClick={() => navigator.clipboard.writeText(address)}
+              onClick={() => {
+                void copyQrlAddress(address, navigator.clipboard);
+              }}
               className="ml-2 text-accent hover:text-accent-hover transition-colors"
               aria-label="Copy full address"
             >

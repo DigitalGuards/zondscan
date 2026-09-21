@@ -6,9 +6,12 @@ import (
 	"QRL2MongoDB/rpc"
 	"QRL2MongoDB/validation"
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
 )
@@ -28,10 +31,23 @@ func ReprocessIncompleteContracts() error {
 	filter := bson.M{
 		"$or": []bson.M{
 			{"contractCode": ""},
+			{"contractCodeSha256": bson.M{"$exists": false}},
+			{"contractCodeSha256": ""},
 			{"isToken": true, "totalSupply": ""},
 			{"isToken": false, "name": "", "symbol": ""},
 			{"creatorAddress": "Q"},
 			{"creatorAddress": ""},
+			{"creatorAddressProvenance": bson.M{"$exists": false}},
+			{"creatorAddressProvenance": ""},
+			{"creationBlockHash": bson.M{"$exists": false}},
+			{"creationBlockHash": ""},
+			{"chainId": bson.M{"$exists": false}},
+			{"chainId": ""},
+			{"creatorAddressProvenance": bson.M{"$in": []string{
+				models.CreatorAddressProvenanceCreateTraceCaller,
+				models.CreatorAddressProvenanceMintHeuristic,
+				models.CreatorAddressProvenanceUnclassified,
+			}}},
 			{
 				"tokenStandard": bson.M{"$in": []string{"ERC-721", "ERC-1155"}},
 				"$or": []bson.M{
@@ -133,14 +149,34 @@ func ReprocessIncompleteContracts() error {
 			contract.CreationBlockNumber = creationBlockNumber
 		}
 
-		// Backfill missing creation transaction from the authoritative
+		if contract.GenesisContract && contract.CreatorAddressProvenance == "" {
+			contract.CreatorAddress = ""
+			contract.CreationTransaction = ""
+			if contract.CreationBlockNumber == "" {
+				contract.CreationBlockNumber = "0x0"
+			}
+			contract.CreatorAddressProvenance = models.CreatorAddressProvenanceGenesis
+		}
+
+		// Backfill missing or lower-confidence creation evidence from the authoritative
 		// sources: the transfer collection (direct deploys) and the
 		// internal-transaction index (factory deploys via CREATE frames).
-		if contract.CreationTransaction == "" && contract.Address != "" {
-			creationTx := findCreationTransaction(contract.Address)
+		creationEvidenceLookupHealthy := true
+		if !contract.GenesisContract &&
+			creatorAddressProvenanceRank(contract.CreatorAddressProvenance) <
+				creatorAddressProvenanceRank(models.CreatorAddressProvenanceDirectDeployment) &&
+			contract.Address != "" {
+			creationTx, lookupErr := findCreationTransaction(contract.Address)
+			if lookupErr != nil {
+				creationEvidenceLookupHealthy = false
+				configs.Logger.Error("Creation evidence lookup failed; preserving current provenance",
+					zap.String("contract", contract.Address),
+					zap.Error(lookupErr))
+			}
 			if creationTx != nil {
 				contract.CreationTransaction = creationTx.TxHash
 				contract.CreationBlockNumber = creationTx.BlockNumber
+				contract.CreatorAddressProvenance = creationTx.Provenance
 				if creationTx.From != "" && creationTx.From != "Q" {
 					contract.CreatorAddress = creationTx.From
 					configs.Logger.Info("Backfilled creation info from transfer collection",
@@ -167,6 +203,8 @@ func ReprocessIncompleteContracts() error {
 			} else if genesisCode != "" && genesisCode != "0x" && genesisCode != "0x0" {
 				contract.CreationBlockNumber = "0x0"
 				contract.GenesisContract = true
+				contract.CreatorAddress = ""
+				contract.CreatorAddressProvenance = models.CreatorAddressProvenanceGenesis
 				configs.Logger.Info("Contract code present at genesis, pinned creation block to 0x0",
 					zap.String("address", contract.Address))
 			}
@@ -176,10 +214,20 @@ func ReprocessIncompleteContracts() error {
 		// coverage: the earliest mint is usually the create+mint tx. When the
 		// creation block is already known, the mint must sit in that exact
 		// block: a later mint would stamp a creation tx from the wrong block.
-		if contract.CreationTransaction == "" && !contract.GenesisContract && contract.Address != "" {
-			mintTx := findCreationTransactionFromMint(contract.Address, contract.CreationBlockNumber)
-			if mintTx != nil {
+		if creationEvidenceLookupHealthy && !contract.GenesisContract && contract.Address != "" &&
+			creatorAddressProvenanceRank(contract.CreatorAddressProvenance) <
+				creatorAddressProvenanceRank(models.CreatorAddressProvenanceMintHeuristic) {
+			mintTx, lookupErr := findCreationTransactionFromMint(contract.Address, contract.CreationBlockNumber)
+			if lookupErr != nil {
+				creationEvidenceLookupHealthy = false
+				configs.Logger.Error("Mint creation evidence lookup failed; preserving current provenance",
+					zap.String("contract", contract.Address),
+					zap.Error(lookupErr))
+			}
+			if mintTx != nil &&
+				(contract.CreationTransaction == "" || contract.CreationTransaction == mintTx.TxHash) {
 				contract.CreationTransaction = mintTx.TxHash
+				contract.CreatorAddressProvenance = mintTx.Provenance
 				if contract.CreationBlockNumber == "" {
 					contract.CreationBlockNumber = mintTx.BlockNumber
 				}
@@ -191,15 +239,47 @@ func ReprocessIncompleteContracts() error {
 					zap.String("tx", contract.CreationTransaction))
 			}
 		}
+		if creationEvidenceLookupHealthy && contract.CreatorAddressProvenance == "" && contract.CreationTransaction != "" {
+			contract.CreatorAddressProvenance = models.CreatorAddressProvenanceUnclassified
+		}
 
-		// Backfill missing creator address from creation transaction via RPC
-		if (contract.CreatorAddress == "" || contract.CreatorAddress == "Q") && contract.CreationTransaction != "" {
+		// Bind the contract row to the outer creation transaction and its exact
+		// canonical block. This identity is also the fence used by the backend
+		// verification worker when it publishes a completed compilation.
+		if contract.CreationTransaction != "" &&
+			((contract.CreatorAddress == "" || contract.CreatorAddress == "Q") ||
+				contract.CreatorAddressProvenance == models.CreatorAddressProvenanceCreateTraceCaller ||
+				contract.CreationBlockHash == "" || contract.ChainID == "") {
 			txDetails, txErr := rpc.GetTxDetailsByHash(contract.CreationTransaction)
-			if txErr == nil && txDetails != nil && txDetails.From != "" {
-				contract.CreatorAddress = validation.ConvertToQAddress(txDetails.From)
+			if txErr == nil && txDetails != nil {
+				if txDetails.From != "" {
+					contract.CreatorAddress = validation.ConvertToQAddress(txDetails.From)
+					switch contract.CreatorAddressProvenance {
+					case models.CreatorAddressProvenanceCreateTraceCaller:
+						contract.CreatorAddressProvenance = models.CreatorAddressProvenanceCreateTraceOuter
+					case "":
+						contract.CreatorAddressProvenance = models.CreatorAddressProvenanceUnclassified
+					}
+				}
+				if contract.CreationBlockNumber == "" {
+					contract.CreationBlockNumber = txDetails.BlockNumber
+				}
+				contract.CreationBlockHash = txDetails.BlockHash
+				contract.ChainID = txDetails.ChainId
 				configs.Logger.Info("Backfilled creator address from creation transaction",
 					zap.String("contract", contract.Address),
 					zap.String("creator", contract.CreatorAddress))
+			}
+		}
+		if contract.CreationBlockHash == "" && contract.CreationBlockNumber != "" {
+			block, blockErr := rpc.GetBlockByNumberMainnet(contract.CreationBlockNumber)
+			if blockErr == nil && block != nil {
+				contract.CreationBlockHash = block.Result.Hash
+			}
+		}
+		if contract.ChainID == "" {
+			if chainID, chainErr := rpc.GetChainID(); chainErr == nil {
+				contract.ChainID = chainID
 			}
 		}
 
@@ -236,6 +316,7 @@ type creationTxInfo struct {
 	TxHash      string `bson:"txHash"`
 	From        string `bson:"from"`
 	BlockNumber string `bson:"blockNumber"`
+	Provenance  string `bson:"-"`
 }
 
 // findCreationTransaction looks up the contract creation transaction from the
@@ -245,7 +326,7 @@ type creationTxInfo struct {
 // deployments, including non-token ones). The mint heuristic lives separately
 // in findCreationTransactionFromMint so callers can order the genesis probe
 // between the two.
-func findCreationTransaction(contractAddress string) *creationTxInfo {
+func findCreationTransaction(contractAddress string) (*creationTxInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -255,7 +336,11 @@ func findCreationTransaction(contractAddress string) *creationTxInfo {
 		"contractAddress": contractAddress,
 	}).Decode(&result)
 	if err == nil {
-		return &result
+		result.Provenance = models.CreatorAddressProvenanceDirectDeployment
+		return &result, nil
+	}
+	if !errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, fmt.Errorf("query direct deployment: %w", err)
 	}
 
 	// 2. Factory deployment: CREATE/CREATE2 frame from the internal-transaction
@@ -274,18 +359,27 @@ func findCreationTransaction(contractAddress string) *creationTxInfo {
 		// The frame's own `from` is the immediate caller (the factory
 		// contract); resolve the outer transaction sender for the creator
 		// field, falling back to the frame's from if the lookup fails.
-		from := lookupTransactionSender(ctx, frame.Hash)
+		from, senderErr := lookupTransactionSender(ctx, frame.Hash)
+		if senderErr != nil {
+			return nil, fmt.Errorf("query outer transaction sender: %w", senderErr)
+		}
+		provenance := models.CreatorAddressProvenanceCreateTraceOuter
 		if from == "" {
 			from = frame.From
+			provenance = models.CreatorAddressProvenanceCreateTraceCaller
 		}
 		return &creationTxInfo{
 			TxHash:      frame.Hash,
 			From:        from,
 			BlockNumber: frame.BlockNumber,
-		}
+			Provenance:  provenance,
+		}, nil
+	}
+	if err != nil && !errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, fmt.Errorf("query CREATE trace: %w", err)
 	}
 
-	return nil
+	return nil, nil
 }
 
 // findCreationTransactionFromMint is the last-resort heuristic for factory
@@ -297,7 +391,7 @@ func findCreationTransaction(contractAddress string) *creationTxInfo {
 // picked, not an arbitrary one. When the creation block is already known,
 // requiredBlock pins the lookup to that block so a later mint cannot be
 // misattributed as the creation tx; pass "" when the block is unknown.
-func findCreationTransactionFromMint(contractAddress string, requiredBlock string) *creationTxInfo {
+func findCreationTransactionFromMint(contractAddress string, requiredBlock string) (*creationTxInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -315,31 +409,41 @@ func findCreationTransactionFromMint(contractAddress string, requiredBlock strin
 	}
 	mintOpts := options.FindOne().SetSort(bson.D{{Key: "blockNumberInt", Value: 1}})
 	err := configs.GetTokenTransfersCollection().FindOne(ctx, filter, mintOpts).Decode(&mint)
-	if err != nil || mint.TxHash == "" {
-		return nil
+	if errors.Is(err, mongo.ErrNoDocuments) || (err == nil && mint.TxHash == "") {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query mint creation evidence: %w", err)
 	}
 
 	// Look up the actual transaction sender from the transfer collection
-	from := lookupTransactionSender(ctx, mint.TxHash)
+	from, senderErr := lookupTransactionSender(ctx, mint.TxHash)
+	if senderErr != nil {
+		return nil, fmt.Errorf("query mint transaction sender: %w", senderErr)
+	}
 	return &creationTxInfo{
 		TxHash:      mint.TxHash,
 		From:        from,
 		BlockNumber: mint.BlockNumber,
-	}
+		Provenance:  models.CreatorAddressProvenanceMintHeuristic,
+	}, nil
 }
 
 // lookupTransactionSender resolves the outer sender of a transaction from the
 // transfer collection. Returns "" when the row is missing; callers treat that
 // as "creator unknown" and keep whatever fallback they have.
-func lookupTransactionSender(ctx context.Context, txHash string) string {
+func lookupTransactionSender(ctx context.Context, txHash string) (string, error) {
 	var tx struct {
 		From string `bson:"from"`
 	}
 	err := configs.TransferCollections.FindOne(ctx, bson.M{
 		"txHash": txHash,
 	}).Decode(&tx)
-	if err != nil {
-		return ""
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return "", nil
 	}
-	return tx.From
+	if err != nil {
+		return "", err
+	}
+	return tx.From, nil
 }

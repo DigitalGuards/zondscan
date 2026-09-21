@@ -8,7 +8,9 @@ import (
 )
 
 // QRL address constants
-const QRLZeroAddress = "Q0000000000000000000000000000000000000000"
+const QRLZeroAddress = "Q" +
+	"0000000000000000000000000000000000000000000000000000000000000000" +
+	"0000000000000000000000000000000000000000000000000000000000000000"
 
 // Collection names
 const (
@@ -19,6 +21,7 @@ const (
 	TRANSFER_COLLECTION                        = "transfer"
 	VALIDATORS_COLLECTION                      = "validators"
 	CONTRACT_CODE_COLLECTION                   = "contractCode"
+	CONTRACT_VERIFICATIONS_COLLECTION          = "contractVerifications"
 	AVERAGE_BLOCK_SIZE_COLLECTION              = "averageBlockSize"
 	COINGECKO_COLLECTION                       = "coingecko"
 	WALLET_COUNT_COLLECTION                    = "walletCount"
@@ -27,6 +30,9 @@ const (
 	EPOCH_INFO_COLLECTION                      = "epoch_info"
 	VALIDATOR_HISTORY_COLLECTION               = "validator_history"
 	PRICE_HISTORY_COLLECTION                   = "priceHistory"
+	SYNCER_LEASES_COLLECTION                   = "syncer_leases"
+	BALANCE_RECONCILIATIONS_COLLECTION         = "balance_reconciliations"
+	TOKEN_EVENT_DEAD_LETTERS_COLLECTION        = "tokenEventDeadLetters"
 )
 
 // API and configuration constants
@@ -53,6 +59,8 @@ var (
 	EpochInfoCollections                    *mongo.Collection
 	ValidatorHistoryCollections             *mongo.Collection
 	PriceHistoryCollections                 *mongo.Collection
+	SyncerLeasesCollection                  *mongo.Collection
+	TokenEventDeadLettersCollection         *mongo.Collection
 )
 
 // bindCollections populates the package-level collection handles above.
@@ -72,6 +80,8 @@ func bindCollections(client *mongo.Client) {
 	EpochInfoCollections = GetCollection(client, EPOCH_INFO_COLLECTION)
 	ValidatorHistoryCollections = GetCollection(client, VALIDATOR_HISTORY_COLLECTION)
 	PriceHistoryCollections = GetCollection(client, PRICE_HISTORY_COLLECTION)
+	SyncerLeasesCollection = GetCollection(client, SYNCER_LEASES_COLLECTION)
+	TokenEventDeadLettersCollection = GetCollection(client, TOKEN_EVENT_DEAD_LETTERS_COLLECTION)
 }
 
 // Global logger instance - initialized once and used throughout the application

@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
-	"strconv"
 	"strings"
 
 	"QRL2MongoDB/validation"
@@ -87,17 +86,18 @@ func GetTokenDecimals(contractAddress string) (uint8, error) {
 	if err != nil {
 		return 0, err
 	}
+	return decodeTokenDecimals(result)
+}
 
-	if len(result) < 66 {
-		return 0, fmt.Errorf("response too short")
-	}
-
-	decimals, err := strconv.ParseUint(result[2:], 16, 8)
+func decodeTokenDecimals(result string) (uint8, error) {
+	decimals, err := decodeTokenUint256(result)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to decode token decimals: %w", err)
 	}
-
-	return uint8(decimals), nil
+	if decimals.BitLen() > 8 {
+		return 0, fmt.Errorf("token decimals exceeds uint8: %s", decimals.String())
+	}
+	return uint8(decimals.Uint64()), nil
 }
 
 // GetTokenTotalSupply retrieves the total supply of an ERC20 token
@@ -106,23 +106,62 @@ func GetTokenTotalSupply(contractAddress string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return decodeTokenTotalSupply(result)
+}
 
-	if len(result) < 66 {
-		return "", fmt.Errorf("response too short")
+func decodeTokenTotalSupply(result string) (string, error) {
+	totalSupply, err := decodeTokenUint256(result)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode token total supply: %w", err)
 	}
+	return totalSupply.String(), nil
+}
 
-	// Convert hex to decimal
-	bigInt := new(big.Int)
-	if _, ok := bigInt.SetString(strings.TrimPrefix(result, "0x"), 16); !ok {
-		return "", fmt.Errorf("failed to parse total supply")
+func decodeTokenBalance(result string) (string, error) {
+	balance, err := decodeTokenUint256(result)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode token balance: %w", err)
 	}
+	return balance.String(), nil
+}
 
-	// Return decimal string
-	return bigInt.String(), nil
+// decodeTokenUint256 accepts exactly one QIP-55 64-byte ABI word. Token
+// scalars remain uint256 values in the low 32 bytes, with zero high bytes.
+func decodeTokenUint256(result string) (*big.Int, error) {
+	stripped := strings.TrimPrefix(result, "0x")
+	if len(stripped) != abiWordHexLength {
+		return nil, fmt.Errorf(
+			"ABI scalar result has %d hex chars, want %d",
+			len(stripped),
+			abiWordHexLength,
+		)
+	}
+	return parseUint256FromWord(result)
 }
 
 // GetTokenBalance retrieves the balance of an ERC20 token for a specific address
 func GetTokenBalance(contractAddress string, holderAddress string) (string, error) {
+	return getTokenBalanceWithCaller(contractAddress, holderAddress, CallContractMethod)
+}
+
+// GetTokenBalanceAtBlock retrieves an ERC-20 balance from the exact state
+// selected by blockHash.
+func GetTokenBalanceAtBlock(
+	contractAddress string,
+	holderAddress string,
+	blockHash string,
+) (string, error) {
+	return getTokenBalanceWithCaller(contractAddress, holderAddress,
+		func(address string, calldata string) (string, error) {
+			return callContractMethodAtBlockHash(address, calldata, blockHash)
+		})
+}
+
+func getTokenBalanceWithCaller(
+	contractAddress string,
+	holderAddress string,
+	call contractMethodCaller,
+) (string, error) {
 	// balanceOf(address) function signature
 	methodID := "0x70a08231"
 
@@ -146,50 +185,39 @@ func GetTokenBalance(contractAddress string, holderAddress string) (string, erro
 	originalHolderAddress := holderAddress // Keep original for logging
 	holderAddress = validation.ConvertToQAddress(holderAddress)
 
-	// Extract the raw address (without prefix) for padding
+	// Encode the native address as one complete 64-byte ABI word.
 	rawAddress := validation.StripAddressPrefix(holderAddress)
-
-	// Pad address to 32 bytes (64 hex chars) for ABI encoding
-	paddedAddress := rawAddress
-	for len(paddedAddress) < 64 {
-		paddedAddress = "0" + paddedAddress
+	encodedAddress := encodeAddressForABI(holderAddress)
+	if encodedAddress == "" {
+		return "", fmt.Errorf("invalid QIP-55 holder address: %s", originalHolderAddress)
 	}
 
-	// Combine method ID and padded address
-	data := methodID + paddedAddress
+	// Combine method ID and the full-width address word.
+	data := methodID + encodedAddress
 	zap.L().Debug("Prepared contract call data",
 		zap.String("contractAddress", contractAddress),
 		zap.String("formattedAddress", holderAddress),
 		zap.String("rawAddress", rawAddress),
-		zap.String("paddedAddress", paddedAddress),
+		zap.String("encodedAddress", encodedAddress),
 		zap.String("data", data))
 
 	// Make the call. DoNodeRPC owns the retry + failover budget; a second
 	// retry loop here only multiplied the delay on genuinely dead endpoints.
-	result, err := CallContractMethod(contractAddress, data)
+	result, err := call(contractAddress, data)
 	if err != nil {
 		zap.L().Error("Contract call for token balance failed after retries",
 			zap.String("contractAddress", contractAddress),
 			zap.String("holderAddress", originalHolderAddress),
 			zap.String("formattedAddress", holderAddress),
-			zap.String("paddedAddress", paddedAddress),
+			zap.String("encodedAddress", encodedAddress),
 			zap.Error(err))
-		return "", fmt.Errorf("contract call failed: %v", err)
+		return "", fmt.Errorf("contract call failed: %w", err)
 	}
 
-	// Parse result
-	if len(result) < 2 {
-		zap.L().Warn("Empty result from token balance call",
-			zap.String("contractAddress", contractAddress),
-			zap.String("holderAddress", originalHolderAddress))
-		return "0", nil
+	balance, err := decodeTokenBalance(result)
+	if err != nil {
+		return "", err
 	}
-
-	// Convert hex string to big.Int
-	bigInt := new(big.Int)
-	bigInt.SetString(strings.TrimPrefix(result, "0x"), 16)
-
-	balance := bigInt.String()
 	zap.L().Info("Retrieved token balance",
 		zap.String("contractAddress", contractAddress),
 		zap.String("holderAddress", originalHolderAddress),

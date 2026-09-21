@@ -15,18 +15,31 @@ import (
 func newLimitedRouter(burst, refill float64, window time.Duration) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
+	if err := router.SetTrustedProxies(nil); err != nil {
+		panic(err)
+	}
 	router.GET("/limited", PerIPRateLimit(burst, refill, window), func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
 	return router
 }
 
-// doLimited issues one request attributed to ip (via CF-Connecting-IP,
-// the header production traffic carries) and returns the recorder.
+// doLimited issues one request from the supplied direct peer address.
 func doLimited(router *gin.Engine, ip string) *httptest.ResponseRecorder {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/limited", nil)
-	req.Header.Set("CF-Connecting-IP", ip)
+	req.RemoteAddr = ip + ":12345"
+	router.ServeHTTP(w, req)
+	return w
+}
+
+func doLimitedWithSpoofedHeaders(router *gin.Engine, remoteIP, claimedIP string) *httptest.ResponseRecorder {
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/limited", nil)
+	req.RemoteAddr = remoteIP + ":12345"
+	req.Header.Set("CF-Connecting-IP", claimedIP)
+	req.Header.Set("X-Forwarded-For", claimedIP)
+	req.Header.Set("X-Real-IP", claimedIP)
 	router.ServeHTTP(w, req)
 	return w
 }
@@ -78,6 +91,17 @@ func TestPerIPRateLimitBucketsAreIsolatedPerIP(t *testing.T) {
 	// A different IP must get a fresh bucket.
 	if w := doLimited(router, "203.0.113.4"); w.Code != http.StatusOK {
 		t.Fatalf("ip B first request: status = %d, want 200", w.Code)
+	}
+}
+
+func TestPerIPRateLimitIgnoresHeadersFromUntrustedPeer(t *testing.T) {
+	router := newLimitedRouter(1, 1, time.Minute)
+
+	if w := doLimitedWithSpoofedHeaders(router, "203.0.113.10", "198.51.100.1"); w.Code != http.StatusOK {
+		t.Fatalf("first request: status = %d, want 200", w.Code)
+	}
+	if w := doLimitedWithSpoofedHeaders(router, "203.0.113.10", "198.51.100.2"); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("spoofed second request: status = %d, want 429", w.Code)
 	}
 }
 

@@ -7,6 +7,8 @@ import ContractBytecode from './ContractBytecode';
 import ReadContract from './ReadContract';
 import WriteContract from './WriteContract';
 import AiExplainCard from './AiExplainCard';
+import CompilerProvenanceDetails from './CompilerProvenanceDetails';
+import VerifiedSourceBundle from './VerifiedSourceBundle';
 import type { ContractData } from '../types/address';
 import { useUrlParam } from '../lib/use-url-param';
 
@@ -112,7 +114,7 @@ function CodeTab({ contractData, parsedAbi }: { contractData: ContractData; pars
     <div className="space-y-3 md:space-y-4">
       <CompilerSettings contractData={contractData} />
       <AiExplainCard contractData={contractData} />
-      <SourcePanel contractData={contractData} />
+      <VerifiedSourceBundle contractData={contractData} />
       <AbiPanel abi={parsedAbi} raw={contractData.abi ?? ''} />
       <ContractBytecode contractCode={contractData.contractCode} />
     </div>
@@ -136,36 +138,11 @@ function CompilerSettings({ contractData }: { contractData: ContractData }) {
           <div className="text-text-primary font-mono break-all">{value}</div>
         </div>
       ))}
-    </div>
-  );
-}
-
-function SourcePanel({ contractData }: { contractData: ContractData }) {
-  const [expanded, setExpanded] = useState(true);
-  if (!contractData.sourceCode) return null;
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <div className="text-xs md:text-sm text-text-secondary">Contract source</div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setExpanded(e => !e)}
-            aria-expanded={expanded}
-            className="inline-flex items-center px-3 py-1.5 rounded-lg bg-card-gradient border border-border hover:border-accent text-sm text-text-secondary hover:text-accent transition-colors"
-          >
-            {expanded ? 'Collapse' : 'Expand'}
-          </button>
-          <CopyButton value={contractData.sourceCode} label="Copy source" />
-        </div>
-      </div>
-      <pre
-        className={`rounded-lg bg-background-tertiary border border-border p-3 font-mono text-xs text-text-secondary overflow-x-auto whitespace-pre transition-[max-height] duration-200 ${
-          expanded ? 'max-h-[36rem] overflow-y-auto' : 'max-h-24 overflow-hidden'
-        }`}
-      >
-        {contractData.sourceCode}
-      </pre>
+      <CompilerProvenanceDetails
+        verificationRecordSchema={contractData.verificationRecordSchema}
+        provenance={contractData.compilerProvenance}
+        compilerVersion={contractData.compilerVersion}
+      />
     </div>
   );
 }
@@ -211,4 +188,3 @@ function AbiPanel({ abi, raw }: { abi: unknown | null; raw: string }) {
     </div>
   );
 }
-

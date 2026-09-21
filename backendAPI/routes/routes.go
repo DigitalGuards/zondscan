@@ -38,6 +38,7 @@ import (
 //	gas:history:<range>       30s  /gas/history              precomputed time series; 30s is fine
 //	market:orderbook           3s  /market/orderbook         MEXC snapshot or short failure backoff
 //	market:fundflow:<v>:<w>   30s  /market/fundflow          stored-trade rollup per venue+window
+//	qns:<deployment>:<name>   15s  /qns/resolve/:name        deployment checks and forward records
 //
 // Staleness contract:
 //   - Endpoints embedding `latestBlock` carry the cache window as their
@@ -112,6 +113,7 @@ func UserRoute(router *gin.Engine) {
 	// only verified contracts are analysed. Returns 503 when the
 	// Anthropic key isn't configured. Per-IP rate-limited (10/min).
 	RegisterContractExplainRoute(router)
+	RegisterQNSRoutes(router)
 
 	router.GET("/pending-transactions", handlePendingTransactions)
 	router.GET("/pending-transaction/:hash", handlePendingTransaction)

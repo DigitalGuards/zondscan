@@ -6,6 +6,7 @@ import { MLDSA87 } from '@theqrl/wallet.js';
 import type { Collection, ObjectId } from 'mongodb';
 
 import { getFaucetDb } from './mongodb';
+import { canonicalizeQrlAddress } from './qrlAddress';
 
 /**
  * Server-only faucet core: configuration, QRL address handling, account
@@ -126,17 +127,12 @@ export class FaucetError extends Error {
 
 /**
  * Validate and normalise a user-supplied QRL address to the canonical
- * `Q`+lowercase-hex form the @theqrl/web3 lib accepts for `to`. QRL addresses
- * are Q-prefixed - the `0x` prefix is only ever used for block/tx hashes - so we
- * accept a `Q`/`q` prefix or bare hex. Returns null when the value isn't a
- * 40-hex-character address.
+ * QIP-55 checksum form the @theqrl/web3 library accepts for `to`. The faucet
+ * accepts Q/q, 0x/0X, and bare Q128 aliases. Mixed-case bodies must carry a
+ * valid SHAKE256 checksum.
  */
 export function normalizeQrlAddress(input: string): string | null {
-  if (!input) return null;
-  let core = input.trim();
-  if (/^[Qq]/.test(core)) core = core.slice(1);
-  if (!/^[0-9a-fA-F]{40}$/.test(core)) return null;
-  return 'Q' + core.toLowerCase();
+  return canonicalizeQrlAddress(input);
 }
 
 /**

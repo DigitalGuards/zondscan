@@ -16,8 +16,8 @@ func hasHexPrefix(s string) bool {
 }
 
 const (
-	AddressLength = 40 // Length of address without prefix (0x or Q)
-	HashLength    = 64 // Length of transaction/block hash without 0x prefix
+	AddressLength = 128 // Length of a QIP-55 address without prefix (0x or Q)
+	HashLength    = 64  // Length of transaction/block hash without 0x prefix
 )
 
 // IsValidHexString checks if a string is a valid hex string with 0x prefix
@@ -110,13 +110,12 @@ func ConvertToQAddress(address string) string {
 }
 
 // IsZeroAddress reports whether addr is any accepted spelling of the zero
-// address (mint/burn endpoint): short or full-width, Q or 0x prefixed.
+// address (mint/burn endpoint): short or QIP-55-width, Q/q or 0x prefixed.
 func IsZeroAddress(addr string) bool {
-	switch addr {
-	case "Q0", "0x0",
-		"Q0000000000000000000000000000000000000000",
-		"0x0000000000000000000000000000000000000000":
-		return true
+	if !hasQPrefix(addr) && !hasHexPrefix(addr) {
+		return false
 	}
-	return false
+	body := StripAddressPrefix(addr)
+	return body == "0" ||
+		(len(body) == AddressLength && strings.Trim(body, "0") == "")
 }

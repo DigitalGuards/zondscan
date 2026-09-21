@@ -69,6 +69,8 @@ function isEmptyTransaction(txData: MaybeTxRecord): boolean {
          (!txData.BlockNumber || txData.BlockNumber === '0x0');
 }
 
+class TransactionNotFoundError extends Error {}
+
 async function getTransaction(txHash: string): Promise<TransactionDetails> {
   // Validate transaction hash format
   if (!isTxHash(txHash)) {
@@ -88,7 +90,7 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
 
   if (!response.ok) {
     if (response.status === 404) {
-      notFound();
+      throw new TransactionNotFoundError('Transaction not found');
     }
     throw new Error('Failed to fetch transaction details');
   }
@@ -115,17 +117,14 @@ async function getTransaction(txHash: string): Promise<TransactionDetails> {
     to: txData.To,
     value: ensureHexString(txData.Value),
     timestamp: txData.BlockTimestamp ? parseInt(txData.BlockTimestamp, 16) : 0,
-    gasUsed: ensureHexString(txData.GasUsed),
-    gasPrice: ensureHexString(txData.GasPrice),
+    gasUsed: txData.GasUsed || undefined,
+    gasPrice: txData.EffectiveGasPrice || undefined,
     nonce: txData.Nonce ? parseInt(txData.Nonce, 16) : 0,
     latestBlock: data.latestBlock,
-    PaidFees: txData.PaidFees ? Number(txData.PaidFees) : undefined,
+    PaidFees: typeof txData.PaidFees === 'string' ? txData.PaidFees : undefined,
     contractCreated: data.contractCreated || undefined,
     tokenTransfers: Array.isArray(data.tokenTransfers) ? data.tokenTransfers : undefined,
-    // input comes from the top-level data.input field. The backend fetches
-    // it from the node via qrl_getTransactionByHash because the syncer's
-    // Transaction struct uses the wrong JSON tag (`data` instead of `input`),
-    // leaving txData.Input empty for every historical tx.
+    // Indexed calldata survives RPC outages; the backend can enrich legacy gaps.
     input: typeof data.input === 'string' ? data.input : (txData.Input || undefined),
     logs: Array.isArray(data.logs) ? data.logs : undefined,
     targetContract: data.targetContract || undefined,
@@ -180,19 +179,15 @@ export default async function TransactionPage({ params }: PageProps): Promise<JS
   try {
     transaction = await getTransaction(txHash);
   } catch (error) {
+    if (error instanceof TransactionNotFoundError) notFound();
     console.error('Error in TransactionPage:', error);
     return (
       <div className="container mx-auto px-4">
         <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg mt-6">
-          <h2 className="text-red-500 font-semibold mb-2">Transaction Not Found</h2>
+          <h2 className="text-red-500 font-semibold mb-2">Transaction Details Unavailable</h2>
           <p className="text-text-secondary">
-            The transaction could not be found. This could mean:
+            The explorer could not retrieve this transaction. Please refresh to try again.
           </p>
-          <ul className="list-disc ml-6 mt-2 text-text-secondary">
-            <li>The transaction hash is incorrect</li>
-            <li>The transaction has not been mined yet</li>
-            <li>The transaction was dropped from the network</li>
-          </ul>
         </div>
       </div>
     );

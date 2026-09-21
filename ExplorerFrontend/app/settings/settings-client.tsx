@@ -57,7 +57,7 @@ function ToggleRow({
   );
 }
 
-const exampleAddress = 'Qa1b2c3d4e5f6789012345678901234567890abcdef';
+const exampleAddress = `Q${'0123456789abcdef'.repeat(8)}`;
 const exampleTimestamp = Date.UTC(2026, 8, 10, 12, 30, 0) / 1000;
 
 export default function SettingsClient() {

@@ -2,6 +2,7 @@ package routes
 
 import (
 	"backendAPI/db"
+	"backendAPI/qrladdress"
 	"regexp"
 	"strconv"
 	"strings"
@@ -10,9 +11,10 @@ import (
 // This file collects the input-format validators used by the route
 // handlers. Three address/hex validators coexist ON PURPOSE, each with a
 // different accepted grammar:
-//   - isValidAddressParam: Q/q or 0x/0X + 40 hex; the permissive form for
-//     read-route path params, both address shapes the frontend forwards.
-//   - isValidAddress: canonical uppercase "Q" + 40 hex only; reserved for
+//   - isValidAddressParam: Q/q or 0x/0X + 128 hex with QIP-55 mixed-case
+//     checksum validation; the permissive form for read-route path params.
+//   - isValidAddress: uppercase "Q" + 128 hex only, with the same checksum
+//     validation; reserved for
 //     the contract-write endpoints (verify/call/explain) whose inputs are
 //     never 0x-form.
 //   - isValidHex: 0x + even-length lowercase hex; validates calldata, not
@@ -26,14 +28,12 @@ import (
 // a junk string fan out into Mongo filters / RPC calls. The accepted
 // shapes mirror what the frontend search resolver emits (see
 // ExplorerFrontend/app/lib/searchResolver.ts).
+const qrlAddressHexLength = qrladdress.HexLength
+
 var (
 	// txHashRe matches a "0x"-prefixed 32-byte hash (the only tx/block
 	// hash form the explorer surfaces).
 	txHashRe = regexp.MustCompile(`^0x[0-9a-fA-F]{64}$`)
-	// addrParamRe matches both address forms the frontend forwards: the
-	// canonical "Q" + 40 hex (case-insensitive Q) and the "0x" + 40 hex
-	// contract form. db.normalizeAddress canonicalises both downstream.
-	addrParamRe = regexp.MustCompile(`^([Qq]|0x|0X)[0-9a-fA-F]{40}$`)
 	// validatorPubkeyRe matches a hex public-key lookup key (optional 0x
 	// prefix). Even-length and an upper bound are enforced in
 	// isValidValidatorID rather than the pattern, because Go's regexp
@@ -49,12 +49,14 @@ func isValidTxHash(s string) bool {
 }
 
 // isValidAddressParam reports whether s is one of the address forms a
-// route path param legitimately carries (Q + 40 hex or 0x + 40 hex).
+// route path param legitimately carries (Q/q + 128 hex or 0x/0X + 128 hex).
+// Uniform-case bodies are accepted; mixed-case bodies must have a valid
+// QIP-55 checksum.
 // Use this for :address / :query route guards; the stricter Q-only
 // isValidAddress stays reserved for the contract-write endpoints whose
 // inputs are never 0x-form.
 func isValidAddressParam(s string) bool {
-	return addrParamRe.MatchString(s)
+	return qrladdress.IsValidAlias(s)
 }
 
 // isValidValidatorID reports whether s is a decimal validator index or a
@@ -91,21 +93,11 @@ func normalizeContractAddr(addr string) string {
 	return db.NormalizeAddress(addr)
 }
 
-// isValidAddress is a permissive Q-prefix check. The full validation
-// happens at the storage layer (normalizeAddress canonicalises case).
+// isValidAddress applies the Q-only form used by contract-write endpoints.
+// Uniform-case bodies are accepted; mixed-case bodies must have a valid
+// QIP-55 checksum.
 func isValidAddress(a string) bool {
-	if !strings.HasPrefix(a, "Q") {
-		return false
-	}
-	if len(a) != 41 {
-		return false
-	}
-	for _, r := range a[1:] {
-		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
-			return false
-		}
-	}
-	return true
+	return qrladdress.IsValidCanonicalInput(a)
 }
 
 // isValidHex returns true for "0x"-prefixed even-length strings of hex

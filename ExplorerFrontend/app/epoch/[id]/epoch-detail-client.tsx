@@ -59,7 +59,7 @@ function formatGasUsed(hex: string): string {
 // The execution coinbase is always the zero address on this network, so
 // linking it as "proposer" would be misleading. Render a dash for it until
 // proposer-index enrichment lands (the column stays so it can slot in).
-const ZERO_ADDRESS = 'Q0000000000000000000000000000000000000000';
+const ZERO_ADDRESS = 'Q' + '0'.repeat(128);
 
 // ── Summary Row ──────────────────────────────────────────────────────────────
 

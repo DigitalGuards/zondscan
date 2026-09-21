@@ -4,9 +4,15 @@
   "private": true,
   "description": "Node entry that wraps @theqrl/hypc for the Go verifier backend. Invoked one-shot per verify request.",
   "scripts": {
-    "version": "node hypc-runner.js --version"
+    "version": "node hypc-runner.js --version",
+    "test": "node --test dependency-compat.test.cjs"
   },
   "dependencies": {
     "@theqrl/hypc": "^0.0.2"
+  },
+  "overrides": {
+    "@theqrl/hypc": {
+      "tmp": "0.2.7"
+    }
   }
 }

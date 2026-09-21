@@ -2,10 +2,13 @@
 
 import { useMemo, useState } from 'react';
 import axios, { AxiosError } from 'axios';
-import * as zondAbi from '@theqrl/web3-zond-abi';
+import * as zondAbi from '@theqrl/web3-qrl-abi';
 import type { ContractData } from '../types/address';
 import { qNormaliseAbiValue } from '../lib/helpers';
+import { assertVm64AbiSupport } from '../lib/vm64Abi';
 import config from '../../config';
+import { classifyStoredVerification } from '../lib/storedVerification';
+import ContractInteractionProvenanceNotice from './ContractInteractionProvenanceNotice';
 
 interface AbiInput {
   name: string;
@@ -30,13 +33,24 @@ interface ReadContractProps {
  * inputs for the function's parameters, a Call button, and a result area
  * that decodes the bytes returned by the backend's /contract/call proxy.
  *
- * ABI encode + decode runs entirely client-side via @theqrl/web3-zond-abi
- *, the backend never sees decoded values, it just forwards the hex
+ * ABI encode + decode runs entirely client-side through the installed codec.
+ * The runtime capability gate requires the QIP-55 64-byte word layout. The
+ * backend never sees decoded values, it just forwards the hex
  * calldata to the node and returns hex.
  */
 export default function ReadContract({ contractData }: ReadContractProps): JSX.Element {
+  const verificationStatus = useMemo(
+    () => classifyStoredVerification(contractData),
+    [contractData],
+  );
   const readFns = useMemo(() => {
-    if (!contractData.verified || !contractData.abi) return [] as AbiFunction[];
+    if (
+      !contractData.verified ||
+      verificationStatus === 'invalid-recorded' ||
+      !contractData.abi
+    ) {
+      return [] as AbiFunction[];
+    }
     try {
       const parsed = JSON.parse(contractData.abi) as AbiFunction[];
       return parsed.filter(
@@ -45,7 +59,7 @@ export default function ReadContract({ contractData }: ReadContractProps): JSX.E
     } catch {
       return [] as AbiFunction[];
     }
-  }, [contractData.abi, contractData.verified]);
+  }, [contractData.abi, contractData.verified, verificationStatus]);
 
   if (!contractData.verified) {
     return (
@@ -54,22 +68,42 @@ export default function ReadContract({ contractData }: ReadContractProps): JSX.E
       </div>
     );
   }
+  if (verificationStatus === 'invalid-recorded') {
+    return (
+      <ContractInteractionProvenanceNotice
+        status={verificationStatus}
+        interaction="Read"
+      />
+    );
+  }
   if (readFns.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-card-gradient p-4 text-sm text-text-secondary">
-        This contract has no view/pure functions to read.
+      <div className="space-y-3">
+        <ContractInteractionProvenanceNotice
+          status={verificationStatus}
+          interaction="Read"
+        />
+        <div className="rounded-lg border border-border bg-card-gradient p-4 text-sm text-text-secondary">
+          This contract has no view/pure functions to read.
+        </div>
       </div>
     );
   }
   return (
-    <div className="space-y-2 md:space-y-3">
-      {readFns.map((fn, idx) => (
-        <ReadFunctionCard
-          key={`${fn.name}-${idx}-${fn.inputs.map(i => i.type).join(',')}`}
-          fn={fn}
-          address={contractData.address}
-        />
-      ))}
+    <div className="space-y-3">
+      <ContractInteractionProvenanceNotice
+        status={verificationStatus}
+        interaction="Read"
+      />
+      <div className="space-y-2 md:space-y-3">
+        {readFns.map((fn, idx) => (
+          <ReadFunctionCard
+            key={`${fn.name}-${idx}-${fn.inputs.map(i => i.type).join(',')}`}
+            fn={fn}
+            address={contractData.address}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -91,6 +125,7 @@ function ReadFunctionCard({ fn, address }: { fn: AbiFunction; address: string })
     setResult(null);
     setReverted(false);
     try {
+      assertVm64AbiSupport();
       const args = fn.inputs.map((input, i) => parseArg(values[i] ?? '', input.type));
       const data = zondAbi.encodeFunctionCall(fn as never, args as never[]);
 
@@ -185,7 +220,7 @@ function ReadFunctionCard({ fn, address }: { fn: AbiFunction; address: string })
 }
 
 // parseArg converts a user-typed string into the right JS shape for
-// @theqrl/web3-zond-abi.encodeFunctionCall. Keep this minimal, anything
+// The installed ABI codec's encodeFunctionCall. Keep this minimal, anything
 // fancy (tuples, fixed arrays) the user can express as JSON.
 function parseArg(raw: string, type: string): unknown {
   const t = raw.trim();
@@ -201,7 +236,7 @@ function parseArg(raw: string, type: string): unknown {
     }
   }
   if (type.startsWith('uint') || type.startsWith('int')) {
-    // Hand string through, web3-zond-abi accepts strings for big ints.
+    // Hand the string through because the ABI codec accepts strings for big ints.
     return t;
   }
   return t;
@@ -217,12 +252,11 @@ function placeholderFor(type: string): string {
   return '';
 }
 
-// formatDecoded renders @theqrl/web3-zond-abi.decodeParameters output for
+// formatDecoded renders the ABI codec's decodeParameters output for
 // human consumption. The Result object carries both `0,1,…` index keys
 // and any named keys, plus a `__length__`. We flatten to a stable shape,
 // and qNormaliseAbiValue (in app/lib/helpers.ts) maps any address-typed
-// value from the legacy Z prefix the 0.3.x decoder emits to the canonical
-// Q prefix the rest of zondscan uses.
+// value to the canonical Q prefix used by the rest of ZondScan.
 function formatDecoded(decoded: unknown, outputs: { name: string; type: string }[]): string {
   const out: Record<string, unknown> = {};
   outputs.forEach((o, i) => {

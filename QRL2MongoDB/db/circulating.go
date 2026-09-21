@@ -32,7 +32,9 @@ func UpdateTotalBalance() {
 	// precision, then emit an integer-QRL string to preserve the existing
 	// `circulating` string contract the backend reads.
 	total := new(big.Float).SetPrec(256)
-	cursor, err := configs.AddressesCollections.Find(ctx, primitive.D{})
+	cursor, err := configs.AddressesCollections.Find(ctx, primitive.D{{
+		Key: "balanceStale", Value: primitive.D{{Key: "$ne", Value: true}},
+	}})
 	if err != nil {
 		configs.Logger.Error("Failed to query addresses", zap.Error(err))
 		return

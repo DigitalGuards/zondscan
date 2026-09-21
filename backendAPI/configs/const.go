@@ -17,6 +17,8 @@ const (
 	validatorsCollName                   = "validators"
 	contractCodeCollName                 = "contractCode"
 	contractVerificationsCollName        = "contractVerifications"
+	contractExplainChallengesCollName    = "contractExplainAuthChallenges"
+	contractExplainUsageCollName         = "contractExplainProviderUsage"
 	blockSizesCollName                   = "averageBlockSize"
 	totalCirculatingSupplyCollName       = "totalCirculatingSupply"
 	coinGeckoCollName                    = "coingecko"
@@ -52,6 +54,8 @@ var (
 	ValidatorsCollections                  *mongo.Collection
 	ContractInfoCollection                 *mongo.Collection
 	ContractVerificationsCollection        *mongo.Collection
+	ContractExplainChallengesCollection    *mongo.Collection
+	ContractExplainUsageCollection         *mongo.Collection
 	BlockSizesCollection                   *mongo.Collection
 	TotalCirculatingSupplyCollection       *mongo.Collection
 	CoinGeckoCollection                    *mongo.Collection

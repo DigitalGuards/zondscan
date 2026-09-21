@@ -10,7 +10,7 @@ import config from '../../../config';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { formatAmount, formatGasPrice, NATIVE_UNIT, truncateHash } from '../../lib/helpers';
+import { formatAmount, NATIVE_UNIT, truncateHash } from '../../lib/helpers';
 import type { PendingTransaction } from '@/app/types';
 import Badge from '../../components/Badge';
 import Pagination from '../../components/Pagination';

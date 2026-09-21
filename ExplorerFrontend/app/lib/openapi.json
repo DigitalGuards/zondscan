@@ -3,7 +3,7 @@
   "info": {
     "title": "ZondScan Public API",
     "version": "1.1.0",
-    "description": "ZondScan is the block explorer for the QRL 2.0 (Zond) public testnet. This API is free to use: no API key, no signup. On-chain data reflects the QRL 2.0 testnet, and testnet coins have no monetary value. The market order-book endpoint serves public QRL/USDT spot data from MEXC.\n\nCORS: GET endpoints respond with Access-Control-Allow-Origin: * and can be called directly from any web page. POST endpoints allow cross-origin browser access only from the explorer's own origins and from browser-extension origins, so browser apps hosted elsewhere should treat POST endpoints as server-side calls.\n\nPagination: list endpoints take page and limit query parameters, and limit is capped at 100 items. Most list endpoints number pages from 1; the contract and token list endpoints number pages from 0. Each operation documents its own defaults.\n\nNumeric encoding: on-chain quantities (block fields, gas values, raw transaction values) are 0x-prefixed hexadecimal strings. Indexed aggregates are decimal strings or JSON numbers. Coin amounts are denominated in Quanta (1 Quanta = 10^9 Shor = 10^18 Planck); fields carrying exact amounts use decimal strings.\n\nCaching and limits: hot endpoints are cached server side for 3 to 30 seconds, noted per operation. The three POST contract endpoints carry per-IP rate limits and return 429 with body {\"error\": \"rate limit exceeded\"} when exhausted."
+    "description": "ZondScan is the block explorer for the QRL 2.0 (Zond) public testnet. This API is free to use: no API key, no signup. On-chain data reflects the QRL 2.0 testnet, and testnet coins have no monetary value. The market order-book endpoint serves public QRL/USDT spot data from MEXC.\n\nCORS: GET endpoints respond with Access-Control-Allow-Origin: * and can be called directly from any web page. POST endpoints allow cross-origin browser access only from the explorer's own origins and from browser-extension origins, so browser apps hosted elsewhere should treat POST endpoints as server-side calls.\n\nPagination: list endpoints take page and limit query parameters, and limit is capped at 100 items. Most list endpoints number pages from 1; the contract and token list endpoints number pages from 0. Each operation documents its own defaults.\n\nNumeric encoding: on-chain quantities (block fields, gas values, raw transaction values) are 0x-prefixed hexadecimal strings. Indexed aggregates are decimal strings or JSON numbers. Coin amounts are denominated in Quanta (1 Quanta = 10^9 Shor = 10^18 Planck); fields carrying exact amounts use decimal strings.\n\nCaching and limits: hot endpoints are cached server side for 3 to 30 seconds, noted per operation. The four POST contract endpoints carry per-IP rate limits and return 429 with body {\"error\": \"rate limit exceeded\"} when exhausted."
   },
   "servers": [{ "url": "https://zondscan.com" }],
   "tags": [
@@ -378,7 +378,7 @@
                       "gasUsed": "0x5208",
                       "gasLimit": "0x1c9c380",
                       "baseFeePerGas": "0x3b9aca00",
-                      "miner": "Q20d20b8026b8f02540249f42acbd6181dc4a0a48",
+                      "miner": "QaaaAAaaaAAaAaaAaAAAAaAAAaAaAaAAaAaaAaaaaAAAAAAAAaAAAAaAaAAaaAAaaaaAaAAAAaaAaAAaaaaaaAaAAaaaaAaAaaaaAaaaAAAAaAAAAaAaAaaAAAaAaaaAA",
                       "size": "0x2d0",
                       "transactions": []
                     }
@@ -550,7 +550,7 @@
         "tags": ["Transactions & Mempool"],
         "operationId": "getTransaction",
         "summary": "Transaction detail",
-        "description": "Full detail for one confirmed transaction: transfer record, live receipt status and event logs, calldata, token transfers, internal calls, and contract metadata for decoding. This endpoint is deliberately uncached so a newly mined transaction shows its true confirmation count immediately.",
+        "description": "Full detail for one confirmed transaction: transfer record, indexed receipt accounting with live enrichment for legacy gaps, event logs, calldata, token transfers, internal calls, and contract metadata for decoding. This endpoint is deliberately uncached so a newly mined transaction shows its true confirmation count immediately.",
         "parameters": [
           { "name": "query", "in": "path", "required": true, "description": "Transaction hash: 0x followed by 64 hex characters.", "schema": { "type": "string", "pattern": "^0x[0-9a-fA-F]{64}$" } }
         ],
@@ -564,7 +564,7 @@
                   "properties": {
                     "response": { "$ref": "#/components/schemas/Transfer" },
                     "latestBlock": { "type": "integer", "description": "Latest indexed block height as a decimal integer." },
-                    "receiptStatus": { "type": "string", "description": "EVM receipt status: 0x1 success, 0x0 reverted. Absent when the receipt fetch failed." },
+                    "receiptStatus": { "type": "string", "description": "EVM receipt status: 0x1 success, 0x0 reverted. Indexed status survives receipt fetch failure. Absent only when neither storage nor a matching live receipt supplies it." },
                     "logs": {
                       "type": "array",
                       "items": {
@@ -635,8 +635,8 @@
                     "ID": "665f1c2ab3d4e5f60718293a",
                     "BlockNumber": "0x24420",
                     "BlockTimestamp": "0x6a743280",
-                    "From": "Q20d20b8026b8f02540249f42acbd6181dc4a0a48",
-                    "To": "Q105c1fdb2a1b03f8b256d6a0b7a0da2a30653d19",
+                    "From": "QaaaAAaaaAAaAaaAaAAAAaAAAaAaAaAAaAaaAaaaaAAAAAAAAaAAAAaAaAAaaAAaaaaAaAAAAaaAaAAaaaaaaAaAAaaaaAaAaaaaAaaaAAAAaAAAAaAaAaaAAAaAaaaAA",
+                    "To": "QBbBbbBBbBbBBBBbBbBbBBbBBBbBBBbBbBBBbbbBBbBBbBbbBBBBbBBbbbbbBbbBBbbBBBbbBBbbbBbBBbBBbbbbBBbBBBbBbBBbbBbbBBbBBBBbbBBbbbbBBBbbBbbBb",
                     "TxHash": "0x9c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d",
                     "Value": "0x2386f26fc10000",
                     "GasUsed": "0x5208",
@@ -818,7 +818,7 @@
         "summary": "Address detail aggregation",
         "description": "Everything the address page needs in one call: balance record, transaction counts, activity range, richlist rank, paginated transaction and internal-transaction lists, and contract metadata when the address is a contract. Cached server side for 10 seconds.",
         "parameters": [
-          { "name": "query", "in": "path", "required": true, "description": "Address: Q or 0x followed by 40 hex characters.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{40}$" } },
+          { "name": "query", "in": "path", "required": true, "description": "Address alias: Q/q or 0x/0X followed by 128 hex characters. Mixed-case bodies require a valid QIP-55 checksum.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{128}$" } },
           { "name": "page", "in": "query", "description": "Page number for the transaction lists, starting at 1.", "schema": { "type": "integer", "default": 1, "minimum": 1 } },
           { "name": "limit", "in": "query", "description": "Items per page. Capped at 100.", "schema": { "type": "integer", "default": 10, "maximum": 100 } }
         ],
@@ -875,7 +875,7 @@
                   }
                 },
                 "example": {
-                  "address": { "ObjectId": "665f1c2ab3d4e5f60718293a", "id": "Q20d20b8026b8f02540249f42acbd6181dc4a0a48", "balance": 12.5, "nonce": 3 },
+                  "address": { "ObjectId": "665f1c2ab3d4e5f60718293a", "id": "QaaaAAaaaAAaAaaAaAAAAaAAAaAaAaAAaAaaAaaaaAAAAAAAAaAAAAaAaAAaaAAaaaaAaAAAAaaAaAAaaaaaaAaAAaaaaAaAaaaaAaaaAAAAaAAAAaAaAaaAAAaAaaaAA", "balance": 12.5, "nonce": 3 },
                   "transactions_count": 2,
                   "internal_transactions_count": 0,
                   "first_seen": 1782300000,
@@ -885,9 +885,9 @@
                     {
                       "InOut": 1,
                       "TxType": "transfer",
-                      "Address": "Q20d20b8026b8f02540249f42acbd6181dc4a0a48",
-                      "From": "Q20d20b8026b8f02540249f42acbd6181dc4a0a48",
-                      "To": "Q105c1fdb2a1b03f8b256d6a0b7a0da2a30653d19",
+                      "Address": "QaaaAAaaaAAaAaaAaAAAAaAAAaAaAaAAaAaaAaaaaAAAAAAAAaAAAAaAaAAaaAAaaaaAaAAAAaaAaAAaaaaaaAaAAaaaaAaAaaaaAaaaAAAAaAAAAaAaAaaAAAaAaaaAA",
+                      "From": "QaaaAAaaaAAaAaaAaAAAAaAAAaAaAaAAaAaaAaaaaAAAAAAAAaAAAAaAaAAaaAAaaaaAaAAAAaaAaAAaaaaaaAaAAaaaaAaAaaaaAaaaAAAAaAAAAaAaAaaAAAaAaaaAA",
+                      "To": "QBbBbbBBbBbBBBBbBbBbBBbBBBbBBBbBbBBBbbbBBbBBbBbbBBBBbBBbbbbbBbbBBbbBBBbbBBbbbBbBBbBBbbbbBBbBBBbBbBBbbBbbBBbBBBBbbBBbbbbBBBbbBbbBb",
                       "TxHash": "0x9c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d",
                       "TimeStamp": "1786000000",
                       "Amount": "3.300000000000000000",
@@ -908,6 +908,98 @@
             "description": "Invalid address format.",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
           },
+          "503": {
+            "description": "The indexed native balance was invalidated by a chain reorganization and is being reconciled. Retry-After is 5 seconds.",
+            "headers": {
+              "Retry-After": {
+                "description": "Suggested retry delay in seconds.",
+                "schema": { "type": "integer", "example": 5 }
+              }
+            },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/qns/resolve/{name}": {
+      "get": {
+        "tags": ["Addresses"],
+        "operationId": "resolveQnsName",
+        "summary": "Resolve a QNS name",
+        "description": "Resolves a conservatively normalized ASCII name below .qrl to its canonical checksummed QIP-55 address. Resolution is enabled only when the backend has a registry address and expected chain ID configured, and it verifies both the connected chain and registry bytecode before reading records. Successful deployment checks and name resolutions are cached server side for 15 seconds. Rate limited per IP: bucket of 30 requests, refilling 30 per minute.",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "QNS name below .qrl. ASCII uppercase folds to lowercase; labels accept a-z, 0-9, and hyphen. Empty labels, Unicode, and the reserved double-hyphen pattern in positions three and four are rejected.",
+            "schema": { "type": "string", "minLength": 5, "maxLength": 255 },
+            "example": "moscowchill.qrl"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The normalized name and its canonical QIP-55 address.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string", "description": "Normalized lowercase QNS name." },
+                    "address": { "type": "string", "description": "Canonical uppercase-Q, SHAKE256-checksummed QIP-55 address." }
+                  },
+                  "required": ["name", "address"]
+                },
+                "example": {
+                  "name": "moscowchill.qrl",
+                  "address": "QaaaAAaaaAAaAaaAaAAAAaAAAaAaAaAAaAaaAaaaaAAAAAAAAaAAAAaAaAAaaAAaaaaAaAAAAaaAaAAaaaaaaAaAAaaaaAaAaaaaAaaaAAAAaAAAAaAaAaaAAAaAaaaAA"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or unsupported QNS name.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "error": "invalid QNS name" } } }
+          },
+          "404": {
+            "description": "The name has no resolver or its resolver has no address record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string", "enum": ["QNS name has no resolver", "QNS name has no address record"] },
+                    "name": { "type": "string", "description": "Normalized QNS name." }
+                  },
+                  "required": ["error", "name"]
+                },
+                "example": { "error": "QNS name has no address record", "name": "moscowchill.qrl" }
+              }
+            }
+          },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "502": {
+            "description": "The node RPC failed or returned a malformed QNS response.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "error": "QNS resolution failed" } } }
+          },
+          "503": {
+            "description": "QNS is unconfigured, the configured chain does not match, or registry bytecode is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "examples": {
+                  "unconfigured": { "value": { "error": "QNS resolution is not configured" } },
+                  "chainMismatch": { "value": { "error": "QNS deployment does not match the connected chain" } },
+                  "registryUnavailable": { "value": { "error": "QNS registry is unavailable on the connected chain" } }
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The bounded QNS lookup timed out.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "error": "QNS resolution timed out" } } }
+          },
           "500": { "$ref": "#/components/responses/InternalError" }
         }
       }
@@ -919,7 +1011,7 @@
         "summary": "Non-zero transactions for an address",
         "description": "Paginated list of value-moving transactions touching the address.",
         "parameters": [
-          { "name": "address", "in": "path", "required": true, "description": "Address: Q or 0x followed by 40 hex characters.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{40}$" } },
+          { "name": "address", "in": "path", "required": true, "description": "Address alias: Q/q or 0x/0X followed by 128 hex characters. Mixed-case bodies require a valid QIP-55 checksum.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{128}$" } },
           { "name": "page", "in": "query", "description": "Page number, starting at 1.", "schema": { "type": "integer", "default": 1, "minimum": 1 } },
           { "name": "limit", "in": "query", "description": "Items per page. Capped at 100.", "schema": { "type": "integer", "default": 5, "maximum": 100 } }
         ],
@@ -955,7 +1047,7 @@
         "summary": "Token transfers touching an address",
         "description": "Token and NFT transfer events where the address is sender or recipient, across every contract.",
         "parameters": [
-          { "name": "address", "in": "path", "required": true, "description": "Address: Q or 0x followed by 40 hex characters.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{40}$" } },
+          { "name": "address", "in": "path", "required": true, "description": "Address alias: Q/q or 0x/0X followed by 128 hex characters. Mixed-case bodies require a valid QIP-55 checksum.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{128}$" } },
           { "name": "page", "in": "query", "description": "Page number, starting at 1.", "schema": { "type": "integer", "default": 1, "minimum": 1 } },
           { "name": "limit", "in": "query", "description": "Items per page. Capped at 100.", "schema": { "type": "integer", "default": 5, "maximum": 100 } }
         ],
@@ -992,7 +1084,7 @@
         "summary": "Token balances for an address",
         "description": "All indexed token holdings for a wallet. By default every standard is returned (ERC-20 plus per-id ERC-721 and ERC-1155 rows); use the standard filter to scope to one.",
         "parameters": [
-          { "name": "address", "in": "path", "required": true, "description": "Address: Q or 0x followed by 40 hex characters.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{40}$" } },
+          { "name": "address", "in": "path", "required": true, "description": "Address alias: Q/q or 0x/0X followed by 128 hex characters. Mixed-case bodies require a valid QIP-55 checksum.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{128}$" } },
           { "name": "standard", "in": "query", "description": "Scope the response to one token standard.", "schema": { "type": "string", "enum": ["ERC-20", "ERC-721", "ERC-1155"] } }
         ],
         "responses": {
@@ -1026,7 +1118,7 @@
         "summary": "NFT holdings for an address",
         "description": "Per (contract, tokenID) NFT holdings joined with collection metadata and per-token off-chain metadata (name, image, attributes) in one call. Covers ERC-721 and ERC-1155.",
         "parameters": [
-          { "name": "address", "in": "path", "required": true, "description": "Address: Q or 0x followed by 40 hex characters.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{40}$" } },
+          { "name": "address", "in": "path", "required": true, "description": "Address alias: Q/q or 0x/0X followed by 128 hex characters. Mixed-case bodies require a valid QIP-55 checksum.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{128}$" } },
           { "name": "standard", "in": "query", "description": "Scope the response to one NFT standard.", "schema": { "type": "string", "enum": ["ERC-721", "ERC-1155"] } }
         ],
         "responses": {
@@ -1225,7 +1317,7 @@
         "summary": "Token summary",
         "description": "Summary statistics for one token contract: identity, supply, holder count, transfer count, and creation provenance.",
         "parameters": [
-          { "name": "address", "in": "path", "required": true, "description": "Contract address: Q or 0x followed by 40 hex characters.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{40}$" } }
+          { "name": "address", "in": "path", "required": true, "description": "Contract address alias: Q/q or 0x/0X followed by 128 hex characters. Mixed-case bodies require a valid QIP-55 checksum.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{128}$" } }
         ],
         "responses": {
           "200": {
@@ -1249,14 +1341,14 @@
                   }
                 },
                 "example": {
-                  "contractAddress": "Q30b4e6b5d1a2c3f4e5d6a7b8c9d0e1f2a3b4c5d6",
+                  "contractAddress": "QCCCccccCcCcCccCcCccCCCccCcCcCcccccCCccCccCccccCcCCcCcccCCcCcccccccCccCcCccccCCcCccCccCcccCcCCCccCcCccCcCccccccCcCcCcccCcCcCCCccC",
                   "name": "Example Token",
                   "symbol": "EXT",
                   "decimals": 18,
                   "totalSupply": "1000000000000000000000000",
                   "holderCount": 42,
                   "transferCount": 310,
-                  "creatorAddress": "Q20d20b8026b8f02540249f42acbd6181dc4a0a48",
+                  "creatorAddress": "QaaaAAaaaAAaAaaAaAAAAaAAAaAaAaAAaAaaAaaaaAAAAAAAAaAAAAaAaAAaaAAaaaaAaAAAAaaAaAAaaaaaaAaAAaaaaAaAaaaaAaaaAAAAaAAAAaAaAaaAAAaAaaaAA",
                   "creationTxHash": "0x9c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d",
                   "creationBlock": "0x1a2b3"
                 }
@@ -1281,7 +1373,7 @@
         "summary": "Token holders",
         "description": "Holders of a token contract. For NFT contracts an optional tokenID filter scopes to holders of one id; without it holders are aggregated across all ids. Pagination is 0-indexed on this endpoint.",
         "parameters": [
-          { "name": "address", "in": "path", "required": true, "description": "Contract address: Q or 0x followed by 40 hex characters.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{40}$" } },
+          { "name": "address", "in": "path", "required": true, "description": "Contract address alias: Q/q or 0x/0X followed by 128 hex characters. Mixed-case bodies require a valid QIP-55 checksum.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{128}$" } },
           { "name": "tokenID", "in": "query", "description": "Filter holders to one NFT token id (decimal string).", "schema": { "type": "string" } },
           { "name": "page", "in": "query", "description": "Page number, starting at 0.", "schema": { "type": "integer", "default": 0, "minimum": 0 } },
           { "name": "limit", "in": "query", "description": "Items per page. Capped at 100.", "schema": { "type": "integer", "default": 25, "maximum": 100 } }
@@ -1319,7 +1411,7 @@
         "summary": "Minted token ids on an NFT contract",
         "description": "Distinct token ids minted on an NFT contract with per-id holder counts and, when fetched, off-chain metadata (name, image, description). Returns an empty list for ERC-20 contracts. Pagination is 0-indexed on this endpoint.",
         "parameters": [
-          { "name": "address", "in": "path", "required": true, "description": "Contract address: Q or 0x followed by 40 hex characters.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{40}$" } },
+          { "name": "address", "in": "path", "required": true, "description": "Contract address alias: Q/q or 0x/0X followed by 128 hex characters. Mixed-case bodies require a valid QIP-55 checksum.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{128}$" } },
           { "name": "page", "in": "query", "description": "Page number, starting at 0.", "schema": { "type": "integer", "default": 0, "minimum": 0 } },
           { "name": "limit", "in": "query", "description": "Items per page. Capped at 100.", "schema": { "type": "integer", "default": 25, "maximum": 100 } }
         ],
@@ -1371,7 +1463,7 @@
         "summary": "Transfers of one token contract",
         "description": "Transfer events emitted by one token contract, newest first. Pagination is 0-indexed on this endpoint.",
         "parameters": [
-          { "name": "address", "in": "path", "required": true, "description": "Contract address: Q or 0x followed by 40 hex characters.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{40}$" } },
+          { "name": "address", "in": "path", "required": true, "description": "Contract address alias: Q/q or 0x/0X followed by 128 hex characters. Mixed-case bodies require a valid QIP-55 checksum.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{128}$" } },
           { "name": "page", "in": "query", "description": "Page number, starting at 0.", "schema": { "type": "integer", "default": 0, "minimum": 0 } },
           { "name": "limit", "in": "query", "description": "Items per page. Capped at 100.", "schema": { "type": "integer", "default": 25, "maximum": 100 } }
         ],
@@ -1408,7 +1500,7 @@
         "summary": "Per-token NFT metadata",
         "description": "Full off-chain metadata for one (contract, tokenID) pair, including OpenSea-style attributes. The id must be a decimal integer; the concrete sibling segments (info, holders, tokens, transfers) take priority over this route.",
         "parameters": [
-          { "name": "address", "in": "path", "required": true, "description": "Contract address: Q or 0x followed by 40 hex characters.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{40}$" } },
+          { "name": "address", "in": "path", "required": true, "description": "Contract address alias: Q/q or 0x/0X followed by 128 hex characters. Mixed-case bodies require a valid QIP-55 checksum.", "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{128}$" } },
           { "name": "id", "in": "path", "required": true, "description": "Token id as a decimal integer, at most 80 characters.", "schema": { "type": "string", "pattern": "^[0-9]+$" } }
         ],
         "responses": {
@@ -1882,16 +1974,20 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "address": { "type": "string", "description": "Canonical Q-prefixed contract address (uppercase Q plus 40 hex characters)." },
+                  "address": { "type": "string", "description": "Canonical QIP-55 contract address (uppercase Q plus 128 checksum-cased hex characters)." },
                   "sourceCode": { "type": "string" },
-                  "contractName": { "type": "string" },
+                  "contractName": { "type": "string", "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$", "description": "Hyperion identifier. Dollar signs are valid in both the first and subsequent positions." },
                   "compilerVersion": { "type": "string", "description": "Build id from /api/contract/compiler-info. Empty selects the default build." },
                   "optimizerEnabled": { "type": "boolean" },
-                  "optimizerRuns": { "type": "integer" },
+                  "optimizerRuns": { "type": "integer", "description": "Effective optimizer run count. When optimization is enabled, zero or a negative value is canonicalized to 200 before enqueue, compilation, and persistence." },
                   "evmVersion": { "type": "string" },
                   "constructorArguments": { "type": "string" },
                   "libraries": { "type": "object", "additionalProperties": { "type": "string" } },
-                  "imports": { "type": "object", "additionalProperties": { "type": "string" } },
+                  "imports": {
+                    "type": "object",
+                    "description": "Additional Hyperion sources keyed by clean relative forward-slash paths. Paths are canonicalized before compilation and persistence; aliases, absolute paths, root escapes, and collisions with <contractName>.hyp are rejected.",
+                    "additionalProperties": { "type": "string" }
+                  },
                   "license": { "type": "string" }
                 },
                 "required": ["address", "sourceCode", "contractName"]
@@ -1912,7 +2008,7 @@
                     "address": { "type": "string" }
                   }
                 },
-                "example": { "jobId": "9f2c4a6e8b0d1f3a", "status": "pending", "address": "Q30b4e6b5d1a2c3f4e5d6a7b8c9d0e1f2a3b4c5d6" }
+                "example": { "jobId": "9f2c4a6e8b0d1f3a", "status": "pending", "address": "QCCCccccCcCcCccCcCccCCCccCcCcCcccccCCccCccCccccCcCCcCcccCCcCcccccccCccCcCccccCCcCccCccCcccCcCCCccCcCccCcCccccccCcCcCcccCcCcCCCccC" }
               }
             }
           },
@@ -1935,7 +2031,7 @@
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
           },
           "409": {
-            "description": "A verification job is already in flight for this address.",
+            "description": "A verification job is already in flight, or the stored verification record is invalid and requires operator repair. Public re-verification never overwrites an invalid stored record.",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
           },
           "429": { "$ref": "#/components/responses/RateLimited" },
@@ -1970,16 +2066,60 @@
                     "error": { "type": "string" },
                     "createdAt": { "type": "string" },
                     "updatedAt": { "type": "string" },
-                    "payload": { "type": "object", "description": "Echo of the submitted request.", "additionalProperties": true },
+                    "target": {
+                      "type": "object",
+                      "description": "Canonical deployment generation captured before compilation and revalidated before publication.",
+                      "properties": {
+                        "address": { "type": "string", "pattern": "^Q[0-9a-f]{128}$" },
+                        "creationTransaction": { "type": "string", "pattern": "^(?:|0x[0-9a-f]{64})$" },
+                        "creationBlockNumber": { "type": "string", "pattern": "^0x(?:0|[1-9a-f][0-9a-f]*)$" },
+                        "creationBlockHash": { "type": "string", "pattern": "^0x[0-9a-f]{64}$" },
+                        "chainId": { "type": "string", "pattern": "^0x(?:0|[1-9a-f][0-9a-f]*)$" },
+                        "deployedCodeSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                        "genesisContract": { "type": "boolean" }
+                      },
+                      "required": ["address", "creationBlockNumber", "creationBlockHash", "chainId", "deployedCodeSha256", "genesisContract"],
+                      "additionalProperties": false
+                    },
+                    "payload": {
+                      "type": "object",
+                      "description": "Echo of the submitted request.",
+                      "properties": {
+                        "sourceCode": { "type": "string" },
+                        "contractName": { "type": "string" },
+                        "compilerVersion": { "type": "string" },
+                        "compilerProvenance": { "$ref": "#/components/schemas/CompilerProvenance" },
+                        "optimizationEnabled": { "type": "boolean" },
+                        "optimizationRuns": { "type": "integer" },
+                        "evmVersion": { "type": "string" },
+                        "constructorArguments": { "type": "string" },
+                        "libraries": { "type": "object", "additionalProperties": { "type": "string" } },
+                        "imports": {
+                          "type": "object",
+                          "description": "Canonical effective import sources used for compilation.",
+                          "additionalProperties": { "type": "string" }
+                        },
+                        "license": { "type": "string" },
+                        "verificationMethod": { "type": "string", "const": "full-source" }
+                      },
+                      "additionalProperties": true
+                    },
                     "result": {
                       "type": "object",
                       "properties": {
                         "abi": { "type": "string" },
                         "bytecodeHash": { "type": "string" },
+                        "artifactDigest": {
+                          "type": "string",
+                          "pattern": "^qrl\\.contract-verification-artifact\\.v2:sha256:[0-9a-f]{64}$",
+                          "description": "V2 digest binding the source bundle, ABI, compiler identity and settings, and canonical deployment target."
+                        },
+                        "compilerProvenance": { "$ref": "#/components/schemas/CompilerProvenance" },
                         "verifiedAt": { "type": "string" }
                       }
                     }
-                  }
+                  },
+                  "required": ["jobId", "address", "status", "target", "payload"]
                 }
               }
             }
@@ -2008,6 +2148,9 @@
                   "properties": {
                     "language": { "type": "string" },
                     "buildId": { "type": "string" },
+                    "kind": { "type": "string", "enum": ["native"] },
+                    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                    "provenance": { "$ref": "#/components/schemas/CompilerProvenance" },
                     "default": { "type": "string" },
                     "compilers": {
                       "type": "array",
@@ -2016,6 +2159,9 @@
                         "properties": {
                           "buildId": { "type": "string" },
                           "language": { "type": "string" },
+                          "kind": { "type": "string", "enum": ["native"] },
+                          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                          "provenance": { "$ref": "#/components/schemas/CompilerProvenance" },
                           "default": { "type": "boolean" }
                         }
                       }
@@ -2045,7 +2191,7 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "to": { "type": "string", "description": "Canonical Q-prefixed contract address." },
+                  "to": { "type": "string", "description": "Canonical QIP-55 contract address." },
                   "data": { "type": "string", "description": "ABI-encoded calldata: 0x-prefixed, even-length, lowercase hex. 0x alone is allowed for zero-argument functions." }
                 },
                 "required": ["to", "data"]
@@ -2106,11 +2252,20 @@
         "tags": ["Contract Interaction"],
         "operationId": "explainContract",
         "summary": "AI explanation of a verified contract",
-        "description": "Generates or returns a cached plain-language explanation of a verified contract's source. Only verified contracts can be analyzed. Rate limited per IP: bucket of 10 requests, refilling 4 per minute. Regeneration is capped at 5 per contract per 7 day window.",
+        "description": "Generates or returns a cached plain-language explanation of a verified contract's complete source bundle. The stored compiler provenance and source-bundle identity must both be digest-backed. Rate limited per IP: bucket of 10 requests, refilling 4 per minute. Regeneration is capped at 5 per contract per 7 day window.",
         "parameters": [
-          { "name": "address", "in": "path", "required": true, "description": "Canonical Q-prefixed contract address.", "schema": { "type": "string" } },
-          { "name": "regenerate", "in": "query", "description": "Set to 1 or true to force a fresh explanation instead of the cached one.", "schema": { "type": "string", "enum": ["1", "true"] } }
+          { "name": "address", "in": "path", "required": true, "description": "Uppercase-Q QIP-55 contract address. Mixed-case bodies require a valid checksum.", "schema": { "type": "string", "pattern": "^Q[0-9a-fA-F]{128}$" } },
+          { "name": "regenerate", "in": "query", "description": "Set the exact raw query to regenerate=1 to force a fresh explanation instead of the cached one.", "schema": { "type": "string", "const": "1" } }
         ],
+        "requestBody": {
+          "required": false,
+          "description": "Required only for regeneration. Contains the one-use creator challenge and its bound qrl_signMessage proof.",
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ContractExplainAuthorizationRequest" }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Explanation, fresh or cached.",
@@ -2130,15 +2285,27 @@
             }
           },
           "400": {
-            "description": "Invalid address format.",
+            "description": "Invalid address, query string, or regeneration authorization body.",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
           },
           "403": {
             "description": "The contract exists and is unverified, so it cannot be analyzed.",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
           },
+          "401": {
+            "description": "The regeneration authorization proof is invalid, expired, or already used.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
           "404": {
             "description": "The address is unknown as a contract.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "409": {
+            "description": "The verification lacks digest-backed compiler or source-bundle provenance, or the source bundle changed during generation.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "413": {
+            "description": "The regeneration authorization body exceeds 24 KiB.",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
           },
           "429": {
@@ -2150,7 +2317,48 @@
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
           },
           "503": {
-            "description": "The AI explainer is not configured on this deployment.",
+            "description": "The AI explainer or regeneration authorization dependency is unavailable on this deployment.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/api/contract/explain/{address}/challenge": {
+      "post": {
+        "tags": ["Contract Interaction"],
+        "operationId": "createContractExplainChallenge",
+        "summary": "Issue a creator authorization challenge",
+        "description": "Creates a five-minute, one-use qrl_signMessage challenge for contract-creator AI regeneration. The signed bytes bind the trusted explorer origin, execution chain, HTTP method and route, contract, creator, nonce, issue time, and expiry. The request body must be empty. Responses are never cached.",
+        "parameters": [
+          { "name": "address", "in": "path", "required": true, "description": "Uppercase-Q QIP-55 contract address. Mixed-case bodies require a valid checksum.", "schema": { "type": "string", "pattern": "^Q[0-9a-fA-F]{128}$" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "A fresh creator-bound challenge. Sign messageHex verbatim.",
+            "headers": {
+              "Cache-Control": { "schema": { "type": "string", "const": "no-store" } }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ContractExplainChallenge" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid address or a non-empty request body.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "404": {
+            "description": "The address is unknown as a contract.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "409": {
+            "description": "The contract creator is unavailable.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "503": {
+            "description": "The explainer, authorization service, execution-chain check, or challenge store is unavailable.",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
           }
         }
@@ -2163,7 +2371,7 @@
         "summary": "Search redirect",
         "description": "Resolves a free-form query (address, transaction hash, or block number) and responds with a 302 redirect to the matching explorer page. Unresolvable queries redirect to the homepage. Served by the explorer web app.",
         "parameters": [
-          { "name": "q", "in": "query", "description": "Address (Q or 0x plus 40 hex), transaction hash (64 hex, 0x optional), or block number (decimal or 0x hex).", "schema": { "type": "string" } }
+          { "name": "q", "in": "query", "description": "Address (Q/q, 0x/0X, or bare 128 hex; mixed case requires a valid QIP-55 checksum), transaction hash (64 hex, 0x optional), or block number (decimal or 0x hex).", "schema": { "type": "string" } }
         ],
         "responses": {
           "302": {
@@ -2213,7 +2421,7 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "address": { "type": "string", "description": "Q-prefixed recipient address (Q plus 40 hex characters)." },
+                  "address": { "type": "string", "description": "Recipient address alias: Q/q, 0x/0X, or bare 128 hex. Mixed-case bodies require a valid QIP-55 checksum." },
                   "turnstileToken": { "type": "string", "description": "Cloudflare Turnstile response token." }
                 },
                 "required": ["address"]
@@ -2238,7 +2446,7 @@
                 "example": {
                   "txHash": "0x9c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d",
                   "amount": "10",
-                  "to": "Q20d20b8026b8f02540249f42acbd6181dc4a0a48",
+                  "to": "QaaaAAaaaAAaAaaAaAAAAaAAAaAaAaAAaAaaAaaaaAAAAAAAAaAAAAaAaAAaaAAaaaaAaAAAAaaAaAAaaaaaaAaAAaaaaAaAaaaaAaaaAAAAaAAAAaAaAaaAAAaAaaaAA",
                   "explorerUrl": "/tx/0x9c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d"
                 }
               }
@@ -2513,13 +2721,16 @@
           "chainId": { "type": "string" },
           "signature": { "type": "string" },
           "publicKey": { "type": "string" },
-          "data": { "type": "string" },
-          "status": { "type": "string" }
+          "input": { "type": "string", "description": "Transaction calldata, stored internally under the legacy BSON data key." },
+          "data": { "type": "string", "description": "Compatibility alias of input for existing block-response clients." },
+          "status": { "type": "string" },
+          "gasUsed": { "type": "string", "description": "Optional indexed actual receipt gas consumption." },
+          "effectiveGasPrice": { "type": "string", "description": "Optional indexed effective gas price." }
         }
       },
       "Transfer": {
         "type": "object",
-        "description": "Stored transfer record for one transaction. BlockNumber, BlockTimestamp, Value, GasUsed, GasPrice, Nonce, and Size are 0x-prefixed hex strings. Signature is the transaction's ML-DSA-87 signature and Pk is the signer's public key.",
+        "description": "Transaction detail projected from the indexed block. Available numeric quantities are 0x-prefixed hex strings; receipt quantities are empty when unavailable. PaidFees is an optional exact Quanta decimal string. Signature is the transaction's ML-DSA-87 signature and Pk is the signer's public key.",
         "properties": {
           "ID": { "type": "string", "description": "Internal record id." },
           "BlockNumber": { "type": "string" },
@@ -2528,8 +2739,13 @@
           "To": { "type": "string" },
           "TxHash": { "type": "string" },
           "Value": { "type": "string" },
-          "GasUsed": { "type": "string", "description": "Actual gas consumed when the receipt is available, the gas limit otherwise." },
+          "GasUsed": { "type": "string", "description": "Actual receipt gas consumed, or an empty string when unavailable." },
+          "GasLimit": { "type": "string", "description": "Transaction gas limit, separate from consumption." },
           "GasPrice": { "type": "string" },
+          "EffectiveGasPrice": { "type": "string", "description": "Receipt effective gas price, or an empty string when unavailable." },
+          "Status": { "type": "string", "description": "Receipt execution status: 0x1 success, 0x0 revert, empty when unavailable." },
+          "PaidFees": { "type": "string", "description": "Exact Quanta fee from receipt accounting. Omitted when unavailable." },
+          "BlockHash": { "type": "string" },
           "Nonce": { "type": "string" },
           "Signature": { "type": "string" },
           "Pk": { "type": "string" },
@@ -2539,7 +2755,7 @@
       },
       "TransactionByAddress": {
         "type": "object",
-        "description": "One indexed transaction row. Amount and PaidFees are exact decimal strings denominated in Quanta with 18 fractional digits. BlockNumber and TimeStamp are decimal strings.",
+        "description": "One indexed transaction row. Amount and verified PaidFees are decimal strings denominated in Quanta with 18 fractional digits. PaidFees is omitted for legacy rows lacking receipt provenance. BlockNumber and TimeStamp are decimal strings.",
         "properties": {
           "ID": { "type": "string", "description": "Internal record id." },
           "InOut": { "type": "integer", "description": "Direction flag relative to the indexed address." },
@@ -2550,7 +2766,8 @@
           "TxHash": { "type": "string" },
           "TimeStamp": { "type": "string" },
           "Amount": { "type": "string" },
-          "PaidFees": { "type": "string" },
+          "PaidFees": { "type": "string", "description": "Exact receipt-derived fee. Omitted when unavailable." },
+          "Status": { "type": "string", "description": "Optional receipt execution status: 0x1 success or 0x0 revert. Legacy rows may omit it." },
           "BlockNumber": { "type": "string" }
         }
       },
@@ -2589,6 +2806,7 @@
           "to": { "type": "string" },
           "amount": { "type": "string" },
           "blockNumber": { "type": "string", "description": "0x-prefixed hex." },
+          "blockHash": { "type": "string", "description": "Exact canonical block hash for this event." },
           "blockNumberInt": { "type": "integer" },
           "txHash": { "type": "string" },
           "logIndex": { "type": "string" },
@@ -2649,25 +2867,117 @@
       },
       "ContractMeta": {
         "type": "object",
-        "description": "Compact contract metadata attached to logs and call targets. The abi field is present only for verified contracts.",
+        "description": "Compact contract metadata attached to logs and call targets. Verified records carry provenanceStatus. The abi field is suppressed when recorded compiler or source-bundle metadata is invalid; legacy-unrecorded ABI remains available with an explicit warning state.",
         "properties": {
           "name": { "type": "string" },
           "symbol": { "type": "string" },
           "tokenStandard": { "type": "string" },
           "verified": { "type": "boolean" },
           "contractName": { "type": "string" },
-          "abi": { "type": "string" }
+          "abi": { "type": "string" },
+          "provenanceStatus": {
+            "type": "string",
+            "enum": ["digest-backed", "legacy-unrecorded", "invalid-recorded"],
+            "description": "Trust classification over compact recorded compiler provenance and versioned source-bundle digest metadata. Compact reads validate digest syntax and reserve exact source recomputation for full contract reads."
+          }
         }
+      },
+      "CompilerProvenanceComponent": {
+        "type": "object",
+        "description": "One content-addressed runtime component that affected compiler output.",
+        "required": ["name", "sha256"],
+        "properties": {
+          "name": { "type": "string", "enum": ["hypc", "nsjail", "policy"] },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        },
+        "additionalProperties": false
+      },
+      "CompilerProvenance": {
+        "type": "object",
+        "description": "Content-addressed identity of the sealed native compiler, static NsJail launcher, and embedded sandbox policy persisted at verification time. Schema v2 binds the exact ordered components with a length-prefixed SHA-256 execution digest. Its absence on an older record means legacy-unrecorded and must not be inferred from the current registry.",
+        "required": ["schema", "kind", "buildId", "executionDigest", "components"],
+        "properties": {
+          "schema": { "type": "string", "const": "qrl.contract-compiler-provenance.v2" },
+          "kind": { "type": "string", "const": "native" },
+          "buildId": { "type": "string", "minLength": 1 },
+          "executionDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "components": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "prefixItems": [
+              {
+                "allOf": [
+                  { "$ref": "#/components/schemas/CompilerProvenanceComponent" },
+                  { "type": "object", "properties": { "name": { "const": "hypc" } } }
+                ]
+              },
+              {
+                "allOf": [
+                  { "$ref": "#/components/schemas/CompilerProvenanceComponent" },
+                  { "type": "object", "properties": { "name": { "const": "nsjail" } } }
+                ]
+              },
+              {
+                "allOf": [
+                  { "$ref": "#/components/schemas/CompilerProvenanceComponent" },
+                  { "type": "object", "properties": { "name": { "const": "policy" } } }
+                ]
+              }
+            ],
+            "items": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "ContractExplainChallenge": {
+        "type": "object",
+        "required": ["challengeId", "messageHex", "signer", "contract", "origin", "chainId", "expiresAt"],
+        "properties": {
+          "challengeId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "messageHex": { "type": "string", "pattern": "^0x(?:[0-9a-f]{2})+$", "maxLength": 32770 },
+          "signer": { "type": "string", "pattern": "^Q[0-9a-fA-F]{128}$", "description": "Canonical checksum-cased QIP-55 contract creator address." },
+          "contract": { "type": "string", "pattern": "^Q[0-9a-fA-F]{128}$", "description": "Canonical checksum-cased QIP-55 contract address." },
+          "origin": { "type": "string", "format": "uri" },
+          "chainId": { "type": "string", "pattern": "^0x[1-9a-f][0-9a-f]*$", "maxLength": 66 },
+          "expiresAt": { "type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$" }
+        },
+        "additionalProperties": false
+      },
+      "ContractExplainSignedMessageProof": {
+        "type": "object",
+        "required": ["signature", "publicKey", "descriptor", "signer", "digest", "schemeVersion"],
+        "properties": {
+          "signature": { "type": "string", "pattern": "^0x[0-9a-fA-F]{9254}$" },
+          "publicKey": { "type": "string", "pattern": "^0x[0-9a-fA-F]{5184}$" },
+          "descriptor": { "type": "string", "const": "0x010000" },
+          "signer": { "type": "string", "pattern": "^Q[0-9a-fA-F]{128}$", "description": "Canonical checksum-cased QIP-55 contract creator address." },
+          "digest": { "type": "string", "pattern": "^0x[0-9a-fA-F]{128}$" },
+          "schemeVersion": { "type": "string", "const": "QRL-SIGN-MSG-v1" }
+        },
+        "additionalProperties": false
+      },
+      "ContractExplainAuthorizationRequest": {
+        "type": "object",
+        "required": ["challengeId", "proof"],
+        "properties": {
+          "challengeId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "proof": { "$ref": "#/components/schemas/ContractExplainSignedMessageProof" }
+        },
+        "additionalProperties": false
       },
       "ContractInfo": {
         "type": "object",
         "description": "A contract record. Verified contracts additionally carry source, ABI, and compiler settings; token contracts carry name, symbol, decimals, and standard.",
         "properties": {
           "creatorAddress": { "type": "string" },
-          "address": { "type": "string", "description": "Canonical Q-prefixed contract address." },
+          "address": { "type": "string", "pattern": "^Q[0-9a-f]{128}$", "description": "Canonical lowercase-hex QIP-55 contract address." },
           "contractCode": { "type": "string" },
-          "creationTransaction": { "type": "string" },
-          "creationBlockNumber": { "type": "string" },
+          "contractCodeSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "creationTransaction": { "type": "string", "pattern": "^(?:|0x[0-9a-f]{64})$" },
+          "creationBlockNumber": { "type": "string", "pattern": "^0x(?:0|[1-9a-f][0-9a-f]*)$" },
+          "creationBlockHash": { "type": "string", "pattern": "^0x[0-9a-f]{64}$" },
+          "chainId": { "type": "string", "pattern": "^0x(?:0|[1-9a-f][0-9a-f]*)$" },
           "isToken": { "type": "boolean" },
           "status": { "type": "string" },
           "decimals": { "type": "integer" },
@@ -2677,8 +2987,81 @@
           "updatedAt": { "type": "string" },
           "tokenStandard": { "type": "string" },
           "genesisContract": { "type": "boolean" },
-          "verified": { "type": "boolean" }
+          "verified": { "type": "boolean" },
+          "verificationRecordSchema": {
+            "type": ["string", "null"],
+            "enum": ["qrl.contract-verification-record.v1", "qrl.contract-verification-record.v2", null],
+            "description": "V2 records bind the source bundle and compiler settings to one canonical deployment generation. V1 and genuinely absent historical records remain legacy-unrecorded; explicit null or any unrecognized value is invalid-recorded."
+          },
+          "sourceCode": { "type": "string" },
+          "abi": { "type": "string", "description": "Exact compact JSON ABI bytes included in the V2 verification artifact digest." },
+          "contractName": { "type": "string" },
+          "compilerVersion": { "type": "string" },
+          "compilerProvenance": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/CompilerProvenance" },
+              { "type": "null" }
+            ]
+          },
+          "imports": {
+            "type": "object",
+            "description": "Canonical effective import sources used to reproduce verified bytecode.",
+            "additionalProperties": { "type": "string" }
+          },
+          "sourceBundleDigest": {
+            "type": ["string", "null"],
+            "description": "Versioned SHA-256 identity of the exact primary and canonical import source bytes for this verification.",
+            "pattern": "^qrl\\.verified-source-bundle\\.v1:sha256:[0-9a-f]{64}$"
+          },
+          "verificationArtifactDigest": {
+            "type": "string",
+            "pattern": "^qrl\\.contract-verification-artifact\\.v2:sha256:[0-9a-f]{64}$",
+            "description": "SHA-256 over uint64 big-endian length-prefixed verification fields: V2 marker, canonical deployment target, source bundle, ABI, compiler provenance and settings, and sorted libraries."
+          },
+          "optimizationEnabled": { "type": "boolean" },
+          "optimizationRuns": { "type": "integer" },
+          "evmVersion": { "type": "string" },
+          "constructorArguments": { "type": "string" },
+          "libraries": { "type": "object", "additionalProperties": { "type": "string" } },
+          "license": { "type": "string" },
+          "verificationMethod": { "type": "string", "const": "full-source" },
+          "verifiedAt": { "type": "string", "format": "date-time" },
+          "aiExplanationSourceDigest": {
+            "type": "string",
+            "description": "Source-bundle identity used to generate the cached AI explanation. Legacy unbound explanations omit this field and are not served.",
+            "pattern": "^qrl\\.verified-source-bundle\\.v1:sha256:[0-9a-f]{64}$"
+          }
         },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "verificationRecordSchema": { "const": "qrl.contract-verification-record.v2" }
+              },
+              "required": ["verificationRecordSchema"]
+            },
+            "then": {
+              "required": [
+                "address",
+                "contractCodeSha256",
+                "creationTransaction",
+                "creationBlockNumber",
+                "creationBlockHash",
+                "chainId",
+                "sourceCode",
+                "abi",
+                "contractName",
+                "compilerVersion",
+                "compilerProvenance",
+                "sourceBundleDigest",
+                "verificationArtifactDigest",
+                "optimizationEnabled",
+                "optimizationRuns",
+                "verificationMethod"
+              ]
+            }
+          }
+        ],
         "additionalProperties": true
       }
     }

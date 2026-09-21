@@ -43,6 +43,7 @@ Comprehensive documentation for the ZondScan backend API server -- a Go + Gin RE
 | `configs/` | MongoDB connection (`setup.go`), collection references and constants (`const.go`), environment variable loading (`env.go`). |
 | `handler/` | Gin router initialization, CORS config, middleware (panic recovery, request latency logging), TLS/HTTP mode selection. |
 | `routes/` | All REST endpoint definitions and request/response handling. |
+| `qrladdress/` | QIP-55 address validation, alias normalization, and SHAKE256 checksum casing. |
 | `db/` | Database query functions organized by entity: addresses, blocks, transactions, contracts, tokens, validators, stats, pending transactions. |
 | `models/` | Go struct definitions for all data entities. |
 
@@ -260,7 +261,7 @@ Paginated network-wide transactions list.
 
 **Notes:**
 - Fixed page size of 5 transactions per page.
-- Amount and PaidFees are serialized with 18 decimal places.
+- Amount and verified PaidFees are serialized with 18 decimal places. PaidFees is optional: legacy rows without receipt provenance omit it. Status is optional and contains receipt execution status (`0x1` success or `0x0` revert) when indexed.
 - BlockNumber is converted from hex to decimal in JSON output.
 
 #### `GET /tx/:query`
@@ -343,13 +344,13 @@ Coinbase transaction lookup (uses the same `ReturnSingleTransfer` function as `/
 #### `GET /address/aggregate/:query`
 Aggregated address data: balance, rank, transactions, internal transactions, and contract code.
 
-**Path Parameter:** Address with `Q` prefix (e.g., `Q2019ea08f4e24201b98f9154906da4b924a04892`)
+**Path Parameter:** QIP-55 address using a `Q`, `q`, `0x`, or `0X` prefix followed by exactly 128 hex characters (for example, `QaaaAAaaaAAaAaaAaAAAAaAAAaAaAaAAaAaaAaaaaAAAAAAAAaAAAAaAaAAaaAAaaaaAaAAAAaaAaAAaaaaaaAaAAaaaaAaAaaaaAaaaAAAAaAAAAaAaAaaAAAaAaaaAA`).
 
 **Response:**
 ```json
 {
   "address": {
-    "id": "q2019ea08f4e24201b98f9154906da4b924a04892",
+    "id": "QaaaAAaaaAAaAaaAaAAAAaAAAaAaAaAAaAaaAaaaaAAAAAAAAaAAAAaAaAAaaAAaaaaAaAAAAaaAaAAaaaaaaAaAAaaaaAaAaaaaAaaaAAAAaAAAAaAaAaaAAAaAaaaAA",
     "balance": 100.5,
     "nonce": 42
   },
@@ -380,10 +381,10 @@ Aggregated address data: balance, rank, transactions, internal transactions, and
 ```
 
 **Notes:**
-- Normalizes `q` prefix to `Q` on input.
+- Normalizes every accepted alias to the uppercase-Q QIP-55 checksum form. The normalized value is returned in `address.id`, and aliases share one aggregate cache entry.
 - If the address is not found in the `addresses` collection, it queries the Zond node RPC (`qrl_getBalance`) and creates a new entry.
-- Transaction queries use case-insensitive regex matching.
-- Internal transactions query the `internalTransactionByAddress` collection using hex-decoded byte-level matching.
+- Address records and transaction indexes use uppercase `Q` plus a lowercase 128-character body in MongoDB. Queries normalize to this exact storage key.
+- Returns `503 Service Unavailable` with `Retry-After: 5` while a reorg-invalidated native balance is being refreshed. Stale balance snapshots are never served as canonical values.
 
 #### `GET /address/:address/transactions?page=1&limit=5`
 Paginated non-zero-amount transactions for an address.
@@ -431,14 +432,14 @@ All ERC20 token balances held by an address. Designed for wallet integration (e.
 **Notes:**
 - Uses MongoDB aggregation pipeline with `$lookup` to join `tokenBalances` with `contractCode` for metadata.
 - Sorted by balance descending (highest value tokens first).
-- Searches both `Q` and `q` prefix variants of the address.
+- Normalizes the input to the single uppercase-Q, lowercase-body MongoDB key before querying.
 
 #### `POST /getBalance`
 Get balance for an address directly from the Zond node RPC.
 
 **Request Body (form-encoded):**
 ```
-address=Q2019ea08f4e24201b98f9154906da4b924a04892
+address=QaaaAAaaaAAaAaaAaAAAAaAAAaAaAaAAaAaaAaaaaAAAAAAAAaAAAAaAaAAaaAAaaaaAaAAAAaaAaAAaaaaaaAaAAaaaaAaAaaaaAaaaAAAAaAAAAaAaAaaAAAaAaaaAA
 ```
 
 **Response:**
@@ -446,7 +447,33 @@ address=Q2019ea08f4e24201b98f9154906da4b924a04892
 { "balance": 100.5 }
 ```
 
-**Notes:** Makes a live `qrl_getBalance` RPC call to the Zond node. Balance is returned in QRL (divided by 1e18 from wei).
+**Notes:** Accepts `Q`, `q`, `0x`, and `0X` aliases followed by exactly 128 hex characters. Uniform lowercase or uppercase bodies are accepted; mixed-case bodies must carry a valid QIP-55 checksum. Invalid addresses return HTTP 400. The RPC receives the canonical uppercase-Q checksum form. Balance is returned in QRL (divided by 1e18 from wei).
+
+#### `GET /qns/resolve/:name`
+Resolve a supported `.qrl` QNS name to its native QIP-55 address.
+
+Names use the conservative `@qns/sdk` normalization profile: ASCII uppercase folds to lowercase; labels accept only `a-z`, `0-9`, and hyphen; empty labels and the reserved double-hyphen pattern in positions three and four are rejected. The endpoint requires at least one label below `.qrl`.
+
+**Response:**
+```json
+{
+  "name": "alice.qrl",
+  "address": "QaaaAAaaaAAaAaaAaAAAAaAAAaAaAaAAaAaaAaaaaAAAAAAAAaAAAAaAaAAaaAAaaaaAaAAAAaaAaAAaaaaaaAaAAaaaaAaAaaaaAaaaAAAAaAAAAaAaAaaAAAaAaaaAA"
+}
+```
+
+**Failure responses:**
+
+| Status | Meaning |
+|--------|---------|
+| `400` | The name fails normalization or is outside `.qrl`. |
+| `404` | The registry has no resolver, or the resolver has no native address record. |
+| `429` | The per-IP resolution limit was exceeded. |
+| `502` | The node returned an RPC error, malformed ABI data, or an invalid address checksum. |
+| `503` | QNS deployment variables are absent or invalid, the chain ID differs, or the registry has no bytecode. |
+| `504` | The bounded resolution request timed out. |
+
+**Protocol checks:** The backend verifies `qrl_chainId` and non-zero registry code before resolving. It then performs `resolver(bytes32)` followed by `addr(bytes32)` using the SDK's EIP-137 namehash and QRVM64 64-byte ABI words. Successful deployment checks and normalized-name results are cached for 15 seconds. Returned addresses use canonical QIP-55 checksum casing.
 
 #### `GET /walletdistribution/:query`
 Count wallets with balance greater than the specified threshold (in units of 1e12 wei).
@@ -841,9 +868,9 @@ All collections are in the `qrldata-z` database. Collection references are initi
 |------------|---------|-------------------|
 | `blocks` | Full block data (header + transactions) | Find by `result.number` (hex), `result.hash`; sorted by `result.timestamp` desc |
 | `transfer` | Individual transaction records | Find by `txHash` (byte array) |
-| `transactionByAddress` | Indexed transactions by address | Find by `from`/`to` (case-insensitive regex); sorted by `timeStamp` desc |
-| `internalTransactionByAddress` | Internal transactions (contract calls) | Find by `from`/`to` (hex-decoded bytes); sorted by `blockTimestamp` desc |
-| `addresses` | Wallet balances and metadata | Find by `id` (lowercase hex string); sorted by `balance` desc for richlist |
+| `transactionByAddress` | Indexed transactions by address | Find by exact canonical `from`/`to` keys (`Q` + 128 lowercase hex); sorted by `timeStamp` desc |
+| `internalTransactionByAddress` | Internal transactions (contract calls) | Find by exact canonical `from`/`to` keys (`Q` + 128 lowercase hex); sorted by `blockTimestamp` desc |
+| `addresses` | Wallet balances and metadata | Find by exact `id` (`Q` + 128 lowercase hex); sorted by `balance` desc for richlist |
 | `pending_transactions` | Mempool transactions | Find by `_id` (hash); filter `status != "mined"`; sorted by `createdAt` desc |
 | `sync_state` | Sync progress tracking | Find by `_id: "last_synced_block"` to get `block_number` |
 
@@ -851,8 +878,8 @@ All collections are in the `qrldata-z` database. Collection references are initi
 
 | Collection | Purpose | Key Query Patterns |
 |------------|---------|-------------------|
-| `contractCode` | Smart contract deployments & token metadata | Find by `address` (both Q/q prefix); search by `name` regex; filter by `isToken` |
-| `tokenBalances` | Token holder balances per contract | Find by `holderAddress` or `contractAddress` (both prefix variants); aggregation with `$lookup` to `contractCode` |
+| `contractCode` | Smart contract deployments & token metadata | Find by exact canonical `address` (`Q` + 128 lowercase hex); search by `name` regex; filter by `isToken` |
+| `tokenBalances` | Token holder balances per contract | Find by exact canonical `holderAddress` or `contractAddress`; aggregation with `$lookup` to `contractCode` |
 | `tokenTransfers` | ERC20 transfer events | Find by `contractAddress` or `txHash`; sorted by `blockNumber` desc |
 
 ### Analytics & Market Collections
@@ -941,7 +968,7 @@ type Transaction struct {
     Value       string `json:"value"`
     Signature   string `json:"signature"`
     PublicKey   string `json:"publicKey"`
-    Data        string `json:"data"`
+    Data        string `json:"input" bson:"data"`
     Status      string `json:"status"`
 }
 ```
@@ -962,7 +989,7 @@ type TransactionByAddress struct {
 }
 ```
 
-**Note:** Custom `MarshalJSON` converts `Amount` and `PaidFees` to `"%.18f"` format and `BlockNumber` from hex to decimal string.
+**Note:** Custom `MarshalJSON` renders exact integer amounts and receipt-derived fees as Quanta decimals, retaining a float fallback only for legacy amounts. Fees without receipt provenance are omitted. `BlockNumber` is converted from hex to a decimal string. Transaction detail preserves indexed execution status, actual gas use, effective gas price, and calldata when the node is unavailable. Missing historical gas and fee data remains unavailable; the gas limit is exposed separately.
 
 ### Transfer
 ```go
@@ -1021,12 +1048,17 @@ type TokenTransfer struct {
     To              string `json:"to" bson:"to"`
     Amount          string `json:"amount" bson:"amount"`
     BlockNumber     string `json:"blockNumber" bson:"blockNumber"`
+    BlockHash       string `json:"blockHash" bson:"blockHash"`
+    BlockNumberInt  int64  `json:"blockNumberInt" bson:"blockNumberInt"`
     TxHash          string `json:"txHash" bson:"txHash"`
+    LogIndex        string `json:"logIndex,omitempty" bson:"logIndex,omitempty"`
     Timestamp       string `json:"timestamp" bson:"timestamp"`
     TokenSymbol     string `json:"tokenSymbol" bson:"tokenSymbol"`
     TokenDecimals   int    `json:"tokenDecimals" bson:"tokenDecimals"`
     TokenName       string `json:"tokenName" bson:"tokenName"`
     TransferType    string `json:"transferType" bson:"transferType"`
+    TokenStandard   string `json:"tokenStandard,omitempty" bson:"tokenStandard,omitempty"`
+    TokenID         string `json:"tokenID,omitempty" bson:"tokenID,omitempty"`
 }
 ```
 
@@ -1105,8 +1137,10 @@ type PendingTransaction struct {
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MONGOURI` | Yes | -- | MongoDB connection string (e.g., `mongodb://localhost:27017`) |
-| `NODE_URL` | No | `http://127.0.0.1:8545` | Zond node RPC endpoint (used for `qrl_getBalance`) |
+| `MONGOURI` | Yes | -- | Replica-set-aware MongoDB connection string, for example `mongodb://localhost:27017/qrldata-z?replicaSet=rs0` |
+| `NODE_URL` | No | `http://127.0.0.1:8545` | Zond node RPC endpoint used for balance and configured QNS reads |
+| `QNS_REGISTRY_ADDRESS` | No | -- | Deployed QNS registry as a non-zero QIP-55 address. Both QNS variables are required to enable `/qns/resolve/:name`. |
+| `QNS_EXPECTED_CHAIN_ID` | No | -- | Expected registry deployment chain ID in decimal or `0x` hex. Checked against `qrl_chainId` before resolution. |
 | `APP_ENV` | No | `development` | Environment mode. Set to `production` for HTTPS. |
 | `HTTP_PORT` | No | `:8080` | HTTP listen port (development mode) |
 | `HTTPS_PORT` | No* | -- | HTTPS listen port (production mode; required if `APP_ENV=production`) |
@@ -1119,18 +1153,23 @@ The API loads environment variables from a `.env` file in the working directory.
 
 Minimal `.env` example:
 ```
-MONGOURI=mongodb://localhost:27017
+MONGOURI=mongodb://localhost:27017/qrldata-z?replicaSet=rs0
 NODE_URL=http://localhost:8545
-HTTP_PORT=:8081
+HTTP_PORT=:8080
 ```
 
 ### MongoDB Setup
 
 - **Database name:** `qrldata-z`
 - **Connection:** Via `MONGOURI` environment variable
+- **Topology:** Replica set or sharded cluster with transaction support. Contract-verification commits and synchronizer reorg rollback use multi-document transactions.
 - **Connection singleton:** Uses `sync.Once` to ensure single connection across the application
 - **Timeout:** 10-second context timeout on connection
 - The database and collections are populated by the `QRL2MongoDB` synchronizer component (not the API).
+- Startup requires the named unique `blockNumberInt_desc_idx` index and rejects markerless or unknown core ingestion state. Run the offline block companion migration described in `docs/db-syncer.md` before starting this API version on an existing database.
+- Public block reads require `ingestionState: "complete"`. Transaction, transfer, token balance, holder, NFT, and contract readers join their source height to exactly one complete `blocks` row. Missing or duplicate canonical identities remain hidden.
+- Token transfer readers add an exact token fence: `tokenIngestionState` must also be `complete`, every row must carry a nonempty `blockHash`, and that hash must equal the unique complete block hash. Pending and hashless legacy token rows remain hidden until exact-identity replay completes.
+- Reorg-invalidated native balances are hidden by their stale marker. Token balance snapshots remain hidden by their stale marker and complete-block join while the synchronizer's reconciliation queue refreshes canonical RPC state. Exact historical token observations carry both numeric height and block-hash provenance. Canonical-head reconciliation refreshes that provenance after a rollback.
 
 ---
 
@@ -1162,7 +1201,7 @@ docker build -t zondscan-backend .
 # Run container
 docker run -d \
   -p 8080:8080 \
-  -e MONGOURI=mongodb://host.docker.internal:27017 \
+  -e 'MONGOURI=mongodb://host.docker.internal:27017/qrldata-z?replicaSet=rs0' \
   -e NODE_URL=http://host.docker.internal:8545 \
   zondscan-backend
 ```
@@ -1178,7 +1217,7 @@ APP_ENV=production \
 HTTPS_PORT=:443 \
 CERT_PATH=/etc/ssl/cert.pem \
 KEY_PATH=/etc/ssl/key.pem \
-MONGOURI=mongodb://localhost:27017 \
+MONGOURI=mongodb://localhost:27017/qrldata-z?replicaSet=rs0 \
 ./backendAPI
 ```
 
@@ -1195,13 +1234,13 @@ MONGOURI=mongodb://localhost:27017 \
 
 ### Address Normalization
 
-QRL Zond addresses use a `Q` prefix (instead of Ethereum's `0x`). The codebase handles multiple address formats:
+QIP-55 addresses contain a 64-byte value encoded as exactly 128 hexadecimal characters. Public read routes and `POST /getBalance` accept `Q`, `q`, `0x`, and `0X` prefixes:
 
-- **Storage in MongoDB:** Most addresses are stored with lowercase `q` prefix by the synchronizer.
-- **API input:** Accepts both `Q` and `q` prefixes. Routes normalize `q` to `Q` on input.
-- **Database queries:** Use both variants via `normalizeAddressBoth()` which returns `["q...", "Q..."]`.
-- **Case-insensitive matching:** Transaction lookups use MongoDB regex with the `i` option.
-- **RPC calls:** `GetBalance` ensures uppercase `Q` prefix for Zond node RPC.
+- **Input validation:** Uniform lowercase or uppercase hex bodies are accepted. A mixed-case body must match the QIP-55 SHAKE256 checksum casing. Legacy 20-byte addresses and 127- or 129-character bodies are rejected.
+- **Canonical API value:** Accepted aliases are converted to uppercase `Q` plus the QIP-55 checksummed body before route handlers use or echo the address.
+- **Storage in MongoDB:** Address keys use uppercase `Q` plus a lowercase 128-character body.
+- **Database queries and cache keys:** Inputs are normalized to the single MongoDB storage form, so all aliases resolve to the same records and aggregate cache entry.
+- **RPC calls:** `GetBalance` sends the canonical uppercase-Q checksummed address to the Zond node.
 
 ### Pagination Patterns
 

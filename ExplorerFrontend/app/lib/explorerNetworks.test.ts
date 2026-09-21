@@ -19,27 +19,21 @@ function loadNetwork(value: string | undefined): NavigationConfig {
 }
 
 it.each([
-  [undefined, 'testnet-v2', 'QRL Testnet v2'],
-  ['', 'testnet-v2', 'QRL Testnet v2'],
-  ['testnet-v2', 'testnet-v2', 'QRL Testnet v2'],
-  ['testnet-v3', 'testnet-v3', 'QRL Testnet v3'],
+  [undefined, 'testnet-v3', 'QRL Testnet v3 (Private)'],
+  ['', 'testnet-v3', 'QRL Testnet v3 (Private)'],
+  ['testnet-v2', 'testnet-v3', 'QRL Testnet v3 (Private)'],
+  ['testnet-v3', 'testnet-v3', 'QRL Testnet v3 (Private)'],
   ['mainnet', 'mainnet', 'QRL Mainnet'],
-  ['unknown-network', 'testnet-v2', 'QRL Testnet v2'],
+  ['unknown-network', 'testnet-v3', 'QRL Testnet v3 (Private)'],
 ])('resolves build network %s to %s and its matching display label', (value, id, name) => {
   const config = loadNetwork(value);
   expect(config.CURRENT_EXPLORER_NETWORK).toBe(id);
   expect(config.CURRENT_EXPLORER_NETWORK_NAME).toBe(name);
   expect(config.EXPLORER_NETWORKS).toEqual([
     {
-      id: 'testnet-v2',
-      name: 'QRL Testnet v2',
-      href: 'https://zondscan.com',
-      status: id === 'testnet-v2' ? 'active' : 'live',
-    },
-    {
       id: 'testnet-v3',
-      name: 'QRL Testnet v3',
-      href: 'https://v3.zondscan.com',
+      name: 'QRL Testnet v3 (Private)',
+      href: 'https://zondscan.com',
       status: id === 'testnet-v3' ? 'active' : 'live',
     },
     {

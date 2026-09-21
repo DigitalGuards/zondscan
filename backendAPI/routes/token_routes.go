@@ -89,6 +89,7 @@ func handleTokenInfo(c *gin.Context) {
 		})
 		return
 	}
+	info.ContractAddress = address
 
 	c.JSON(http.StatusOK, info)
 }
@@ -192,6 +193,7 @@ func handleTokenMetadata(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Token not found"})
 		return
 	}
+	meta.ContractAddress = address
 	c.JSON(http.StatusOK, meta)
 }
 

@@ -18,30 +18,13 @@ import (
 // The goroutine returns promptly once stopCh is closed so a graceful
 // shutdown does not start new work while in-flight DB ops are draining.
 func runPeriodicTask(task func(), interval time.Duration, taskName string, stopCh <-chan struct{}) {
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				configs.Logger.Error("Recovered from panic in periodic task",
-					zap.String("task", taskName),
-					zap.Any("error", r))
-				// Restart the task after a short delay, but exit promptly if a
-				// shutdown signal arrives during the wait instead of blocking
-				// the whole delay on time.Sleep.
-				select {
-				case <-stopCh:
-					return
-				case <-time.After(5 * time.Second):
-					runPeriodicTask(task, interval, taskName, stopCh)
-				}
-			}
-		}()
-
+	startBackgroundWorker(func() {
 		configs.Logger.Info("Starting periodic task",
 			zap.String("task", taskName),
 			zap.Duration("interval", interval))
 
 		// Run immediately on start
-		runTaskWithRetry(task, taskName)
+		runTaskWithRetry(task, taskName, stopCh)
 
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -49,22 +32,28 @@ func runPeriodicTask(task func(), interval time.Duration, taskName string, stopC
 		for {
 			select {
 			case <-ticker.C:
-				runTaskWithRetry(task, taskName)
+				runTaskWithRetry(task, taskName, stopCh)
 			case <-stopCh:
 				configs.Logger.Info("Stopping periodic task on shutdown signal",
 					zap.String("task", taskName))
 				return
 			}
 		}
-	}()
+	})
 }
 
 // runTaskWithRetry executes a task with retry logic on failure
-func runTaskWithRetry(task func(), taskName string) {
+func runTaskWithRetry(task func(), taskName string, stopCh <-chan struct{}) {
 	maxAttempts := 5
 	attempt := 1
 
 	for attempt <= maxAttempts {
+		select {
+		case <-stopCh:
+			return
+		default:
+		}
+
 		configs.Logger.Debug("Running periodic task",
 			zap.String("task", taskName),
 			zap.Int("attempt", attempt))
@@ -91,10 +80,73 @@ func runTaskWithRetry(task func(), taskName string) {
 				zap.String("task", taskName),
 				zap.Int("attempt", attempt),
 				zap.Duration("delay", delay))
-			time.Sleep(delay)
+			select {
+			case <-stopCh:
+				return
+			case <-time.After(delay):
+			}
 			attempt++
 		}
 	}
+}
+
+const pendingTokenQueueInterval = 30 * time.Second
+
+func processQueuedTokenContracts(stopCh ...<-chan struct{}) error {
+	lockChainMutation()
+	defer chainMutationMu.Unlock()
+	if len(stopCh) > 0 && stopCh[0] != nil {
+		select {
+		case <-stopCh[0]:
+			return nil
+		default:
+		}
+	}
+	return db.ProcessTokenTransfersFromTransactions(stopCh...)
+}
+
+// StartPendingTokenQueueJob keeps retryable legacy receipt validation moving
+// when the canonical chain is quiet. Every pass is a registered writer and
+// runs inside the same mutation boundary as block ingestion and rollback.
+func StartPendingTokenQueueJob(stopCh <-chan struct{}) {
+	if !startPendingTokenQueueJob(
+		stopCh,
+		pendingTokenQueueInterval,
+		func() error { return processQueuedTokenContracts(stopCh) },
+	) {
+		configs.Logger.Warn("Pending token queue worker was not started during shutdown")
+	}
+}
+
+func startPendingTokenQueueJob(
+	stopCh <-chan struct{},
+	interval time.Duration,
+	process func() error,
+) bool {
+	return startBackgroundWorker(func() {
+		configs.Logger.Info("Starting pending token queue worker",
+			zap.Duration("interval", interval))
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		run := func() {
+			if err := process(); err != nil {
+				configs.Logger.Error("Queued token processing completed with retryable failures",
+					zap.Error(err))
+			}
+		}
+		run()
+
+		for {
+			select {
+			case <-ticker.C:
+				run()
+			case <-stopCh:
+				configs.Logger.Info("Stopping pending token queue worker on shutdown signal")
+				return
+			}
+		}
+	})
 }
 
 // StartContractReprocessingJob starts a background job to periodically reprocess
@@ -106,14 +158,16 @@ func runTaskWithRetry(task func(), taskName string) {
 // db.ReprocessIncompleteContracts. Semantics: run immediately, then every
 // hour, exiting on stopCh.
 func StartContractReprocessingJob(stopCh <-chan struct{}) {
-	go func() {
+	startBackgroundWorker(func() {
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
 
 		for {
 			configs.Logger.Info("Starting contract reprocessing job")
 
+			lockChainMutation()
 			err := db.ReprocessIncompleteContracts()
+			chainMutationMu.Unlock()
 			if err != nil {
 				configs.Logger.Error("Contract reprocessing job failed", zap.Error(err))
 			}
@@ -126,7 +180,7 @@ func StartContractReprocessingJob(stopCh <-chan struct{}) {
 				return
 			}
 		}
-	}()
+	})
 }
 
 // StartWalletCountSync starts a goroutine that syncs wallet count every 4 hours.
@@ -138,7 +192,7 @@ func StartContractReprocessingJob(stopCh <-chan struct{}) {
 // exiting on stopCh.
 func StartWalletCountSync(stopCh <-chan struct{}) {
 	configs.Logger.Info("Initializing wallet count sync service")
-	go func() {
+	startBackgroundWorker(func() {
 		ticker := time.NewTicker(4 * time.Hour)
 		defer ticker.Stop()
 
@@ -161,7 +215,7 @@ func StartWalletCountSync(stopCh <-chan struct{}) {
 				return
 			}
 		}
-	}()
+	})
 }
 
 // processBlockPeriodically checks for new blocks and processes them
@@ -198,7 +252,7 @@ func processBlockPeriodically() {
 	lastProcessedBlockNum := utils.HexToInt(lastProcessedBlock).Int64()
 	latestBlockNum := utils.HexToInt(latestBlock).Int64()
 
-	if latestBlockNum-lastProcessedBlockNum > BatchSyncThreshold {
+	if shouldUseBatchSync(lastProcessedBlockNum, latestBlockNum) {
 		configs.Logger.Info("More than BatchSyncThreshold blocks behind, switching to batch sync",
 			zap.Int64("lastProcessedBlock", lastProcessedBlockNum),
 			zap.Int64("latestBlock", latestBlockNum),
@@ -206,14 +260,20 @@ func processBlockPeriodically() {
 
 		// Use batch sync for faster processing
 		nextBlock := utils.AddHexNumbers(lastProcessedBlock, "0x1")
-		batchSync(nextBlock, latestBlock)
-
-		// Process token transfers for the batch-synced blocks
-		// This is critical - without this, tokens deployed in batch-synced blocks are never detected
-		configs.Logger.Info("Processing token transfers for batch-synced blocks",
-			zap.String("from", nextBlock),
-			zap.String("to", latestBlock))
-		ProcessTokensAfterInitialSync(nextBlock, latestBlock)
+		confirmedEnd, syncErr := batchSync(nextBlock, latestBlock)
+		if utils.CompareHexNumbers(confirmedEnd, nextBlock) >= 0 {
+			configs.Logger.Info("Processing token transfers for confirmed batch prefix",
+				zap.String("from", nextBlock),
+				zap.String("to", confirmedEnd))
+			ProcessTokensAfterInitialSync(nextBlock, confirmedEnd)
+		}
+		if syncErr != nil {
+			configs.Logger.Error("Periodic batch sync stopped before the requested head",
+				zap.String("confirmed_end", confirmedEnd),
+				zap.String("requested_end", latestBlock),
+				zap.Error(syncErr))
+			return
+		}
 
 		// Update lastProcessedBlock to reflect what's actually been synced
 		// This is important for consistent state tracking
@@ -232,26 +292,17 @@ func processBlockPeriodically() {
 		failedBlocksInRun := make([]string, 0)
 
 		for utils.CompareHexNumbers(currentBlock, latestBlock) <= 0 {
-			// Check if this block has already been processed
-			blockExists := db.BlockExists(currentBlock)
-			if blockExists {
-				configs.Logger.Info("Block already processed, skipping",
-					zap.String("blockNumber", currentBlock))
-				currentBlock = utils.AddHexNumbers(currentBlock, "0x1")
-				continue
-			}
-
 			configs.Logger.Info("Processing block", zap.String("blockNumber", currentBlock))
 
 			// Process the block and check for failure
 			result := processSubsequentBlocks(currentBlock)
 			if result == "" {
-				// Block processing failed - track for later retry
-				configs.Logger.Warn("Block processing failed, will retry later",
+				// Stop at the first unresolved height so later companions and
+				// token state cannot move past a canonical gap.
+				configs.Logger.Warn("Block processing failed; stopping at confirmed prefix",
 					zap.String("blockNumber", currentBlock))
 				failedBlocksInRun = append(failedBlocksInRun, currentBlock)
-				currentBlock = utils.AddHexNumbers(currentBlock, "0x1")
-				continue
+				break
 			}
 
 			// processSubsequentBlocks returns the next block to process. On a
@@ -275,7 +326,11 @@ func processBlockPeriodically() {
 			// Clear any previous failure tracking on success
 			clearFailedBlock(currentBlock)
 
-			ProcessTokenTransfersForBlock(currentBlock)
+			if err := ProcessTokenTransfersForBlock(currentBlock); err != nil {
+				configs.Logger.Error("Token block remains queued after immediate processing",
+					zap.String("blockNumber", currentBlock),
+					zap.Error(err))
+			}
 
 			// Move to next block (== result on the success path)
 			currentBlock = result
@@ -287,19 +342,34 @@ func processBlockPeriodically() {
 				zap.Int("count", len(failedBlocksInRun)))
 			filled := fillGaps(failedBlocksInRun)
 			configs.Logger.Info("Filled failed blocks",
-				zap.Int("filled", filled),
-				zap.Int("remaining", len(failedBlocksInRun)-filled))
+				zap.Int("filled", len(filled)),
+				zap.Int("remaining", len(failedBlocksInRun)-len(filled)))
+			for _, blockNumber := range filled {
+				if err := ProcessTokenTransfersForBlock(blockNumber); err != nil {
+					configs.Logger.Error("Filled-gap token block remains queued",
+						zap.String("blockNumber", blockNumber),
+						zap.Error(err))
+				}
+			}
 		}
 
 		// Process all token transfers in batch after all blocks are processed
-		db.ProcessTokenTransfersFromTransactions()
-		configs.Logger.Info("Completed individual block processing without token transfers")
+		tokenQueueErr := processQueuedTokenContracts()
+		if tokenQueueErr != nil {
+			configs.Logger.Error("Queued token processing completed with retryable failures",
+				zap.Error(tokenQueueErr))
+		}
+		configs.Logger.Info("Completed individual block processing and token queue pass")
 
 		// Update lastProcessedBlock after individual processing
 		lastProcessedBlock = db.GetLastKnownBlockNumber()
 		configs.Logger.Info("After individual block processing, last synced block is now",
 			zap.String("lastProcessedBlock", lastProcessedBlock))
 	}
+}
+
+func shouldUseBatchSync(lastProcessedBlockNum, latestBlockNum int64) bool {
+	return latestBlockNum-lastProcessedBlockNum > BatchSyncThreshold
 }
 
 // updateValidatorsPeriodically updates validator data from the beacon chain
@@ -354,6 +424,7 @@ func updateDataPeriodically() {
 // which lets Sync() (and therefore main.go's doneCh) complete cleanly.
 func singleBlockInsertion(stopCh <-chan struct{}) {
 	configs.Logger.Info("Starting single block insertion process")
+	StartPendingTokenQueueJob(stopCh)
 
 	// Create a wait group to keep the main goroutine alive
 	var wg sync.WaitGroup

@@ -3,7 +3,12 @@ package routes
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
+
+	"backendAPI/models"
+	"backendAPI/sourcebundle"
 
 	"github.com/gin-gonic/gin"
 )
@@ -32,6 +37,120 @@ func newGuardRouter() *gin.Engine {
 	return guardRouter
 }
 
+func TestContractInfoPayloadGatesStoredABIByCompilerProvenance(t *testing.T) {
+	address := "Q" + strings.Repeat("a", 128)
+	const (
+		buildID        = "0.2.0-develop.2026.8.27+commit.6f862206.mod.Linux.g++"
+		compilerSHA256 = "fe8e2344dbd902d6fc8c8cbb24114378c2de3a996b0d58f642d303c8bf30e930"
+		nsjailSHA256   = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+		policySHA256   = "cc2c6d14e943c9b4b9252e69c2fbf9a5a4313938cd561594a255746393baaa8c"
+	)
+	valid := &models.CompilerProvenance{
+		Schema:  models.CompilerProvenanceSchemaV2,
+		Kind:    "native",
+		BuildID: buildID,
+		ExecutionDigest: models.NativeSandboxCompilerExecutionDigestV2(
+			buildID,
+			compilerSHA256,
+			nsjailSHA256,
+			policySHA256,
+		),
+		Components: []models.CompilerProvenanceComponent{
+			{Name: "hypc", SHA256: compilerSHA256},
+			{Name: "nsjail", SHA256: nsjailSHA256},
+			{Name: "policy", SHA256: policySHA256},
+		},
+	}
+	contract := models.ContractInfo{
+		ContractAddress:          address,
+		Verified:                 true,
+		VerificationRecordSchema: models.VerificationRecordSchemaV1,
+		ContractName:             "Main",
+		SourceCode:               "contract Main {}",
+		Abi:                      `[{"type":"function","name":"read"}]`,
+		CompilerVersion:          buildID,
+		CompilerProvenance:       valid,
+	}
+	contract.SourceBundleDigest = sourcebundle.Digest(contract.ContractName, contract.SourceCode, contract.Imports)
+
+	t.Run("digest-backed includes ABI", func(t *testing.T) {
+		compact := contract
+		compact.ContractName = ""
+		compact.SourceCode = ""
+		compact.Imports = nil
+		payload := contractInfoPayload(map[string]models.ContractInfo{address: compact}, address)
+		if payload["provenanceStatus"] != models.CompilerProvenanceDigestBacked || payload["abi"] != contract.Abi {
+			t.Fatalf("digest-backed payload = %#v", payload)
+		}
+	})
+
+	for name, digest := range map[string]string{
+		"missing source digest":   "",
+		"malformed source digest": sourcebundle.Version + ":sha256:nope",
+	} {
+		t.Run(name+" suppresses ABI", func(t *testing.T) {
+			invalid := contract
+			invalid.SourceBundleDigest = digest
+			payload := contractInfoPayload(map[string]models.ContractInfo{address: invalid}, address)
+			if payload["provenanceStatus"] != models.CompilerProvenanceInvalidRecorded {
+				t.Fatalf("invalid digest payload status = %#v", payload)
+			}
+			if _, ok := payload["abi"]; ok {
+				t.Fatalf("invalid digest payload exposed ABI: %#v", payload)
+			}
+		})
+	}
+
+	t.Run("legacy includes ABI with explicit status", func(t *testing.T) {
+		legacy := contract
+		legacy.VerificationRecordSchema = ""
+		legacy.CompilerProvenance = nil
+		legacy.SourceBundleDigest = ""
+		payload := contractInfoPayload(map[string]models.ContractInfo{address: legacy}, address)
+		if payload["provenanceStatus"] != models.CompilerProvenanceLegacyUnrecorded || payload["abi"] != contract.Abi {
+			t.Fatalf("legacy payload = %#v", payload)
+		}
+	})
+
+	t.Run("mixed legacy and current fields suppress ABI", func(t *testing.T) {
+		mixed := contract
+		mixed.CompilerProvenance = nil
+		payload := contractInfoPayload(map[string]models.ContractInfo{address: mixed}, address)
+		if payload["provenanceStatus"] != models.CompilerProvenanceInvalidRecorded {
+			t.Fatalf("mixed payload status = %#v", payload)
+		}
+		if _, ok := payload["abi"]; ok {
+			t.Fatalf("mixed payload exposed ABI: %#v", payload)
+		}
+	})
+
+	t.Run("invalid suppresses ABI", func(t *testing.T) {
+		invalid := contract
+		broken := *valid
+		broken.ExecutionDigest = strings.Repeat("c", 64)
+		invalid.CompilerProvenance = &broken
+		payload := contractInfoPayload(map[string]models.ContractInfo{address: invalid}, address)
+		if payload["provenanceStatus"] != models.CompilerProvenanceInvalidRecorded {
+			t.Fatalf("invalid payload status = %#v", payload)
+		}
+		if _, ok := payload["abi"]; ok {
+			t.Fatalf("invalid payload exposed ABI: %#v", payload)
+		}
+	})
+
+	t.Run("unverified includes neither status nor ABI", func(t *testing.T) {
+		unverified := contract
+		unverified.Verified = false
+		payload := contractInfoPayload(map[string]models.ContractInfo{address: unverified}, address)
+		if _, ok := payload["provenanceStatus"]; ok {
+			t.Fatalf("unverified payload exposed provenance status: %#v", payload)
+		}
+		if _, ok := payload["abi"]; ok {
+			t.Fatalf("unverified payload exposed ABI: %#v", payload)
+		}
+	})
+}
+
 func serve(t *testing.T, guardRouter *gin.Engine, path string) *httptest.ResponseRecorder {
 	t.Helper()
 	w := httptest.NewRecorder()
@@ -46,12 +165,12 @@ func TestRequireAddressParam(t *testing.T) {
 	t.Run("invalid address emits exact 400 body", func(t *testing.T) {
 		cases := []string{
 			"/addr/not-an-address",
-			"/addr/" + repeat("a", 40),       // bare hex, missing prefix
-			"/addr/Q" + repeat("a", 39),      // one char short
-			"/addr/0x" + repeat("a", 64),     // tx hash, not an address
-			"/addr/" + "Q" + repeat("z", 40), // non-hex body
+			"/addr/" + repeat("a", 128),       // bare hex, missing prefix
+			"/addr/Q" + repeat("a", 127),      // one char short
+			"/addr/0x" + repeat("a", 64),      // tx hash, not an address
+			"/addr/" + "Q" + repeat("z", 128), // non-hex body
 		}
-		want := `{"error":"invalid address; expected Q or 0x followed by 40 hex chars"}`
+		want := `{"error":"invalid address; expected Q or 0x followed by 128 hex chars"}`
 		for _, path := range cases {
 			w := serve(t, guardRouter, path)
 			if w.Code != http.StatusBadRequest {
@@ -63,22 +182,54 @@ func TestRequireAddressParam(t *testing.T) {
 		}
 	})
 
-	t.Run("valid address passes through unmodified", func(t *testing.T) {
+	t.Run("valid aliases return a canonical response address", func(t *testing.T) {
 		for _, addr := range []string{
-			"Q" + repeat("a", 40),
-			"q" + repeat("A", 40),
-			"0x" + repeat("1", 40),
+			"Q" + repeat("a", 128),
+			"q" + repeat("A", 128),
+			"0x" + repeat("1", 128),
+			"0X" + repeat("a", 128),
+			qip55ChecksumA,
 		} {
 			w := serve(t, guardRouter, "/addr/"+addr)
 			if w.Code != http.StatusOK {
 				t.Errorf("%s: status = %d, want %d", addr, w.Code, http.StatusOK)
 			}
-			want := `{"address":"` + addr + `"}`
+			wantAddress := qip55ChecksumA
+			if strings.Contains(addr, "1") {
+				wantAddress = "Q" + repeat("1", 128)
+			}
+			want := `{"address":"` + wantAddress + `"}`
 			if got := w.Body.String(); got != want {
 				t.Errorf("%s: body = %s, want %s", addr, got, want)
 			}
 		}
 	})
+}
+
+func TestGetBalanceRejectsInvalidAddresses(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.POST("/getBalance", handleGetBalance)
+	want := `{"error":"invalid address; expected Q or 0x followed by 128 hex chars"}`
+
+	for _, address := range []string{
+		"Q" + repeat("a", 127),
+		"Q" + repeat("a", 129),
+		"Q" + repeat("Ab", 64),
+		"not-an-address",
+	} {
+		form := url.Values{"address": {address}}
+		req := httptest.NewRequest(http.MethodPost, "/getBalance", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want %d", address, w.Code, http.StatusBadRequest)
+		}
+		if got := w.Body.String(); got != want {
+			t.Errorf("%s: body = %s, want %s", address, got, want)
+		}
+	}
 }
 
 // parseStandardFilter derives its message from the allowed set instead of
@@ -132,7 +283,7 @@ func TestRequireTxHashParam(t *testing.T) {
 			"/tx/" + repeat("a", 64),   // missing 0x prefix
 			"/tx/0x" + repeat("a", 63), // one char short
 			"/tx/0x" + repeat("a", 65), // one char long
-			"/tx/Q" + repeat("a", 40),  // address, not a hash
+			"/tx/Q" + repeat("a", 128), // address, not a hash
 		}
 		want := `{"error":"invalid transaction hash; expected 0x + 64 hex chars"}`
 		for _, path := range cases {

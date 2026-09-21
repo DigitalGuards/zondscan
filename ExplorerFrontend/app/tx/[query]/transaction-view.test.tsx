@@ -37,4 +37,18 @@ describe('TransactionView status', () => {
     expect(html).toContain('>Status<');
     expect(html).toContain('1910 Confirmations');
   });
+
+  it('retains a persisted revert and exact paid fee during receipt unavailability', () => {
+    const html = renderToStaticMarkup(<TransactionView transaction={{ ...confirmedTransaction, receiptStatus: '0x0', PaidFees: '0.000000000000147001' }} />);
+    expect(html).toContain('>Reverted<');
+    expect(html).not.toContain('>Confirmed<');
+    expect(html).toContain('0.000000000000147001');
+  });
+
+  it('shows unavailable execution and fee when historical receipt fields are missing', () => {
+    const html = renderToStaticMarkup(<TransactionView transaction={{ ...confirmedTransaction, receiptStatus: undefined, gasUsed: undefined, PaidFees: undefined }} />);
+    expect(html).toContain('Execution status unavailable');
+    expect(html).toContain('Unavailable');
+    expect(html).not.toContain('>Confirmed<');
+  });
 });

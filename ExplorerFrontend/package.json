@@ -2,17 +2,20 @@
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "dependencies": {
     "@headlessui/react": "^2.2.0",
     "@heroicons/react": "^2.0.18",
     "@noble/hashes": "^1.8.0",
-    "@qrlwallet/connect": "4.0.0",
+    "@qrlwallet/connect": "5.0.0",
     "@tailwindcss/postcss": "^4.2.2",
     "@tanstack/react-query": "^5.90.16",
     "@tanstack/react-table": "^8.21.3",
-    "@theqrl/wallet.js": "^6.2.3",
-    "@theqrl/web3": "1.0.1",
-    "@theqrl/web3-zond-abi": "^0.3.3",
+    "@theqrl/wallet.js": "^6.2.4",
+    "@theqrl/web3": "1.0.3",
+    "@theqrl/web3-qrl-abi": "1.0.3",
     "@visx/axis": "4.0.1-alpha.0",
     "@visx/brush": "4.0.1-alpha.0",
     "@visx/gradient": "4.0.1-alpha.0",
@@ -28,13 +31,13 @@
     "eslint-config-next": "^16.2.2",
     "json-formatter-js": "^2.3.4",
     "mongodb": "^6.12.0",
-    "next": "^16.2.12",
+    "next": "^16.3.3",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-tabs": "^6.1.0",
     "server-only": "^0.0.1",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.4"
   },
   "scripts": {
     "dev": "next dev --webpack",
@@ -88,7 +91,6 @@
     "@types/node": "^20.19.27",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
-    "cypress": "^13.4.0",
     "eslint": "^10.4.0",
     "jest": "^30.4.2",
     "postcss": "^8.5.8",

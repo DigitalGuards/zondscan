@@ -6,10 +6,13 @@ import (
 	"QRL2MongoDB/models"
 	"QRL2MongoDB/rpc"
 	"QRL2MongoDB/utils"
+	"context"
+	"errors"
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -33,170 +36,486 @@ const (
 	MaxProducerConcurrency = 16
 )
 
-// producerSem is a semaphore to limit concurrent producer goroutines
-var producerSem chan struct{}
+type blockProducerGroup struct {
+	semaphore chan struct{}
+	waitGroup sync.WaitGroup
+}
+
+func newBlockProducerGroup(concurrency int) *blockProducerGroup {
+	return &blockProducerGroup{semaphore: make(chan struct{}, concurrency)}
+}
+
+func (group *blockProducerGroup) wait() {
+	group.waitGroup.Wait()
+}
 
 // Data holds block data and numbers for batch processing
 type Data struct {
 	blockData    []interface{}
 	blockNumbers []int
+	err          error
 }
 
-// consumer processes data from multiple producer channels
-func consumer(ch <-chan (<-chan Data)) {
-	var wg sync.WaitGroup
-	var syncMutex sync.Mutex // Mutex for synchronizing block updates
+type batchBlock struct {
+	block  models.ZondDatabaseBlock
+	number int
+}
 
-	// Track the highest block number processed using atomic operations to prevent race conditions
-	var highestProcessedBlock int64 = 0
+type batchParentMismatchError struct {
+	blockNumber          int
+	expected             string
+	actual               string
+	canonicalPredecessor bool
+}
 
-	// Track all processed blocks for gap detection
-	var processedBlocksMutex sync.Mutex
-	processedBlocks := make([]int, 0)
+func (e *batchParentMismatchError) Error() string {
+	return fmt.Sprintf("block %d parent mismatch: expected %s, got %s",
+		e.blockNumber, e.expected, e.actual)
+}
 
-	for producer := range ch {
-		wg.Add(1)
-		go func(p <-chan Data) {
-			defer wg.Done()
-			for data := range p {
-				// Only process if there's data to process
-				if len(data.blockData) > 0 {
-					// Pre-validate every blockData entry. blockData is
-					// []interface{} (see Data struct). If we discovered a bad
-					// type mid-loop, InsertManyBlockDocuments below would have
-					// already committed the whole batch, we'd be left with
-					// rows in `blocks` whose transactions never get processed
-					// and whose pending hashes never get tombstoned, while
-					// sync_state still advances past them. Drop the whole
-					// batch on any bad type so gap-detection (or the next
-					// fetch) can re-pull from RPC.
-					blocks := make([]models.ZondDatabaseBlock, len(data.blockData))
-					typesOk := true
-					for x, entry := range data.blockData {
-						blk, ok := entry.(models.ZondDatabaseBlock)
-						if !ok {
-							configs.Logger.Error("Unexpected blockData type in batch consumer, dropping batch",
-								zap.Int("index", x),
-								zap.Int("blockNumber", data.blockNumbers[x]))
-							typesOk = false
-							break
-						}
-						blocks[x] = blk
-					}
-					if !typesOk {
-						continue
-					}
-
-					// Snapshot which blocks already exist BEFORE the InsertMany.
-					// After InsertManyBlockDocuments runs, every block in the
-					// batch is present, so checking existence afterward would
-					// also skip ProcessTransactions for legitimately new blocks.
-					// Capturing it up front lets us skip ProcessTransactions only
-					// for blocks that were already synced (crash/restart during
-					// catch-up, overlapping ranges), matching the BlockExists
-					// idempotency guard in sync.go and gap_detection.go.
-					// ProcessTransactions has no unique index on txHash, so
-					// re-running it on an already-synced block duplicates
-					// transfer + transactionByAddress rows. One $in query keeps
-					// this to a single round-trip instead of N per batch.
-					blockNumbers := make([]string, len(blocks))
-					for x := 0; x < len(blocks); x++ {
-						blockNumbers[x] = blocks[x].Result.Number
-					}
-					alreadyExists, err := db.BlocksExist(blockNumbers)
-					if err != nil {
-						configs.Logger.Error("Failed to check existing blocks in batch", zap.Error(err))
-					}
-
-					db.InsertManyBlockDocuments(data.blockData)
-					configs.Logger.Info("Inserted block batch",
-						zap.Int("count", len(data.blockData)))
-
-					for x := 0; x < len(blocks); x++ {
-						if alreadyExists[blocks[x].Result.Number] {
-							configs.Logger.Info("Batch block already processed, skipping transaction processing",
-								zap.String("block", blocks[x].Result.Number))
-							continue
-						}
-						db.ProcessTransactions(blocks[x])
-						// Tombstone any pending rows whose hashes are in this
-						// block. The single-block path (sync.go) calls this
-						// inline; without it here, batch-sync (first-sync /
-						// behind-the-tip catch-up) leaves rows as "pending"
-						// until verifyPendingTransactions sweeps them, up to
-						// 5 minutes after the tx is confirmed on-chain.
-						if err := UpdatePendingTransactionsInBlock(&blocks[x]); err != nil {
-							configs.Logger.Error("Failed to update pending transactions in batch block",
-								zap.String("block", blocks[x].Result.Number),
-								zap.Error(err))
-						}
-					}
-					configs.Logger.Info("Processed transactions for blocks",
-						zap.Ints("block_numbers", data.blockNumbers))
-
-					// Track processed blocks for gap detection (thread-safe)
-					processedBlocksMutex.Lock()
-					processedBlocks = append(processedBlocks, data.blockNumbers...)
-					processedBlocksMutex.Unlock()
-
-					// Store the last block number from this batch
-					if len(data.blockNumbers) > 0 {
-						syncMutex.Lock()
-						lastBlock := utils.IntToHex(data.blockNumbers[len(data.blockNumbers)-1])
-						db.StoreLastKnownBlockNumber(lastBlock)
-						syncMutex.Unlock()
-					}
-
-					// Track the highest block number processed using atomic compare-and-swap
-					for _, blockNum := range data.blockNumbers {
-						blockNum64 := int64(blockNum)
-						for {
-							current := atomic.LoadInt64(&highestProcessedBlock)
-							if blockNum64 <= current {
-								break
-							}
-							if atomic.CompareAndSwapInt64(&highestProcessedBlock, current, blockNum64) {
-								break
-							}
-						}
-					}
-				}
-			}
-		}(producer)
+func parseBatchBlockNumber(blockNumber string) (int, error) {
+	if !strings.HasPrefix(blockNumber, "0x") || len(blockNumber) == 2 {
+		return 0, fmt.Errorf("invalid block number %q", blockNumber)
 	}
-	wg.Wait()
+	value, err := strconv.ParseUint(blockNumber[2:], 16, strconv.IntSize)
+	if err != nil {
+		return 0, fmt.Errorf("invalid block number %q: %w", blockNumber, err)
+	}
+	return int(value), nil
+}
 
-	// After all batches are processed, update the sync state with the highest block number
-	highest := atomic.LoadInt64(&highestProcessedBlock)
-	if highest > 0 {
-		highestBlockHex := utils.IntToHex(int(highest))
-		configs.Logger.Info("Updating sync state with highest processed block after batch processing",
-			zap.String("block", highestBlockHex))
-		forceUpdateSyncState(highestBlockHex)
+func validateFetchedBlock(requested string, block *models.ZondDatabaseBlock) error {
+	if block == nil {
+		return fmt.Errorf("RPC returned a nil block for %s", requested)
+	}
+	requestedNumber, err := parseBatchBlockNumber(requested)
+	if err != nil {
+		return err
+	}
+	returnedNumber, err := parseBatchBlockNumber(block.Result.Number)
+	if err != nil {
+		return fmt.Errorf("RPC block for %s has %w", requested, err)
+	}
+	if returnedNumber != requestedNumber {
+		return fmt.Errorf("RPC returned block %s for requested height %s", block.Result.Number, requested)
+	}
+	if block.Result.Number != requested {
+		return fmt.Errorf("RPC returned non-canonical block number %s for requested height %s",
+			block.Result.Number, requested)
+	}
+	if block.Result.Hash == "" {
+		return fmt.Errorf("RPC block %s has an empty hash", requested)
+	}
+	if block.Result.ParentHash == "" {
+		return fmt.Errorf("RPC block %s has an empty parent hash", requested)
+	}
+	for index, tx := range block.Result.Transactions {
+		if tx.Hash == "" {
+			return fmt.Errorf("RPC block %s transaction %d has an empty hash", requested, index)
+		}
+		if tx.BlockNumber != block.Result.Number {
+			return fmt.Errorf("RPC block %s transaction %s reports block number %s",
+				requested, tx.Hash, tx.BlockNumber)
+		}
+		if !strings.EqualFold(tx.BlockHash, block.Result.Hash) {
+			return fmt.Errorf("RPC block %s transaction %s reports block hash %s, want %s",
+				requested, tx.Hash, tx.BlockHash, block.Result.Hash)
+		}
+	}
+	return nil
+}
 
-		// Check for gaps in the processed blocks
-		processedBlocksMutex.Lock()
-		if len(processedBlocks) > 1 {
-			sort.Ints(processedBlocks)
-			minBlock := processedBlocks[0]
-			maxBlock := processedBlocks[len(processedBlocks)-1]
+func prepareBatch(data Data) ([]batchBlock, error) {
+	if len(data.blockData) != len(data.blockNumbers) {
+		return nil, fmt.Errorf("batch data length mismatch: %d blocks for %d requested heights",
+			len(data.blockData), len(data.blockNumbers))
+	}
+	prepared := make([]batchBlock, 0, len(data.blockData))
+	for index, entry := range data.blockData {
+		block, ok := entry.(models.ZondDatabaseBlock)
+		if !ok {
+			return nil, fmt.Errorf("batch entry %d has type %T", index, entry)
+		}
+		requested := data.blockNumbers[index]
+		if requested < 0 {
+			return nil, fmt.Errorf("batch entry %d has negative requested height %d", index, requested)
+		}
+		if err := validateFetchedBlock(utils.IntToHex(requested), &block); err != nil {
+			return nil, err
+		}
+		prepared = append(prepared, batchBlock{block: block, number: requested})
+	}
+	sort.Slice(prepared, func(i, j int) bool {
+		return prepared[i].number < prepared[j].number
+	})
+	for index := 1; index < len(prepared); index++ {
+		if prepared[index].number != prepared[index-1].number+1 {
+			return nil, fmt.Errorf("batch heights are not contiguous: %d followed by %d",
+				prepared[index-1].number, prepared[index].number)
+		}
+	}
+	return prepared, nil
+}
 
-			// If we processed fewer blocks than the range suggests, there might be gaps
-			expectedCount := maxBlock - minBlock + 1
-			if len(processedBlocks) < expectedCount {
-				configs.Logger.Warn("Potential gaps detected during batch processing",
-					zap.Int("expected_blocks", expectedCount),
-					zap.Int("processed_blocks", len(processedBlocks)),
-					zap.Int("min_block", minBlock),
-					zap.Int("max_block", maxBlock))
+func validateBatchParentLinks(blocks []batchBlock, predecessorHash string) error {
+	if len(blocks) == 0 {
+		return nil
+	}
+	if blocks[0].number > 0 {
+		if predecessorHash == "" {
+			return fmt.Errorf("canonical predecessor for block %d is missing", blocks[0].number)
+		}
+		if !strings.EqualFold(blocks[0].block.Result.ParentHash, predecessorHash) {
+			return &batchParentMismatchError{
+				blockNumber:          blocks[0].number,
+				expected:             predecessorHash,
+				actual:               blocks[0].block.Result.ParentHash,
+				canonicalPredecessor: true,
 			}
 		}
-		processedBlocksMutex.Unlock()
+	}
+	for index := 1; index < len(blocks); index++ {
+		previous := blocks[index-1]
+		current := blocks[index]
+		if current.number != previous.number+1 {
+			return fmt.Errorf("batch heights are not contiguous: %d followed by %d",
+				previous.number, current.number)
+		}
+		if !strings.EqualFold(current.block.Result.ParentHash, previous.block.Result.Hash) {
+			return &batchParentMismatchError{
+				blockNumber: current.number,
+				expected:    previous.block.Result.Hash,
+				actual:      current.block.Result.ParentHash,
+			}
+		}
+	}
+	return nil
+}
+
+func ingestBatch(data Data) ([]int, error) {
+	return ingestBatchWithReorgPolicy(data, false)
+}
+
+func ingestBatchWithReorgPolicy(data Data, recoverCanonicalReorg bool) ([]int, error) {
+	prepared, err := prepareBatch(data)
+	if err != nil {
+		return nil, errors.Join(err, data.err)
+	}
+	if len(prepared) == 0 {
+		return nil, data.err
+	}
+
+	lockChainMutation()
+	defer chainMutationMu.Unlock()
+	return ingestPreparedBatchLockedWithReorgPolicy(prepared, data.err, recoverCanonicalReorg)
+}
+
+type blockCompanionOperations struct {
+	reset         func(string) error
+	process       func(models.ZondDatabaseBlock) error
+	updatePending func(*models.ZondDatabaseBlock) error
+	markComplete  func(string, string) error
+	storeSync     func(string) error
+}
+
+func completeConfirmedCompanionPrefix(
+	confirmedBlocks []db.ConfirmedBlockWrite,
+	operations blockCompanionOperations,
+) ([]int, error) {
+	confirmedNumbers := make([]int, 0, len(confirmedBlocks))
+	var companionErr error
+	for _, confirmed := range confirmedBlocks {
+		number, parseErr := parseBatchBlockNumber(confirmed.Block.Result.Number)
+		if parseErr != nil {
+			companionErr = parseErr
+			break
+		}
+		if confirmed.CompanionsComplete {
+			configs.Logger.Debug("Block identity and companions were already complete",
+				zap.String("block", confirmed.Block.Result.Number),
+				zap.String("hash", confirmed.Block.Result.Hash))
+			confirmedNumbers = append(confirmedNumbers, number)
+			continue
+		}
+
+		if err := operations.reset(confirmed.Block.Result.Number); err != nil {
+			companionErr = fmt.Errorf("reset interrupted companions for block %s: %w",
+				confirmed.Block.Result.Number, err)
+			break
+		}
+		if err := operations.process(confirmed.Block); err != nil {
+			companionErr = fmt.Errorf("process companions for block %s: %w",
+				confirmed.Block.Result.Number, err)
+			break
+		}
+		block := confirmed.Block
+		if err := operations.updatePending(&block); err != nil {
+			companionErr = fmt.Errorf("update pending transactions for block %s: %w",
+				block.Result.Number, err)
+			break
+		}
+		if err := operations.markComplete(block.Result.Number, block.Result.Hash); err != nil {
+			companionErr = fmt.Errorf("mark companions complete for block %s: %w",
+				block.Result.Number, err)
+			break
+		}
+		confirmedNumbers = append(confirmedNumbers, number)
+	}
+
+	var syncStateErr error
+	if len(confirmedNumbers) > 0 {
+		lastConfirmed := utils.IntToHex(confirmedNumbers[len(confirmedNumbers)-1])
+		syncStateErr = operations.storeSync(lastConfirmed)
+	}
+	return confirmedNumbers, errors.Join(companionErr, syncStateErr)
+}
+
+func ingestPreparedBatchLocked(prepared []batchBlock, batchErr error) ([]int, error) {
+	return ingestPreparedBatchLockedWithReorgPolicy(prepared, batchErr, false)
+}
+
+func recoverBatchCanonicalReorgLocked(
+	mismatch *batchParentMismatchError,
+	durableCursor string,
+	rollback func(string) error,
+) error {
+	if mismatch == nil {
+		return errors.New("batch parent mismatch is required for reorg recovery")
+	}
+	if !mismatch.canonicalPredecessor {
+		return mismatch
+	}
+	if mismatch.blockNumber <= 1 {
+		return fmt.Errorf("%w: immutable genesis predecessor cannot be replaced", mismatch)
+	}
+	predecessorNumber := utils.IntToHex(mismatch.blockNumber - 1)
+	if durableCursor != predecessorNumber {
+		return fmt.Errorf("%w: durable cursor %s does not match predecessor %s",
+			mismatch, durableCursor, predecessorNumber)
+	}
+	rollbackTarget := utils.IntToHex(mismatch.blockNumber - 2)
+	if err := rollback(rollbackTarget); err != nil {
+		return errors.Join(mismatch, fmt.Errorf("rollback stale canonical suffix to %s: %w",
+			rollbackTarget, err))
+	}
+	return fmt.Errorf("%w: rolled back stale canonical suffix to %s; retry with fresh blocks",
+		mismatch, rollbackTarget)
+}
+
+func ingestPreparedBatchLockedWithReorgPolicy(
+	prepared []batchBlock,
+	batchErr error,
+	recoverCanonicalReorg bool,
+) ([]int, error) {
+	predecessorHash := ""
+	var err error
+	if prepared[0].number > 0 {
+		predecessorNumber := utils.IntToHex(prepared[0].number - 1)
+		predecessorHash, err = db.GetCanonicalBlockHash(predecessorNumber)
+		if err != nil {
+			return nil, fmt.Errorf("read canonical predecessor %s: %w", predecessorNumber, err)
+		}
+	}
+	if err := validateBatchParentLinks(prepared, predecessorHash); err != nil {
+		var mismatch *batchParentMismatchError
+		if recoverCanonicalReorg && errors.As(err, &mismatch) && mismatch.canonicalPredecessor {
+			durableCursor, cursorErr := db.GetLastKnownBlockNumberStrict()
+			if cursorErr != nil {
+				return nil, errors.Join(err,
+					fmt.Errorf("read durable cursor before batch reorg recovery: %w", cursorErr))
+			}
+			recoveryErr := recoverBatchCanonicalReorgLocked(mismatch, durableCursor, db.Rollback)
+			configs.Logger.Warn("Batch parent mismatch stopped sync for canonical recovery",
+				zap.Int("block", mismatch.blockNumber),
+				zap.String("durable_cursor", durableCursor),
+				zap.Error(recoveryErr))
+			return nil, recoveryErr
+		}
+		return nil, err
+	}
+
+	blocks := make([]models.ZondDatabaseBlock, len(prepared))
+	for index := range prepared {
+		blocks[index] = prepared[index].block
+	}
+	writeResult, writeErr := db.InsertManyBlockDocuments(blocks)
+	confirmedNumbers, companionErr := completeConfirmedCompanionPrefix(
+		writeResult.Confirmed,
+		blockCompanionOperations{
+			reset:         db.ResetBlockCompanionRows,
+			process:       db.ProcessTransactions,
+			updatePending: UpdatePendingTransactionsInBlock,
+			markComplete:  db.MarkBlockCompanionsComplete,
+			storeSync:     db.StoreLastKnownBlockNumber,
+		},
+	)
+	var conflictRecoveryErr error
+	var conflict *db.BlockHeightConflictError
+	if errors.As(writeErr, &conflict) {
+		pendingOnly, stateErr := db.BlockHeightHasOnlyPendingRows(conflict.Number)
+		if stateErr != nil {
+			conflictRecoveryErr = fmt.Errorf("inspect conflicting block %s: %w", conflict.Number, stateErr)
+		} else if pendingOnly {
+			conflictNumber, parseErr := parseBatchBlockNumber(conflict.Number)
+			if parseErr != nil {
+				conflictRecoveryErr = parseErr
+			} else if conflictNumber == 0 {
+				conflictRecoveryErr = fmt.Errorf("pending genesis conflicts with fetched canonical identity")
+			} else {
+				rollbackTarget := utils.IntToHex(conflictNumber - 1)
+				if err := db.Rollback(rollbackTarget); err != nil {
+					conflictRecoveryErr = fmt.Errorf("remove pending conflicting suffix from %s: %w",
+						conflict.Number, err)
+				} else {
+					configs.Logger.Warn("Removed pending conflicting block suffix for canonical refetch",
+						zap.String("conflict_height", conflict.Number),
+						zap.String("durable_cursor", rollbackTarget))
+				}
+			}
+		}
+	}
+	configs.Logger.Info("Confirmed canonical block batch prefix",
+		zap.Int("attempted", writeResult.Attempted),
+		zap.Int("confirmed", len(writeResult.Confirmed)),
+		zap.Int("companions_complete", len(confirmedNumbers)),
+		zap.Ints("block_numbers", confirmedNumbers))
+	return confirmedNumbers, errors.Join(writeErr, batchErr, companionErr, conflictRecoveryErr)
+}
+
+func ingestFetchedBlock(requested string, block *models.ZondDatabaseBlock) error {
+	if err := validateFetchedBlock(requested, block); err != nil {
+		return err
+	}
+	number, err := parseBatchBlockNumber(requested)
+	if err != nil {
+		return err
+	}
+	if err := db.UpdateTransactionStatuses(block); err != nil {
+		return fmt.Errorf("enrich transaction statuses for block %s: %w", requested, err)
+	}
+	confirmed, err := ingestBatch(Data{
+		blockData:    []interface{}{*block},
+		blockNumbers: []int{number},
+	})
+	if err != nil {
+		return err
+	}
+	if len(confirmed) != 1 || confirmed[0] != number {
+		return fmt.Errorf("block %s did not reach durable companion completion", requested)
+	}
+	return nil
+}
+
+// ReindexBlockCompanions replays one exact legacy or pending block through the
+// durable companion boundary. Callers must process candidates in ascending
+// canonical order.
+func ReindexBlockCompanions(requested string, block *models.ZondDatabaseBlock) error {
+	if err := validateFetchedBlock(requested, block); err != nil {
+		return err
+	}
+	if err := db.UpdateTransactionStatuses(block); err != nil {
+		return fmt.Errorf("enrich transaction statuses for block %s: %w", requested, err)
+	}
+	number, err := parseBatchBlockNumber(requested)
+	if err != nil {
+		return err
+	}
+	lockChainMutation()
+	defer chainMutationMu.Unlock()
+	needsReplay, err := db.PrepareBlockCompanionReindex(requested, block.Result.Hash)
+	if err != nil && !errors.Is(err, db.ErrCanonicalBlockNotFound) {
+		return err
+	}
+	if err == nil && !needsReplay {
+		return nil
+	}
+	confirmed, err := ingestPreparedBatchLocked([]batchBlock{{
+		block:  *block,
+		number: number,
+	}}, nil)
+	if err != nil {
+		return err
+	}
+	if len(confirmed) != 1 || confirmed[0] != number {
+		return fmt.Errorf("block %s did not reach durable companion completion", requested)
+	}
+	return nil
+}
+
+type consumerReport struct {
+	err                   error
+	highestProcessedBlock int
+}
+
+// consumeBatches drains producer channels in range order. Producers still
+// fetch in parallel, while database mutations remain deterministic and
+// parent-linked. The first unresolved prefix cancels outstanding fetch work.
+func consumeBatches(ch <-chan (<-chan Data), cancel func()) consumerReport {
+	processedBlocks := make([]int, 0)
+	highestProcessedBlock := -1
+	halted := false
+	var haltErr error
+
+	for producer := range ch {
+		for data := range producer {
+			if halted {
+				continue
+			}
+			confirmed, err := ingestBatchWithReorgPolicy(data, true)
+			processedBlocks = append(processedBlocks, confirmed...)
+			for _, blockNumber := range confirmed {
+				if blockNumber > highestProcessedBlock {
+					highestProcessedBlock = blockNumber
+				}
+			}
+			if err != nil {
+				halted = true
+				haltErr = err
+				cancel()
+				configs.Logger.Error("Batch ingestion halted at the first unresolved canonical prefix",
+					zap.Error(err),
+					zap.Ints("confirmed_prefix", confirmed))
+			}
+		}
+	}
+
+	if highestProcessedBlock >= 0 {
+		configs.Logger.Info("Batch processing finished at confirmed canonical height",
+			zap.String("block", utils.IntToHex(highestProcessedBlock)))
+	}
+	if len(processedBlocks) > 1 {
+		sort.Ints(processedBlocks)
+		minBlock := processedBlocks[0]
+		maxBlock := processedBlocks[len(processedBlocks)-1]
+		expectedCount := maxBlock - minBlock + 1
+		if len(processedBlocks) < expectedCount {
+			configs.Logger.Warn("Potential gaps detected during batch processing",
+				zap.Int("expected_blocks", expectedCount),
+				zap.Int("processed_blocks", len(processedBlocks)),
+				zap.Int("min_block", minBlock),
+				zap.Int("max_block", maxBlock))
+		}
+	}
+	return consumerReport{err: haltErr, highestProcessedBlock: highestProcessedBlock}
+}
+
+func waitForProducerContext(ctx context.Context, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return true
+	case <-ctx.Done():
+		return false
 	}
 }
 
-// producer fetches blocks in a range and sends them to a channel
-func producer(start string, end string) <-chan Data {
+// producerWithContext fetches blocks in a range and sends them to a channel.
+func (group *blockProducerGroup) producerWithContext(
+	ctx context.Context,
+	start string,
+	end string,
+) <-chan Data {
 	// Create a channel which we will send our data.
 	Datas := make(chan Data, 32)
 
@@ -204,28 +523,30 @@ func producer(start string, end string) <-chan Data {
 	var blockNumbers []int
 
 	// Start the goroutine that produces data.
+	group.waitGroup.Add(1)
 	go func(ch chan<- Data) {
+		defer group.waitGroup.Done()
 		// Acquire a token from the producer semaphore
-		producerSem <- struct{}{}
+		select {
+		case group.semaphore <- struct{}{}:
+		case <-ctx.Done():
+			close(ch)
+			return
+		}
 		// Ensure the token is released when this goroutine finishes
 		defer func() {
-			<-producerSem
+			<-group.semaphore
 			close(ch) // Close the channel when done producing
 		}()
 
 		// Produce data.
+		var batchErr error
 		currentBlock := start
 		for utils.CompareHexNumbers(currentBlock, end) < 0 {
-			// Check if this block already exists in the database
-			if db.BlockExists(currentBlock) {
-				configs.Logger.Debug("Block already exists in database, skipping",
-					zap.String("block", currentBlock))
-				currentBlock = utils.AddHexNumbers(currentBlock, "0x1")
-				continue
-			}
-
 			// Add reduced delay for bulk sync operations (5-7ms instead of 50-76ms)
-			time.Sleep(getRPCDelay(true))
+			if !waitForProducerContext(ctx, getRPCDelay(true)) {
+				return
+			}
 
 			// Try to fetch block with retry logic
 			var data *models.ZondDatabaseBlock
@@ -233,8 +554,19 @@ func producer(start string, end string) <-chan Data {
 			maxRetries := 3
 
 			for attempt := 1; attempt <= maxRetries; attempt++ {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
 				data, err = rpc.GetBlockByNumberMainnet(currentBlock)
-				if err == nil && data != nil && data.Result.ParentHash != "" {
+				if err == nil {
+					err = validateFetchedBlock(currentBlock, data)
+				}
+				if err == nil {
+					err = db.UpdateTransactionStatuses(data)
+				}
+				if err == nil {
 					break // Success
 				}
 
@@ -245,7 +577,9 @@ func producer(start string, end string) <-chan Data {
 						zap.Int("attempt", attempt),
 						zap.Duration("backoff", backoffDelay),
 						zap.Error(err))
-					time.Sleep(backoffDelay)
+					if !waitForProducerContext(ctx, backoffDelay) {
+						return
+					}
 				}
 			}
 
@@ -255,76 +589,71 @@ func producer(start string, end string) <-chan Data {
 					zap.String("block", currentBlock),
 					zap.Int("max_retries", maxRetries),
 					zap.Error(err))
-				currentBlock = utils.AddHexNumbers(currentBlock, "0x1")
-				continue
-			}
-
-			if data == nil || data.Result.ParentHash == "" {
-				trackFailedBlock(currentBlock, fmt.Errorf("invalid block data: nil or missing parent hash"))
-				configs.Logger.Error("Invalid block data received",
-					zap.String("block", currentBlock))
-				currentBlock = utils.AddHexNumbers(currentBlock, "0x1")
-				continue
+				batchErr = fmt.Errorf("fetch block %s: %w", currentBlock, err)
+				break
 			}
 
 			// Success - clear any previous failure tracking
 			clearFailedBlock(currentBlock)
 
-			db.UpdateTransactionStatuses(data)
 			blockData = append(blockData, *data)
 			blockNumbers = append(blockNumbers, int(utils.HexToInt(currentBlock).Int64()))
 			currentBlock = utils.AddHexNumbers(currentBlock, "0x1")
 		}
-		if len(blockData) > 0 {
-			ch <- Data{blockData: blockData, blockNumbers: blockNumbers}
+		if len(blockData) > 0 || batchErr != nil {
+			select {
+			case ch <- Data{blockData: blockData, blockNumbers: blockNumbers, err: batchErr}:
+			case <-ctx.Done():
+			}
 		}
 	}(Datas)
 
 	return Datas
 }
 
-// batchSync handles syncing multiple blocks in parallel
-func batchSync(fromBlock string, toBlock string) string {
-	// Sanity check to prevent backwards sync
-	if utils.CompareHexNumbers(fromBlock, toBlock) >= 0 {
+// batchSync ingests the inclusive range [fromBlock, toBlock] and returns the
+// confirmed durable high-water mark.
+func batchSync(fromBlock string, toBlock string) (string, error) {
+	if utils.CompareHexNumbers(fromBlock, toBlock) > 0 {
 		configs.Logger.Error("Invalid block range for batch sync",
 			zap.String("from_block", fromBlock),
 			zap.String("to_block", toBlock))
-		return fromBlock
+		return db.GetLastKnownBlockNumber(), fmt.Errorf("invalid batch range %s through %s", fromBlock, toBlock)
 	}
 
 	configs.Logger.Info("Starting batch sync",
 		zap.String("from_block", fromBlock),
 		zap.String("to_block", toBlock))
 
-	// Check if the last known block is already higher than our starting point
-	// This prevents duplicate processing if another process has already synced these blocks
 	lastKnownBlock := db.GetLastKnownBlockNumber()
 	if utils.CompareHexNumbers(lastKnownBlock, fromBlock) >= 0 {
-		configs.Logger.Info("Skipping batch sync as blocks have already been processed",
-			zap.String("last_known_block", lastKnownBlock),
-			zap.String("requested_from_block", fromBlock))
-
-		// Return the higher of the two values to continue from there
 		if utils.CompareHexNumbers(lastKnownBlock, toBlock) >= 0 {
-			return toBlock
+			configs.Logger.Info("Requested batch range is already durably processed",
+				zap.String("last_known_block", lastKnownBlock),
+				zap.String("requested_to_block", toBlock))
+			return lastKnownBlock, nil
 		}
-		return lastKnownBlock
+		fromBlock = utils.AddHexNumbers(lastKnownBlock, "0x1")
+		configs.Logger.Info("Trimmed batch range to the durable sync state",
+			zap.String("last_known_block", lastKnownBlock),
+			zap.String("next_block", fromBlock))
 	}
 
 	wg := sync.WaitGroup{}
 
-	// Initialize the producer semaphore
-	producerSem = make(chan struct{}, MaxProducerConcurrency)
+	producerGroup := newBlockProducerGroup(MaxProducerConcurrency)
 
 	// Create buffered channel for producers
 	producers := make(chan (<-chan Data), 32)
+	batchCtx, cancelBatch := context.WithCancel(context.Background())
+	defer cancelBatch()
 
 	// Start the consumer
+	var report consumerReport
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		consumer(producers)
+		report = consumeBatches(producers, cancelBatch)
 	}()
 
 	// Use larger batch size when far behind
@@ -335,101 +664,78 @@ func batchSync(fromBlock string, toBlock string) string {
 
 	// Start producers in batches with retry logic
 	currentBlock := fromBlock
-	lastSuccessfulBatch := fromBlock
+	toBlockExclusive := utils.AddHexNumbers(toBlock, "0x1")
+	lastScheduledBlock := utils.SubtractHexNumbers(fromBlock, "0x1")
 
-	for utils.CompareHexNumbers(currentBlock, toBlock) < 0 {
+scheduleBatches:
+	for utils.CompareHexNumbers(currentBlock, toBlockExclusive) < 0 {
+		select {
+		case <-batchCtx.Done():
+			break scheduleBatches
+		default:
+		}
 		endBlock := utils.AddHexNumbers(currentBlock, utils.IntToHex(batchSize))
-		if utils.CompareHexNumbers(endBlock, toBlock) > 0 {
-			endBlock = toBlock
+		if utils.CompareHexNumbers(endBlock, toBlockExclusive) > 0 {
+			endBlock = toBlockExclusive
 		}
 
-		// Retry logic for producer
-		var producerChan <-chan Data
-		for retries := 0; retries < 3; retries++ {
-			producerChan = producer(currentBlock, endBlock)
-			if producerChan != nil {
-				break
-			}
-			configs.Logger.Warn("Failed to create producer, retrying...",
-				zap.String("from", currentBlock),
-				zap.String("to", endBlock),
-				zap.Int("retry", retries+1))
-			time.Sleep(time.Duration(1<<uint(retries)) * time.Second)
+		producerChan := producerGroup.producerWithContext(batchCtx, currentBlock, endBlock)
+		select {
+		case producers <- producerChan:
+		case <-batchCtx.Done():
+			break scheduleBatches
 		}
-
-		if producerChan == nil {
-			configs.Logger.Error("Failed to create producer after retries",
-				zap.String("from", currentBlock),
-				zap.String("to", endBlock))
-			return currentBlock
-		}
-
-		producers <- producerChan
 		configs.Logger.Info("Processing block range",
 			zap.String("from", currentBlock),
-			zap.String("to", endBlock))
+			zap.String("to", utils.SubtractHexNumbers(endBlock, "0x1")))
 
-		lastSuccessfulBatch = endBlock
+		lastScheduledBlock = utils.SubtractHexNumbers(endBlock, "0x1")
 		currentBlock = endBlock
 	}
 
 	close(producers)
 	wg.Wait()
+	cancelBatch()
+	producerGroup.wait()
+	if report.err != nil {
+		lastKnownBlock = db.GetLastKnownBlockNumber()
+		configs.Logger.Error("batchSync stopped at its confirmed canonical prefix",
+			zap.String("confirmed_sync_state", lastKnownBlock),
+			zap.Error(report.err))
+		return lastKnownBlock, report.err
+	}
 
 	// After batch sync completes, verify what the actual last synced block is
 	lastKnownBlock = db.GetLastKnownBlockNumber()
 	configs.Logger.Info("batchSync completed",
 		zap.String("requested_to_block", toBlock),
-		zap.String("last_successful_batch", lastSuccessfulBatch),
+		zap.String("last_scheduled_block", lastScheduledBlock),
 		zap.String("db_last_known_block", lastKnownBlock))
 
-	if utils.CompareHexNumbers(lastSuccessfulBatch, lastKnownBlock) > 0 {
-		configs.Logger.Info("Forcing update of sync state to latest processed block",
-			zap.String("from", lastKnownBlock),
-			zap.String("to", lastSuccessfulBatch))
-
-		// Force update the sync state by directly setting it without conditions
-		forceUpdateSyncState(lastSuccessfulBatch)
-
-		// Update our local variable to reflect the change
-		lastKnownBlock = lastSuccessfulBatch
+	if utils.CompareHexNumbers(lastKnownBlock, toBlock) < 0 {
+		unresolvedErr := fmt.Errorf("%w: batch ended at %s before requested height %s",
+			db.ErrBlockWriteUnresolved, lastKnownBlock, toBlock)
+		configs.Logger.Error("Batch scheduling ended beyond the confirmed sync state",
+			zap.String("scheduled_end", lastScheduledBlock),
+			zap.String("confirmed_sync_state", lastKnownBlock),
+			zap.Error(unresolvedErr))
+		return lastKnownBlock, unresolvedErr
 	}
 
 	// Process all token transfers once after all batches are completed
-	db.ProcessTokenTransfersFromTransactions()
+	tokenQueueErr := processQueuedTokenContracts()
+	if tokenQueueErr != nil {
+		configs.Logger.Error("Queued token processing completed with retryable failures",
+			zap.Error(tokenQueueErr))
+	}
 
 	configs.Logger.Info("Final sync state verification")
 	highestBlock := findHighestProcessedBlock()
 	if utils.CompareHexNumbers(highestBlock, lastKnownBlock) > 0 {
-		configs.Logger.Info("Found higher processed block than current sync state",
+		configs.Logger.Warn("Found block rows beyond the confirmed sync state",
 			zap.String("current_sync_state", lastKnownBlock),
 			zap.String("highest_processed_block", highestBlock))
-		forceUpdateSyncState(highestBlock)
-		lastKnownBlock = highestBlock
 	}
 
-	// Detect and fill any gaps that occurred during batch sync
-	configs.Logger.Info("Running gap detection after batch sync")
-	gaps := detectGaps(fromBlock, toBlock)
-	if len(gaps) > 0 {
-		configs.Logger.Warn("Found gaps in batch sync, attempting to fill",
-			zap.Int("gap_count", len(gaps)))
-		filled := fillGaps(gaps)
-		if filled > 0 {
-			configs.Logger.Info("Filled gaps during batch sync",
-				zap.Int("filled", filled),
-				zap.Int("remaining", len(gaps)-filled))
-			// Update sync state after filling gaps
-			newHighest := findHighestProcessedBlock()
-			if utils.CompareHexNumbers(newHighest, lastKnownBlock) > 0 {
-				forceUpdateSyncState(newHighest)
-				lastKnownBlock = newHighest
-			}
-		}
-	}
-
-	if utils.CompareHexNumbers(lastKnownBlock, "0x0") > 0 {
-		return lastKnownBlock
-	}
-	return lastSuccessfulBatch
+	return lastKnownBlock, nil
 }

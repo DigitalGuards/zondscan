@@ -2,10 +2,14 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import * as zondAbi from '@theqrl/web3-zond-abi';
+import * as zondAbi from '@theqrl/web3-qrl-abi';
 import ConnectButton from './ConnectButton';
 import type { QRLConnectProvider } from '../lib/qrlConnect';
 import type { ContractData } from '../types/address';
+import { assertVm64AbiSupport } from '../lib/vm64Abi';
+import { classifyStoredVerification } from '../lib/storedVerification';
+import ContractInteractionProvenanceNotice from './ContractInteractionProvenanceNotice';
+import { sendExplorerTransaction } from '../lib/explorerTransaction';
 
 interface AbiInput {
   name: string;
@@ -27,7 +31,7 @@ interface WriteContractProps {
 
 /**
  * One collapsible card per nonpayable/payable ABI function. Each card encodes
- * its calldata client-side via @theqrl/web3-zond-abi and asks the user's
+ * its calldata client-side through a capability-checked VM64 ABI codec and asks the user's
  * paired wallet to broadcast the transaction over the QRL Connect relay. The
  * wallet returns the broadcast tx hash, which we link to the local explorer.
  *
@@ -38,9 +42,19 @@ interface WriteContractProps {
 export default function WriteContract({ contractData }: WriteContractProps): JSX.Element {
   const [account, setAccount] = useState<string | null>(null);
   const [provider, setProvider] = useState<QRLConnectProvider | null>(null);
+  const verificationStatus = useMemo(
+    () => classifyStoredVerification(contractData),
+    [contractData],
+  );
 
   const writeFns = useMemo(() => {
-    if (!contractData.verified || !contractData.abi) return [] as AbiFunction[];
+    if (
+      !contractData.verified ||
+      verificationStatus !== 'digest-backed' ||
+      !contractData.abi
+    ) {
+      return [] as AbiFunction[];
+    }
     try {
       const parsed = JSON.parse(contractData.abi) as AbiFunction[];
       return parsed.filter(
@@ -51,7 +65,7 @@ export default function WriteContract({ contractData }: WriteContractProps): JSX
     } catch {
       return [] as AbiFunction[];
     }
-  }, [contractData.abi, contractData.verified]);
+  }, [contractData.abi, contractData.verified, verificationStatus]);
 
   if (!contractData.verified) {
     return (
@@ -60,16 +74,34 @@ export default function WriteContract({ contractData }: WriteContractProps): JSX
       </div>
     );
   }
+  if (verificationStatus !== 'digest-backed') {
+    return (
+      <ContractInteractionProvenanceNotice
+        status={verificationStatus}
+        interaction="Write"
+      />
+    );
+  }
   if (writeFns.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-card-gradient p-4 text-sm text-text-secondary">
-        This contract has no state-changing functions to call.
+      <div className="space-y-3">
+        <ContractInteractionProvenanceNotice
+          status={verificationStatus}
+          interaction="Write"
+        />
+        <div className="rounded-lg border border-border bg-card-gradient p-4 text-sm text-text-secondary">
+          This contract has no state-changing functions to call.
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-3 md:space-y-4">
+      <ContractInteractionProvenanceNotice
+        status={verificationStatus}
+        interaction="Write"
+      />
       <div className="rounded-lg border border-border bg-card-gradient p-3 md:p-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
         <div>
           <div className="text-xs md:text-sm font-medium text-text-primary">Wallet pairing</div>
@@ -127,6 +159,7 @@ function WriteFunctionCard({
     setTxHash(null);
     setRejected(false);
     try {
+      assertVm64AbiSupport();
       const args = fn.inputs.map((input, i) => parseArg(values[i] ?? '', input.type));
       const data = zondAbi.encodeFunctionCall(fn as never, args as never[]);
 
@@ -139,10 +172,7 @@ function WriteFunctionCard({
         tx.value = toHexWei(value.trim());
       }
 
-      const result = (await provider.request({
-        method: 'qrl_sendTransaction',
-        params: [tx],
-      })) as string;
+      const result = await sendExplorerTransaction(provider, tx);
       setTxHash(result);
     } catch (e) {
       // EIP-1193 user-rejection: code 4001.
@@ -244,7 +274,7 @@ function WriteFunctionCard({
 }
 
 // parseArg converts a user-typed string into the right JS shape for
-// @theqrl/web3-zond-abi.encodeFunctionCall. Mirrors ReadContract's parser
+// The installed ABI codec's encodeFunctionCall. Mirrors ReadContract's parser
 // so the Read/Write tabs accept identical input formats.
 function parseArg(raw: string, type: string): unknown {
   const t = raw.trim();

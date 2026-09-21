@@ -3,8 +3,10 @@ package db
 import (
 	"backendAPI/configs"
 	"backendAPI/models"
+	"backendAPI/qrladdress"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math/big"
@@ -17,6 +19,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+var ErrStaleIndexedBalance = errors.New("indexed balance is being reconciled after a chain reorganization")
+
 func ReturnSingleAddress(query string) (models.Address, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	var result models.Address
@@ -28,6 +32,9 @@ func ReturnSingleAddress(query string) (models.Address, error) {
 	// Try to find existing address
 	filter := bson.D{{Key: "id", Value: addressHex}}
 	err := configs.AddressesCollections.FindOne(ctx, filter).Decode(&result)
+	if err == nil && result.BalanceStale {
+		return models.Address{}, ErrStaleIndexedBalance
+	}
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			// Address not found, create new one
@@ -58,6 +65,9 @@ func ReturnSingleAddress(query string) (models.Address, error) {
 func ReturnRichlist() ([]models.RichlistEntry, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	contractLookupPipeline := canonicalContractPipeline(bson.M{
+		"$expr": bson.M{"$eq": bson.A{"$address", "$$address"}},
+	})
 
 	// Contract detection joins contractCode by address instead of trusting
 	// addresses.isContract (known-poisoned data). Both collections store
@@ -66,13 +76,14 @@ func ReturnRichlist() ([]models.RichlistEntry, error) {
 	// contract when at least one joined doc carries real bytecode
 	// (non-empty and not "0x", which guards failed deploys).
 	pipeline := []bson.M{
+		{"$match": bson.M{"balanceStale": bson.M{"$ne": true}}},
 		{"$sort": bson.M{"balance": -1}},
 		{"$limit": 50},
 		{"$lookup": bson.M{
-			"from":         "contractCode",
-			"localField":   "id",
-			"foreignField": "address",
-			"as":           "contract",
+			"from":     "contractCode",
+			"let":      bson.M{"address": "$id"},
+			"pipeline": contractLookupPipeline,
+			"as":       "contract",
 		}},
 		{"$project": bson.M{
 			"_id":     0,
@@ -143,6 +154,7 @@ func ReturnRichlist() ([]models.RichlistEntry, error) {
 // richlist's percent-of-supply column.
 func totalAddressBalance(ctx context.Context) (float64, error) {
 	pipeline := []bson.M{
+		{"$match": bson.M{"balanceStale": bson.M{"$ne": true}}},
 		{"$group": bson.M{"_id": nil, "total": bson.M{"$sum": "$balance"}}},
 	}
 
@@ -184,9 +196,15 @@ func ReturnRankAddress(address string) (int64, error) {
 		}
 		return 0, fmt.Errorf("error looking up address for rank: %v", err)
 	}
+	if target.BalanceStale {
+		return 0, ErrStaleIndexedBalance
+	}
 
 	// Count how many addresses have a strictly higher balance; rank = that count + 1
-	count, err := configs.AddressesCollections.CountDocuments(ctx, bson.M{"balance": bson.M{"$gt": target.Balance}})
+	count, err := configs.AddressesCollections.CountDocuments(ctx, bson.M{
+		"balance":      bson.M{"$gt": target.Balance},
+		"balanceStale": bson.M{"$ne": true},
+	})
 	if err != nil {
 		return 0, fmt.Errorf("error counting addresses for rank: %v", err)
 	}
@@ -195,12 +213,9 @@ func ReturnRankAddress(address string) (int64, error) {
 }
 
 func GetBalance(address string) (float64, string) {
-	// Ensure address has Q prefix for RPC calls
-	rpcAddress := address
-	if strings.HasPrefix(rpcAddress, "0x") {
-		rpcAddress = "Q" + rpcAddress[2:]
-	} else if !strings.HasPrefix(rpcAddress, "Q") {
-		rpcAddress = "Q" + rpcAddress
+	rpcAddress, ok := qrladdress.Canonicalize(address)
+	if !ok {
+		return 0, "Invalid address"
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -242,9 +257,12 @@ func ReturnWalletDistribution(query uint64) (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := bson.D{{Key: "balance", Value: bson.D{
-		{Key: "$gt", Value: (query * 1000000000000)},
-	}}}
+	filter := bson.D{
+		{Key: "balance", Value: bson.D{
+			{Key: "$gt", Value: (query * 1000000000000)},
+		}},
+		{Key: "balanceStale", Value: bson.D{{Key: "$ne", Value: true}}},
+	}
 
 	results, err := configs.AddressesCollections.CountDocuments(ctx, filter)
 	if err != nil {

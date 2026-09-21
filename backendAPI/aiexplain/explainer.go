@@ -9,6 +9,7 @@ import (
 
 	"backendAPI/db"
 	"backendAPI/models"
+	"backendAPI/sourcebundle"
 )
 
 // Common errors callers can switch on to return the right HTTP status.
@@ -16,6 +17,8 @@ var (
 	ErrNotFound       = errors.New("contract not found")
 	ErrNotVerified    = errors.New("contract is not verified")
 	ErrSourceTooLarge = errors.New("contract source exceeds size cap")
+	ErrProvenance     = errors.New("verification provenance is not digest-backed")
+	ErrSourceChanged  = errors.New("contract source bundle changed")
 	ErrRegenCap       = errors.New("regeneration cap reached")
 )
 
@@ -27,18 +30,30 @@ var (
 const (
 	RegenLimitPerWindow = 5
 	RegenWindow         = 7 * 24 * time.Hour
+	// GenerationLeaseTTL exceeds the route deadline plus FailureCooldown.
+	// The original lease preserves a full cooldown when a follow-up Mongo
+	// cooldown write encounters a partial outage.
+	GenerationLeaseTTL = 3 * time.Minute
+	FailureCooldown    = 2 * time.Minute
 )
 
 // Explainer is the orchestrator: it enforces the verified-only gate, runs
 // the Anthropic call, and persists the result back to the contract record
 // so subsequent reads are free.
 type Explainer struct {
-	Client *Client
+	Client modelGenerator
+	Store  generationStore
 
-	// SourceMaxBytes caps how much source we ship to Anthropic. Larger
-	// contracts get truncated with a clear "…" marker so the LLM still
-	// sees the prelude (which carries most of the structural signal).
+	// SourceMaxBytes caps how much of the complete verified source bundle we
+	// ship to Anthropic. The historical name is retained for configuration
+	// compatibility; the implementation counts runes to preserve valid UTF-8.
 	SourceMaxBytes int
+
+	// DailyProviderCallLimit is shared through a Mongo UTC-day counter. The
+	// configured value is validated during Init.
+	DailyProviderCallLimit int
+
+	Now func() time.Time
 }
 
 // systemPrompt frames the LLM as a neutral describer. No safety analysis,
@@ -59,9 +74,22 @@ Keep the entire answer under 150 words. Never add sections on risks, security, a
 // one via Anthropic and persists it before returning. Forces a fresh call
 // when regenerate=true.
 func (e *Explainer) Explain(ctx context.Context, address string, regenerate bool) (*ExplainResponse, error) {
-	c, err := db.ReturnContractCode(address)
+	store := e.Store
+	if store == nil {
+		store = mongoGenerationStore{}
+	}
+	now := time.Now
+	if e.Now != nil {
+		now = e.Now
+	}
+
+	c, err := store.ReturnContractCode(address)
 	if err != nil {
-		return nil, fmt.Errorf("lookup contract: %w", err)
+		return nil, &retryableError{
+			kind:       ErrStorageUnavailable,
+			cause:      fmt.Errorf("lookup contract: %w", err),
+			retryAfter: FailureCooldown,
+		}
 	}
 	if c.ContractAddress == "" {
 		return nil, ErrNotFound
@@ -69,15 +97,74 @@ func (e *Explainer) Explain(ctx context.Context, address string, regenerate bool
 	if !c.Verified || c.SourceCode == "" {
 		return nil, ErrNotVerified
 	}
+	if !explanationRecordIsDigestBacked(c) {
+		return nil, ErrProvenance
+	}
 
-	if !regenerate && c.AIExplanation != "" {
-		return &ExplainResponse{
-			Address:     c.ContractAddress,
-			Explanation: c.AIExplanation,
-			GeneratedAt: c.AIExplanationAt,
-			Model:       c.AIExplanationModel,
-			Cached:      true,
-		}, nil
+	fullSourceBundle := buildSourceBundle(c)
+	sourceDigest := sourcebundle.Digest(c.ContractName, c.SourceCode, c.Imports)
+
+	if !regenerate && cachedExplanationMatches(c, sourceDigest) {
+		return cachedExplainResponse(c), nil
+	}
+
+	lease, err := store.AcquireLease(
+		ctx,
+		address,
+		c,
+		sourceDigest,
+		GenerationLeaseTTL,
+		!regenerate,
+	)
+	if err != nil {
+		var busy *db.AIExplanationLeaseBusyError
+		switch {
+		case errors.As(err, &busy):
+			return nil, &retryableError{
+				kind:       ErrGenerationInProgress,
+				cause:      err,
+				retryAfter: busy.RetryAfterDuration,
+			}
+		case errors.Is(err, db.ErrSourceBundleChanged):
+			return nil, ErrSourceChanged
+		case errors.Is(err, db.ErrAIExplanationCacheFilled):
+			fresh, freshErr := store.ReturnContractCode(address)
+			if freshErr != nil {
+				return nil, &retryableError{
+					kind:       ErrStorageUnavailable,
+					cause:      fmt.Errorf("reload concurrent AI explanation cache: %w", freshErr),
+					retryAfter: FailureCooldown,
+				}
+			}
+			if cachedExplanationMatches(fresh, sourceDigest) {
+				return cachedExplainResponse(fresh), nil
+			}
+			if fresh.VerifiedAt != c.VerifiedAt || fresh.SourceBundleDigest != sourceDigest {
+				return nil, ErrSourceChanged
+			}
+			return nil, &retryableError{
+				kind:       ErrGenerationInProgress,
+				cause:      err,
+				retryAfter: time.Second,
+			}
+		default:
+			return nil, &retryableError{
+				kind:       ErrStorageUnavailable,
+				cause:      fmt.Errorf("acquire AI explanation lease: %w", err),
+				retryAfter: FailureCooldown,
+			}
+		}
+	}
+	releaseLease := func() {
+		_ = store.ReleaseLease(context.WithoutCancel(ctx), address, lease)
+	}
+	cooldownLease := func() {
+		_ = store.CooldownLease(
+			context.WithoutCancel(ctx),
+			address,
+			lease,
+			FailureCooldown,
+		)
 	}
 
 	// Regen path: reserve a slot atomically before spending Anthropic
@@ -86,50 +173,83 @@ func (e *Explainer) Explain(ctx context.Context, address string, regenerate bool
 	// 429. Initial generations skip this check, only regenerate=true
 	// passes through here.
 	if regenerate {
-		if err := db.ReserveAIRegenSlot(address, RegenLimitPerWindow, RegenWindow); err != nil {
+		if err := store.ReserveRegenSlot(address, RegenLimitPerWindow, RegenWindow); err != nil {
+			releaseLease()
 			if errors.Is(err, db.ErrAIRegenCap) {
 				return nil, ErrRegenCap
 			}
-			return nil, fmt.Errorf("reserve regen slot: %w", err)
+			return nil, &retryableError{
+				kind:       ErrStorageUnavailable,
+				cause:      fmt.Errorf("reserve regen slot: %w", err),
+				retryAfter: FailureCooldown,
+			}
 		}
 	}
 
-	// Truncate by rune count so a UTF-8 codepoint can't be split mid-byte
-	// (which would produce an invalid string and confuse the LLM tokenizer).
-	// SourceMaxBytes is interpreted as a *rune* cap; bytes ≈ runes for the
-	// ASCII-dominant Hyperion source we expect, with a small safety margin
-	// for non-ASCII string literals in the source.
-	source := c.SourceCode
-	if e.SourceMaxBytes > 0 {
-		runes := []rune(c.SourceCode)
-		if len(runes) > e.SourceMaxBytes {
-			source = string(runes[:e.SourceMaxBytes]) + "\n\n// […truncated for length…]"
+	dailyLimit := e.DailyProviderCallLimit
+	if dailyLimit <= 0 {
+		dailyLimit = DefaultDailyProviderCallLimit
+	}
+	if err := store.ReserveProviderCall(ctx, dailyLimit, now().UTC()); err != nil {
+		var budget *db.AIProviderDailyBudgetError
+		if errors.As(err, &budget) {
+			releaseLease()
+			return nil, &retryableError{
+				kind:       ErrDailyBudget,
+				cause:      err,
+				retryAfter: budget.RetryAfterDuration,
+			}
+		}
+		cooldownLease()
+		return nil, &retryableError{
+			kind:       ErrBudgetCooldown,
+			cause:      fmt.Errorf("reserve AI provider call budget: %w", err),
+			retryAfter: FailureCooldown,
 		}
 	}
+
+	// The primary source is always first and imports use canonical filename
+	// order. Apply one cap to the aggregate so imports cannot bypass the
+	// existing source budget.
+	source := capSourceBundle(fullSourceBundle, e.SourceMaxBytes)
 
 	user := buildUserPrompt(c, source)
 	text, model, err := e.Client.Generate(ctx, systemPrompt, user)
 	if err != nil {
-		return nil, fmt.Errorf("anthropic: %w", err)
+		cooldownLease()
+		return nil, &retryableError{
+			kind:       ErrProviderCooldown,
+			cause:      fmt.Errorf("anthropic: %w", err),
+			retryAfter: FailureCooldown,
+		}
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339)
-	if err := db.SaveContractExplanation(address, text, model, now); err != nil {
-		// Persistence failure isn't fatal, return the freshly-generated
-		// answer so the user gets something. Just log via the caller.
-		return &ExplainResponse{
-			Address:     c.ContractAddress,
-			Explanation: text,
-			GeneratedAt: now,
-			Model:       model,
-			Cached:      false,
-		}, fmt.Errorf("cache write failed: %w", err)
+	generatedAt := now().UTC().Format(time.RFC3339)
+	if err := store.SaveExplanation(
+		ctx,
+		address,
+		text,
+		model,
+		generatedAt,
+		sourceDigest,
+		lease,
+		c,
+	); err != nil {
+		if errors.Is(err, db.ErrSourceBundleChanged) {
+			return nil, ErrSourceChanged
+		}
+		cooldownLease()
+		return nil, &retryableError{
+			kind:       ErrCacheCooldown,
+			cause:      err,
+			retryAfter: FailureCooldown,
+		}
 	}
 
 	return &ExplainResponse{
 		Address:     c.ContractAddress,
 		Explanation: text,
-		GeneratedAt: now,
+		GeneratedAt: generatedAt,
 		Model:       model,
 		Cached:      false,
 	}, nil
@@ -137,8 +257,8 @@ func (e *Explainer) Explain(ctx context.Context, address string, regenerate bool
 
 // buildUserPrompt assembles the per-contract message. We embed the
 // contract name + address + compiler + license as a header so the model
-// can ground its answer in concrete facts, then the source itself.
-func buildUserPrompt(c models.ContractInfo, source string) string {
+// can ground its answer in concrete facts, then the verified source bundle.
+func buildUserPrompt(c models.ContractInfo, sourceBundle string) string {
 	var b strings.Builder
 	b.WriteString("Contract metadata:\n")
 	fmt.Fprintf(&b, "- address: %s\n", c.ContractAddress)
@@ -151,11 +271,51 @@ func buildUserPrompt(c models.ContractInfo, source string) string {
 	if c.License != "" {
 		fmt.Fprintf(&b, "- license: %s\n", c.License)
 	}
-	b.WriteString("\nSource code:\n```hyperion\n")
-	b.WriteString(source)
-	if !strings.HasSuffix(source, "\n") {
+	b.WriteString("\nVerified source bundle:\n```hyperion\n")
+	b.WriteString(sourceBundle)
+	if !strings.HasSuffix(sourceBundle, "\n") {
 		b.WriteString("\n")
 	}
 	b.WriteString("```\n")
 	return b.String()
+}
+
+func buildSourceBundle(c models.ContractInfo) string {
+	return sourcebundle.Render(c.ContractName, c.SourceCode, c.Imports)
+}
+
+func cachedExplanationMatches(c models.ContractInfo, sourceDigest string) bool {
+	return c.AIExplanation != "" &&
+		c.AIExplanationSourceDigest == sourceDigest &&
+		c.SourceBundleDigest == sourceDigest
+}
+
+func cachedExplainResponse(c models.ContractInfo) *ExplainResponse {
+	return &ExplainResponse{
+		Address:     c.ContractAddress,
+		Explanation: c.AIExplanation,
+		GeneratedAt: c.AIExplanationAt,
+		Model:       c.AIExplanationModel,
+		Cached:      true,
+	}
+}
+
+func explanationRecordIsDigestBacked(c models.ContractInfo) bool {
+	return sourcebundle.ClassifyStoredVerification(c) == models.CompilerProvenanceDigestBacked
+}
+
+func capSourceBundle(sourceBundle string, maxRunes int) string {
+	if maxRunes <= 0 {
+		return sourceBundle
+	}
+	runes := []rune(sourceBundle)
+	if len(runes) <= maxRunes {
+		return sourceBundle
+	}
+
+	marker := []rune("\n\n// [truncated for length]")
+	if maxRunes <= len(marker) {
+		return string(runes[:maxRunes])
+	}
+	return string(runes[:maxRunes-len(marker)]) + string(marker)
 }

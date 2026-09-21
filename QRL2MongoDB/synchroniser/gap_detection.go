@@ -6,7 +6,8 @@ import (
 	"QRL2MongoDB/rpc"
 	"QRL2MongoDB/utils"
 	"context"
-	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -26,6 +27,53 @@ type FailedBlock struct {
 	Attempts    int
 	LastError   error
 	LastAttempt time.Time
+}
+
+type observedGapBlock struct {
+	BlockNumberInt int64 `bson:"blockNumberInt"`
+	Result         struct {
+		Number string `bson:"number"`
+		Hash   string `bson:"hash"`
+	} `bson:"result"`
+	IngestionState string `bson:"ingestionState"`
+}
+
+func repairHeights(fromNum, toNum int64, rows []observedGapBlock) []string {
+	type heightState struct {
+		hash     string
+		seen     bool
+		complete bool
+	}
+	states := make(map[int64]heightState, len(rows))
+	for _, row := range rows {
+		if row.BlockNumberInt < fromNum || row.BlockNumberInt > toNum {
+			continue
+		}
+		canonicalNumber := utils.IntToHex(int(row.BlockNumberInt))
+		rowComplete := row.Result.Number == canonicalNumber && row.Result.Hash != "" &&
+			row.IngestionState == db.BlockIngestionComplete
+		hash := strings.ToLower(row.Result.Hash)
+		state := states[row.BlockNumberInt]
+		if !state.seen {
+			states[row.BlockNumberInt] = heightState{
+				hash:     hash,
+				seen:     true,
+				complete: rowComplete,
+			}
+			continue
+		}
+		state.complete = state.complete && rowComplete && state.hash == hash
+		states[row.BlockNumberInt] = state
+	}
+
+	repairs := make([]string, 0)
+	for height := fromNum; height <= toNum; height++ {
+		state := states[height]
+		if !state.seen || !state.complete {
+			repairs = append(repairs, utils.IntToHex(int(height)))
+		}
+	}
+	return repairs
 }
 
 // trackFailedBlock records a failed block for later retry
@@ -84,7 +132,13 @@ func detectGaps(fromBlock, toBlock string) []string {
 		},
 	}
 
-	projection := bson.M{"result.number": 1, "_id": 0}
+	projection := bson.M{
+		"blockNumberInt": 1,
+		"result.number":  1,
+		"result.hash":    1,
+		"ingestionState": 1,
+		"_id":            0,
+	}
 	cursor, err := configs.BlocksCollections.Find(ctx, filter, options.Find().SetProjection(projection))
 	if err != nil {
 		configs.Logger.Error("Failed to query blocks for gap detection", zap.Error(err))
@@ -92,27 +146,15 @@ func detectGaps(fromBlock, toBlock string) []string {
 	}
 	defer cursor.Close(ctx)
 
-	existingBlocks := make(map[int64]bool)
-	for cursor.Next(ctx) {
-		var block struct {
-			Result struct {
-				Number string `bson:"number"`
-			} `bson:"result"`
-		}
-		if err := cursor.Decode(&block); err != nil {
-			continue
-		}
-		blockNum := utils.HexToInt(block.Result.Number).Int64()
-		existingBlocks[blockNum] = true
+	var observed []observedGapBlock
+	if err := cursor.All(ctx, &observed); err != nil {
+		configs.Logger.Error("Failed to decode blocks for gap detection", zap.Error(err))
+		return nil
 	}
 
-	// Find missing blocks
-	var gaps []string
-	for i := fromNum; i <= toNum; i++ {
-		if !existingBlocks[i] {
-			gaps = append(gaps, utils.IntToHex(int(i)))
-		}
-	}
+	// Missing rows, pending markers, unknown markers, malformed identities,
+	// and same-height conflicts all require replay through canonical ingestion.
+	gaps := repairHeights(fromNum, toNum, observed)
 
 	if len(gaps) > 0 {
 		configs.Logger.Warn("Found block gaps",
@@ -124,84 +166,58 @@ func detectGaps(fromBlock, toBlock string) []string {
 	return gaps
 }
 
-// fillGaps attempts to sync missing blocks
-func fillGaps(gaps []string) int {
+// fillGaps attempts to sync missing or incomplete blocks and returns the exact
+// durably completed prefix.
+func fillGaps(gaps []string) []string {
 	if len(gaps) == 0 {
-		return 0
+		return nil
 	}
+	sort.Slice(gaps, func(i, j int) bool {
+		return utils.CompareHexNumbers(gaps[i], gaps[j]) < 0
+	})
 
 	configs.Logger.Info("Attempting to fill block gaps",
 		zap.Int("gap_count", len(gaps)))
 
-	filled := 0
+	filled := make([]string, 0, len(gaps))
 	for _, blockNum := range gaps {
-		// Check if we've already tried this block too many times
-		if existing, ok := failedBlocks.Load(blockNum); ok {
-			failed := existing.(*FailedBlock)
-			if failed.Attempts >= GapRetryAttempts {
-				configs.Logger.Warn("Skipping block after max retry attempts",
-					zap.String("block", blockNum),
-					zap.Int("attempts", failed.Attempts))
-				continue
+		var fillErr error
+		for attempt := 1; attempt <= GapRetryAttempts; attempt++ {
+			time.Sleep(getRPCDelay(false))
+			data, err := rpc.GetBlockByNumberMainnet(blockNum)
+			if err == nil {
+				err = ingestFetchedBlock(blockNum, data)
+			}
+			if err == nil {
+				fillErr = nil
+				break
+			}
+			fillErr = err
+			trackFailedBlock(blockNum, err)
+			configs.Logger.Warn("Gap ingestion attempt failed",
+				zap.String("block", blockNum),
+				zap.Int("attempt", attempt),
+				zap.Error(err))
+			if attempt < GapRetryAttempts {
+				time.Sleep(time.Duration(attempt*100) * time.Millisecond)
 			}
 		}
-
-		// Add RPC delay to prevent overwhelming the node
-		time.Sleep(getRPCDelay(false))
-
-		// Fetch and insert the block
-		data, err := rpc.GetBlockByNumberMainnet(blockNum)
-		if err != nil {
-			trackFailedBlock(blockNum, err)
-			configs.Logger.Error("Failed to fetch block for gap fill",
+		if fillErr != nil {
+			configs.Logger.Error("Stopping gap fill at unresolved canonical prefix",
 				zap.String("block", blockNum),
-				zap.Error(err))
-			continue
-		}
-
-		if data == nil || data.Result.ParentHash == "" {
-			trackFailedBlock(blockNum, fmt.Errorf("invalid block data"))
-			configs.Logger.Error("Invalid block data for gap fill",
-				zap.String("block", blockNum))
-			continue
-		}
-
-		// Idempotency guard: skip both the block insert and ProcessTransactions
-		// together if the block already exists. A "gap" can close between
-		// detection and fill (the single-block loop retries failed blocks, the
-		// batch path may overlap), and ProcessTransactions has no txHash unique
-		// index, so re-running it would duplicate transfer + transactionByAddress
-		// rows. InsertBlockDocument alone already no-ops on an existing block;
-		// the guard keeps the transaction processing consistent with it.
-		if db.BlockExists(blockNum) {
-			configs.Logger.Info("Gap block already exists, skipping insert and transaction processing",
-				zap.String("block", blockNum))
-			clearFailedBlock(blockNum)
-			filled++
-			continue
-		}
-
-		// Insert the block
-		db.UpdateTransactionStatuses(data)
-		db.InsertBlockDocument(*data)
-		db.ProcessTransactions(*data)
-
-		// Update pending transactions
-		if err := UpdatePendingTransactionsInBlock(data); err != nil {
-			configs.Logger.Error("Failed to update pending transactions during gap fill",
-				zap.String("block", blockNum),
-				zap.Error(err))
+				zap.Error(fillErr))
+			break
 		}
 
 		clearFailedBlock(blockNum)
-		filled++
+		filled = append(filled, blockNum)
 
 		configs.Logger.Info("Filled block gap",
 			zap.String("block", blockNum))
 	}
 
 	configs.Logger.Info("Gap fill completed",
-		zap.Int("filled", filled),
+		zap.Int("filled", len(filled)),
 		zap.Int("total_gaps", len(gaps)))
 
 	return filled
@@ -211,12 +227,10 @@ func fillGaps(gaps []string) int {
 func detectAndFillGapsPeriodically() {
 	configs.Logger.Info("Running periodic gap detection")
 
-	// Get the current sync range
+	// Get the current sync range. Height zero is still inspected when the
+	// durable cursor is zero so a pending genesis marker can recover without a
+	// process restart.
 	lastKnown := db.GetLastKnownBlockNumber()
-	if lastKnown == "0x0" {
-		configs.Logger.Debug("No blocks synced yet, skipping gap detection")
-		return
-	}
 
 	// Check the last MaxGapDetectionBlocks blocks for gaps. Clamp to 0, not 1:
 	// the genesis block is a fillable gap like any other.
@@ -240,14 +254,18 @@ func detectAndFillGapsPeriodically() {
 		zap.Int("gap_count", len(gaps)))
 
 	filled := fillGaps(gaps)
-	if filled > 0 {
+	if len(filled) > 0 {
 		configs.Logger.Info("Periodic gap fill completed",
-			zap.Int("filled", filled),
-			zap.Int("remaining", len(gaps)-filled))
+			zap.Int("filled", len(filled)),
+			zap.Int("remaining", len(gaps)-len(filled)))
 
 		// Process token transfers for filled gaps
-		for _, gap := range gaps[:filled] {
-			ProcessTokenTransfersForBlock(gap)
+		for _, gap := range filled {
+			if err := ProcessTokenTransfersForBlock(gap); err != nil {
+				configs.Logger.Error("Gap token block remains queued after immediate processing",
+					zap.String("blockNumber", gap),
+					zap.Error(err))
+			}
 		}
 	}
 }

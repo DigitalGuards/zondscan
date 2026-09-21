@@ -60,10 +60,10 @@ function renderHeader(network: string): {
 }
 
 it.each([
-  ['testnet-v2', 'en', 'QRL Testnet v2', 'QRL Testnet v2'],
-  ['testnet-v3', 'en', 'QRL Testnet v3', 'QRL Testnet v3'],
-  ['testnet-v2', 'es', 'Red de pruebas QRL v2', 'QRL Testnet v2'],
-  ['testnet-v3', 'es', 'Red de pruebas QRL v3', 'QRL Testnet v3'],
+  ['testnet-v2', 'en', 'QRL Testnet v3 (Private)', 'QRL Testnet v3 (Private)'],
+  ['testnet-v3', 'en', 'QRL Testnet v3 (Private)', 'QRL Testnet v3 (Private)'],
+  ['testnet-v2', 'es', 'Red de pruebas QRL v3 (Privada)', 'QRL Testnet v3 (Private)'],
+  ['testnet-v3', 'es', 'Red de pruebas QRL v3 (Privada)', 'QRL Testnet v3 (Private)'],
 ])(
   'renders the %s header and gas network label with %s preferences',
   (network, locale, subtitle, gasName) => {

@@ -39,11 +39,21 @@ spec:
                 configMapKeyRef:
                   name: zond-explorer-config
                   key: NEXT_PUBLIC_HANDLER_URL
+            - name: HANDLER_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: zond-explorer-config
+                  key: HANDLER_URL
             - name: NEXT_PUBLIC_DOMAIN_NAME
               valueFrom:
                 configMapKeyRef:
                   name: zond-explorer-config
                   key: NEXT_PUBLIC_DOMAIN_NAME
+            - name: DOMAIN_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: zond-explorer-config
+                  key: DOMAIN_NAME
           resources:
             requests:
               memory: "256Mi"

@@ -19,7 +19,7 @@ interface BaseTransaction {
   TxHash: string;
   TimeStamp: number;
   Amount: number | string;
-  PaidFees?: number;
+  PaidFees?: string;
   gasUsed?: string;
   gasPrice?: string;
   gasUsedStr?: string;
@@ -83,6 +83,11 @@ export type InternalTransaction = BaseInternalTransaction & OptionalInternalTran
  */
 export type TokenStandard = 'ERC-20' | 'ERC-721' | 'ERC-1155';
 
+export type ContractMetadataProvenanceStatus =
+  | 'digest-backed'
+  | 'legacy-unrecorded'
+  | 'invalid-recorded';
+
 /**
  * Token transfer information for a transaction
  */
@@ -117,7 +122,7 @@ export interface TransactionDetails {
   gasPrice?: string;
   nonce?: number;
   latestBlock?: number;
-  PaidFees?: number;
+  PaidFees?: string;
   contractCreated?: {
     address: string;
     isToken: boolean;
@@ -135,7 +140,7 @@ export interface TransactionDetails {
   targetContract?: ContractMeta;
   /** Internal calls captured under this tx by the syncer (CALL / DELEGATECALL / STATICCALL sub-frames). */
   internalTransactions?: InternalTx[];
-  /** Receipt-level status from the live RPC. "0x1" = success, "0x0" = reverted, undefined when RPC fetch failed. */
+  /** Stored or live receipt status. Undefined means execution status is unavailable. */
   receiptStatus?: string;
 }
 
@@ -174,6 +179,8 @@ export interface ContractMeta {
   verified?: boolean;
   contractName?: string;
   abi?: string;
+  /** Trust state computed by the backend's compact recorded-metadata gate. */
+  provenanceStatus?: ContractMetadataProvenanceStatus | string;
 }
 
 /**

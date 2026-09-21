@@ -3,10 +3,6 @@ const nextConfig = {
   distDir: 'build',
   output: 'standalone',
   turbopack: {},
-  env: {
-    HANDLER_URL: process.env.HANDLER_URL,
-    DOMAIN_NAME: process.env.DOMAIN_NAME,
-  },
   // Phase 3a: allow next/image to render off-chain NFT metadata images.
   // The syncer's metadata fetcher resolves every NFT image URL through
   // its configured IPFS gateway (default https://qrlwallet.com/api/ipfs/),
@@ -59,7 +55,7 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: `${process.env.HANDLER_URL || 'http://127.0.0.1:8081'}/:path*`,
+        destination: `${process.env.HANDLER_URL || 'http://127.0.0.1:8080'}/:path*`,
       },
       {
         source: '/dapp-example',

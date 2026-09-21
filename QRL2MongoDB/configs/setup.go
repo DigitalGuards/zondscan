@@ -20,15 +20,15 @@ import (
 var DB *mongo.Client
 
 var (
-	connectOnce sync.Once
-	connectErr  error
+	connectOnce   sync.Once
+	connectErr    error
+	bootstrapOnce sync.Once
+	bootstrapErr  error
 )
 
-// ConnectDB connects to MongoDB, runs the collection/index bootstrap, and
-// binds the package-level collection handles in const.go. Idempotent: only
-// the first call connects, later calls return the first result. Every
-// entrypoint (main, cmd/ tools, integration tests) must call it before any
-// db work; the caller decides whether a failure is fatal.
+// ConnectDB connects to MongoDB and binds package-level collection handles.
+// It performs no database bootstrap writes. Canonical writers must acquire the
+// exclusive syncer lease before calling BootstrapDB.
 func ConnectDB() error {
 	connectOnce.Do(func() {
 		connectErr = connect()
@@ -54,12 +54,36 @@ func connect() error {
 
 	//ping the database
 	if err := client.Ping(ctx, nil); err != nil {
+		_ = client.Disconnect(ctx)
+		return err
+	}
+	if err := validateTransactionTopology(ctx, client); err != nil {
+		_ = client.Disconnect(ctx)
 		return err
 	}
 	Logger.Info("Connected to MongoDB")
 
 	DB = client
 	bindCollections(client)
+	return nil
+}
+
+// BootstrapDB initializes validators, collections, indexes, and seed rows.
+// It is separate from ConnectDB so every bootstrap mutation runs while the
+// caller holds the exclusive chain-indexer lease.
+func BootstrapDB() error {
+	bootstrapOnce.Do(func() {
+		if DB == nil {
+			bootstrapErr = fmt.Errorf("bootstrap database: MongoDB is not connected")
+			return
+		}
+		bootstrapErr = bootstrap(DB)
+	})
+	return bootstrapErr
+}
+
+func bootstrap(client *mongo.Client) error {
+	var err error
 
 	// Initialize collections with validators
 	db := client.Database("qrldata-z")
@@ -236,6 +260,24 @@ func connect() error {
 	return nil
 }
 
+func validateTransactionTopology(ctx context.Context, client *mongo.Client) error {
+	var hello struct {
+		SetName string `bson:"setName"`
+		Msg     string `bson:"msg"`
+	}
+	if err := client.Database("admin").RunCommand(ctx, bson.D{{Key: "hello", Value: 1}}).Decode(&hello); err != nil {
+		return fmt.Errorf("validate Mongo transaction topology: %w", err)
+	}
+	if !mongoTopologySupportsTransactions(hello.SetName, hello.Msg) {
+		return fmt.Errorf("MongoDB must be a replica set or mongos because reorg rollback is transactional")
+	}
+	return nil
+}
+
+func mongoTopologySupportsTransactions(setName, msg string) bool {
+	return strings.TrimSpace(setName) != "" || msg == "isdbgrid"
+}
+
 func ensureCollection(db *mongo.Database, name string, validator bson.M) {
 	cmd := bson.D{
 		{Key: "collMod", Value: name},
@@ -323,6 +365,49 @@ func initializeCollections(db *mongo.Database) {
 		Logger.Error("Failed to create processed index for pending token contracts collection", zap.Error(err))
 	}
 
+	// Normalize legacy work rows before the claim query switches to the exact
+	// processed=false predicate. Completed rows receive a retention timestamp so
+	// the queue does not grow forever across historical replays.
+	if _, err = pendingTokenContractsCollection.UpdateMany(
+		ctx,
+		bson.M{"processed": bson.M{"$exists": false}},
+		bson.M{"$set": bson.M{"processed": false}},
+	); err != nil {
+		Logger.Error("Failed to normalize legacy pending token work rows", zap.Error(err))
+	}
+	if _, err = pendingTokenContractsCollection.UpdateMany(
+		ctx,
+		bson.M{
+			"processed":   true,
+			"processedAt": bson.M{"$exists": false},
+		},
+		bson.M{"$currentDate": bson.M{"processedAt": true}},
+	); err != nil {
+		Logger.Error("Failed to timestamp legacy completed token work rows", zap.Error(err))
+	}
+
+	_, err = pendingTokenContractsCollection.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				{Key: "processed", Value: 1},
+				{Key: "nextAttemptAt", Value: 1},
+				{Key: "processingUntil", Value: 1},
+				{Key: "createdAt", Value: 1},
+				{Key: "_id", Value: 1},
+			},
+			Options: options.Index().SetName("pending_token_claim_idx"),
+		},
+		{
+			Keys: bson.D{{Key: "processedAt", Value: 1}},
+			Options: options.Index().
+				SetName("pending_token_completed_ttl_idx").
+				SetExpireAfterSeconds(30 * 24 * 60 * 60),
+		},
+	})
+	if err != nil {
+		Logger.Error("Failed to create pending token claim or retention indexes", zap.Error(err))
+	}
+
 	// tokenTransfers indexes are owned by db.InitializeTokenTransfersCollection
 	// (called from synchroniser.InitializeTokenCollections at startup). Creating
 	// a duplicate, auto-named set here causes IndexOptionsConflict against the
@@ -390,13 +475,44 @@ func initializeCollections(db *mongo.Database) {
 		ctx,
 		mongo.IndexModel{
 			Keys:    bson.D{{Key: "blockNumberInt", Value: -1}},
-			Options: options.Index().SetName("blockNumberInt_desc_idx"),
+			Options: options.Index().SetName("blockNumberInt_desc_idx").SetUnique(true),
 		},
 	)
 	if err != nil {
-		Logger.Error("Failed to create blockNumberInt index for blocks collection", zap.Error(err))
+		Logger.Warn("Could not create unique block-height index; the offline block migration must upgrade it before startup",
+			zap.Error(err))
 	} else {
-		Logger.Info("Blocks collection initialized with blockNumberInt index")
+		Logger.Info("Blocks collection initialized with unique blockNumberInt index")
+	}
+	_, err = blocksCollection.Indexes().CreateOne(
+		ctx,
+		mongo.IndexModel{
+			Keys: bson.D{
+				{Key: "ingestionState", Value: 1},
+				{Key: "blockNumberInt", Value: -1},
+			},
+			Options: options.Index().SetName("ingestionState_blockNumberInt_idx"),
+		},
+	)
+	if err != nil {
+		Logger.Error("Failed to create completed-block visibility index", zap.Error(err))
+	}
+	_, err = blocksCollection.Indexes().CreateOne(
+		ctx,
+		mongo.IndexModel{
+			Keys: bson.D{
+				{Key: "ingestionState", Value: 1},
+				{Key: "tokenIngestionState", Value: 1},
+				{Key: "tokenNextAttemptAt", Value: 1},
+				{Key: "tokenProcessingUntil", Value: 1},
+				{Key: "blockNumberInt", Value: 1},
+				{Key: "_id", Value: 1},
+			},
+			Options: options.Index().SetName("token_ingestion_claim_idx"),
+		},
+	)
+	if err != nil {
+		Logger.Error("Failed to create token-ingestion claim index", zap.Error(err))
 	}
 
 	ensureCollection(db, "validators", nil)
@@ -424,6 +540,23 @@ func initializeCollections(db *mongo.Database) {
 	ensureCollection(db, "dailyTransactionsVolume", nil)
 	ensureCollection(db, "totalCirculatingSupply", nil)
 	ensureCollection(db, "sync_state", nil)
+	ensureCollection(db, BALANCE_RECONCILIATIONS_COLLECTION, nil)
+
+	// Reorg rollback enqueues exact native and token balance keys in this
+	// collection. _id is deterministic, while availableAt combines retry and
+	// crash-recovery eligibility. This index serves the server-time claim sort.
+	balanceReconciliations := db.Collection(BALANCE_RECONCILIATIONS_COLLECTION)
+	_, err = balanceReconciliations.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "availableAt", Value: 1},
+			{Key: "createdAt", Value: 1},
+			{Key: "_id", Value: 1},
+		},
+		Options: options.Index().SetName("balance_reconciliations_available_idx"),
+	})
+	if err != nil {
+		Logger.Warn("Could not create balance reconciliation queue index", zap.Error(err))
+	}
 
 	// Create indexes on the validators collection for per-document lookup.
 	validatorsCollection := db.Collection("validators")
@@ -508,6 +641,16 @@ func GetTokenTransfersCollection() *mongo.Collection {
 	Logger.Debug("Getting tokenTransfers collection reference")
 
 	return coll
+}
+
+// GetTokenEventDeadLettersCollection returns the durable malformed-event
+// audit collection. The bound handle lets integration tests isolate it without
+// changing the production database name.
+func GetTokenEventDeadLettersCollection() *mongo.Collection {
+	if TokenEventDeadLettersCollection != nil {
+		return TokenEventDeadLettersCollection
+	}
+	return GetCollection(DB, TOKEN_EVENT_DEAD_LETTERS_COLLECTION)
 }
 
 func GetListCollectionNames(client *mongo.Client) []string {

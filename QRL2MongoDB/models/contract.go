@@ -1,5 +1,26 @@
 package models
 
+import (
+	"encoding/json"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/bsontype"
+)
+
+const (
+	VerificationRecordSchemaV1 = "qrl.contract-verification-record.v1"
+	VerificationRecordSchemaV2 = "qrl.contract-verification-record.v2"
+)
+
+const (
+	CreatorAddressProvenanceDirectDeployment  = "direct-deployment"
+	CreatorAddressProvenanceCreateTraceOuter  = "create-trace-outer-sender"
+	CreatorAddressProvenanceCreateTraceCaller = "create-trace-caller"
+	CreatorAddressProvenanceMintHeuristic     = "mint-heuristic"
+	CreatorAddressProvenanceGenesis           = "genesis"
+	CreatorAddressProvenanceUnclassified      = "creation-tx-unclassified"
+)
+
 type Contract struct {
 	Jsonrpc string         `json:"jsonrpc"`
 	ID      int            `json:"id"`
@@ -35,6 +56,22 @@ type ResultContract struct {
 	Type              string `json:"type"`
 }
 
+// CompilerProvenance mirrors backendAPI/models.CompilerProvenance. The
+// syncer preserves this backend-owned verification field without inferring
+// provenance for legacy records where it is absent.
+type CompilerProvenance struct {
+	Schema          string                        `bson:"schema" json:"schema"`
+	Kind            string                        `bson:"kind" json:"kind"`
+	BuildID         string                        `bson:"buildId" json:"buildId"`
+	ExecutionDigest string                        `bson:"executionDigest" json:"executionDigest"`
+	Components      []CompilerProvenanceComponent `bson:"components" json:"components"`
+}
+
+type CompilerProvenanceComponent struct {
+	Name   string `bson:"name" json:"name"`
+	SHA256 string `bson:"sha256" json:"sha256"`
+}
+
 // ContractInfo represents contract information stored in MongoDB.
 //
 // The verification fields at the bottom are written **only** by the
@@ -47,17 +84,21 @@ type ResultContract struct {
 // identical bson/json tags so whole-doc reads survive cross-process
 // round-trips.
 type ContractInfo struct {
-	Address             string `bson:"address" json:"address"`
-	Status              string `bson:"status" json:"status"`
-	IsToken             bool   `bson:"isToken" json:"isToken"`
-	Name                string `bson:"name" json:"name"`
-	Symbol              string `bson:"symbol" json:"symbol"`
-	Decimals            uint8  `bson:"decimals" json:"decimals"`
-	TotalSupply         string `bson:"totalSupply" json:"totalSupply"`
-	ContractCode        string `bson:"contractCode" json:"contractCode"`
-	CreatorAddress      string `bson:"creatorAddress" json:"creatorAddress"`
-	CreationTransaction string `bson:"creationTransaction" json:"creationTransaction"`
-	CreationBlockNumber string `bson:"creationBlockNumber" json:"creationBlockNumber"`
+	Address                  string `bson:"address" json:"address"`
+	Status                   string `bson:"status" json:"status"`
+	IsToken                  bool   `bson:"isToken" json:"isToken"`
+	Name                     string `bson:"name" json:"name"`
+	Symbol                   string `bson:"symbol" json:"symbol"`
+	Decimals                 uint8  `bson:"decimals" json:"decimals"`
+	TotalSupply              string `bson:"totalSupply" json:"totalSupply"`
+	ContractCode             string `bson:"contractCode" json:"contractCode"`
+	ContractCodeSHA256       string `bson:"contractCodeSha256,omitempty" json:"contractCodeSha256,omitempty"`
+	CreatorAddress           string `bson:"creatorAddress" json:"creatorAddress"`
+	CreatorAddressProvenance string `bson:"creatorAddressProvenance,omitempty" json:"creatorAddressProvenance,omitempty"`
+	CreationTransaction      string `bson:"creationTransaction" json:"creationTransaction"`
+	CreationBlockNumber      string `bson:"creationBlockNumber" json:"creationBlockNumber"`
+	CreationBlockHash        string `bson:"creationBlockHash,omitempty" json:"creationBlockHash,omitempty"`
+	ChainID                  string `bson:"chainId,omitempty" json:"chainId,omitempty"`
 	// GenesisContract marks contracts whose code already exists at block 0;
 	// they have no creation transaction anywhere on chain. Written by the
 	// reprocess backfill only; latches true (see db/contracts_store.go).
@@ -108,27 +149,142 @@ type ContractInfo struct {
 	// Source-verification fields, mirror backendAPI/models/contract.go.
 	// Written exclusively by the backend verify endpoint; the syncer
 	// holds them only for round-trip preservation.
-	Verified             bool              `bson:"verified" json:"verified"`
-	SourceCode           string            `bson:"sourceCode,omitempty" json:"sourceCode,omitempty"`
-	Abi                  string            `bson:"abi,omitempty" json:"abi,omitempty"`
-	ContractName         string            `bson:"contractName,omitempty" json:"contractName,omitempty"`
-	CompilerVersion      string            `bson:"compilerVersion,omitempty" json:"compilerVersion,omitempty"`
-	OptimizationEnabled  bool              `bson:"optimizationEnabled" json:"optimizationEnabled"`
-	OptimizationRuns     int               `bson:"optimizationRuns" json:"optimizationRuns"`
-	EvmVersion           string            `bson:"evmVersion,omitempty" json:"evmVersion,omitempty"`
-	ConstructorArguments string            `bson:"constructorArguments,omitempty" json:"constructorArguments,omitempty"`
-	Libraries            map[string]string `bson:"libraries,omitempty" json:"libraries,omitempty"`
-	License              string            `bson:"license,omitempty" json:"license,omitempty"`
-	VerificationMethod   string            `bson:"verificationMethod,omitempty" json:"verificationMethod,omitempty"`
-	VerifiedAt           string            `bson:"verifiedAt,omitempty" json:"verifiedAt,omitempty"`
+	Verified                     bool   `bson:"verified" json:"verified"`
+	VerificationRecordSchema     string `bson:"verificationRecordSchema,omitempty" json:"verificationRecordSchema,omitempty"`
+	verificationRecordSchemaSeen bool
+	verificationRecordSchemaNull bool
+	SourceCode                   string              `bson:"sourceCode,omitempty" json:"sourceCode,omitempty"`
+	Abi                          string              `bson:"abi,omitempty" json:"abi,omitempty"`
+	ContractName                 string              `bson:"contractName,omitempty" json:"contractName,omitempty"`
+	CompilerVersion              string              `bson:"compilerVersion,omitempty" json:"compilerVersion,omitempty"`
+	CompilerProvenance           *CompilerProvenance `bson:"compilerProvenance,omitempty" json:"compilerProvenance,omitempty"`
+	compilerProvenanceSeen       bool
+	compilerProvenanceNull       bool
+	OptimizationEnabled          bool              `bson:"optimizationEnabled" json:"optimizationEnabled"`
+	OptimizationRuns             int               `bson:"optimizationRuns" json:"optimizationRuns"`
+	EvmVersion                   string            `bson:"evmVersion,omitempty" json:"evmVersion,omitempty"`
+	ConstructorArguments         string            `bson:"constructorArguments,omitempty" json:"constructorArguments,omitempty"`
+	Libraries                    map[string]string `bson:"libraries,omitempty" json:"libraries,omitempty"`
+	Imports                      map[string]string `bson:"imports,omitempty" json:"imports,omitempty"`
+	SourceBundleDigest           string            `bson:"sourceBundleDigest,omitempty" json:"sourceBundleDigest,omitempty"`
+	VerificationArtifactDigest   string            `bson:"verificationArtifactDigest,omitempty" json:"verificationArtifactDigest,omitempty"`
+	sourceBundleDigestSeen       bool
+	sourceBundleDigestNull       bool
+	License                      string `bson:"license,omitempty" json:"license,omitempty"`
+	VerificationMethod           string `bson:"verificationMethod,omitempty" json:"verificationMethod,omitempty"`
+	VerifiedAt                   string `bson:"verifiedAt,omitempty" json:"verifiedAt,omitempty"`
 
 	// M6a AI explanation cache. Written exclusively by the backend
 	// /contract/explain endpoint; the syncer holds them only for
 	// round-trip preservation.
-	AIExplanation      string `bson:"aiExplanation,omitempty" json:"aiExplanation,omitempty"`
-	AIExplanationAt    string `bson:"aiExplanationAt,omitempty" json:"aiExplanationAt,omitempty"`
-	AIExplanationModel string `bson:"aiExplanationModel,omitempty" json:"aiExplanationModel,omitempty"`
+	AIExplanation             string `bson:"aiExplanation,omitempty" json:"aiExplanation,omitempty"`
+	AIExplanationAt           string `bson:"aiExplanationAt,omitempty" json:"aiExplanationAt,omitempty"`
+	AIExplanationModel        string `bson:"aiExplanationModel,omitempty" json:"aiExplanationModel,omitempty"`
+	AIExplanationSourceDigest string `bson:"aiExplanationSourceDigest,omitempty" json:"aiExplanationSourceDigest,omitempty"`
 
 	AIExplanationRegenCount       int    `bson:"aiExplanationRegenCount,omitempty" json:"aiExplanationRegenCount,omitempty"`
 	AIExplanationRegenWindowStart string `bson:"aiExplanationRegenWindowStart,omitempty" json:"aiExplanationRegenWindowStart,omitempty"`
+}
+
+// UnmarshalBSON tracks whether verificationRecordSchema was absent or was
+// explicitly stored as BSON null. Both decode to an empty Go string, while the
+// distinction is required to preserve verification-record trust semantics.
+func (c *ContractInfo) UnmarshalBSON(data []byte) error {
+	type contractInfoAlias ContractInfo
+
+	var decoded contractInfoAlias
+	if err := bson.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*c = ContractInfo(decoded)
+	raw := bson.Raw(data)
+	verificationRecordSchema := raw.Lookup("verificationRecordSchema")
+	compilerProvenance := raw.Lookup("compilerProvenance")
+	sourceBundleDigest := raw.Lookup("sourceBundleDigest")
+	c.verificationRecordSchemaSeen = verificationRecordSchema.Type != 0
+	c.verificationRecordSchemaNull = verificationRecordSchema.Type == bsontype.Null
+	c.compilerProvenanceSeen = compilerProvenance.Type != 0
+	c.compilerProvenanceNull = compilerProvenance.Type == bsontype.Null
+	c.sourceBundleDigestSeen = sourceBundleDigest.Type != 0
+	c.sourceBundleDigestNull = sourceBundleDigest.Type == bsontype.Null
+	return nil
+}
+
+// MarshalJSON preserves BSON null versus absent semantics for the three trust
+// fields. Ordinary values retain their existing JSON form, genuinely absent
+// legacy fields remain omitted, and explicit BSON null remains JSON null.
+func (c ContractInfo) MarshalJSON() ([]byte, error) {
+	type contractInfoAlias ContractInfo
+	type contractInfoJSON struct {
+		contractInfoAlias
+		VerificationRecordSchema **string             `json:"verificationRecordSchema,omitempty"`
+		CompilerProvenance       **CompilerProvenance `json:"compilerProvenance,omitempty"`
+		SourceBundleDigest       **string             `json:"sourceBundleDigest,omitempty"`
+	}
+
+	return json.Marshal(contractInfoJSON{
+		contractInfoAlias: contractInfoAlias(c),
+		VerificationRecordSchema: jsonStringField(
+			c.VerificationRecordSchema,
+			c.verificationRecordSchemaSeen,
+			c.verificationRecordSchemaNull,
+		),
+		CompilerProvenance: jsonCompilerProvenanceField(
+			c.CompilerProvenance,
+			c.compilerProvenanceSeen,
+			c.compilerProvenanceNull,
+		),
+		SourceBundleDigest: jsonStringField(
+			c.SourceBundleDigest,
+			c.sourceBundleDigestSeen,
+			c.sourceBundleDigestNull,
+		),
+	})
+}
+
+func jsonStringField(value string, seen, explicitNull bool) **string {
+	if !seen && value == "" {
+		return nil
+	}
+	if explicitNull {
+		var nullValue *string
+		return &nullValue
+	}
+	valueCopy := value
+	valuePointer := &valueCopy
+	return &valuePointer
+}
+
+func jsonCompilerProvenanceField(
+	value *CompilerProvenance,
+	seen bool,
+	explicitNull bool,
+) **CompilerProvenance {
+	if !seen && value == nil {
+		return nil
+	}
+	if explicitNull {
+		var nullValue *CompilerProvenance
+		return &nullValue
+	}
+	valuePointer := value
+	return &valuePointer
+}
+
+// HasVerificationRecordSchema reports BSON field presence as well as a schema
+// assigned directly by an in-memory writer.
+func (c ContractInfo) HasVerificationRecordSchema() bool {
+	return c.verificationRecordSchemaSeen || c.VerificationRecordSchema != ""
+}
+
+// HasCompilerProvenanceField distinguishes an absent legacy field from an
+// explicitly stored BSON null.
+func (c ContractInfo) HasCompilerProvenanceField() bool {
+	return c.compilerProvenanceSeen || c.CompilerProvenance != nil
+}
+
+// HasSourceBundleDigestField distinguishes an absent legacy field from an
+// explicitly stored BSON null.
+func (c ContractInfo) HasSourceBundleDigestField() bool {
+	return c.sourceBundleDigestSeen || c.SourceBundleDigest != ""
 }
