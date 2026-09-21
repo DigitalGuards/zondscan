@@ -3,8 +3,8 @@ import { createServer } from 'node:http';
 // Synthetic data for local interface tests. No node, wallet, or network connection.
 const hex = (value) => `0x${BigInt(value).toString(16)}`;
 const hash = (value) => `0x${value.toString(16).padStart(64, '0')}`;
-const sender = `Q${'a'.repeat(40)}`;
-const recipient = `Q${'b'.repeat(40)}`;
+const sender = `Q${'a'.repeat(128)}`;
+const recipient = `Q${'b'.repeat(128)}`;
 const timestamp = 1789043400;
 const amounts = [
   '0.01',
@@ -27,7 +27,7 @@ const txs = amounts.map((amount, index) => ({
   BlockNumber: String(233635 - index),
   InOut: 0,
   TxType: 2,
-  PaidFees: 0.000021,
+  PaidFees: '0.000021',
 }));
 const blocks = txs.map((tx, index) => ({
   number: hex(233635 - index),
@@ -63,7 +63,7 @@ const transfers = [
     tokenID: '0',
   },
 ].map((transfer, index) => ({
-  contractAddress: `Q${String(index + 1).repeat(40)}`,
+  contractAddress: `Q${String(index + 1).repeat(128)}`,
   from: sender,
   to: recipient,
   tokenDecimals: 18,
@@ -155,6 +155,8 @@ createServer((request, response) => {
         BlockTimestamp: hex(timestamp),
         GasUsed: '0x5208',
         GasPrice: '0x3b9aca00',
+        EffectiveGasPrice: '0x3b9aca00',
+        PaidFees: '0.000021',
         Nonce: '0x1',
       },
       latestBlock: 233640,

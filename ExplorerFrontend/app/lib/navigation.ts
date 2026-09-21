@@ -113,25 +113,25 @@ export function isNavigationActive(pathname: string, href: string): boolean {
   return ['/learn', '/contracts', '/pending/1'].includes(href) && pathname.startsWith(`${base}/`);
 }
 
-export type ExplorerNetworkId = "testnet-v3" | "mainnet";
-export type ExplorerNetworkStatus = "active" | "live" | "planned";
+export type ExplorerNetworkId = 'testnet-v3' | 'mainnet';
+export type ExplorerNetworkStatus = 'active' | 'live' | 'planned';
 
 /**
  * The network this build serves. Set NEXT_PUBLIC_EXPLORER_NETWORK at build
  * time for future mainnet builds. QRL v3 is the default at zondscan.com.
  */
 export const CURRENT_EXPLORER_NETWORK: ExplorerNetworkId =
-  process.env.NEXT_PUBLIC_EXPLORER_NETWORK === "mainnet"
+  process.env.NEXT_PUBLIC_EXPLORER_NETWORK === 'mainnet'
     ? process.env.NEXT_PUBLIC_EXPLORER_NETWORK
-    : "testnet-v3";
+    : 'testnet-v3';
 
 const EXPLORER_NETWORK_CATALOG: ReadonlyArray<{
   id: ExplorerNetworkId;
   name: string;
   href: string | null;
 }> = [
-  { id: "testnet-v3", name: "QRL Testnet v3", href: "https://zondscan.com" },
-  { id: "mainnet", name: "QRL Mainnet", href: null },
+  { id: 'testnet-v3', name: 'QRL Testnet v3', href: 'https://zondscan.com' },
+  { id: 'mainnet', name: 'QRL Mainnet', href: null },
 ];
 
 /** Live networks link across explorers; the current one is marked active. */
@@ -142,17 +142,11 @@ export const EXPLORER_NETWORKS: ReadonlyArray<{
   status: ExplorerNetworkStatus;
 }> = EXPLORER_NETWORK_CATALOG.map((network) => ({
   ...network,
-  status:
-    network.id === CURRENT_EXPLORER_NETWORK
-      ? "active"
-      : network.href
-        ? "live"
-        : "planned",
+  status: network.id === CURRENT_EXPLORER_NETWORK ? 'active' : network.href ? 'live' : 'planned',
 }));
 
 export const CURRENT_EXPLORER_NETWORK_NAME =
-  EXPLORER_NETWORKS.find((network) => network.status === "active")?.name ??
-  "QRL Testnet v3";
+  EXPLORER_NETWORKS.find((network) => network.status === 'active')?.name ?? 'QRL Testnet v3';
 
 const EXPLORER_CHAIN_ID_HEX: Record<ExplorerNetworkId, string | null> = {
   'testnet-v3': '0x301825',

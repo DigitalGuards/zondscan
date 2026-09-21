@@ -131,8 +131,8 @@ func newServiceHarness(t *testing.T) *serviceHarness {
 	store := newMemoryChallengeStore()
 	contracts := &mutableContractReader{records: map[string]models.ContractInfo{
 		contract: {
-			ContractAddress:        contract,
-			ContractCreatorAddress: creator,
+			ContractAddress:          contract,
+			ContractCreatorAddress:   creator,
 			CreatorAddressProvenance: models.CreatorAddressProvenanceDirectDeployment,
 		},
 	}}
@@ -352,8 +352,8 @@ func TestAuthorizationRejectsExpiredCrossContractAndChangedCreator(t *testing.T)
 		_, request := harness.issueAndSign(t)
 		_, replacement := testSignerWithSeed(t, 0x44)
 		harness.contracts.set(harness.contract, models.ContractInfo{
-			ContractAddress:        harness.contract,
-			ContractCreatorAddress: replacement,
+			ContractAddress:          harness.contract,
+			ContractCreatorAddress:   replacement,
 			CreatorAddressProvenance: models.CreatorAddressProvenanceDirectDeployment,
 		})
 		if err := harness.service.AuthorizeRegeneration(context.Background(), harness.contract, request); !errors.Is(err, ErrInvalidAuthorization) {
@@ -377,8 +377,7 @@ func TestChallengeRejectsHeuristicOrUnclassifiedCreatorIdentity(t *testing.T) {
 				ContractCreatorAddress:   harness.creator,
 				CreatorAddressProvenance: provenance,
 			})
-			if _, err := harness.service.IssueChallenge(context.Background(), harness.contract);
-				!errors.Is(err, ErrCreatorUnavailable) {
+			if _, err := harness.service.IssueChallenge(context.Background(), harness.contract); !errors.Is(err, ErrCreatorUnavailable) {
 				t.Fatalf("provenance %q error = %v", provenance, err)
 			}
 		})

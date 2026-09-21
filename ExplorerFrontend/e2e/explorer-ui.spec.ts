@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 const key = 'zondscan.preferences.v1';
 const hash = `0x${'0'.repeat(63)}1`;
-const address = `Q${'a'.repeat(40)}`;
+const address = `Q${'a'.repeat(128)}`;
 const errors = new WeakMap<Page, string[]>();
 
 async function appearance(page: Page, label: string) {
@@ -81,11 +81,10 @@ test('horizontal menus support keyboard navigation, active sections, and escape'
   );
   await page.keyboard.press('Escape');
   await expect(blockchain).toBeFocused();
-  await page.getByRole('button', { name: 'Network: QRL Testnet v2' }).click();
-  const currentNetwork = page.getByRole('menuitem', { name: 'QRL Testnet v2', exact: true });
+  await page.getByRole('button', { name: 'Network: QRL Testnet v3' }).click();
+  const currentNetwork = page.getByRole('menuitem', { name: 'QRL Testnet v3', exact: true });
   await expect(currentNetwork).toHaveAttribute('aria-current', 'true');
-  const devnetNetwork = page.getByRole('menuitem', { name: /QRL Testnet v3 Devnet/ });
-  await expect(devnetNetwork).toHaveAttribute('href', 'https://v3.zondscan.com');
+  await expect(page.getByRole('menuitem', { name: /QRL Testnet v2/ })).toHaveCount(0);
   await expect(page.getByRole('menuitem', { name: /QRL Mainnet/ })).toBeDisabled();
   await page.keyboard.press('Escape');
 });
@@ -125,7 +124,7 @@ test('saved reading settings apply on routes and survive reload', async ({ page 
   await expect(page.locator('details').first()).toHaveAttribute('open', '');
   await page.goto('/transactions/1');
   await expect(
-    page.locator(`[data-explorer-address="${address.toLowerCase()}"]`).first()
+    page.locator(`[data-explorer-address="${address.toLowerCase()}"] [aria-hidden="true"]`).first()
   ).toHaveText('Qaaaaaaaaaaaaa...');
   const match = page.locator(`[data-explorer-address="${address.toLowerCase()}"]`).first();
   await match.hover();
@@ -263,7 +262,7 @@ test('changing zero filtering resets a searched transfer page', async ({ page, c
   const transfers = Array.from({ length: 40 }, (_, index) => ({
     contractAddress: address,
     from: address,
-    to: `Q${'b'.repeat(40)}`,
+    to: `Q${'b'.repeat(128)}`,
     amount: index < 15 ? '0' : '1000000000000000000',
     tokenStandard: 'ERC-20',
     tokenSymbol: 'DEMO',
