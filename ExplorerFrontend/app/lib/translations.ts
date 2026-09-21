@@ -1,6 +1,7 @@
 export const translations: Record<'zh' | 'es' | 'ru', Record<string, string>> = {
   zh: {
     'QRL Testnet v3': 'QRL 测试网 v3',
+    'QRL Testnet v3 (Private)': 'QRL 测试网 v3 (私有)',
     Upcoming: '即将上线',
     Devnet: '开发网',
     'API Docs': 'API 文档',
@@ -210,6 +211,7 @@ export const translations: Record<'zh' | 'es' | 'ru', Record<string, string>> = 
   },
   es: {
     'QRL Testnet v3': 'Red de pruebas QRL v3',
+    'QRL Testnet v3 (Private)': 'Red de pruebas QRL v3 (Privada)',
     Upcoming: 'Próximamente',
     Devnet: 'Red de desarrollo',
     'API Docs': 'Documentación de la API',
@@ -426,6 +428,7 @@ export const translations: Record<'zh' | 'es' | 'ru', Record<string, string>> = 
   },
   ru: {
     'QRL Testnet v3': 'Тестовая сеть QRL v3',
+    'QRL Testnet v3 (Private)': 'Тестовая сеть QRL v3 (частная)',
     Upcoming: 'Скоро',
     Devnet: 'Девнет',
     'API Docs': 'Документация API',

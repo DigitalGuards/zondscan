@@ -9,6 +9,7 @@ import type { ContractData } from '../types/address';
 import { assertVm64AbiSupport } from '../lib/vm64Abi';
 import { classifyStoredVerification } from '../lib/storedVerification';
 import ContractInteractionProvenanceNotice from './ContractInteractionProvenanceNotice';
+import { sendExplorerTransaction } from '../lib/explorerTransaction';
 
 interface AbiInput {
   name: string;
@@ -171,10 +172,7 @@ function WriteFunctionCard({
         tx.value = toHexWei(value.trim());
       }
 
-      const result = (await provider.request({
-        method: 'qrl_sendTransaction',
-        params: [tx],
-      })) as string;
+      const result = await sendExplorerTransaction(provider, tx);
       setTxHash(result);
     } catch (e) {
       // EIP-1193 user-rejection: code 4001.

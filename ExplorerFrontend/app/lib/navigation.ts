@@ -130,7 +130,7 @@ const EXPLORER_NETWORK_CATALOG: ReadonlyArray<{
   name: string;
   href: string | null;
 }> = [
-  { id: 'testnet-v3', name: 'QRL Testnet v3', href: 'https://zondscan.com' },
+  { id: 'testnet-v3', name: 'QRL Testnet v3 (Private)', href: 'https://zondscan.com' },
   { id: 'mainnet', name: 'QRL Mainnet', href: null },
 ];
 
@@ -146,7 +146,8 @@ export const EXPLORER_NETWORKS: ReadonlyArray<{
 }));
 
 export const CURRENT_EXPLORER_NETWORK_NAME =
-  EXPLORER_NETWORKS.find((network) => network.status === 'active')?.name ?? 'QRL Testnet v3';
+  EXPLORER_NETWORKS.find((network) => network.status === 'active')?.name ??
+  'QRL Testnet v3 (Private)';
 
 const EXPLORER_CHAIN_ID_HEX: Record<ExplorerNetworkId, string | null> = {
   'testnet-v3': '0x301825',

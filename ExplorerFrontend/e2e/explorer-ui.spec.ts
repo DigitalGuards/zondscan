@@ -81,8 +81,11 @@ test('horizontal menus support keyboard navigation, active sections, and escape'
   );
   await page.keyboard.press('Escape');
   await expect(blockchain).toBeFocused();
-  await page.getByRole('button', { name: 'Network: QRL Testnet v3' }).click();
-  const currentNetwork = page.getByRole('menuitem', { name: 'QRL Testnet v3', exact: true });
+  await page.getByRole('button', { name: 'Network: QRL Testnet v3 (Private)' }).click();
+  const currentNetwork = page.getByRole('menuitem', {
+    name: 'QRL Testnet v3 (Private)',
+    exact: true,
+  });
   await expect(currentNetwork).toHaveAttribute('aria-current', 'true');
   await expect(page.getByRole('menuitem', { name: /QRL Testnet v2/ })).toHaveCount(0);
   await expect(page.getByRole('menuitem', { name: /QRL Mainnet/ })).toBeDisabled();
