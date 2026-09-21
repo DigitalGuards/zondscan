@@ -38,9 +38,8 @@ func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
 		{Key: "blockNumber", Value: 1},
 	}
 
-	pipeline := canonicalCompanionPipeline(primitive.D{})
+	pipeline := sortedCanonicalTransactionsPipeline()
 	pipeline = append(pipeline,
-		bson.M{"$sort": primitive.D{{Key: "timeStamp", Value: -1}}},
 		bson.M{"$limit": 100},
 		bson.M{"$project": projection},
 	)
@@ -64,6 +63,15 @@ func ReturnLatestTransactions() ([]models.TransactionByAddress, error) {
 	}
 
 	return transactions, nil
+}
+
+// Sort through the timestamp index before joining canonical blocks. Callers
+// apply pagination after the complete-block fence so hidden rows consume no slots.
+func sortedCanonicalTransactionsPipeline() []bson.M {
+	return append(
+		[]bson.M{{"$sort": primitive.D{{Key: "timeStamp", Value: -1}}}},
+		canonicalCompanionPipeline(primitive.D{})...,
+	)
 }
 
 // ReturnAllInternalTransactionsByAddress returns one page (default 10, max
@@ -237,9 +245,8 @@ func ReturnTransactionsNetwork(page, limit int) ([]models.TransactionByAddress, 
 	if page == 0 {
 		page = 1
 	}
-	pipeline := canonicalCompanionPipeline(primitive.D{})
+	pipeline := sortedCanonicalTransactionsPipeline()
 	pipeline = append(pipeline,
-		bson.M{"$sort": primitive.D{{Key: "timeStamp", Value: -1}}},
 		bson.M{"$skip": int64((page - 1) * limit)},
 		bson.M{"$limit": int64(limit)},
 		bson.M{"$project": projection},
