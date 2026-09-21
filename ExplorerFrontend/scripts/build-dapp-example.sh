@@ -13,7 +13,7 @@ if [[ "${SKIP_DAPP_EXAMPLE:-0}" == "1" ]]; then
 fi
 
 REPO_URL="${QRL_CONNECT_REPO:-https://github.com/DigitalGuards/myqrlwallet-connect.git}"
-REF="${QRL_CONNECT_REF:-v5.0.0}"
+REF="${QRL_CONNECT_REF:-v5.0.1}"
 LOCAL_SRC="${QRL_CONNECT_LOCAL:-}"
 
 FRONTEND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
