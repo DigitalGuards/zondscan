@@ -9,7 +9,7 @@ import Link from 'next/link';
 import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import { formatNumberWithCommas, formatStaked, formatGasPrice, truncateHash, formatAddress, NATIVE_UNIT } from './lib/helpers';
-import type { EpochInfo } from './types';
+import { initialHomeData, loadHomeData, type BlockResult, type HomeData, type HomeStatus, type TxResult } from './lib/homeData';
 import config from '../config.js';
 import SearchBar from './components/SearchBar';
 import TransactionAmount from './components/TransactionAmount';
@@ -33,44 +33,6 @@ const Charts = dynamic(() => import('./components/Charts'), {
   ssr: false,
 });
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
-interface BlockResult {
-  number: string;
-  timestamp: string;
-  hash: string;
-  miner: string;
-  // Only `.length` is read on the home page; the per-tx shape varies by
-  // endpoint, so `unknown[]` keeps it honest without inventing a type.
-  transactions: unknown[];
-}
-
-interface TxResult {
-  TxHash: string;
-  TimeStamp: string | number;
-  From: string;
-  To: string;
-  Amount: string | number;
-  BlockNumber?: string;
-  TxType?: string;
-}
-
-interface HomeData {
-  blockHeight: number;
-  totalTransactions: number;
-  validatorCount: number;
-  epochInfo: EpochInfo | null;
-  blocks: BlockResult[];
-  txs: TxResult[];
-  totalStaked: string;
-  marketCap: number;
-  circulating: string;
-  avgGasPriceHex: string | null;
-  loading: boolean;
-  error: boolean;
-  dataInitialized: boolean;
-}
-
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const SLOTS_PER_EPOCH = 128;
@@ -86,19 +48,6 @@ function parseTimestamp(ts: string | number | undefined): number {
   if (typeof ts === 'number') return ts;
   if (ts.startsWith('0x')) return parseInt(ts, 16);
   return parseInt(ts, 10) || 0;
-}
-
-/** Dedupe txs by hash (the network endpoint returns one row per side of a transfer). */
-function dedupeTxs(txs: TxResult[], max: number): TxResult[] {
-  const seen = new Set<string>();
-  const out: TxResult[] = [];
-  for (const tx of txs) {
-    if (!tx?.TxHash || seen.has(tx.TxHash)) continue;
-    seen.add(tx.TxHash);
-    out.push(tx);
-    if (out.length >= max) break;
-  }
-  return out;
 }
 
 // ── Icons ────────────────────────────────────────────────────────────────────
@@ -156,7 +105,8 @@ const icons = {
 
 interface Stat {
   label: string;
-  value: string | number;
+  value: string | number | null;
+  status: HomeStatus;
   icon: React.ReactNode;
   live?: boolean;
 }
@@ -164,16 +114,16 @@ interface Stat {
 function StatBar({ data }: { data: HomeData }) {
   const fiat = useDisplayCurrency();
   const stats: Stat[] = [
-    { label: 'Epoch', value: data.epochInfo ? data.epochInfo.headEpoch : '…', icon: icons.epoch },
-    { label: 'Avg Gas Price', value: data.avgGasPriceHex ? `${formatGasPrice(data.avgGasPriceHex)} Shor` : '…', icon: icons.gas },
-    { label: 'Block Height', value: formatNumberWithCommas(data.blockHeight.toString()), icon: icons.block, live: true },
-    { label: 'Validators', value: formatNumberWithCommas(data.validatorCount.toString()), icon: icons.validators },
-    { label: `Staked ${NATIVE_UNIT}`, value: data.totalStaked !== '0' ? formatStaked(data.totalStaked) : '…', icon: icons.staked },
-    { label: 'Transactions', value: formatNumberWithCommas(data.totalTransactions.toString()), icon: icons.transactions },
-    { label: `Market Cap (${fiat.currency})`, value: data.marketCap > 0 ? fiat.format(data.marketCap, { style: 'decimal', maximumFractionDigits: 0 }) : '…', icon: icons.marketCap },
+    { label: 'Epoch', value: data.epochInfo?.headEpoch ?? null, status: data.status.epochInfo, icon: icons.epoch },
+    { label: 'Avg Gas Price', value: data.avgGasPriceHex ? `${formatGasPrice(data.avgGasPriceHex)} Shor` : null, status: data.status.avgGasPriceHex, icon: icons.gas },
+    { label: 'Block Height', value: data.blockHeight === null ? null : formatNumberWithCommas(data.blockHeight.toString()), status: data.status.blockHeight, icon: icons.block, live: true },
+    { label: 'Validators', value: data.validatorCount === null ? null : formatNumberWithCommas(data.validatorCount.toString()), status: data.status.overview, icon: icons.validators },
+    { label: `Staked ${NATIVE_UNIT}`, value: data.totalStaked === null ? null : formatStaked(data.totalStaked), status: data.status.totalStaked, icon: icons.staked },
+    { label: 'Transactions', value: data.totalTransactions === null ? null : formatNumberWithCommas(data.totalTransactions.toString()), status: data.status.totalTransactions, icon: icons.transactions },
+    { label: `Market Cap (${fiat.currency})`, value: data.marketCap !== null && data.marketCap > 0 ? fiat.format(data.marketCap, { style: 'decimal', maximumFractionDigits: 0 }) : null, status: data.status.overview, icon: icons.marketCap },
     // Unit lives on the label line per the Quanta layout convention; the
     // value stays a bare number so the 8-cell strip keeps its width budget.
-    { label: `Circulating ${NATIVE_UNIT}`, value: data.circulating !== '0' ? formatNumberWithCommas(data.circulating) : '…', icon: icons.circulating },
+    { label: `Circulating ${NATIVE_UNIT}`, value: data.circulating === null ? null : formatNumberWithCommas(data.circulating), status: data.status.overview, icon: icons.circulating },
   ];
 
   return (
@@ -187,12 +137,12 @@ function StatBar({ data }: { data: HomeData }) {
             key={stat.label}
             className="bg-background-secondary px-4 py-4 sm:py-5 flex flex-col items-center justify-center text-center"
           >
-            {data.loading ? (
-              <div className="skeleton h-7 w-20" />
+            {stat.status === 'loading' ? (
+              <div className="skeleton h-7 w-20" aria-label={`Loading ${stat.label}`} />
             ) : (
-              <span className="font-display text-lg sm:text-xl font-semibold text-text-primary tabular-nums inline-flex items-center gap-2">
-                {stat.live && <span className="live-dot" aria-hidden="true" />}
-                {stat.value}
+              <span title={stat.status === 'error' && stat.value !== null ? 'Last available value; refresh failed' : undefined} className="font-display text-lg sm:text-xl font-semibold text-text-primary tabular-nums inline-flex items-center gap-2">
+                {stat.live && stat.value !== null && stat.status === 'ready' && <span className="live-dot" aria-hidden="true" />}
+                {stat.value ?? <span className="text-sm text-text-muted">Unavailable</span>}
               </span>
             )}
             <span className="flex items-center gap-1.5 text-[11px] text-text-muted mt-1.5 uppercase tracking-wider">
@@ -270,13 +220,15 @@ function getEpochFromBlock(blockNumber: number): number {
 
 // ── Block Table ──────────────────────────────────────────────────────────────
 
-function BlockTable({ blocks, loading }: { blocks: BlockResult[]; loading: boolean }) {
+function BlockTable({ blocks, status }: { blocks: BlockResult[] | null; status: HomeStatus }) {
   return (
     <section aria-label="Latest blocks" className="card overflow-hidden">
       <TableHeader icon={icons.block} title="Latest Blocks" viewAllHref="/blocks/1" tone="accent" />
       <div>
-        {loading
+        {status === 'loading'
           ? Array.from({ length: TABLE_ROWS }).map((_, i) => <SkeletonRow key={i} />)
+          : blocks === null ? <p className="p-4 text-sm text-text-muted">Latest blocks unavailable. Retrying automatically.</p>
+          : blocks.length === 0 ? <p className="p-4 text-sm text-text-muted">No blocks yet.</p>
           : blocks.slice(0, TABLE_ROWS).map((block, idx) => {
               const blockNum = parseHex(block.number);
               const epoch = getEpochFromBlock(blockNum);
@@ -331,13 +283,15 @@ function BlockTable({ blocks, loading }: { blocks: BlockResult[]; loading: boole
 
 // ── Transaction Table ────────────────────────────────────────────────────────
 
-function TransactionTable({ txs, loading }: { txs: TxResult[]; loading: boolean }) {
+function TransactionTable({ txs, status }: { txs: TxResult[] | null; status: HomeStatus }) {
   return (
     <section aria-label="Latest transactions" className="card overflow-hidden">
       <TableHeader icon={icons.transactions} title="Latest Transactions" viewAllHref="/transactions/1" tone="quantum" />
       <div>
-        {loading
+        {status === 'loading'
           ? Array.from({ length: TABLE_ROWS }).map((_, i) => <SkeletonRow key={i} />)
+          : txs === null ? <p className="p-4 text-sm text-text-muted">Latest transactions unavailable. Retrying automatically.</p>
+          : txs.length === 0 ? <p className="p-4 text-sm text-text-muted">No transactions yet.</p>
           : txs.slice(0, TABLE_ROWS).map((tx, idx) => {
               const timestamp = parseTimestamp(tx.TimeStamp);
               const from = tx.From ? formatAddress(tx.From) : '';
@@ -392,90 +346,25 @@ function TransactionTable({ txs, loading }: { txs: TxResult[]; loading: boolean 
 // ── Main Component ───────────────────────────────────────────────────────────
 
 export default function HomeClient(): JSX.Element {
-  const [data, setData] = React.useState<HomeData>({
-    blockHeight: 0,
-    totalTransactions: 0,
-    validatorCount: 0,
-    epochInfo: null,
-    blocks: [],
-    txs: [],
-    totalStaked: '0',
-    marketCap: 0,
-    circulating: '0',
-    avgGasPriceHex: null,
-    loading: true,
-    error: false,
-    dataInitialized: false,
-  });
-
-  const fetchData = React.useCallback(async () => {
-    try {
-      if (!config.handlerUrl) return;
-
-      const [overviewRes, latestBlockRes, txsRes, epochRes, blocksRes, epochsRes, gasRes, latestTxsRes] = await Promise.allSettled([
-        axios.get(config.handlerUrl + '/overview'),
-        axios.get(config.handlerUrl + '/latestblock'),
-        axios.get(config.handlerUrl + '/txs?page=1'),
-        axios.get(config.handlerUrl + '/epoch'),
-        axios.get(config.handlerUrl + '/blocks?page=1&limit=10'),
-        axios.get(config.handlerUrl + '/epochs?page=1&limit=1'),
-        axios.get(config.handlerUrl + '/gas/summary'),
-        axios.get(config.handlerUrl + '/transactions'),
-      ]);
-
-      setData((prev) => {
-        const next = { ...prev, loading: false };
-
-        if (overviewRes.status === 'fulfilled') {
-          next.validatorCount = overviewRes.value.data.validatorCount || 0;
-          next.dataInitialized = overviewRes.value.data.status?.dataInitialized ?? false;
-          next.marketCap = overviewRes.value.data.marketcap || 0;
-          next.circulating = String(overviewRes.value.data.circulating || '0');
-        }
-        if (latestBlockRes.status === 'fulfilled') {
-          next.blockHeight = latestBlockRes.value.data.blockNumber || 0;
-        }
-        if (txsRes.status === 'fulfilled') {
-          next.totalTransactions = txsRes.value.data.total || 0;
-        }
-        if (epochRes.status === 'fulfilled' && epochRes.value.data) {
-          next.epochInfo = epochRes.value.data;
-        }
-        if (blocksRes.status === 'fulfilled') {
-          next.blocks = blocksRes.value.data.blocks || [];
-        }
-        if (epochsRes.status === 'fulfilled') {
-          const latestEpoch = epochsRes.value.data.epochs?.[0];
-          if (latestEpoch?.totalStaked) {
-            next.totalStaked = latestEpoch.totalStaked;
-          }
-        }
-        if (gasRes.status === 'fulfilled' && gasRes.value.data?.avgGasPriceHex) {
-          next.avgGasPriceHex = gasRes.value.data.avgGasPriceHex;
-        }
-        if (latestTxsRes.status === 'fulfilled') {
-          const rows = (latestTxsRes.value.data?.response || []) as TxResult[];
-          next.txs = dedupeTxs(rows, TABLE_ROWS);
-        }
-
-        return next;
-      });
-    } catch (err) {
-      console.error('Failed to fetch homepage data:', err);
-      setData((prev) => ({ ...prev, loading: false, error: true }));
-    }
-  }, []);
+  const [data, setData] = React.useState<HomeData>(initialHomeData);
+  const generation = React.useRef(0);
 
   // Drive the polling via TanStack Query so backgrounded tabs go quiet
   // (every other live page uses this discipline; the previous raw
-  // setInterval polled regardless of visibility). fetchData stays in
-  // charge of writing into the local state; this query only owns the
-  // schedule. Returns a timestamp so successive renders see a fresh
-  // value and don't dedupe.
+  // setInterval polled regardless of visibility). The loader writes each
+  // response into local state; this query owns the snapshot schedule.
+  // Return a timestamp so successive polls see a fresh value.
   useQuery<number>({
     queryKey: ['home-poll'],
-    queryFn: async () => {
-      await fetchData();
+    queryFn: async ({ signal }) => {
+      const current = ++generation.current;
+      await loadHomeData(
+        async (path, requestSignal) => (await axios.get(config.handlerUrl + path, { signal: requestSignal, timeout: 15000 })).data,
+        signal,
+        update => {
+          if (!signal.aborted && current === generation.current) setData(update);
+        },
+      );
       return Date.now();
     },
     refetchInterval: 30000,
@@ -507,7 +396,7 @@ export default function HomeClient(): JSX.Element {
           </div>
 
           {/* Init Warning */}
-          {!data.loading && !data.dataInitialized && (
+          {data.status.overview === 'ready' && data.dataInitialized === false && (
             <div
               role="status"
               className="mb-4 px-3 py-2.5 rounded-xl bg-warning/10 border border-warning/25 text-warning text-xs sm:text-sm flex items-center gap-2"
@@ -519,6 +408,12 @@ export default function HomeClient(): JSX.Element {
             </div>
           )}
 
+          {Object.values(data.status).includes('error') && (
+            <p role="status" className="mb-4 text-xs sm:text-sm text-text-muted">
+              Some explorer data could not be refreshed. Showing available data and retrying automatically.
+            </p>
+          )}
+
           {/* Stats Cluster */}
           <section aria-label="Network stats" className="mb-6">
             <StatBar data={data} />
@@ -526,8 +421,8 @@ export default function HomeClient(): JSX.Element {
 
           {/* Side-by-Side Tables */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5 mb-6">
-            <BlockTable blocks={data.blocks} loading={data.loading} />
-            <TransactionTable txs={data.txs} loading={data.loading} />
+            <BlockTable blocks={data.blocks} status={data.status.blocks} />
+            <TransactionTable txs={data.txs} status={data.status.txs} />
           </div>
 
           {/* TradingView Chart */}
