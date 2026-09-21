@@ -24,7 +24,11 @@ test('phone menu keeps the page usable and exposes appearance, networks and sett
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await navigation.getByRole('button', { name: 'Explorer network', exact: true }).click();
   await expect(navigation.getByText('QRL Testnet v2', { exact: true })).toBeVisible();
-  await expect(navigation.getByRole('button', { name: /QRL Testnet v3/ })).toBeDisabled();
+  await expect(navigation.getByRole('link', { name: /QRL Testnet v3/ })).toHaveAttribute(
+    'href',
+    'https://v3.zondscan.com'
+  );
+  await expect(navigation.getByRole('button', { name: /QRL Mainnet/ })).toBeDisabled();
   await navigation.getByRole('link', { name: 'Site settings', exact: true }).click();
   await expect(page).toHaveURL('/settings');
   await expect(navigation).not.toBeVisible();

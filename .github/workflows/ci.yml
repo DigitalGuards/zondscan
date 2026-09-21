@@ -57,7 +57,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version-file: 'backendAPI/go.mod'
           cache-dependency-path: backendAPI/go.sum
 
       - name: Download dependencies
@@ -90,7 +90,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version-file: 'QRL2MongoDB/go.mod'
           cache-dependency-path: QRL2MongoDB/go.sum
 
       - name: Download dependencies
