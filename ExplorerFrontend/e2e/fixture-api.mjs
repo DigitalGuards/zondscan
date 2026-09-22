@@ -98,8 +98,53 @@ const gas = {
   qrlUsdPrice: overview.currentPrice,
 };
 
+// Pending lifecycle state is isolated to synthetic hashes and this loopback server.
+const pendingHashes = new Map([21, 22, 23, 24, 25, 26, 27, 28].map((id) => [hash(id), id]));
+const pendingStates = new Map();
+const pendingFixture = (id) => ({
+  hash: hash(id),
+  from: sender,
+  to: id === 22 ? '' : recipient,
+  input:
+    id === 22
+      ? '0x6000'
+      : id === 23 || id === 28
+        ? '0xa9059cbb' + 'c'.repeat(128) + 'a'.padStart(128, '0')
+        : id === 25
+          ? '0x12345678'
+          : '0x',
+  value: '0x2386f26fc10000',
+  gas: '0x5208',
+  gasPrice: '0x3b9aca00',
+  nonce: '0x1',
+  status: 'pending',
+  createdAt: Math.floor(Date.now() / 1000) - 30,
+  lastSeen: Math.floor(Date.now() / 1000),
+  accessList: [],
+  blockHash: null,
+  chainId: '0x301825',
+  publicKey: '',
+  transactionIndex: null,
+  type: '0x2',
+});
+
 createServer((request, response) => {
-  const path = new URL(request.url, 'http://127.0.0.1').pathname;
+  const url = new URL(request.url, 'http://127.0.0.1');
+  const path = url.pathname;
+  if (request.method === 'POST' && path.startsWith('/__fixture/pending/')) {
+    const fixtureHash = path.slice('/__fixture/pending/'.length);
+    const state = url.searchParams.get('status');
+    if (
+      pendingHashes.has(fixtureHash) &&
+      ['pending', 'mined', 'dropped', 'unavailable'].includes(state)
+    ) {
+      pendingStates.set(fixtureHash, state);
+      response.writeHead(204);
+    } else response.writeHead(400);
+    response.end();
+    return;
+  }
+  let statusCode;
   let data = {
     '/health': { ok: true },
     '/overview': overview,
@@ -212,7 +257,35 @@ createServer((request, response) => {
   if (/^\/address\/[^/]+\/transactions$/.test(path))
     data = { transactions: txs, total: txs.length };
   if (/^\/address\/[^/]+\/internal-transactions$/.test(path)) data = { transactions: [], total: 0 };
-  response.writeHead(data ? 200 : 404, {
+  const pendingHash = path.split('/').at(-1);
+  const pendingId = pendingHashes.get(pendingHash);
+  if (pendingId) {
+    const state = pendingStates.get(pendingHash) ?? 'pending';
+    if (path.startsWith('/pending-transaction/')) {
+      statusCode = state === 'pending' ? 200 : state === 'unavailable' ? 503 : 404;
+      data =
+        state === 'pending'
+          ? {
+              transaction: pendingFixture(pendingId),
+              targetContract: pendingId === 23 || pendingId === 24 ? {} : undefined,
+            }
+          : { status: state };
+    } else if (path.startsWith('/pending-tx-eta/')) {
+      data = { etaSec: 20, avgBlockTimeSec: 60, pendingCount: 3, medianGasPriceHex: '0x3b9aca00' };
+    } else if (path.startsWith('/tx/')) {
+      statusCode = state === 'mined' ? 200 : 404;
+      data =
+        state === 'mined'
+          ? {
+              ...data,
+              response: { ...data.response, TxHash: pendingHash, Value: '0x2386f26fc10000' },
+              tokenTransfers: [],
+              input: '0x',
+            }
+          : { error: 'Synthetic pending transaction has no mined record' };
+    }
+  }
+  response.writeHead(statusCode ?? (data ? 200 : 404), {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': 'http://127.0.0.1:18090',
   });

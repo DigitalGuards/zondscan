@@ -73,4 +73,15 @@ describe('TransactionFlow', () => {
     expect(html).not.toContain(contractCreated.address);
     expect(html).not.toContain('Copy contract address');
   });
+
+  it('describes a pending deployment without inventing a created address', () => {
+    const html = renderToStaticMarkup(
+      <TransactionFlow transaction={{ from: transaction.from, to: '' }} pending />
+    );
+    expect(html).toContain('Contract creation');
+    expect(html).toContain('Available after confirmation');
+    expect(html).not.toContain('No contract created');
+    expect(html).not.toContain('Copy contract address');
+    expect(html).not.toContain('href="/address/"');
+  });
 });

@@ -7,13 +7,29 @@ import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import type { PendingTransaction, ContractMeta } from '@/app/types';
 import config from '../../../../config';
-import { fetchPendingTransactionStatus, pendingStatusPollInterval, type PendingStatus } from '../../../lib/pendingTransaction';
-import { formatAmount, formatGasPrice, decodeTokenTransferInput, decodeContractCall, formatTokenAmount, hexToBigInt, type DecodedTokenTransfer } from '../../../lib/helpers';
+import {
+  fetchPendingTransactionStatus,
+  pendingStatusPollInterval,
+  type PendingStatus,
+} from '../../../lib/pendingTransaction';
+import {
+  formatAmount,
+  formatGasPrice,
+  decodeTokenTransferInput,
+  decodeContractCall,
+  formatTokenAmount,
+  hexToBigInt,
+  type DecodedTokenTransfer,
+} from '../../../lib/helpers';
 import Badge from '../../../components/Badge';
 import Breadcrumbs from '../../../components/Breadcrumbs';
 import DetailRow from '../../../components/DetailRow';
 import CopyButton from '../../../components/CopyButton';
 import AddressFingerprint from '../../../components/AddressFingerprint';
+import TransactionFlow from '../../../components/TransactionFlow';
+import InterfaceText from '../../../components/InterfaceText';
+import { getTransactionKind } from '../../../lib/transactionKind';
+import { useIsMobile } from '../../../lib/hooks';
 import ContractMetadataProvenanceNotice, {
   trustedContractMetadataABI,
 } from '../../../components/ContractMetadataProvenanceNotice';
@@ -48,9 +64,15 @@ function formatElapsed(seconds: number): string {
 
 // QRC badge label + variant per decoded standard. Kept symmetric with
 // tx page's qrcBadgeText so a tx looks consistent before vs after mining.
-function badgeForDecoded(dt: DecodedTokenTransfer): { text: string; variant: 'brand' | 'warning' | 'info' } {
+function badgeForDecoded(dt: DecodedTokenTransfer): {
+  text: string;
+  variant: 'brand' | 'warning' | 'info';
+} {
   if (dt.methodName === 'setApprovalForAll') {
-    return { text: dt.standard === 'ERC-1155' ? 'QRC-1155 Approval' : 'NFT Approval', variant: 'info' };
+    return {
+      text: dt.standard === 'ERC-1155' ? 'QRC-1155 Approval' : 'NFT Approval',
+      variant: 'info',
+    };
   }
   if (dt.standard === 'ERC-721') return { text: 'QRC-721', variant: 'warning' };
   if (dt.standard === 'ERC-1155') return { text: 'QRC-1155', variant: 'warning' };
@@ -67,17 +89,26 @@ function headerLabelFor(dt: DecodedTokenTransfer): string {
 
 function methodSignatureFor(dt: DecodedTokenTransfer): string {
   switch (dt.methodName) {
-    case 'transfer':              return 'transfer(address, uint256)';
-    case 'transferFrom':          return 'transferFrom(address, address, uint256)';
-    case 'safeTransferFrom':      return dt.standard === 'ERC-1155'
-      ? 'safeTransferFrom(address, address, uint256, uint256, bytes)'
-      : 'safeTransferFrom(address, address, uint256)';
-    case 'safeBatchTransferFrom': return 'safeBatchTransferFrom(address, address, uint256[], uint256[], bytes)';
-    case 'setApprovalForAll':     return 'setApprovalForAll(address, bool)';
+    case 'transfer':
+      return 'transfer(address, uint256)';
+    case 'transferFrom':
+      return 'transferFrom(address, address, uint256)';
+    case 'safeTransferFrom':
+      return dt.standard === 'ERC-1155'
+        ? 'safeTransferFrom(address, address, uint256, uint256, bytes)'
+        : 'safeTransferFrom(address, address, uint256)';
+    case 'safeBatchTransferFrom':
+      return 'safeBatchTransferFrom(address, address, uint256[], uint256[], bytes)';
+    case 'setApprovalForAll':
+      return 'setApprovalForAll(address, bool)';
   }
 }
 
-export default function PendingTransactionView({ pendingTx, targetContract }: PendingTransactionViewProps): JSX.Element {
+export default function PendingTransactionView({
+  pendingTx,
+  targetContract,
+}: PendingTransactionViewProps): JSX.Element {
+  const isMobile = useIsMobile();
   const [formattedValue, unit] = formatAmount(pendingTx.value);
   const formattedGasPrice = formatGasPrice(pendingTx.gasPrice);
   const router = useRouter();
@@ -96,6 +127,12 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
   }, [decodedTransfer, pendingTx.input, targetABI]);
 
   const isTokenTransfer = decodedTransfer !== null;
+  const flowTransaction = { from: pendingTx.from, to: pendingTx.to ?? '' };
+  const kind = getTransactionKind({
+    to: flowTransaction.to,
+    input: pendingTx.input,
+    targetContract,
+  });
 
   // ── Status poll ─────────────────────────────────────────────────────────
   // A mined tombstone redirects immediately. Other 404 responses probe /tx;
@@ -112,7 +149,9 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
     queryKey: ['pending-tx-eta', pendingTx.hash],
     queryFn: async () => {
       try {
-        const res = await axios.get<EtaResponse>(`${config.handlerUrl}/pending-tx-eta/${pendingTx.hash}`);
+        const res = await axios.get<EtaResponse>(
+          `${config.handlerUrl}/pending-tx-eta/${pendingTx.hash}`
+        );
         return res.data;
       } catch {
         return null;
@@ -167,7 +206,10 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
   const hasEta = etaRemaining !== null;
   useEffect(() => {
     if (!hasEta) return;
-    const id = setInterval(() => setEtaRemaining((v) => (v === null ? null : Math.max(0, v - 1))), 1000);
+    const id = setInterval(
+      () => setEtaRemaining((v) => (v === null ? null : Math.max(0, v - 1))),
+      1000
+    );
     return () => clearInterval(id);
   }, [hasEta]);
 
@@ -197,89 +239,88 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
   }
 
   return (
-    <div className="py-4 sm:py-6 lg:py-8">
+    <main className="detail-content" aria-labelledby="tx-detail-heading">
       {statusQuery.data?.status === 'unavailable' && (
         <p role="status" className="mb-4 text-sm text-text-secondary">
           Transaction status is temporarily unavailable. Checking again shortly.
         </p>
       )}
-      <Breadcrumbs items={[
-        { label: 'Pending', translateLabel: true, href: '/pending/1' },
-        { label: `${pendingTx.hash.slice(0, 10)}...${pendingTx.hash.slice(-6)}` },
-      ]} />
+      <Breadcrumbs
+        items={[
+          { label: 'Pending', translateLabel: true, href: '/pending/1' },
+          { label: `${pendingTx.hash.slice(0, 10)}...${pendingTx.hash.slice(-6)}` },
+        ]}
+      />
 
       {/* Main Details Card */}
-      <div className="card overflow-hidden mb-6">
+      <section className="card overflow-hidden mb-6" aria-labelledby="tx-detail-heading">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border">
+        <div className="flex flex-wrap items-center gap-3 p-4 sm:p-6 border-b border-border">
           <div className="flex items-center gap-3">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-accent">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+              className="w-6 h-6 text-accent"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"
+              />
             </svg>
-            <h1 className="section-title">Pending Transaction</h1>
-            {decodedTransfer && (() => {
-              const b = badgeForDecoded(decodedTransfer);
-              return <Badge variant={b.variant}>{b.text}</Badge>;
-            })()}
-            {!decodedTransfer && decodedCall && (
-              <Badge variant="info">{decodedCall.name}</Badge>
-            )}
+            <h1 id="tx-detail-heading" className="section-title">
+              <InterfaceText text="Transaction Details" />
+            </h1>
           </div>
-          <Badge variant="warning" size="md" dot>Pending</Badge>
+          <Badge variant="neutral">
+            <InterfaceText text={kind} />
+          </Badge>
         </div>
 
         {/* Live status strip */}
-        <div className="px-4 sm:px-6 py-3 border-b border-border bg-background/40">
+        <div className="px-4 sm:px-6 py-3 border-b border-border bg-surface-2/50">
           <div className="flex flex-wrap items-center gap-2 mb-1">
             <Badge variant="warning">Pending for {formatElapsed(elapsedSec)}</Badge>
             {etaRemaining !== null && (
               <Badge variant="info">
-                {etaRemaining > 0 ? `Next inclusion ~${formatElapsed(etaRemaining)}` : 'Any moment now…'}
+                {etaRemaining > 0
+                  ? `Next inclusion ~${formatElapsed(etaRemaining)}`
+                  : 'Any moment now…'}
               </Badge>
             )}
             {typeof etaQuery.data?.pendingCount === 'number' && (
               <Badge variant="neutral">Mempool: {etaQuery.data.pendingCount}</Badge>
             )}
-            {gasCompare && (
-              <Badge variant={gasCompare.variant}>Gas: {gasCompare.label}</Badge>
-            )}
+            {gasCompare && <Badge variant={gasCompare.variant}>Gas: {gasCompare.label}</Badge>}
           </div>
           <p className="text-[11px] text-text-muted">
-            Auto-refreshing every 5s, this page will navigate to the confirmed transaction once it&apos;s included in a block.
+            Auto-refreshing every 5s, this page will navigate to the confirmed transaction once
+            it&apos;s included in a block.
           </p>
         </div>
 
         {/* Content */}
         <div className="p-4 sm:p-6">
+          <TransactionFlow transaction={flowTransaction} pending />
           <DetailRow label="Transaction Hash" mono>
             <div className="flex items-start gap-2">
-              <span>{pendingTx.hash}</span>
+              <span>
+                {isMobile
+                  ? `${pendingTx.hash.slice(0, 10)}...${pendingTx.hash.slice(-8)}`
+                  : pendingTx.hash}
+              </span>
               <CopyButton value={pendingTx.hash} label="Copy hash" size="sm" />
             </div>
           </DetailRow>
           <DetailRow label="Status">
-            <Badge variant="warning" dot>pending</Badge>
-          </DetailRow>
-          <DetailRow label="From" mono>
-            <Link
-              href={`/address/${pendingTx.from}`}
-              className="text-text-primary hover:text-accent transition-colors break-all"
-            >
-              <AddressFingerprint address={pendingTx.from} />
-            </Link>
-          </DetailRow>
-          <DetailRow label="To" mono>
-            {pendingTx.to ? (
-              <Link
-                href={`/address/${pendingTx.to}`}
-                className="text-text-primary hover:text-accent transition-colors break-all"
-              >
-                <AddressFingerprint address={pendingTx.to} />
-              </Link>
-            ) : (
-              <span className="text-text-secondary">Contract Creation</span>
-            )}
-            {isTokenTransfer && <span className="text-xs text-text-muted ml-2">(Contract)</span>}
+            <Badge variant="warning" dot>
+              <InterfaceText text="Pending" />
+            </Badge>
+            <span className="text-text-muted text-xs ml-2">Awaiting block inclusion</span>
           </DetailRow>
           <DetailRow label="Value">
             <span className="font-semibold text-accent">{formattedValue}</span>
@@ -289,121 +330,155 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
           <DetailRow label="Gas Limit">{pendingTx.gas}</DetailRow>
           <DetailRow label="Nonce">{pendingTx.nonce}</DetailRow>
         </div>
-      </div>
+      </section>
 
       {/* Token call section. Layout branches on the decoded shape: ERC-20
           shows recipient + raw amount (decimals unknown until confirmed);
           ERC-721 / ERC-1155 surface tokenID(s) + value(s); setApprovalForAll
           shows operator + on/off. Token name/symbol fill in once mined. */}
-      {decodedTransfer && (() => {
-        const b = badgeForDecoded(decodedTransfer);
-        const isApproval = decodedTransfer.methodName === 'setApprovalForAll';
-        const isBatch = decodedTransfer.methodName === 'safeBatchTransferFrom';
-        return (
-          <div className="card overflow-hidden mb-6">
-            <div className="px-4 sm:px-6 py-4 border-b border-border">
-              <div className="flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-accent">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-                </svg>
-                <h2 className="text-[15px] font-display font-semibold text-text-primary">{headerLabelFor(decodedTransfer)}</h2>
-                <Badge variant={b.variant}>{b.text}</Badge>
+      {decodedTransfer &&
+        (() => {
+          const b = badgeForDecoded(decodedTransfer);
+          const isApproval = decodedTransfer.methodName === 'setApprovalForAll';
+          const isBatch = decodedTransfer.methodName === 'safeBatchTransferFrom';
+          return (
+            <div className="card overflow-hidden mb-6">
+              <div className="px-4 sm:px-6 py-4 border-b border-border">
+                <div className="flex items-center gap-2">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={1.5}
+                    stroke="currentColor"
+                    className="w-5 h-5 text-accent"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"
+                    />
+                  </svg>
+                  <h2 className="text-[15px] font-display font-semibold text-text-primary">
+                    {headerLabelFor(decodedTransfer)}
+                  </h2>
+                  <Badge variant={b.variant}>{b.text}</Badge>
+                </div>
+              </div>
+              <div className="p-4 sm:p-6">
+                <DetailRow label="Method">
+                  <span className="font-mono text-sm">{methodSignatureFor(decodedTransfer)}</span>
+                </DetailRow>
+
+                {/* setApprovalForAll(operator, approved) */}
+                {isApproval && (
+                  <>
+                    {decodedTransfer.operator && (
+                      <DetailRow label="Operator" mono>
+                        <Link
+                          href={`/address/${decodedTransfer.operator}`}
+                          className="text-accent hover:text-accent-hover transition-colors break-all"
+                        >
+                          <AddressFingerprint address={decodedTransfer.operator} />
+                        </Link>
+                      </DetailRow>
+                    )}
+                    <DetailRow label="Approved">
+                      <Badge variant={decodedTransfer.approved ? 'success' : 'error'}>
+                        {decodedTransfer.approved ? 'true (granted)' : 'false (revoked)'}
+                      </Badge>
+                    </DetailRow>
+                  </>
+                )}
+
+                {/* Transfer-like calls: From (when present) → To */}
+                {!isApproval && decodedTransfer.from && (
+                  <DetailRow label="From" mono>
+                    <Link
+                      href={`/address/${decodedTransfer.from}`}
+                      className="text-text-primary hover:text-accent transition-colors break-all"
+                    >
+                      <AddressFingerprint address={decodedTransfer.from} />
+                    </Link>
+                  </DetailRow>
+                )}
+                {!isApproval && decodedTransfer.to && (
+                  <DetailRow label={decodedTransfer.from ? 'To' : 'Recipient'} mono>
+                    <Link
+                      href={`/address/${decodedTransfer.to}`}
+                      className="text-accent hover:text-accent-hover transition-colors break-all"
+                    >
+                      <AddressFingerprint address={decodedTransfer.to} />
+                    </Link>
+                  </DetailRow>
+                )}
+
+                {/* ERC-20: raw amount (decimals unknown pre-confirmation) */}
+                {decodedTransfer.standard === 'ERC-20' && decodedTransfer.amount && (
+                  <DetailRow label="Amount">
+                    <span className="font-semibold">
+                      {formatTokenAmount(decodedTransfer.amount, 18)}
+                    </span>
+                    <span className="text-text-muted ml-2 text-xs">
+                      (raw: {decodedTransfer.amount}, assumes 18 decimals)
+                    </span>
+                  </DetailRow>
+                )}
+
+                {/* ERC-721 / ERC-1155 single */}
+                {!isBatch && decodedTransfer.tokenID && (
+                  <DetailRow label="Token ID" mono>
+                    <span className="font-semibold text-text-primary">
+                      #{decodedTransfer.tokenID}
+                    </span>
+                  </DetailRow>
+                )}
+                {decodedTransfer.standard === 'ERC-1155' && !isBatch && decodedTransfer.value && (
+                  <DetailRow label="Quantity">
+                    <span className="font-semibold text-text-primary">
+                      {(() => {
+                        try {
+                          return BigInt(decodedTransfer.value).toLocaleString('en-US');
+                        } catch {
+                          return decodedTransfer.value;
+                        }
+                      })()}
+                    </span>
+                  </DetailRow>
+                )}
+
+                {/* ERC-1155 batch: list each (id, qty) row */}
+                {isBatch && decodedTransfer.ids && decodedTransfer.values && (
+                  <DetailRow label="Batch">
+                    <div className="flex flex-col gap-1 mt-1">
+                      {decodedTransfer.ids.map((id, i) => (
+                        <div key={`${id}-${i}`} className="font-mono text-xs text-text-primary">
+                          <span className="text-accent">#{id}</span>
+                          <span className="text-text-muted"> x </span>
+                          <span>
+                            {(() => {
+                              try {
+                                return BigInt(decodedTransfer.values![i]).toLocaleString('en-US');
+                              } catch {
+                                return decodedTransfer.values![i];
+                              }
+                            })()}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </DetailRow>
+                )}
+
+                <p className="text-xs text-text-muted mt-3">
+                  {isApproval
+                    ? 'Approval will take effect once the transaction is confirmed.'
+                    : 'Token name and symbol will be available once the transaction is confirmed.'}
+                </p>
               </div>
             </div>
-            <div className="p-4 sm:p-6">
-              <DetailRow label="Method">
-                <span className="font-mono text-sm">{methodSignatureFor(decodedTransfer)}</span>
-              </DetailRow>
-
-              {/* setApprovalForAll(operator, approved) */}
-              {isApproval && (
-                <>
-                  {decodedTransfer.operator && (
-                    <DetailRow label="Operator" mono>
-                      <Link
-                        href={`/address/${decodedTransfer.operator}`}
-                        className="text-accent hover:text-accent-hover transition-colors break-all"
-                      >
-                        <AddressFingerprint address={decodedTransfer.operator} />
-                      </Link>
-                    </DetailRow>
-                  )}
-                  <DetailRow label="Approved">
-                    <Badge variant={decodedTransfer.approved ? 'success' : 'error'}>
-                      {decodedTransfer.approved ? 'true (granted)' : 'false (revoked)'}
-                    </Badge>
-                  </DetailRow>
-                </>
-              )}
-
-              {/* Transfer-like calls: From (when present) → To */}
-              {!isApproval && decodedTransfer.from && (
-                <DetailRow label="From" mono>
-                  <Link
-                    href={`/address/${decodedTransfer.from}`}
-                    className="text-text-primary hover:text-accent transition-colors break-all"
-                  >
-                    <AddressFingerprint address={decodedTransfer.from} />
-                  </Link>
-                </DetailRow>
-              )}
-              {!isApproval && decodedTransfer.to && (
-                <DetailRow label={decodedTransfer.from ? 'To' : 'Recipient'} mono>
-                  <Link
-                    href={`/address/${decodedTransfer.to}`}
-                    className="text-accent hover:text-accent-hover transition-colors break-all"
-                  >
-                    <AddressFingerprint address={decodedTransfer.to} />
-                  </Link>
-                </DetailRow>
-              )}
-
-              {/* ERC-20: raw amount (decimals unknown pre-confirmation) */}
-              {decodedTransfer.standard === 'ERC-20' && decodedTransfer.amount && (
-                <DetailRow label="Amount">
-                  <span className="font-semibold">{formatTokenAmount(decodedTransfer.amount, 18)}</span>
-                  <span className="text-text-muted ml-2 text-xs">(raw: {decodedTransfer.amount}, assumes 18 decimals)</span>
-                </DetailRow>
-              )}
-
-              {/* ERC-721 / ERC-1155 single */}
-              {!isBatch && decodedTransfer.tokenID && (
-                <DetailRow label="Token ID" mono>
-                  <span className="font-semibold text-text-primary">#{decodedTransfer.tokenID}</span>
-                </DetailRow>
-              )}
-              {decodedTransfer.standard === 'ERC-1155' && !isBatch && decodedTransfer.value && (
-                <DetailRow label="Quantity">
-                  <span className="font-semibold text-text-primary">
-                    {(() => { try { return BigInt(decodedTransfer.value).toLocaleString('en-US'); } catch { return decodedTransfer.value; } })()}
-                  </span>
-                </DetailRow>
-              )}
-
-              {/* ERC-1155 batch: list each (id, qty) row */}
-              {isBatch && decodedTransfer.ids && decodedTransfer.values && (
-                <DetailRow label="Batch">
-                  <div className="flex flex-col gap-1 mt-1">
-                    {decodedTransfer.ids.map((id, i) => (
-                      <div key={`${id}-${i}`} className="font-mono text-xs text-text-primary">
-                        <span className="text-accent">#{id}</span>
-                        <span className="text-text-muted"> x </span>
-                        <span>{(() => { try { return BigInt(decodedTransfer.values![i]).toLocaleString('en-US'); } catch { return decodedTransfer.values![i]; } })()}</span>
-                      </div>
-                    ))}
-                  </div>
-                </DetailRow>
-              )}
-
-              <p className="text-xs text-text-muted mt-3">
-                {isApproval
-                  ? 'Approval will take effect once the transaction is confirmed.'
-                  : 'Token name and symbol will be available once the transaction is confirmed.'}
-              </p>
-            </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
 
       {/* ABI-decoded contract call (verified target, falls through from
           the well-known-token-selector path above). Same shape as the
@@ -412,10 +487,14 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
         <div className="card overflow-hidden mb-6">
           <div className="px-4 sm:px-6 py-4 border-b border-border">
             <div className="flex items-center gap-2">
-              <h2 className="text-[15px] font-display font-semibold text-text-primary">Contract Call (Pending)</h2>
+              <h2 className="text-[15px] font-display font-semibold text-text-primary">
+                Contract Call (Pending)
+              </h2>
               <Badge variant="info">{decodedCall.name}</Badge>
               {targetContract?.contractName && (
-                <span className="text-xs text-text-muted font-mono">via {targetContract.contractName}</span>
+                <span className="text-xs text-text-muted font-mono">
+                  via {targetContract.contractName}
+                </span>
               )}
             </div>
           </div>
@@ -426,19 +505,36 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
                 <div key={arg.label} className="text-xs flex flex-wrap items-start gap-2">
                   <span className="text-text-secondary font-mono min-w-[80px]">{arg.label}:</span>
                   {arg.type === 'address' && arg.value ? (
-                    <Link href={`/address/${arg.value}`} className="text-text-primary hover:text-accent transition-colors break-all font-mono">
+                    <Link
+                      href={`/address/${arg.value}`}
+                      className="text-text-primary hover:text-accent transition-colors break-all font-mono"
+                    >
                       <AddressFingerprint address={arg.value} />
                     </Link>
                   ) : arg.type === 'bool' ? (
                     <Badge variant={arg.value === 'true' ? 'success' : 'error'}>{arg.value}</Badge>
                   ) : arg.type === 'uint256' ? (
                     <span className="text-text-primary font-mono break-all">
-                      {(() => { try { return BigInt(arg.value || '0').toLocaleString('en-US'); } catch { return arg.value || ''; } })()}
+                      {(() => {
+                        try {
+                          return BigInt(arg.value || '0').toLocaleString('en-US');
+                        } catch {
+                          return arg.value || '';
+                        }
+                      })()}
                     </span>
                   ) : arg.type === 'uint256[]' ? (
                     <span className="text-text-primary font-mono break-all">
                       {arg.values && arg.values.length > 0
-                        ? arg.values.map((v) => { try { return BigInt(v).toLocaleString('en-US'); } catch { return v; } }).join(', ')
+                        ? arg.values
+                            .map((v) => {
+                              try {
+                                return BigInt(v).toLocaleString('en-US');
+                              } catch {
+                                return v;
+                              }
+                            })
+                            .join(', ')
                         : '[]'}
                     </span>
                   ) : arg.type === 'string' ? (
@@ -450,7 +546,8 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
               ))}
             </div>
             <p className="text-xs text-text-muted mt-3">
-              Decoded from the target contract&apos;s verified ABI. Final on-chain state lands once the transaction is confirmed.
+              Decoded from the target contract&apos;s verified ABI. Final on-chain state lands once
+              the transaction is confirmed.
             </p>
           </div>
         </div>
@@ -462,15 +559,19 @@ export default function PendingTransactionView({ pendingTx, targetContract }: Pe
           <div className="px-4 sm:px-6 py-4 border-b border-border">
             <h2 className="text-[15px] font-display font-semibold text-text-primary">
               Input Data
-              {(isTokenTransfer || decodedCall) && <span className="text-xs text-text-muted ml-2">(decoded above)</span>}
+              {(isTokenTransfer || decodedCall) && (
+                <span className="text-xs text-text-muted ml-2">(decoded above)</span>
+              )}
             </h2>
           </div>
           <div className="p-4 sm:p-6">
             <ContractMetadataProvenanceNotice contract={targetContract} />
-            <p className="font-mono text-text-secondary break-all text-xs leading-relaxed">{pendingTx.input}</p>
+            <p className="font-mono text-text-secondary break-all text-xs leading-relaxed">
+              {pendingTx.input}
+            </p>
           </div>
         </div>
       )}
-    </div>
+    </main>
   );
 }
