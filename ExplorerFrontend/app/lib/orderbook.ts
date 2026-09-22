@@ -61,29 +61,15 @@ export interface MarketBookStats {
   bandPercent: number;
 }
 
-export interface MarketPlay {
-  id: string;
-  occurredAt: number;
-  startPrice: number;
-  endPrice: number;
-  yards: number;
-  direction: 'bulls' | 'bears' | 'flat';
-  quantity: number;
-  executionCount: number;
-}
-
 const finiteNumber = (value: string | number | null | undefined): number => {
   const parsed = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const clamp = (value: number, min: number, max: number): number =>
-  Math.min(max, Math.max(min, value));
-
 export function buildLadder(
   levels: MarketOrderBookLevel[],
   side: MarketSide,
-  limit = 12,
+  limit = 12
 ): LadderLevel[] {
   const sorted = levels
     .map((level) => ({
@@ -130,11 +116,7 @@ function groupingScale(grouping: PriceGrouping): number {
   return grouping.split('.')[1]?.length ?? 0;
 }
 
-function bucketPriceUnits(
-  price: string,
-  side: MarketSide,
-  grouping: PriceGrouping,
-): bigint | null {
+function bucketPriceUnits(price: string, side: MarketSide, grouping: PriceGrouping): bigint | null {
   const parsedPrice = parseUnsignedDecimal(price);
   const parsedGrouping = parseUnsignedDecimal(grouping);
   if (
@@ -147,16 +129,13 @@ function bucketPriceUnits(
   }
 
   const commonScale = Math.max(parsedPrice.scale, parsedGrouping.scale);
-  const scaledPrice =
-    parsedPrice.coefficient * powerOfTen(commonScale - parsedPrice.scale);
+  const scaledPrice = parsedPrice.coefficient * powerOfTen(commonScale - parsedPrice.scale);
   const scaledGrouping =
     parsedGrouping.coefficient * powerOfTen(commonScale - parsedGrouping.scale);
   const wholeBuckets = scaledPrice / scaledGrouping;
   const remainder = scaledPrice % scaledGrouping;
   const bucketIndex =
-    side === 'sell' && remainder > BigInt(0)
-      ? wholeBuckets + BigInt(1)
-      : wholeBuckets;
+    side === 'sell' && remainder > BigInt(0) ? wholeBuckets + BigInt(1) : wholeBuckets;
   const commonBucket = bucketIndex * scaledGrouping;
 
   return commonBucket / powerOfTen(commonScale - parsedGrouping.scale);
@@ -177,25 +156,16 @@ export function buildGroupedLadder(
   levels: MarketOrderBookLevel[],
   side: MarketSide,
   grouping: PriceGrouping,
-  limit = 12,
+  limit = 12
 ): LadderLevel[] {
   const scale = groupingScale(grouping);
-  const grouped = new Map<
-    string,
-    { bucketUnits: bigint; quantity: number; notional: number }
-  >();
+  const grouped = new Map<string, { bucketUnits: bigint; quantity: number; notional: number }>();
 
   for (const level of levels) {
     const quantity = finiteNumber(level.quantity);
     const price = finiteNumber(level.price);
     const bucketUnits = bucketPriceUnits(level.price, side, grouping);
-    if (
-      quantity <= 0 ||
-      price <= 0 ||
-      bucketUnits === null ||
-      bucketUnits <= BigInt(0)
-    )
-      continue;
+    if (quantity <= 0 || price <= 0 || bucketUnits === null || bucketUnits <= BigInt(0)) continue;
 
     const key = bucketUnits.toString();
     const current = grouped.get(key) ?? {
@@ -235,7 +205,7 @@ export function buildGroupedLadder(
 
 export function calculateBookStats(
   response: MarketOrderBookResponse,
-  bandPercent = 2,
+  bandPercent = 2
 ): MarketBookStats {
   const allBids = buildLadder(response.bids, 'buy', response.bids.length);
   const allAsks = buildLadder(response.asks, 'sell', response.asks.length);
@@ -267,108 +237,8 @@ export function calculateBookStats(
   };
 }
 
-function nicePriceStep(value: number): number {
-  if (!Number.isFinite(value) || value <= 0) return 0.00001;
-  const magnitude = 10 ** Math.floor(Math.log10(value));
-  const normalized = value / magnitude;
-  let nice = 1;
-  if (normalized >= 7.5) nice = 10;
-  else if (normalized >= 3.75) nice = 5;
-  else if (normalized >= 2.25) nice = 2.5;
-  else if (normalized >= 1.5) nice = 2;
-  return nice * magnitude;
-}
-
-/**
- * Chooses a stable market scale for the arena. A full field covers roughly
- * one quarter of the 24-hour range, with the live spread still receiving
- * enough room to remain visible. The result is rounded to a readable step.
- */
-export function calculateYardValue(stats: MarketBookStats): number {
-  const dailyRange = Math.max(0, stats.high24h - stats.low24h);
-  const volatilityStep = dailyRange / 400;
-  const spreadStep = stats.spread / 12;
-  const minimumStep = Math.max(stats.last, stats.midpoint) * 0.00005;
-  return nicePriceStep(Math.max(volatilityStep, spreadStep, minimumStep));
-}
-
-export function priceDeltaToYards(priceDelta: number, yardValue: number): number {
-  if (!Number.isFinite(priceDelta) || !Number.isFinite(yardValue) || yardValue <= 0) return 0;
-  return priceDelta / yardValue;
-}
-
-export function priceToFieldPosition(
-  price: number,
-  currentPrice: number,
-  currentPosition: number,
-  yardValue: number,
-): number {
-  return clamp(currentPosition + priceDeltaToYards(price - currentPrice, yardValue), 2, 98);
-}
-
-export function markerScale(quantity: number, visibleQuantities: number[]): number {
-  const positive = visibleQuantities.filter((value) => Number.isFinite(value) && value > 0);
-  if (positive.length === 0 || quantity <= 0) return 0.72;
-  const logs = positive.map((value) => Math.log1p(value));
-  const min = Math.min(...logs);
-  const max = Math.max(...logs);
-  const normalized = max === min ? 0.5 : (Math.log1p(quantity) - min) / (max - min);
-  return 0.72 + Math.sqrt(clamp(normalized, 0, 1)) * 0.72;
-}
-
 export function marketTradeKey(trade: MarketTrade): string {
-  return [
-    trade.id,
-    trade.time,
-    trade.price,
-    trade.quantity,
-    trade.aggressorSide,
-  ].join(':');
-}
-
-/**
- * Converts recent executions into short play summaries. Executions inside the
- * same window are batched so dust prints do not create a frantic animation.
- */
-export function buildHistoricalPlays(
-  trades: MarketTrade[],
-  yardValue: number,
-  windowMs = 30_000,
-  limit = 6,
-): MarketPlay[] {
-  const ordered = [...trades]
-    .filter((trade) => trade.time > 0 && finiteNumber(trade.price) > 0)
-    .sort((a, b) => a.time - b.time);
-  if (ordered.length < 2 || yardValue <= 0) return [];
-
-  const groups: MarketTrade[][] = [];
-  for (const trade of ordered) {
-    const bucket = groups[groups.length - 1];
-    if (!bucket || trade.time - bucket[0].time >= windowMs) groups.push([trade]);
-    else bucket.push(trade);
-  }
-
-  let previousPrice = finiteNumber(ordered[0].price);
-  const plays: MarketPlay[] = [];
-  for (const group of groups) {
-    const end = group[group.length - 1];
-    const endPrice = finiteNumber(end.price);
-    const yards = priceDeltaToYards(endPrice - previousPrice, yardValue);
-    const quantity = group.reduce((sum, trade) => sum + finiteNumber(trade.quantity), 0);
-    plays.push({
-      id: `history:${end.time}:${marketTradeKey(end)}`,
-      occurredAt: end.time,
-      startPrice: previousPrice,
-      endPrice,
-      yards,
-      direction: yards > 0.05 ? 'bulls' : yards < -0.05 ? 'bears' : 'flat',
-      quantity,
-      executionCount: group.length,
-    });
-    previousPrice = endPrice;
-  }
-
-  return plays.slice(-limit).reverse();
+  return [trade.id, trade.time, trade.price, trade.quantity, trade.aggressorSide].join(':');
 }
 
 export function formatMarketPrice(value: number): string {

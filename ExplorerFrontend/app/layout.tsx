@@ -224,8 +224,8 @@ const structuredData = {
         },
         {
           '@type': 'WebPage',
-          name: 'QRL Order Book Arena',
-          description: 'Live visualization of the MEXC QRL/USDT spot order book',
+          name: 'QRL Order Book',
+          description: 'MEXC QRL/USDT market depth, recent trades and fund flow',
           url: 'https://zondscan.com/orderbook',
         },
         {

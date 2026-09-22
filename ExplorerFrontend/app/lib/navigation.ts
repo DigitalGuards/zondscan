@@ -41,7 +41,7 @@ export const NAVIGATION_GROUPS: NavigationGroup[] = [
     name: 'Tools',
     items: [
       {
-        name: 'Order Book Arena',
+        name: 'Order Book',
         href: '/orderbook',
         description: 'QRL markets and trading activity',
       },

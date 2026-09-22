@@ -1,10 +1,9 @@
 /**
  * Types and pure helpers for the venue fund-flow panel.
  *
- * Net flow is signed base-asset quantity: buys positive, sells negative. The
- * API can never backfill (venues expose no historical trade tape), so every
- * response carries coverage and the UI must show it rather than let a partly
- * covered window read as a complete one.
+ * Net buy volume is signed base-asset quantity: taker buys minus taker sells.
+ * History comes from retained executions. Coverage timestamps describe the
+ * observed data range and cannot establish uninterrupted collection.
  */
 
 export type SizeBand = 'large' | 'medium' | 'small';
@@ -63,6 +62,9 @@ export interface MarketFundFlowResponse {
   totals: MarketFlowBucket;
   series: MarketFlowPoint[];
   daily: MarketFlowPoint[];
+  dailyDays?: number;
+  dailyStart?: number;
+  dailyEnd?: number;
   coverage: MarketFlowCoverage;
 }
 
@@ -127,7 +129,7 @@ export function columnPath(
   y: number,
   height: number,
   positive: boolean,
-  cornerRadius = 4,
+  cornerRadius = 4
 ): string {
   const radius = Math.max(0, Math.min(cornerRadius, width / 2, height));
   const top = y;
@@ -189,9 +191,7 @@ export function niceFlowScale(values: number[]): FlowScale {
 export function flowTicks(scale: FlowScale): number[] {
   const top = niceCeil(scale.max);
   const bottom = -niceCeil(Math.abs(scale.min));
-  const ticks = [top, 0, bottom].filter(
-    (value, index, all) => all.indexOf(value) === index,
-  );
+  const ticks = [top, 0, bottom].filter((value, index, all) => all.indexOf(value) === index);
   return ticks.sort((a, b) => b - a);
 }
 
@@ -216,7 +216,7 @@ export function axisLabelPlacement(
   centerX: number,
   labelLength: number,
   plotWidth: number,
-  charWidth = MONO_CHAR_WIDTH,
+  charWidth = MONO_CHAR_WIDTH
 ): AxisLabelPlacement {
   const halfText = (labelLength * charWidth) / 2;
   if (centerX - halfText < 0) return { x: 0, anchor: 'start' };
@@ -244,7 +244,7 @@ export interface ColumnLabelPlacement {
 export function columnLabelPlacement(
   column: FlowColumn,
   positive: boolean,
-  plotHeight: number,
+  plotHeight: number
 ): ColumnLabelPlacement {
   const outside = positive ? column.y - 6 : column.y + column.height + 12;
   if (outside >= 10 && outside <= plotHeight - 2) {
@@ -280,7 +280,18 @@ export function formatSignedQuantity(value: number): string {
 
 /** Human label for a window id, e.g. "1h" renders as "1H". */
 export function formatWindowLabel(window: string): string {
+  if (window === '1d') return '24H';
   return window.replace(/h$/, 'H').replace(/d$/, 'D');
+}
+
+export function formatFlowInterval(stepMs: number): string {
+  const [count, unit] =
+    stepMs >= 86_400_000
+      ? ([stepMs / 86_400_000, 'day'] as const)
+      : stepMs >= 3_600_000
+        ? ([stepMs / 3_600_000, 'hour'] as const)
+        : ([stepMs / 60_000, 'minute'] as const);
+  return count === 1 ? unit : `${count} ${unit}s`;
 }
 
 /** Title-case band name for table rows and legends. */
@@ -322,7 +333,7 @@ export function orderBuckets(buckets: MarketFlowBucket[]): MarketFlowBucket[] {
         netQuote: 0,
         buyTradeCount: 0,
         sellTradeCount: 0,
-      },
+      }
   );
 }
 
@@ -346,20 +357,25 @@ export function formatFlowDay(time: number): string {
   return dayFormatter.format(new Date(time));
 }
 
+/** Longer windows carry a date so repeated clock times remain unambiguous. */
+export function formatFlowPeriod(time: number, stepMs: number, windowMs: number): string {
+  if (stepMs >= 86_400_000) return formatFlowDay(time);
+  if (windowMs > 86_400_000) return `${formatFlowDay(time)} ${formatFlowTime(time)}`;
+  return formatFlowTime(time);
+}
+
+export function formatFlowTimestamp(time: number): string {
+  return `${new Date(time).toISOString().slice(0, 10)} ${formatFlowTime(time)} UTC`;
+}
+
 /**
- * Sentence explaining how much of a window is actually backed by collected
- * data. Returns null when the window is fully covered and nothing needs
- * saying.
+ * Describe missing retained history without treating the earliest-only
+ * legacy complete flag as evidence of continuous collection.
  */
-export function coverageNotice(
-  coverage: MarketFlowCoverage,
-  windowStart: number,
-): string | null {
+export function coverageNotice(coverage: MarketFlowCoverage, windowStart: number): string | null {
   if (coverage.tradeCount === 0 || coverage.firstTradeAt === null) {
-    return 'No collected trades yet. Flow history begins when collection starts and cannot be backfilled.';
+    return 'No recorded trades are available yet. Historical data is limited to executions captured by the collector.';
   }
-  if (coverage.complete || coverage.firstTradeAt <= windowStart) return null;
-  return `Partial window: collection began ${formatFlowDay(coverage.firstTradeAt)} ${formatFlowTime(
-    coverage.firstTradeAt,
-  )} UTC, so earlier flow in this window is not counted.`;
+  if (coverage.firstTradeAt <= windowStart) return null;
+  return `Partial history: the earliest retained trade is ${formatFlowTimestamp(coverage.firstTradeAt)}. Earlier trades in this period are unavailable.`;
 }

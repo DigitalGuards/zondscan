@@ -132,7 +132,7 @@ export const translations: Record<'zh' | 'es' | 'ru', Record<string, string>> = 
     'Open collapsible transaction and block data by default. You can still close individual panels.':
       '默认展开可折叠的交易和区块数据。你仍可单独收起各个面板。',
     'Open navigation': '打开导航',
-    'Order Book Arena': '订单簿交易场',
+    'Order Book': '订单簿',
     Overview: '概览',
     Page: '页',
     'Page search': '页面搜索',
@@ -347,7 +347,7 @@ export const translations: Record<'zh' | 'es' | 'ru', Record<string, string>> = 
     'Open collapsible transaction and block data by default. You can still close individual panels.':
       'Abre por defecto los datos desplegables de transacciones y bloques. Puedes cerrar cada panel por separado.',
     'Open navigation': 'Abrir navegación',
-    'Order Book Arena': 'Panel del libro de órdenes',
+    'Order Book': 'Libro de órdenes',
     Overview: 'Vista general',
     Page: 'Página',
     'Page search': 'Búsqueda en la página',
@@ -564,7 +564,7 @@ export const translations: Record<'zh' | 'es' | 'ru', Record<string, string>> = 
     'Open collapsible transaction and block data by default. You can still close individual panels.':
       'По умолчанию разворачивайте сворачиваемые данные транзакций и блоков. Отдельные панели по-прежнему можно закрывать.',
     'Open navigation': 'Открыть навигацию',
-    'Order Book Arena': 'Торговый стакан',
+    'Order Book': 'Торговый стакан',
     Overview: 'Обзор',
     Page: 'Страница',
     'Page search': 'Поиск на странице',
