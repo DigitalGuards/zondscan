@@ -303,6 +303,12 @@ The app uses several configuration files:
 
 ## Testing
 
+### Faucet runtime CAPTCHA
+
+The QRL Testnet v3 faucet reads `NEXT_PUBLIC_TURNSTILE_SITE_KEY` from the running server environment. Its public `GET /faucet/claim` status explicitly returns `turnstileSiteKey` alongside availability, CAPTCHA status, drip amount and cooldown. The browser uses this runtime response, so the site key can be supplied after the frontend build. Configure the matching `TURNSTILE_SECRET` on the server; it remains server-only with the funding seed, database connection and RPC configuration.
+
+The claim form stays disabled until a configured CAPTCHA returns a token. A configured CAPTCHA with an unavailable public key, script failures and invalid status responses show a recovery message. Expired tokens and disposed widgets cannot authorize the next claim. Server verification and claim cooldowns continue to apply to every request.
+
 1. Run tests:
 ```bash
 npm test

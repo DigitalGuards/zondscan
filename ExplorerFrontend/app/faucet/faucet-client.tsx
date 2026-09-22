@@ -1,19 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, ChangeEvent } from 'react';
 import Link from 'next/link';
 import Script from 'next/script';
 
 import { formatDuration, NATIVE_UNIT } from '../lib/helpers';
 import { canonicalizeQrlAddress } from '../lib/qrlAddress';
-
-interface FaucetStatus {
-  configured: boolean;
-  captchaEnabled: boolean;
-  dripQuanta: string;
-  cooldownHours: number;
-}
+import { mountFaucetCaptcha, parseFaucetStatus, type FaucetStatus, type TurnstileApi } from './captcha';
 
 interface ClaimSuccess {
   txHash: string;
@@ -23,20 +17,11 @@ interface ClaimSuccess {
 }
 
 // Minimal typing for the Cloudflare Turnstile global injected by api.js.
-interface TurnstileApi {
-  render: (
-    el: HTMLElement,
-    opts: { sitekey: string; callback: (token: string) => void; 'error-callback'?: () => void; 'expired-callback'?: () => void; theme?: string },
-  ) => string;
-  reset: (widgetId?: string) => void;
-}
 declare global {
   interface Window {
     turnstile?: TurnstileApi;
   }
 }
-
-const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
 // A claim resolves the moment the node accepts the broadcast (the tx is then
 // pending on-chain), which can be well under 100ms. Floor the visible
@@ -53,10 +38,14 @@ export default function FaucetClient(): JSX.Element {
   // Mirrors tokenRef in React state so the submit button can react to whether a
   // captcha has been solved (refs don't trigger re-renders).
   const [captchaToken, setCaptchaToken] = useState<string>('');
+  const [captchaError, setCaptchaError] = useState<string | null>(null);
+  const [scriptReady, setScriptReady] = useState(false);
+  const [captchaAttempt, setCaptchaAttempt] = useState(0);
 
   const turnstileRef = useRef<HTMLDivElement>(null);
-  const widgetIdRef = useRef<string | null>(null);
+  const disposeWidgetRef = useRef<(() => void) | null>(null);
   const tokenRef = useRef<string>('');
+  const submittingRef = useRef(false);
 
   // Load faucet config so we can show the drip amount / disabled state and know
   // whether captcha is enforced. Until this resolves we render a spinner rather
@@ -65,9 +54,16 @@ export default function FaucetClient(): JSX.Element {
   // offline rather than leaving an interactive but broken form.
   useEffect(() => {
     let cancelled = false;
-    fetch('/faucet/claim')
-      .then(r => r.json())
-      .then((s: FaucetStatus) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    fetch('/faucet/claim', { cache: 'no-store', signal: controller.signal })
+      .then(r => {
+        if (!r.ok) throw new Error('Status request failed');
+        return r.json();
+      })
+      .then((value: unknown) => {
+        const s = parseFaucetStatus(value);
+        if (!s) throw new Error('Invalid faucet status');
         if (!cancelled) {
           setStatus(s);
           setLoadingStatus(false);
@@ -75,58 +71,64 @@ export default function FaucetClient(): JSX.Element {
       })
       .catch(() => {
         if (!cancelled) {
-          setStatus({ configured: false, captchaEnabled: false, dripQuanta: '10', cooldownHours: 24 });
+          setError('Faucet status is unavailable. Please reload the page.');
           setLoadingStatus(false);
         }
-      });
+      })
+      .finally(() => clearTimeout(timer));
     return () => {
       cancelled = true;
+      clearTimeout(timer);
+      controller.abort();
     };
   }, []);
 
-  // Render the widget when every prerequisite is in place. We gate on
-  // `window.turnstile` existing rather than a "script loaded" state flag: that
-  // way the render is driven purely by external readiness and can be retried
-  // safely from both the status effect and the script's onLoad - including the
-  // client-side-nav case where the script is already cached and onLoad never
-  // refires. Idempotent: the widgetIdRef guard prevents a double render.
-  const renderTurnstile = useCallback(() => {
-    if (
-      !status?.captchaEnabled ||
-      !SITE_KEY ||
-      !turnstileRef.current ||
-      !window.turnstile ||
-      widgetIdRef.current !== null
-    ) {
-      return;
-    }
-    widgetIdRef.current = window.turnstile.render(turnstileRef.current, {
-      sitekey: SITE_KEY,
-      theme: 'dark',
-      callback: (token: string) => {
-        tokenRef.current = token;
-        setCaptchaToken(token);
-      },
-      'expired-callback': () => {
-        tokenRef.current = '';
-        setCaptchaToken('');
-      },
-      'error-callback': () => {
-        tokenRef.current = '';
-        setCaptchaToken('');
-      },
-    });
-  }, [status?.captchaEnabled]);
-
-  // Retry the render whenever its inputs change (notably once the status fetch
-  // resolves). If the script hasn't loaded yet this is a no-op and onLoad will
-  // drive it; if the script is already present this is what renders the widget.
   useEffect(() => {
-    renderTurnstile();
-  }, [renderTurnstile]);
+    if (!status?.configured || !status.captchaEnabled) return;
+    let dispose: (() => void) | undefined;
+    let readinessTimer: ReturnType<typeof setTimeout> | undefined;
+    // Cancel abandoned StrictMode setups before creating an external widget.
+    const setupTimer = setTimeout(() => {
+      tokenRef.current = '';
+      setCaptchaToken('');
+      if (!status.turnstileSiteKey) {
+        setCaptchaError('Captcha is unavailable. Please try again later.');
+        return;
+      }
+      if (!window.turnstile || !turnstileRef.current) {
+        readinessTimer = setTimeout(() => {
+          setCaptchaError('Captcha could not load. Please reload the page.');
+        }, 15000);
+        return;
+      }
+      setCaptchaError(null);
+      dispose = mountFaucetCaptcha(
+        window.turnstile,
+        turnstileRef.current,
+        status.turnstileSiteKey,
+        (token) => {
+          tokenRef.current = token;
+          setCaptchaToken(token);
+          if (token) setCaptchaError(null);
+        },
+        () => setCaptchaError('Captcha verification failed. Please try again.'),
+      );
+      disposeWidgetRef.current = dispose;
+    }, 0);
+    return () => {
+      clearTimeout(setupTimer);
+      clearTimeout(readinessTimer);
+      dispose?.();
+      disposeWidgetRef.current = null;
+      tokenRef.current = '';
+    };
+  }, [status, scriptReady, captchaAttempt]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
+    if (submittingRef.current || !status?.configured) return;
+    if (status.captchaEnabled && (!status.turnstileSiteKey || !tokenRef.current || captchaError)) return;
+    submittingRef.current = true;
     setIsLoading(true);
     setError(null);
     setResult(null);
@@ -138,17 +140,23 @@ export default function FaucetClient(): JSX.Element {
     if (!canonicalAddress) {
       setError('Enter a valid QRL address with exactly 128 hex characters.');
       setIsLoading(false);
+      submittingRef.current = false;
       return;
     }
 
     const startedAt = performance.now();
+    const claimToken = tokenRef.current;
+    // Consume the challenge before any asynchronous request or widget callback.
+    disposeWidgetRef.current?.();
+    tokenRef.current = '';
+    setCaptchaToken('');
     try {
       const res = await fetch('/faucet/claim', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           address: canonicalAddress,
-          turnstileToken: tokenRef.current || undefined,
+          turnstileToken: claimToken || undefined,
         }),
       });
       const data = await res.json();
@@ -175,12 +183,8 @@ export default function FaucetClient(): JSX.Element {
       setError('Network error. Please try again.');
     } finally {
       setIsLoading(false);
-      // One token per challenge: reset so the next claim gets a fresh one.
-      if (widgetIdRef.current && window.turnstile) {
-        window.turnstile.reset(widgetIdRef.current);
-        tokenRef.current = '';
-        setCaptchaToken('');
-      }
+      submittingRef.current = false;
+      setCaptchaAttempt(attempt => attempt + 1);
     }
   };
 
@@ -198,18 +202,24 @@ export default function FaucetClient(): JSX.Element {
     );
   }
 
-  const disabled = status !== null && !status.configured;
+  const disabled = !status?.configured;
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
-      {status?.captchaEnabled && (
+      {status?.configured && status.captchaEnabled && status.turnstileSiteKey && (
         <Script
           src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
-          onLoad={() => renderTurnstile()}
+          onReady={() => setScriptReady(true)}
+          onError={() => {
+            disposeWidgetRef.current?.();
+            tokenRef.current = '';
+            setCaptchaToken('');
+            setCaptchaError('Captcha could not load. Please reload the page.');
+          }}
         />
       )}
       <div className="flex flex-col items-center justify-center">
-        <h2 className="section-title mb-2">QRL 2.0 Testnet Faucet</h2>
+        <h2 className="section-title mb-2">QRL Testnet v3 Faucet</h2>
         <p className="text-text-secondary mb-8 text-center max-w-md">
           Get free testnet Quanta to experiment with transactions, contracts, and tooling.
           {status && (
@@ -224,7 +234,7 @@ export default function FaucetClient(): JSX.Element {
           {disabled ? (
             <div role="alert" className="w-full p-4 bg-background rounded-lg border border-yellow-500/40 text-center">
               <div className="text-sm text-yellow-300">
-                The faucet is currently offline. Please check back later.
+                {error || 'The faucet is currently offline. Please check back later.'}
               </div>
             </div>
           ) : (
@@ -244,6 +254,10 @@ export default function FaucetClient(): JSX.Element {
               </div>
 
               {status?.captchaEnabled && <div ref={turnstileRef} className="self-center" />}
+
+              {captchaError && (
+                <div role="alert" className="text-sm text-error">{captchaError}</div>
+              )}
 
               {result && (
                 <div role="status" className="w-full p-4 bg-background rounded-lg border border-green-500/40">
@@ -270,7 +284,7 @@ export default function FaucetClient(): JSX.Element {
 
               <button
                 type="submit"
-                disabled={isLoading || (status?.captchaEnabled === true && !captchaToken)}
+                disabled={isLoading || (status?.captchaEnabled === true && (!captchaToken || !!captchaError))}
                 className="w-full px-6 py-3 bg-accent text-background font-semibold rounded-lg hover:bg-accent-hover hover:shadow-glow-accent transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
               >
                 {isLoading ? (

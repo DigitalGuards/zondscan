@@ -43,9 +43,10 @@ export function GET(): NextResponse {
   return NextResponse.json({
     configured: cfg.configured,
     captchaEnabled: cfg.captchaEnabled,
+    turnstileSiteKey: cfg.turnstileSiteKey,
     dripQuanta: cfg.dripQuanta,
     cooldownHours: cfg.cooldownHours,
-  });
+  }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 /** POST /faucet/claim - verify captcha + cooldown, then sign and broadcast a drip. */
