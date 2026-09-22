@@ -24,6 +24,8 @@ import { usePreferences } from '../../components/PreferencesProvider';
 import { isZeroTokenTransfer } from '../../lib/preferences';
 import { useDisplayCurrency } from '../../components/useDisplayCurrency';
 import { formatTransactionAmount } from '../../lib/transactionAmount';
+import { getTransactionKind } from '../../lib/transactionKind';
+import TransactionFlow from '../../components/TransactionFlow';
 
 // Once a tx has this many confirmations we stop polling /latestblock for
 // it; further refinement is just visual noise (most chain UIs treat
@@ -156,17 +158,21 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
         className="card overflow-hidden mb-6"
       >
         {/* Header */}
-        <div className="flex items-center p-4 sm:p-6 border-b border-border">
+        <div className="flex flex-wrap items-center gap-3 p-4 sm:p-6 border-b border-border">
           <div className="flex items-center gap-3">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-accent" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
             </svg>
             <h1 id="tx-detail-heading" className="section-title"><InterfaceText text="Transaction Details" /></h1>
           </div>
+          <Badge variant="neutral">
+            <InterfaceText text={getTransactionKind(transaction)} />
+          </Badge>
         </div>
 
         {/* Content */}
         <div className="p-4 sm:p-6">
+          <TransactionFlow transaction={transaction} />
           <DetailRow label="Transaction Hash" mono>
             <div className="flex items-start gap-2">
               <span>{isMobile ? `${transaction.hash.slice(0, 10)}...${transaction.hash.slice(-8)}` : transaction.hash}</span>
@@ -197,66 +203,6 @@ export default function TransactionView({ transaction }: TransactionViewProps): 
             )}
           </DetailRow>
           <DetailRow label="Timestamp"><TimeDisplay timestamp={transaction.timestamp} /></DetailRow>
-          <DetailRow label="From" mono>
-            <div className="flex items-start gap-2">
-              <Link
-                href={`/address/${transaction.from}`}
-                className="text-text-primary hover:text-accent transition-colors break-all"
-              >
-                <AddressFingerprint address={transaction.from} />
-              </Link>
-              <CopyButton value={transaction.from} label="Copy address" size="sm" />
-            </div>
-          </DetailRow>
-          <DetailRow label="To" mono>
-            {/* Contract-creation txs have an empty `to` because the tx
-                doesn't target an existing address; the new contract's
-                address comes back on the receipt. Render Etherscan-style:
-                "[Contract Created]" label + the new contract address as
-                a link, instead of an empty field. The separate "Contract
-                Created" section below still surfaces the token / standard
-                details. */}
-            {transaction.contractCreated?.address ? (
-              <div className="flex items-start gap-2 flex-wrap">
-                <span className="inline-flex items-center gap-1 text-xs text-success font-sans">
-                  <svg
-                    className="w-3.5 h-3.5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={2}
-                    stroke="currentColor"
-                    aria-hidden="true"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                  </svg>
-                  Contract Created
-                </span>
-                <Link
-                  href={`/address/${transaction.contractCreated.address}`}
-                  className="text-text-primary hover:text-accent transition-colors break-all"
-                >
-                  <AddressFingerprint address={transaction.contractCreated.address} />
-                </Link>
-                <CopyButton
-                  value={transaction.contractCreated.address}
-                  label="Copy contract address"
-                  size="sm"
-                />
-              </div>
-            ) : transaction.to ? (
-              <div className="flex items-start gap-2">
-                <Link
-                  href={`/address/${transaction.to}`}
-                  className="text-text-primary hover:text-accent transition-colors break-all"
-                >
-                  <AddressFingerprint address={transaction.to} />
-                </Link>
-                <CopyButton value={transaction.to} label="Copy address" size="sm" />
-              </div>
-            ) : (
-              <span className="text-text-muted">-</span>
-            )}
-          </DetailRow>
           <DetailRow label="Value">
             <span className="font-semibold text-accent">{formattedValue}</span>
             <span className="text-text-muted ml-1">{unit}</span>
