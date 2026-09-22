@@ -3,7 +3,18 @@ import type { TransactionDetails } from '../types';
 export type TransactionKind = 'Transfer' | 'Contract call' | 'Contract creation' | 'Transaction';
 
 /** Describe the transaction independently of its execution status or the viewer's address. */
-export function getTransactionKind(transaction: TransactionDetails): TransactionKind {
+export function getTransactionKind(
+  transaction: Pick<
+    TransactionDetails,
+    | 'to'
+    | 'input'
+    | 'targetContract'
+    | 'contractCreated'
+    | 'tokenTransfers'
+    | 'internalTransactions'
+    | 'receiptStatus'
+  >
+): TransactionKind {
   if (transaction.to === '') return 'Contract creation';
   if (
     transaction.contractCreated?.address ||
