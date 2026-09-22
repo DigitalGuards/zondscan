@@ -44,7 +44,18 @@ function FlowAddress({ label, address, copyLabel, description, placeholder }: Fl
   );
 }
 
-export default function TransactionFlow({ transaction }: { transaction: TransactionDetails }) {
+type FlowTransaction = Pick<
+  TransactionDetails,
+  'from' | 'to' | 'contractCreated' | 'receiptStatus'
+>;
+
+export default function TransactionFlow({
+  transaction,
+  pending = false,
+}: {
+  transaction: FlowTransaction;
+  pending?: boolean;
+}) {
   const createdAddress = transaction.contractCreated?.address;
   const isCreation = transaction.to === '';
   const isReverted = transaction.receiptStatus === '0x0';
@@ -76,7 +87,13 @@ export default function TransactionFlow({ transaction }: { transaction: Transact
         address={recipient}
         copyLabel={isCreation ? 'Copy contract address' : 'Copy recipient address'}
         description={isCreation ? 'Contract creation' : undefined}
-        placeholder={isCreation && isReverted ? 'No contract created' : 'Address unavailable'}
+        placeholder={
+          isCreation && pending
+            ? 'Available after confirmation'
+            : isCreation && isReverted
+              ? 'No contract created'
+              : 'Address unavailable'
+        }
       />
     </section>
   );
