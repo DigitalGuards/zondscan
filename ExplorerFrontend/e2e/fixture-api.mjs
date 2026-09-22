@@ -166,6 +166,35 @@ createServer((request, response) => {
       internalTransactions: [],
       receiptStatus: '0x1',
     };
+  // Dedicated transaction-flow cases leave the shared token fixture unchanged.
+  if ([11, 12, 13, 14, 15, 16].some((value) => path === `/tx/${hash(value)}`)) {
+    const creation = path === `/tx/${hash(12)}` || path === `/tx/${hash(16)}`;
+    const factoryCall = path === `/tx/${hash(15)}`;
+    const reverted = path === `/tx/${hash(14)}` || path === `/tx/${hash(16)}`;
+    const unknownInput = path === `/tx/${hash(13)}`;
+    data = {
+      ...data,
+      response: {
+        ...data.response,
+        TxHash: path.slice('/tx/'.length),
+        To: creation ? '' : recipient,
+        Value: '0x2386f26fc10000',
+      },
+      tokenTransfers: [],
+      input: unknownInput ? undefined : creation || factoryCall ? '0x6000' : '0x',
+      contractCreated:
+        (creation || factoryCall) && !reverted
+          ? {
+              address: `Q${'c'.repeat(128)}`,
+              isToken: false,
+              name: '',
+              symbol: '',
+              decimals: 0,
+            }
+          : undefined,
+      receiptStatus: reverted ? '0x0' : '0x1',
+    };
+  }
   if (path.startsWith('/block/')) data = { block: { result: blocks[0] } };
   if (path.startsWith('/address/aggregate/'))
     data = {
