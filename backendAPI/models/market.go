@@ -48,16 +48,15 @@ type MarketFlowPoint struct {
 	NetQuantity  float64 `json:"netQuantity"`
 }
 
-// MarketFlowCoverage describes how much history backs a response. The API
-// cannot backfill: venues expose no historical trade tape, so a series can
-// only accumulate forward from the first collection. Clients use this to
-// distinguish "flat because flows balanced" from "flat because we were not
-// collecting yet".
+// MarketFlowCoverage describes the retained trade extent for a venue. It
+// reports observed timestamps and a count across stored history. Collection
+// gaps and quiet periods can both produce empty chart buckets, so this
+// extent alone cannot establish continuous coverage of a requested window.
 type MarketFlowCoverage struct {
 	FirstTradeAt *int64 `json:"firstTradeAt"`
 	LastTradeAt  *int64 `json:"lastTradeAt"`
 	TradeCount   int64  `json:"tradeCount"`
-	// Complete is true when collection started at or before the window's
-	// start, so the window is fully covered by stored data.
+	// Complete is a legacy flag indicating the earliest retained trade is
+	// at or before the window start. It does not verify collection continuity.
 	Complete bool `json:"complete"`
 }

@@ -16,30 +16,31 @@ import (
 
 const (
 	marketFundFlowCacheTTL = 30 * time.Second
-	// dailyBarDays is the span of the daily net-inflow bars. Venues expose
-	// no historical tape, so this fills in one bar per day from the first
-	// deploy rather than being backfillable.
+	// dailyBarDays preserves the daily chart span for intraday windows.
 	dailyBarDays = 5
 )
 
 // fundFlowWindow is one selectable rollup window. Step sets the resolution
-// of the net-inflow series, chosen so every window returns 12-24 points:
+// of the net-inflow series, chosen so every window returns 12-30 points:
 // enough shape to read, few enough to stay legible on a narrow card.
 type fundFlowWindow struct {
-	ID       string
-	Duration time.Duration
-	Step     time.Duration
+	ID        string
+	Duration  time.Duration
+	Step      time.Duration
+	DailyDays int
 }
 
 // fundFlowWindows is ordered shortest first, which is the order the UI
 // renders its selector.
 var fundFlowWindows = []fundFlowWindow{
-	{ID: "15m", Duration: 15 * time.Minute, Step: time.Minute},
-	{ID: "30m", Duration: 30 * time.Minute, Step: 2 * time.Minute},
-	{ID: "1h", Duration: time.Hour, Step: 5 * time.Minute},
-	{ID: "2h", Duration: 2 * time.Hour, Step: 10 * time.Minute},
-	{ID: "4h", Duration: 4 * time.Hour, Step: 15 * time.Minute},
-	{ID: "1d", Duration: 24 * time.Hour, Step: time.Hour},
+	{ID: "15m", Duration: 15 * time.Minute, Step: time.Minute, DailyDays: dailyBarDays},
+	{ID: "30m", Duration: 30 * time.Minute, Step: 2 * time.Minute, DailyDays: dailyBarDays},
+	{ID: "1h", Duration: time.Hour, Step: 5 * time.Minute, DailyDays: dailyBarDays},
+	{ID: "2h", Duration: 2 * time.Hour, Step: 10 * time.Minute, DailyDays: dailyBarDays},
+	{ID: "4h", Duration: 4 * time.Hour, Step: 15 * time.Minute, DailyDays: dailyBarDays},
+	{ID: "1d", Duration: 24 * time.Hour, Step: time.Hour, DailyDays: dailyBarDays},
+	{ID: "7d", Duration: 7 * 24 * time.Hour, Step: 6 * time.Hour, DailyDays: 7},
+	{ID: "30d", Duration: 30 * 24 * time.Hour, Step: 24 * time.Hour, DailyDays: 30},
 }
 
 const defaultFundFlowWindow = "1d"
@@ -105,19 +106,24 @@ type marketSizeBands struct {
 }
 
 type marketFundFlowResponse struct {
-	Venue        marketVenueInfo           `json:"venue"`
-	Venues       []marketVenueInfo         `json:"venues"`
-	Window       string                    `json:"window"`
-	Windows      []string                  `json:"windows"`
-	WindowStart  int64                     `json:"windowStart"`
-	WindowEnd    int64                     `json:"windowEnd"`
-	SeriesStepMs int64                     `json:"seriesStepMs"`
-	Bands        marketSizeBands           `json:"bands"`
-	Buckets      []models.MarketFlowBucket `json:"buckets"`
-	Totals       models.MarketFlowBucket   `json:"totals"`
-	Series       []models.MarketFlowPoint  `json:"series"`
-	Daily        []models.MarketFlowPoint  `json:"daily"`
-	Coverage     models.MarketFlowCoverage `json:"coverage"`
+	Venue        marketVenueInfo   `json:"venue"`
+	Venues       []marketVenueInfo `json:"venues"`
+	Window       string            `json:"window"`
+	Windows      []string          `json:"windows"`
+	WindowStart  int64             `json:"windowStart"`
+	WindowEnd    int64             `json:"windowEnd"`
+	SeriesStepMs int64             `json:"seriesStepMs"`
+	// Daily bars span UTC calendar days, including the current partial
+	// day. DailyStart is inclusive and DailyEnd is exclusive.
+	DailyDays  int                       `json:"dailyDays"`
+	DailyStart int64                     `json:"dailyStart"`
+	DailyEnd   int64                     `json:"dailyEnd"`
+	Bands      marketSizeBands           `json:"bands"`
+	Buckets    []models.MarketFlowBucket `json:"buckets"`
+	Totals     models.MarketFlowBucket   `json:"totals"`
+	Series     []models.MarketFlowPoint  `json:"series"`
+	Daily      []models.MarketFlowPoint  `json:"daily"`
+	Coverage   models.MarketFlowCoverage `json:"coverage"`
 }
 
 func venueInfo(venue marketdata.Venue) marketVenueInfo {
@@ -205,7 +211,7 @@ func buildFundFlowResponse(
 
 	end := time.Now().UTC()
 	start := end.Add(-window.Duration)
-	dailyStart := end.Truncate(24*time.Hour).AddDate(0, 0, -(dailyBarDays - 1))
+	dailyStart := end.Truncate(24*time.Hour).AddDate(0, 0, -(window.DailyDays - 1))
 
 	buckets, err := store.Buckets(ctx, venue.ID(), start, end)
 	if err != nil {
@@ -238,6 +244,9 @@ func buildFundFlowResponse(
 		WindowStart:  start.UnixMilli(),
 		WindowEnd:    end.UnixMilli(),
 		SeriesStepMs: window.Step.Milliseconds(),
+		DailyDays:    window.DailyDays,
+		DailyStart:   dailyStart.UnixMilli(),
+		DailyEnd:     end.UnixMilli(),
 		Bands: marketSizeBands{
 			MediumFrom: thresholds.Medium,
 			LargeFrom:  thresholds.Large,
