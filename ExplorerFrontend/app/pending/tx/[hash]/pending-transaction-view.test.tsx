@@ -86,7 +86,11 @@ it('retains generic classification for unknown calldata', () => {
 });
 
 it('preserves known contract classification without requiring a receipt', () => {
-  expect(render({}, {})).toContain('>Contract call</span>');
+  expect(render({ input: '0xa9059cbb' }, {})).toContain('>Contract call</span>');
+});
+
+it('labels a pending value transfer to a known contract as the confirmed view will', () => {
+  expect(render({}, {})).toContain('>Transfer</span>');
 });
 
 it('preserves decoded token intent separately from the actual recipient contract', () => {

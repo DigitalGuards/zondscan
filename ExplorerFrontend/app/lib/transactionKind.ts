@@ -16,9 +16,12 @@ export function getTransactionKind(
   >
 ): TransactionKind {
   if (transaction.to === '') return 'Contract creation';
+  const hasCalldata = Boolean(transaction.input && transaction.input !== '0x');
   if (
     transaction.contractCreated?.address ||
-    transaction.targetContract ||
+    // A verified target counts only with calldata: the pending route attaches it for
+    // any recipient with code, the confirmed route only when input is present.
+    (transaction.targetContract && hasCalldata) ||
     transaction.tokenTransfers?.length ||
     transaction.internalTransactions?.length
   ) {

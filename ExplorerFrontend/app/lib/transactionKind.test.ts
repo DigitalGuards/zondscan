@@ -19,8 +19,16 @@ describe('getTransactionKind', () => {
     expect(getTransactionKind({ ...transaction, input })).toBe('Transaction');
   });
 
-  it('recognizes a known contract even with empty calldata', () => {
-    expect(getTransactionKind({ ...transaction, targetContract: {} })).toBe('Contract call');
+  it('labels a value transfer to a known contract as Transfer', () => {
+    // The pending route attaches targetContract for any recipient with code; the
+    // confirmed route only with calldata. Both must render the same badge.
+    expect(getTransactionKind({ ...transaction, targetContract: {} })).toBe('Transfer');
+  });
+
+  it('recognizes a call to a known contract by its calldata', () => {
+    expect(
+      getTransactionKind({ ...transaction, input: '0xa9059cbb', targetContract: {} })
+    ).toBe('Contract call');
   });
 
   it('uses token execution evidence even when zero-value events are hidden in the UI', () => {
