@@ -1,14 +1,10 @@
 import {
-  buildHistoricalPlays,
   formatQrlQuantity,
   formatQrlTradeSize,
   buildGroupedLadder,
   buildLadder,
   calculateBookStats,
-  calculateYardValue,
-  markerScale,
   PRICE_GROUPINGS,
-  priceDeltaToYards,
   type MarketOrderBookResponse,
 } from './orderbook';
 
@@ -62,7 +58,7 @@ describe('order-book calculations', () => {
         { price: '0.78001', quantity: '4' },
       ],
       'sell',
-      '0.01',
+      '0.01'
     );
 
     expect(asks.map((level) => level.raw.price)).toEqual(['0.78', '0.79']);
@@ -82,7 +78,7 @@ describe('order-book calculations', () => {
         { price: '0.92', quantity: '3' },
       ],
       'sell',
-      '0.1',
+      '0.1'
     );
     expect(asks.map((level) => level.raw.price)).toEqual(['0.9', '1.0']);
     expect(asks.map((level) => level.quantity)).toEqual([2, 7]);
@@ -94,7 +90,7 @@ describe('order-book calculations', () => {
         { price: '0.75', quantity: '6' },
       ],
       'buy',
-      '0.1',
+      '0.1'
     );
     expect(bids.map((level) => level.raw.price)).toEqual(['0.8', '0.7']);
     expect(bids.map((level) => level.quantity)).toEqual([6, 6]);
@@ -109,7 +105,7 @@ describe('order-book calculations', () => {
         { price: '0.699999999999999999', quantity: '1' },
       ],
       'buy',
-      '0.01',
+      '0.01'
     );
 
     expect(bids.map((level) => level.raw.price)).toEqual(['0.76', '0.75', '0.69']);
@@ -125,7 +121,7 @@ describe('order-book calculations', () => {
       ],
       'buy',
       '0.01',
-      1,
+      1
     );
 
     expect(bids).toHaveLength(1);
@@ -142,41 +138,6 @@ describe('order-book calculations', () => {
     expect(stats.spreadBps).toBeCloseTo(263.1578, 3);
     expect(stats.bidQuantityInBand).toBe(10);
     expect(stats.askQuantityInBand).toBe(15);
-  });
-
-  it('selects a positive readable price-per-yard scale', () => {
-    const stats = calculateBookStats(fixture);
-    const yardValue = calculateYardValue(stats);
-    expect(yardValue).toBeGreaterThan(0);
-    expect(priceDeltaToYards(yardValue * 4, yardValue)).toBeCloseTo(4);
-    expect(priceDeltaToYards(-yardValue * 2, yardValue)).toBeCloseTo(-2);
-  });
-
-  it('uses marker area scaling without letting large levels dominate', () => {
-    const small = markerScale(1, [1, 100, 10_000]);
-    const medium = markerScale(100, [1, 100, 10_000]);
-    const large = markerScale(10_000, [1, 100, 10_000]);
-    expect(small).toBeLessThan(medium);
-    expect(medium).toBeLessThan(large);
-    expect(large).toBeLessThanOrEqual(1.44);
-  });
-
-  it('batches micro executions into timed plays', () => {
-    const plays = buildHistoricalPlays(
-      [
-        { id: '1', price: '0.7500', quantity: '1', quoteQuantity: '0.75', time: 1_000, aggressorSide: 'buy' },
-        { id: '2', price: '0.7501', quantity: '2', quoteQuantity: '1.50', time: 5_000, aggressorSide: 'buy' },
-        { id: '3', price: '0.7498', quantity: '3', quoteQuantity: '2.25', time: 45_000, aggressorSide: 'sell' },
-      ],
-      0.0001,
-      30_000,
-    );
-
-    expect(plays).toHaveLength(2);
-    expect(plays[0].direction).toBe('bears');
-    expect(plays[0].yards).toBeCloseTo(-3);
-    expect(plays[1].quantity).toBe(3);
-    expect(plays[1].executionCount).toBe(2);
   });
 });
 

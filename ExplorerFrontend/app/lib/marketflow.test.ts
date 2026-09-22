@@ -9,6 +9,9 @@ import {
   niceFlowScale,
   formatBandRange,
   formatCompactQuantity,
+  formatFlowInterval,
+  formatFlowPeriod,
+  formatFlowTimestamp,
   formatSignedQuantity,
   formatWindowLabel,
   orderBuckets,
@@ -29,7 +32,10 @@ describe('flowScale', () => {
   });
 
   it('ignores non-finite values rather than collapsing the domain', () => {
-    expect(flowScale([Number.NaN, 5, Number.POSITIVE_INFINITY])).toEqual({ min: 0, max: 5 });
+    expect(flowScale([Number.NaN, 5, Number.POSITIVE_INFINITY])).toEqual({
+      min: 0,
+      max: 5,
+    });
   });
 });
 
@@ -127,7 +133,10 @@ describe('axisLabelPlacement', () => {
     // 24 narrow bands: the first band's centre is a few pixels in, so a
     // centred label would run back over the y-axis ticks.
     const bandWidth = plotWidth / 24;
-    expect(axisLabelPlacement(bandWidth / 2, 5, plotWidth)).toEqual({ x: 0, anchor: 'start' });
+    expect(axisLabelPlacement(bandWidth / 2, 5, plotWidth)).toEqual({
+      x: 0,
+      anchor: 'start',
+    });
     expect(axisLabelPlacement(plotWidth - bandWidth / 2, 5, plotWidth)).toEqual({
       x: plotWidth,
       anchor: 'end',
@@ -169,11 +178,7 @@ describe('columnLabelPlacement', () => {
   });
 
   it('drops the label when the column reaches the edge and is too short to hold it', () => {
-    const placement = columnLabelPlacement(
-      { y: plotHeight - 4, height: 4 },
-      false,
-      plotHeight,
-    );
+    const placement = columnLabelPlacement({ y: plotHeight - 4, height: 4 }, false, plotHeight);
     expect(placement.visible).toBe(false);
   });
 });
@@ -196,7 +201,33 @@ describe('quantity formatting', () => {
   it('labels windows without touching the minute unit', () => {
     expect(formatWindowLabel('15m')).toBe('15m');
     expect(formatWindowLabel('1h')).toBe('1H');
-    expect(formatWindowLabel('1d')).toBe('1D');
+    expect(formatWindowLabel('1d')).toBe('24H');
+    expect(formatWindowLabel('7d')).toBe('7D');
+    expect(formatWindowLabel('30d')).toBe('30D');
+  });
+});
+
+describe('analysis interval labels', () => {
+  const time = Date.UTC(2026, 8, 22, 6, 30);
+  const day = 86_400_000;
+
+  it('keeps short-window clock labels and includes dates for longer windows', () => {
+    expect(formatFlowPeriod(time, 3_600_000, day)).toBe('06:30');
+    expect(formatFlowPeriod(time, 6 * 3_600_000, 7 * day)).toMatch(/^22 Sept? 06:30$/);
+    expect(formatFlowPeriod(time, day, 30 * day)).toMatch(/^22 Sept?$/);
+  });
+
+  it('keeps full UTC timestamps for accessible tables and tooltips', () => {
+    expect(formatFlowTimestamp(time)).toBe('2026-09-22 06:30 UTC');
+    expect(formatFlowTimestamp(Date.UTC(2027, 0, 1))).toBe('2027-01-01 00:00 UTC');
+  });
+
+  it('uses readable interval units', () => {
+    expect(formatFlowInterval(60_000)).toBe('minute');
+    expect(formatFlowInterval(5 * 60_000)).toBe('5 minutes');
+    expect(formatFlowInterval(3_600_000)).toBe('hour');
+    expect(formatFlowInterval(6 * 3_600_000)).toBe('6 hours');
+    expect(formatFlowInterval(day)).toBe('day');
   });
 });
 
@@ -231,7 +262,11 @@ describe('orderBuckets', () => {
   it('zero-fills a band the API omitted so the table keeps its shape', () => {
     const ordered = orderBuckets([bucket('large')]);
     expect(ordered).toHaveLength(3);
-    expect(ordered[2]).toMatchObject({ bucket: 'small', buyQuantity: 0, sellQuantity: 0 });
+    expect(ordered[2]).toMatchObject({
+      bucket: 'small',
+      buyQuantity: 0,
+      sellQuantity: 0,
+    });
   });
 });
 
@@ -244,21 +279,27 @@ describe('coverageNotice', () => {
     ...overrides,
   });
 
-  it('says nothing when the window is fully covered', () => {
+  it('needs no missing-start notice when retained history predates the range', () => {
     expect(coverageNotice(coverage({}), 2_000)).toBeNull();
   });
 
   it('explains an empty store rather than implying zero flow', () => {
     const notice = coverageNotice(coverage({ tradeCount: 0, firstTradeAt: null }), 0);
-    expect(notice).toMatch(/cannot be backfilled/);
+    expect(notice).toMatch(/No recorded trades/);
   });
 
   it('flags a partially covered window', () => {
     const notice = coverageNotice(
       coverage({ complete: false, firstTradeAt: Date.UTC(2026, 7, 15, 9, 30) }),
-      Date.UTC(2026, 7, 14),
+      Date.UTC(2026, 7, 14)
     );
-    expect(notice).toMatch(/^Partial window/);
-    expect(notice).toContain('15 Aug');
+    expect(notice).toMatch(/^Partial history/);
+    expect(notice).toContain('2026-08-15');
+  });
+
+  it('does not let the legacy complete flag hide an uncovered window start', () => {
+    expect(coverageNotice(coverage({ complete: true, firstTradeAt: 5_000 }), 1_000)).toMatch(
+      /^Partial history/
+    );
   });
 });

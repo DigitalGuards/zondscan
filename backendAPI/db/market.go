@@ -285,9 +285,9 @@ func MarketFlowDaily(ctx context.Context, venue string, from, to time.Time) ([]m
 	return out, nil
 }
 
-// MarketFlowCoverage reports the stored extent for a venue so a response can
-// state honestly how much of the requested window is actually backed by
-// data. windowStart decides the Complete flag.
+// MarketFlowCoverage reports a venue's retained trade extent and count.
+// windowStart decides the legacy Complete flag from the earliest trade;
+// the flag cannot establish collection continuity or detect missing trades.
 func MarketFlowCoverage(ctx context.Context, venue string, windowStart time.Time) (models.MarketFlowCoverage, error) {
 	var coverage models.MarketFlowCoverage
 	if configs.MarketTradesCollection == nil {
