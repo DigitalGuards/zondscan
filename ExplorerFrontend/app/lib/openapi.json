@@ -2399,11 +2399,12 @@
                   "properties": {
                     "configured": { "type": "boolean" },
                     "captchaEnabled": { "type": "boolean" },
+                    "turnstileSiteKey": { "type": "string", "nullable": true, "description": "Public Cloudflare Turnstile site key read at runtime. Null when absent or malformed. Clients require this key when captchaEnabled is true. Secrets and RPC configuration are never returned." },
                     "dripQuanta": { "type": "string", "description": "Whole-Quanta amount sent per successful claim, as a decimal string." },
                     "cooldownHours": { "type": "integer", "description": "Cooldown window in hours, enforced per address and per IP." }
                   }
                 },
-                "example": { "configured": true, "captchaEnabled": true, "dripQuanta": "10", "cooldownHours": 24 }
+                "example": { "configured": true, "captchaEnabled": true, "turnstileSiteKey": "1x00000000000000000000AA", "dripQuanta": "10", "cooldownHours": 24 }
               }
             }
           }

@@ -7,6 +7,7 @@ import type { Collection, ObjectId } from 'mongodb';
 
 import { getFaucetDb } from './mongodb';
 import { canonicalizeQrlAddress } from './qrlAddress';
+import { publicTurnstileSiteKey } from '../faucet/captcha';
 
 /**
  * Server-only faucet core: configuration, QRL address handling, account
@@ -40,6 +41,8 @@ export interface FaucetConfig {
   configured: boolean;
   /** True when Turnstile is fully wired (site + secret keys present). */
   captchaEnabled: boolean;
+  /** Public widget key read from the running server environment. */
+  turnstileSiteKey: string | null;
   /**
    * Hard cap on total quanta dripped per rolling 24h across ALL claimers.
    * 0 means unlimited. A safety net against draining when address rotation
@@ -72,8 +75,11 @@ function parseDripQuanta(raw: string | undefined): string {
 let warnedNoCaptcha = false;
 
 export function getFaucetConfig(): FaucetConfig {
+  // An environment alias keeps the public key runtime-configurable in Next builds.
+  const runtimeEnv = process.env;
+  const siteKey = runtimeEnv.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
   const captchaEnabled = Boolean(
-    process.env.TURNSTILE_SECRET && process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
+    process.env.TURNSTILE_SECRET && siteKey,
   );
   // The faucet needs both a funding seed AND a Mongo connection for the
   // cooldown store; without the latter every claim would fail at runtime, so
@@ -99,6 +105,7 @@ export function getFaucetConfig(): FaucetConfig {
     rpcUrl: process.env.FAUCET_RPC_URL || DEFAULT_RPC_URL,
     configured,
     captchaEnabled,
+    turnstileSiteKey: publicTurnstileSiteKey(siteKey),
     dailyCapQuanta: Math.max(0, Math.floor(Number(process.env.FAUCET_DAILY_CAP_QUANTA) || 0)),
     allowNoCaptcha,
   };
