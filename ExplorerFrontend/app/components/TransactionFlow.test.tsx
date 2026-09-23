@@ -27,6 +27,10 @@ describe('TransactionFlow', () => {
       expect(html).toContain(`title="${address}"`);
       expect(html).toContain(`class="sr-only">${address}</span>`);
     }
+    // Rows, full address from the sm breakpoint up, fingerprint below it.
+    expect(html).not.toContain('rounded-xl');
+    expect(html).toContain(`<span class="hidden break-all sm:inline" title="${transaction.from}">${transaction.from}</span>`);
+    expect(html.indexOf('>From<')).toBeLessThan(html.indexOf('>To<'));
     expect(html).toContain('aria-label="Copy sender address"');
     expect(html).toContain('aria-label="Copy recipient address"');
     expect(html).not.toMatch(/>IN<|>OUT<|>Sent<|>Received</);
