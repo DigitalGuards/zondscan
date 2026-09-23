@@ -83,8 +83,10 @@ for (const width of [390, 1280]) {
     const toBox = await to.boundingBox();
     expect(fromBox).not.toBeNull();
     expect(toBox).not.toBeNull();
-    if (width < 1024) {
-      expect(toBox!.y).toBeGreaterThan(fromBox!.y + fromBox!.height);
+    // Stacked rows at every width, To below From.
+    expect(toBox!.y).toBeGreaterThan(fromBox!.y + fromBox!.height);
+    if (width < 640) {
+      // Phones show the one-line fingerprint.
       for (const link of [from, to]) {
         const dimensions = await link.locator('[aria-hidden="true"]').evaluate((element) => ({
           height: element.getBoundingClientRect().height,
@@ -94,8 +96,10 @@ for (const width of [390, 1280]) {
         expect(dimensions.height).toBeLessThanOrEqual(dimensions.lineHeight + 1);
       }
     } else {
-      expect(Math.abs(fromBox!.y - toBox!.y)).toBeLessThanOrEqual(2);
-      expect(toBox!.x).toBeGreaterThan(fromBox!.x + fromBox!.width);
+      // Wider screens show the whole address as the link text.
+      for (const [link, address] of [[from, sender], [to, recipient]] as const) {
+        await expect(link.locator(`span[title="${address}"]`).first()).toHaveText(address);
+      }
     }
     await expectNoOverflow(page);
     // The release runner sets --output to its private evidence directory.
