@@ -1,6 +1,7 @@
 package configs
 
 import (
+	"backendAPI/networkprofile"
 	"context"
 	"log"
 	"sync"
@@ -19,6 +20,14 @@ var dbOnce sync.Once
 // It uses a sync.Once to ensure the connection is only established once
 func ConnectDB() *mongo.Client {
 	dbOnce.Do(func() {
+		EnvMongoURI()
+		identityCtx, cancelIdentity := context.WithTimeout(context.Background(), 45*time.Second)
+		profile, profileErr := configuredNetwork(identityCtx)
+		cancelIdentity()
+		if profileErr != nil {
+			log.Fatal(profileErr)
+		}
+
 		// Conservative connection-pool defaults so a burst of concurrent HTTP
 		// handlers doesn't exhaust or thrash Mongo connections. The driver's
 		// zero-value pool is effectively unbounded, which lets a traffic spike
@@ -50,7 +59,13 @@ func ConnectDB() *mongo.Client {
 		log.Println("Connected to MongoDB")
 
 		// Initialize collections with validators and indexes
-		db := client.Database("qrldata-z")
+		db := client.Database(profile.DatabaseName)
+		if err := networkprofile.Bind(ctx, db, profile); err != nil {
+			client.Disconnect(context.Background())
+			log.Fatal(err)
+		}
+		activeNetwork = profile
+		networkprofile.Activate(profile)
 
 		// Create indexes for collections we query
 		createIndexes(db)
@@ -80,7 +95,7 @@ func ConnectDB() *mongo.Client {
 // bindCollections wires the package-level *mongo.Collection handles to the
 // live client. Called once from ConnectDB after the ping succeeds.
 func bindCollections(client *mongo.Client) {
-	db := client.Database("qrldata-z")
+	db := client.Database(DatabaseName())
 	TransferCollections = db.Collection(transferCollName)
 	TransactionByAddressCollection = db.Collection(transactionByAddressCollName)
 	InternalTransactionByAddressCollection = db.Collection(internalTransactionByAddressCollName)

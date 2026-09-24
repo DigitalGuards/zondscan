@@ -1,11 +1,19 @@
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { readNetworkConfig, assertNetworkCapability } = require('./network-config.cjs');
+const network = readNetworkConfig(process.env);
+assertNetworkCapability(network.network);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   distDir: 'build',
   output: 'standalone',
   turbopack: {},
   env: {
-    HANDLER_URL: process.env.HANDLER_URL,
-    DOMAIN_NAME: process.env.DOMAIN_NAME,
+    NEXT_PUBLIC_EXPLORER_NETWORK: network.network,
+    NEXT_PUBLIC_V2_EXPLORER_URL: network.v2Url,
+    NEXT_PUBLIC_V3_EXPLORER_URL: network.v3Url || '',
+    NEXT_PUBLIC_V3_EXPLORER_AVAILABLE: String(network.v3Available),
+    NEXT_PUBLIC_DOMAIN_NAME: process.env.NEXT_PUBLIC_DOMAIN_NAME || process.env.DOMAIN_NAME,
   },
   // Phase 3a: allow next/image to render off-chain NFT metadata images.
   // The syncer's metadata fetcher resolves every NFT image URL through

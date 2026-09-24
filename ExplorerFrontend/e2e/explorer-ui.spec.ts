@@ -82,6 +82,11 @@ test('horizontal menus support keyboard navigation, active sections, and escape'
   await page.keyboard.press('Escape');
   await expect(blockchain).toBeFocused();
   await page.getByRole('button', { name: 'Network: QRL Testnet v2' }).click();
+  const currentNetwork = page.getByRole('menuitem', { name: 'QRL Testnet v2', exact: true });
+  await expect(currentNetwork).toHaveAttribute('aria-current', 'true');
+  const upcomingNetwork = page.getByRole('menuitem', { name: /QRL Testnet v3 Upcoming/ });
+  await expect(upcomingNetwork).toBeDisabled();
+  await expect(upcomingNetwork).not.toHaveAttribute('href');
   await expect(page.getByRole('menuitem', { name: /QRL Mainnet/ })).toBeDisabled();
   await page.keyboard.press('Escape');
 });
@@ -151,9 +156,10 @@ test('zero token transfers are disclosed and recoverable, NFT ID zero stays visi
   ).toBeVisible();
 });
 
-test('mobile navigation traps focus, closes on route selection, and stays within the screen', async ({
+test('mobile navigation expands inline, closes on route selection, and stays within the screen', async ({
   page,
 }) => {
+  test.setTimeout(60_000);
   for (const width of [360, 390, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/settings');
@@ -161,12 +167,19 @@ test('mobile navigation traps focus, closes on route selection, and stays within
     await noOverflow(page);
     if (width < 1024) {
       await page.getByRole('button', { name: 'Open navigation' }).click();
-      const dialog = page.getByRole('dialog');
-      await expect(dialog).toBeVisible();
-      await dialog.getByRole('button', { name: 'Blockchain', exact: true }).click();
-      await dialog.getByRole('link', { name: /^Transactions Latest/ }).click();
-      await expect(page).toHaveURL('/transactions/1');
-      await expect(dialog).not.toBeVisible();
+      const navigation = page.getByRole('navigation', { name: 'Mobile navigation' });
+      await expect(navigation).toBeVisible();
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(page.getByRole('link', { name: 'ZondScan home' })).toBeVisible();
+      expect(
+        await page.locator('#main-content').evaluate((el) => el.getBoundingClientRect().top)
+      ).toBeGreaterThanOrEqual(
+        await navigation.evaluate((el) => el.getBoundingClientRect().bottom)
+      );
+      await navigation.getByRole('button', { name: 'Blockchain', exact: true }).click();
+      await navigation.getByRole('link', { name: 'Transactions', exact: true }).click();
+      await expect(page).toHaveURL('/transactions/1', { timeout: 20_000 });
+      await expect(navigation).not.toBeVisible();
       await noOverflow(page);
       await page.screenshot({ path: `test-results/transactions-${width}.png`, fullPage: true });
       await page.getByRole('button', { name: 'Open navigation' }).click();
@@ -223,9 +236,9 @@ test('resizing an open mobile menu to desktop releases the page', async ({ page 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/settings');
   await page.getByRole('button', { name: 'Open navigation' }).click();
-  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Mobile navigation' })).toBeVisible();
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('navigation', { name: 'Mobile navigation' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Blockchain', exact: true }).click();
   await expect(page.getByRole('menu', { name: 'Blockchain', exact: true })).toBeVisible();
 });

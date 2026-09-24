@@ -2,7 +2,9 @@ package rpc
 
 import (
 	"QRL2MongoDB/models"
+	"QRL2MongoDB/networkprofile"
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -29,6 +31,13 @@ func GetPendingTransactions() string {
 		return ""
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := networkprofile.GuardSource(ctx, nodeURL); err != nil {
+		zap.L().Error("Mempool network identity mismatch", zap.Error(err))
+		return ""
+	}
+
 	// Use txpool_content which actually works on Zond nodes
 	// Pending transactions are fetched via txpool_content (not a dedicated pending RPC method)
 	rpcReq := models.JsonRPC{
@@ -44,7 +53,7 @@ func GetPendingTransactions() string {
 		return ""
 	}
 
-	req, err := http.NewRequest("POST", nodeURL, bytes.NewBuffer(b))
+	req, err := http.NewRequestWithContext(ctx, "POST", nodeURL, bytes.NewBuffer(b))
 	if err != nil {
 		zap.L().Error("Failed to create pending transactions request", zap.Error(err))
 		return ""
@@ -52,7 +61,8 @@ func GetPendingTransactions() string {
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout:       10 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -69,6 +79,11 @@ func GetPendingTransactions() string {
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		zap.L().Error("Failed to read pending transactions response", zap.Error(err))
+		return ""
+	}
+
+	if err := networkprofile.GuardSource(ctx, nodeURL); err != nil {
+		zap.L().Error("Mempool network identity mismatch", zap.Error(err))
 		return ""
 	}
 

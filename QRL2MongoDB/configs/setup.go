@@ -1,6 +1,7 @@
 package configs
 
 import (
+	"QRL2MongoDB/networkprofile"
 	"context"
 	"fmt"
 	"log"
@@ -44,6 +45,13 @@ func connect() error {
 		return fmt.Errorf("required environment variable MONGOURI is not set")
 	}
 
+	identityCtx, cancelIdentity := context.WithTimeout(context.Background(), 45*time.Second)
+	profile, err := configuredNetwork(identityCtx)
+	cancelIdentity()
+	if err != nil {
+		return err
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -58,11 +66,17 @@ func connect() error {
 	}
 	Logger.Info("Connected to MongoDB")
 
+	if err := networkprofile.Bind(ctx, client.Database(profile.DatabaseName), profile); err != nil {
+		client.Disconnect(context.Background())
+		return err
+	}
+	activeNetwork = profile
+	networkprofile.Activate(profile)
 	DB = client
 	bindCollections(client)
 
 	// Initialize collections with validators
-	db := client.Database("qrldata-z")
+	db := client.Database(DatabaseName())
 
 	// Daily Transactions Volume
 	volumeValidator := bson.M{
@@ -480,7 +494,7 @@ func initializeCollections(db *mongo.Database) {
 
 // Getting database collections
 func GetCollection(client *mongo.Client, collectionName string) *mongo.Collection {
-	collection := client.Database("qrldata-z").Collection(collectionName)
+	collection := client.Database(DatabaseName()).Collection(collectionName)
 	return collection
 }
 
@@ -514,7 +528,7 @@ func GetListCollectionNames(client *mongo.Client) []string {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	result, err := client.Database("qrldata-z").ListCollectionNames(ctx, bson.D{})
+	result, err := client.Database(DatabaseName()).ListCollectionNames(ctx, bson.D{})
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -2,6 +2,7 @@ package routes
 
 import (
 	"backendAPI/cache"
+	"backendAPI/configs"
 	"backendAPI/db"
 	"context"
 	"net/http"
@@ -96,6 +97,17 @@ func UserRoute(router *gin.Engine) {
 	stopCacheJanitor = routeCache.StartJanitor(time.Minute)
 
 	router.GET("/health", handleHealth)
+	router.GET("/network", func(c *gin.Context) {
+		identity := configs.NetworkIdentity()
+		c.Header("Cache-Control", "no-store")
+		c.JSON(http.StatusOK, gin.H{
+			"networkId":        identity.NetworkID,
+			"chainId":          identity.ChainID,
+			"genesisHash":      identity.GenesisHash,
+			"addressBytes":     identity.AddressBytes,
+			"identityVerified": identity.IdentityVerified,
+		})
+	})
 
 	// Contract-verification endpoints (POST /contract/verify, GET
 	// /contract/verify/:jobId, GET /contract/compiler-info). The

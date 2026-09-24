@@ -1,0 +1,49 @@
+services:
+  mongodb-v3:
+    profiles: [prepare-v3]
+    image: mongo:8.2
+    restart: unless-stopped
+    entrypoint: [/bin/bash, /opt/network/mongo-entrypoint.sh]
+    environment:
+      EXPLORER_NETWORK: v3
+      MONGO_DB_NAME: qrldata-v3
+      MONGO_INITDB_DATABASE: qrldata-v3
+      MONGO_INITDB_ROOT_USERNAME_FILE: /run/mongodb/admin_user
+      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/mongodb/admin_password
+      GLIBC_TUNABLES: glibc.cpu.hwcaps=-SHSTK
+    ports:
+      - "127.0.0.1:${MONGO_V3_PORT:-27130}:27017"
+    volumes:
+      - v3_data:/data/db
+      - ./mongo-entrypoint.sh:/opt/network/mongo-entrypoint.sh:ro
+      - ./mongo-app-user.js:/docker-entrypoint-initdb.d/01-app-user.js:ro
+      - ./mongo-init-replica.js:/opt/network/mongo-init-replica.js:ro
+    tmpfs:
+      - /run/mongodb
+    secrets:
+      - admin_user
+      - admin_password
+      - app_user
+      - app_password
+      - replica_key
+    healthcheck:
+      test: [CMD, mongosh, --quiet, --eval, "quit(db.hello().isWritablePrimary ? 0 : 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+volumes:
+  v3_data:
+    name: zondscan-testnet-v3-data
+
+secrets:
+  admin_user:
+    file: ${MONGO_V3_ADMIN_USER_FILE:?Set a private v3 administrator username file}
+  admin_password:
+    file: ${MONGO_V3_ADMIN_PASSWORD_FILE:?Set a private v3 administrator password file}
+  app_user:
+    file: ${MONGO_V3_USER_FILE:?Set a private v3 application username file}
+  app_password:
+    file: ${MONGO_V3_PASSWORD_FILE:?Set a private v3 application password file}
+  replica_key:
+    file: ${MONGO_V3_REPLICA_KEY_FILE:?Set a private v3 replica key file}

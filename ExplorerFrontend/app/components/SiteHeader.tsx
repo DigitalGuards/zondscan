@@ -3,78 +3,26 @@
 import { useTranslation } from './InterfaceText';
 
 import {
-  forwardRef,
   useEffect,
   useId,
   useLayoutEffect,
   useRef,
   useState,
-  type ComponentPropsWithoutRef,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import {
-  Dialog,
-  DialogBackdrop,
-  DialogPanel,
-  DialogTitle,
-  Disclosure,
-  DisclosureButton,
-  DisclosurePanel,
-} from '@headlessui/react';
-import {
-  ArrowUpRightIcon,
-  Bars3Icon,
-  ChevronDownIcon,
-  Cog6ToothIcon,
-  XMarkIcon,
-} from '@heroicons/react/24/outline';
-import { NAVIGATION_GROUPS, isNavigationActive, type NavigationItem } from '../lib/navigation';
+import { Bars3Icon, ChevronDownIcon, Cog6ToothIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { NAVIGATION_GROUPS, isNavigationActive } from '../lib/navigation';
 import AppearanceMenu from './AppearanceMenu';
 import NetworkMenu from './NetworkMenu';
+import { CURRENT_NETWORK_NAME } from '../lib/networks';
 import MarketSummary from './MarketSummary';
 import SearchBar from './SearchBar';
-
-const NavigationLink = forwardRef<
-  HTMLAnchorElement,
-  ComponentPropsWithoutRef<'a'> & {
-    item: NavigationItem;
-    active: boolean;
-  }
->(function NavigationLink({ item, active, className, ...rest }, ref) {
-  const { t } = useTranslation();
-  const content = (
-    <>
-      <span className="min-w-0 flex-1">
-        <span className="block font-medium">{t(item.name)}</span>
-        <span className="mt-0.5 block text-xs font-normal text-text-muted">
-          {t(item.description)}
-        </span>
-      </span>
-      {item.external && (
-        <ArrowUpRightIcon className="size-3.5 shrink-0 text-text-muted" aria-hidden="true" />
-      )}
-    </>
-  );
-  const props = { ...rest, ref, className, 'aria-current': active ? ('page' as const) : undefined };
-  return item.external || item.hardNavigation ? (
-    <a
-      href={item.href}
-      target={item.external ? '_blank' : undefined}
-      rel={item.external ? 'noopener noreferrer' : undefined}
-      {...props}
-    >
-      {content}
-    </a>
-  ) : (
-    <Link href={item.href} {...props}>
-      {content}
-    </Link>
-  );
-});
+import NavigationLink from './NavigationLink';
+import MobileNavigation from './MobileNavigation';
 
 interface DesktopMenuProps {
   group: (typeof NAVIGATION_GROUPS)[number];
@@ -125,6 +73,12 @@ function DesktopMenu({ group, pathname, open, onOpen, onClose }: DesktopMenuProp
   };
   const handlePointerEnter = (event: ReactPointerEvent) => {
     if (event.pointerType !== 'mouse' || !window.matchMedia('(any-hover: hover)').matches) return;
+    // Preserve the focused menu until an explicit click or keyboard action.
+    if (
+      document.activeElement?.closest('[role="menu"]') &&
+      !containerRef.current?.contains(document.activeElement)
+    )
+      return;
     clearCloseTimer();
     if (!open) interaction.current = 'hover';
     onOpen();
@@ -293,6 +247,9 @@ export default function SiteHeader() {
   const { t } = useTranslation();
   const pathname = usePathname();
   const headerRef = useRef<HTMLElement>(null);
+  const mobileButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreMobileFocus = useRef(false);
+  const mobileMenuId = useId();
   const [searchVisibility, setSearchVisibility] = useState({ pathname, visible: false });
   const [searchFocused, setSearchFocused] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -306,6 +263,13 @@ export default function SiteHeader() {
   }
   const pageSearchVisible = searchVisibility.pathname === pathname && searchVisibility.visible;
   const showHeaderSearch = !pageSearchVisible || searchFocused;
+
+  useLayoutEffect(() => {
+    if (!mobileOpen && restoreMobileFocus.current) {
+      restoreMobileFocus.current = false;
+      mobileButtonRef.current?.focus({ preventScroll: true });
+    }
+  }, [mobileOpen]);
 
   useEffect(() => {
     const desktop = window.matchMedia('(min-width: 64rem)');
@@ -418,6 +382,13 @@ export default function SiteHeader() {
       <div
         className="relative z-30 border-b border-border bg-background-secondary"
         data-site-navigation
+        onKeyDown={(event) => {
+          if (mobileOpen && event.key === 'Escape') {
+            event.preventDefault();
+            mobileButtonRef.current?.focus();
+            setMobileOpen(false);
+          }
+        }}
       >
         <div className="mx-auto flex min-h-16 max-w-screen-2xl items-center justify-between gap-6 px-4 sm:px-6 lg:px-8">
           <Link
@@ -431,7 +402,7 @@ export default function SiteHeader() {
                 ZondScan
               </span>
               <span className="block text-[10px] uppercase tracking-[0.13em] text-text-muted">
-                {t('QRL Testnet v2')}
+                {t(CURRENT_NETWORK_NAME)}
               </span>
             </span>
           </Link>
@@ -457,69 +428,37 @@ export default function SiteHeader() {
             ))}
           </nav>
           <button
+            ref={mobileButtonRef}
+            data-mobile-navigation-toggle
             className="header-control lg:hidden"
             type="button"
-            aria-label={t('Open navigation')}
+            aria-label={t(mobileOpen ? 'Close navigation' : 'Open navigation')}
             aria-expanded={mobileOpen}
-            onClick={() => setMobileOpen(true)}
+            aria-controls={mobileMenuId}
+            onClick={() => {
+              setDesktopMenu(null);
+              setMobileOpen((open) => !open);
+            }}
           >
-            <Bars3Icon className="size-5" aria-hidden="true" />
+            {mobileOpen ? (
+              <XMarkIcon className="size-5" aria-hidden="true" />
+            ) : (
+              <Bars3Icon className="size-5" aria-hidden="true" />
+            )}
           </button>
         </div>
+        <div id={mobileMenuId} hidden={!mobileOpen} className="border-t border-border lg:hidden">
+          {mobileOpen && (
+            <MobileNavigation
+              pathname={pathname}
+              onNavigate={() => {
+                restoreMobileFocus.current = true;
+                setMobileOpen(false);
+              }}
+            />
+          )}
+        </div>
       </div>
-      <Dialog open={mobileOpen} onClose={setMobileOpen} className="fixed inset-0 z-[80] lg:hidden">
-        <DialogBackdrop className="fixed inset-0 bg-black/45 backdrop-blur-sm" />
-        <DialogPanel className="fixed inset-y-0 right-0 flex w-full max-w-sm flex-col overflow-y-auto border-l border-border bg-background-secondary p-5 shadow-xl">
-          <div className="mb-5 flex items-center justify-between">
-            <DialogTitle className="font-display text-xl font-semibold text-text-primary">
-              {t('Explore ZondScan')}
-            </DialogTitle>
-            <button
-              type="button"
-              className="header-control"
-              aria-label={t('Close navigation')}
-              onClick={() => setMobileOpen(false)}
-            >
-              <XMarkIcon className="size-5" aria-hidden="true" />
-            </button>
-          </div>
-          <nav aria-label={t('Mobile navigation')} className="space-y-1">
-            <Link
-              href="/"
-              onClick={() => setMobileOpen(false)}
-              className="block rounded-md px-3 py-3 font-medium text-text-primary"
-              aria-current={pathname === '/' ? 'page' : undefined}
-            >
-              {t('Home')}
-            </Link>
-            {NAVIGATION_GROUPS.map((group) => (
-              <Disclosure
-                key={`${pathname}:${t(group.name)}`}
-                defaultOpen={group.items.some((item) => isNavigationActive(pathname, item.href))}
-              >
-                <DisclosureButton className="group flex w-full items-center justify-between rounded-md px-3 py-3 font-medium text-text-primary hover:bg-surface">
-                  {t(group.name)}
-                  <ChevronDownIcon
-                    className="size-4 group-data-open:rotate-180"
-                    aria-hidden="true"
-                  />
-                </DisclosureButton>
-                <DisclosurePanel className="mb-2 ml-3 border-l border-border pl-2">
-                  {group.items.map((item) => (
-                    <NavigationLink
-                      key={item.href}
-                      item={item}
-                      active={isNavigationActive(pathname, item.href)}
-                      onClick={() => setMobileOpen(false)}
-                      className={`flex items-center gap-2 rounded-md px-3 py-2.5 text-sm hover:bg-surface ${isNavigationActive(pathname, item.href) ? 'text-accent' : 'text-text-secondary'}`}
-                    />
-                  ))}
-                </DisclosurePanel>
-              </Disclosure>
-            ))}
-          </nav>
-        </DialogPanel>
-      </Dialog>
     </>
   );
 }

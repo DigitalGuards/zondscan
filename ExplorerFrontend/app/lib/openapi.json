@@ -20,6 +20,35 @@
     { "name": "Faucet & Site", "description": "Endpoints served by the explorer web app itself: search redirect and the testnet faucet." }
   ],
   "paths": {
+    "/api/network": {
+      "get": {
+        "tags": ["Status"],
+        "operationId": "getNetworkIdentity",
+        "summary": "Explorer deployment network identity",
+        "description": "Returns the fixed network identity of this API deployment. Verified profiles have a decimal chain ID and a genesis hash checked against their node sources and database at startup. An unpinned legacy v2 deployment reports identityVerified=false with empty chainId and genesisHash. Network selection uses a separate explorer origin and database for each testnet.",
+        "responses": {
+          "200": {
+            "description": "Deployment network identity. This endpoint does not change the selected network.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["networkId", "chainId", "genesisHash", "addressBytes", "identityVerified"],
+                  "properties": {
+                    "networkId": { "type": "string", "enum": ["v2", "v3"] },
+                    "chainId": { "type": "string", "description": "Canonical decimal chain ID, or empty for unpinned legacy v2." },
+                    "genesisHash": { "type": "string", "description": "Lowercase 0x-prefixed 32-byte genesis hash, or empty for unpinned legacy v2." },
+                    "addressBytes": { "type": "integer", "enum": [20, 64] },
+                    "identityVerified": { "type": "boolean", "description": "Whether explicit chain and genesis pins were verified at startup." }
+                  }
+                },
+                "example": { "networkId": "v2", "chainId": "", "genesisHash": "", "addressBytes": 20, "identityVerified": false }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "tags": ["Status"],

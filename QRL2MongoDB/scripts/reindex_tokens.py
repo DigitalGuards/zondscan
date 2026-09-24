@@ -6,6 +6,7 @@ from datetime import datetime
 import json
 import requests
 from pymongo import MongoClient
+from network_profile import parse_profile, validate_sources, open_database, guard_source, NetworkIdentityError
 from dotenv import load_dotenv
 from web3 import Web3
 import logging
@@ -30,7 +31,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # MongoDB connection
-MONGO_URI = os.getenv('MONGOURI', 'mongodb://localhost:27017')
+MONGO_URI = os.getenv('MONGOURI', '')
+NETWORK_PROFILE = None
 NODE_URL = os.getenv('NODE_URL', 'https://qrlwallet.com/api/zond-rpc/testnet')
 
 # Constants
@@ -48,10 +50,16 @@ def make_rpc_call(method, params, max_retries=3, retry_delay=1):
                 "params": params,
                 "id": 1
             }
-            response = requests.post(NODE_URL, json=payload)
+            if NETWORK_PROFILE is not None:
+                guard_source(NETWORK_PROFILE, NODE_URL)
+            response = requests.post(NODE_URL, json=payload, timeout=15, allow_redirects=False)
+            if NETWORK_PROFILE is not None:
+                guard_source(NETWORK_PROFILE, NODE_URL)
             result = response.json().get('result')
             logger.info(f"RPC response for {method}: {result}")
             return result
+        except NetworkIdentityError:
+            raise
         except Exception as e:
             logger.error(f"RPC call failed (attempt {attempt + 1}): {e}")
             if attempt < max_retries - 1:
@@ -125,6 +133,8 @@ def process_transfer_logs(logs, contract_address, token_balances_collection, tok
             
             try:
                 token_transfers_collection.insert_one(transfer)
+            except NetworkIdentityError:
+                raise
             except Exception as e:
                 if 'duplicate key error' not in str(e):  # Ignore duplicates
                     logger.error(f"Failed to store transfer {tx_hash}: {e}")
@@ -187,6 +197,8 @@ def process_transfer_logs(logs, contract_address, token_balances_collection, tok
                 upsert=True
             )
             
+        except NetworkIdentityError:
+            raise
         except Exception as e:
             logger.error(f"Error processing transfer in block {block_number}: {str(e)}", exc_info=True)
             continue
@@ -280,6 +292,8 @@ def update_missing_creation_blocks(contracts_collection):
                     updated_count += 1
                 else:
                     logger.warning(f"Could not find block number for transaction {tx_hash}")
+            except NetworkIdentityError:
+                raise
             except Exception as e:
                 logger.error(f"Error updating creation block for {contract['address']}: {str(e)}")
     
@@ -289,9 +303,12 @@ def main():
     logger.info("Starting token reindexing...")
     
     # Connect to MongoDB
-    logger.info(f"Connecting to MongoDB at {MONGO_URI}")
-    client = MongoClient(MONGO_URI)
-    db = client['qrldata-z']  # Changed from qrldata to qrldata-z to match Go code
+    global NETWORK_PROFILE
+    NETWORK_PROFILE = parse_profile(os.environ)
+    validate_sources(NETWORK_PROFILE, os.environ)
+    logger.info("Opening the configured explorer database")
+    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=10000)
+    db = open_database(client, NETWORK_PROFILE)
     
     # Get collections
     contracts_collection = db.contractCode  # Changed from contracts to contractCode

@@ -6,6 +6,8 @@ import { BoltIcon } from '@heroicons/react/24/outline';
 import config from '../../config';
 import { formatPlanckAdaptive } from '../lib/helpers';
 import { useDisplayCurrency } from './useDisplayCurrency';
+import { useTranslation } from './InterfaceText';
+import { CURRENT_NETWORK_NAME } from '../lib/networks';
 
 async function getSummary(path: string) {
   const response = await fetch(`${config.handlerUrl}${path}`);
@@ -15,6 +17,7 @@ async function getSummary(path: string) {
 
 export default function MarketSummary() {
   const fiat = useDisplayCurrency();
+  const { t, locale } = useTranslation();
   const overview = useQuery<{ currentPrice?: number; priceChange24h?: number }>({
     queryKey: ['header-overview'],
     queryFn: () => getSummary('/overview'),
@@ -85,9 +88,14 @@ export default function MarketSummary() {
         className="inline-flex items-center gap-1 whitespace-nowrap text-text-secondary hover:text-accent"
         title={
           validGas
-            ? `Average recent transaction gas price on QRL Testnet v2: ${gasValue} ${gasUnit}`
-            : 'Testnet gas price is temporarily unavailable'
+            ? t('Average recent transaction gas price on {network}: {value} {unit}', {
+                network: t(CURRENT_NETWORK_NAME),
+                value: gasValue,
+                unit: gasUnit,
+              })
+            : t('Testnet gas price is temporarily unavailable')
         }
+        lang={locale}
       >
         <BoltIcon className="size-3.5 text-text-muted" aria-hidden="true" />
         Gas:{' '}

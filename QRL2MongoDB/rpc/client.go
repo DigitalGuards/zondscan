@@ -14,7 +14,8 @@ import (
 
 // Package-level HTTP client with connection pooling and timeouts
 var httpClient = &http.Client{
-	Timeout: 30 * time.Second,
+	Timeout:       30 * time.Second,
+	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	Transport: &http.Transport{
 		MaxIdleConns:        100,
 		MaxIdleConnsPerHost: 100,

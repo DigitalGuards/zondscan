@@ -1,5 +1,11 @@
 export const translations: Record<'zh' | 'es' | 'ru', Record<string, string>> = {
   zh: {
+    'QRL Testnet v3': 'QRL 测试网 v3',
+    'Network: {network}': '网络：{network}',
+    Upcoming: '即将上线',
+    'Average recent transaction gas price on {network}: {value} {unit}':
+      '{network} 最近交易的平均 Gas 价格：{value} {unit}',
+    'Testnet gas price is temporarily unavailable': '测试网 Gas 价格暂时不可用',
     'API Docs': 'API 文档',
     'API explorer': 'API 浏览器',
     Activity: '活动',
@@ -206,6 +212,13 @@ export const translations: Record<'zh' | 'es' | 'ru', Record<string, string>> = 
     'your device': '你的设备',
   },
   es: {
+    'QRL Testnet v3': 'Red de pruebas QRL v3',
+    'Network: {network}': 'Red: {network}',
+    Upcoming: 'Próximamente',
+    'Average recent transaction gas price on {network}: {value} {unit}':
+      'Precio medio del gas en transacciones recientes de {network}: {value} {unit}',
+    'Testnet gas price is temporarily unavailable':
+      'El precio del gas de la red de pruebas no está disponible temporalmente',
     'API Docs': 'Documentación de la API',
     'API explorer': 'Explorador de API',
     Activity: 'Actividad',
@@ -419,6 +432,12 @@ export const translations: Record<'zh' | 'es' | 'ru', Record<string, string>> = 
     'your device': 'tu dispositivo',
   },
   ru: {
+    'QRL Testnet v3': 'Тестовая сеть QRL v3',
+    'Network: {network}': 'Сеть: {network}',
+    Upcoming: 'Скоро',
+    'Average recent transaction gas price on {network}: {value} {unit}':
+      'Средняя цена газа недавних транзакций в сети {network}: {value} {unit}',
+    'Testnet gas price is temporarily unavailable': 'Цена газа тестовой сети временно недоступна',
     'API Docs': 'Документация API',
     'API explorer': 'Обозреватель API',
     Activity: 'Активность',

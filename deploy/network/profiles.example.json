@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "networks": [
+    {
+      "network": "v2",
+      "enabled": true,
+      "address_bytes": 20,
+      "origin": "https://zondscan.com",
+      "database": "qrldata-z",
+      "volume": "zondscan-testnet-v2-data",
+      "mongo_uri_env": "MONGO_V2_URI",
+      "mongo_user_file_env": "MONGO_V2_USER_FILE",
+      "mongo_password_file_env": "MONGO_V2_PASSWORD_FILE",
+      "replica_set": null,
+      "bind": "127.0.0.1",
+      "ports": {"frontend": 18120, "backend": 18122, "syncer_health": 18123, "mongodb": 27120},
+      "chain_id": null,
+      "genesis_hash": null,
+      "beacon_genesis_validators_root": null,
+      "beacon_genesis_time": null,
+      "rpc_url": null,
+      "beacon_url": null
+    },
+    {
+      "network": "v3",
+      "enabled": false,
+      "address_bytes": 64,
+      "origin": "https://v3.zondscan.com",
+      "database": "qrldata-v3",
+      "volume": "zondscan-testnet-v3-data",
+      "mongo_uri_env": "MONGO_V3_URI",
+      "mongo_user_file_env": "MONGO_V3_USER_FILE",
+      "mongo_password_file_env": "MONGO_V3_PASSWORD_FILE",
+      "replica_set": "zondscan-v3",
+      "bind": "127.0.0.1",
+      "ports": {"frontend": 18130, "backend": 18132, "syncer_health": 18133, "mongodb": 27130},
+      "chain_id": null,
+      "genesis_hash": null,
+      "beacon_genesis_validators_root": null,
+      "beacon_genesis_time": null,
+      "rpc_url": null,
+      "beacon_url": null
+    }
+  ]
+}

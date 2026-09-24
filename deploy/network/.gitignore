@@ -1,0 +1,5 @@
+*.local.json
+*.local.env
+secrets/
+backups/
+__pycache__/

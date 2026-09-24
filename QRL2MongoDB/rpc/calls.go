@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"QRL2MongoDB/beaconprofile"
 	"QRL2MongoDB/models"
 	"QRL2MongoDB/utils"
 	"QRL2MongoDB/validation"
@@ -518,6 +519,9 @@ func GetValidators() ([]models.BeaconValidatorResponse, error) {
 			return nil, fmt.Errorf("failed to create request: %v", err)
 		}
 
+		if err := beaconprofile.GuardSource(req.Context(), beaconchainURL); err != nil {
+			return nil, err
+		}
 		resp, err := client.Do(req)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get response from beacon API: %v", err)
@@ -534,6 +538,9 @@ func GetValidators() ([]models.BeaconValidatorResponse, error) {
 			return nil, fmt.Errorf("failed to read response body: %v", err)
 		}
 
+		if err := beaconprofile.GuardSource(req.Context(), beaconchainURL); err != nil {
+			return nil, err
+		}
 		var beaconResponse models.BeaconValidatorResponse
 		err = json.Unmarshal(body, &beaconResponse)
 		if err != nil {
@@ -575,6 +582,9 @@ func GetBeaconChainHead() (*models.BeaconChainHeadResponse, error) {
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
 
+	if err := beaconprofile.GuardSource(req.Context(), beaconchainURL); err != nil {
+		return nil, err
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get response from beacon API: %v", err)
@@ -590,6 +600,9 @@ func GetBeaconChainHead() (*models.BeaconChainHeadResponse, error) {
 		return nil, fmt.Errorf("failed to read response body: %v", err)
 	}
 
+	if err := beaconprofile.GuardSource(req.Context(), beaconchainURL); err != nil {
+		return nil, err
+	}
 	var chainHead models.BeaconChainHeadResponse
 	if err := json.Unmarshal(body, &chainHead); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %v", err)

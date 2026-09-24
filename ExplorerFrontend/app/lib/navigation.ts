@@ -112,8 +112,3 @@ export function isNavigationActive(pathname: string, href: string): boolean {
   if (href === '/validators' && pathname.startsWith('/validators/')) return true;
   return ['/learn', '/contracts', '/pending/1'].includes(href) && pathname.startsWith(`${base}/`);
 }
-
-export const EXPLORER_NETWORKS = [
-  { id: 'testnet-v2', name: 'QRL Testnet v2', status: 'active' },
-  { id: 'mainnet', name: 'QRL Mainnet', status: 'planned' },
-] as const;

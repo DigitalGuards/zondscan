@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"backendAPI/models"
+	"backendAPI/networkprofile"
 )
 
 // RPCError is a JSON-RPC error payload as returned by the QRL execution
@@ -36,7 +37,7 @@ func (e *RPCError) Error() string {
 // Default upstream HTTP client tuned for short-lived JSON-RPC calls.
 // Pulled to package-level so every call shares the connection pool
 // (keep-alive saves a TCP+TLS handshake per request).
-var nodeRPCClient = &http.Client{Timeout: 12 * time.Second}
+var nodeRPCClient = &http.Client{Timeout: 12 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 
 // nodeURL resolves the node endpoint from NODE_URL exactly once.
 // configs.ValidateEnv fail-fasts at startup when NODE_URL is missing
@@ -72,6 +73,9 @@ func nodeURL() string {
 //
 // `result` is `nil` only on error.
 func NodeRPC(ctx context.Context, method string, params []interface{}) (json.RawMessage, *RPCError, error) {
+	if err := networkprofile.GuardSource(ctx, nodeURL()); err != nil {
+		return nil, nil, err
+	}
 	body, err := json.Marshal(models.JsonRPC{
 		Jsonrpc: "2.0",
 		Method:  method,
@@ -114,6 +118,9 @@ func NodeRPC(ctx context.Context, method string, params []interface{}) (json.Raw
 	}
 	if len(parsed.Result) == 0 {
 		return nil, nil, errors.New("rpc envelope: missing result")
+	}
+	if err := networkprofile.GuardSource(ctx, nodeURL()); err != nil {
+		return nil, nil, err
 	}
 	return parsed.Result, nil, nil
 }

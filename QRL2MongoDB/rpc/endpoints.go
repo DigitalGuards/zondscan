@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"QRL2MongoDB/networkprofile"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -306,6 +307,9 @@ func postWithRetry(ctx context.Context, url string, reqBody []byte, retries int)
 	}
 	var lastErr error
 	for attempt := 0; attempt < retries; attempt++ {
+		if err := networkprofile.GuardSource(ctx, url); err != nil {
+			return nil, err
+		}
 		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(reqBody))
 		if err != nil {
 			lastErr = err
@@ -319,6 +323,9 @@ func postWithRetry(ctx context.Context, url string, reqBody []byte, retries int)
 				body, readErr := io.ReadAll(resp.Body)
 				resp.Body.Close()
 				if readErr == nil {
+					if err := networkprofile.GuardSource(ctx, url); err != nil {
+						return nil, err
+					}
 					return body, nil
 				}
 				lastErr = readErr

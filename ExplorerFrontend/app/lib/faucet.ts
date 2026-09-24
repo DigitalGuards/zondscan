@@ -6,6 +6,8 @@ import { MLDSA87 } from '@theqrl/wallet.js';
 import type { Collection, ObjectId } from 'mongodb';
 
 import { getFaucetDb } from './mongodb';
+import { databaseNetworkConfig } from './database-network';
+import { verifyFaucetRpcNetwork } from './faucet-network';
 
 /**
  * Server-only faucet core: configuration, QRL address handling, account
@@ -290,6 +292,15 @@ export function sendFaucetDrip(to: string): Promise<DripResult> {
 
 async function dripExclusive(to: string): Promise<DripResult> {
   const web3 = getWeb3();
+  let chainId: string | undefined;
+  try {
+    chainId = await verifyFaucetRpcNetwork(databaseNetworkConfig(process.env), {
+      chainId: () => web3.qrl.getChainId(),
+      genesis: () => web3.qrl.getBlock('0x0', false),
+    });
+  } catch {
+    throw new FaucetError('NOT_CONFIGURED', 'The faucet network is temporarily unavailable.');
+  }
   const seed = getSeed();
   const from = getFaucetAddress();
   const { dripQuanta, dailyCapQuanta } = getFaucetConfig();
@@ -344,6 +355,7 @@ async function dripExclusive(to: string): Promise<DripResult> {
   const nonce = await web3.qrl.getTransactionCount(from, 'pending');
 
   const tx = {
+    ...(chainId ? { chainId } : {}),
     from,
     to,
     value: value.toString(),

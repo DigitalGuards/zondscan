@@ -70,6 +70,24 @@ Kubernetes health check probe.
 { "status": "ok" }
 ```
 
+#### `GET /network`
+
+Returns the fixed network identity of this API process after its database binding has passed startup checks. The endpoint contains no connection strings or credentials.
+
+An existing unpinned v2 deployment returns:
+
+```json
+{
+  "networkId": "v2",
+  "chainId": "",
+  "genesisHash": "",
+  "addressBytes": 20,
+  "identityVerified": false
+}
+```
+
+Pinned deployments return the canonical decimal chain ID, lowercase execution genesis hash, and `identityVerified: true`. This describes the configured identity; use `/health` for service availability. V3 requires a separate database, explicit chain pins, and reviewed binaries supporting 64-byte addresses. See [network isolation](network-isolation.md) for configuration and launch checks.
+
 #### `GET /overview`
 Dashboard overview with market data and network stats.
 

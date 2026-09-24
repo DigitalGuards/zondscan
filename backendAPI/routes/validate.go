@@ -1,7 +1,9 @@
 package routes
 
 import (
+	"backendAPI/configs"
 	"backendAPI/db"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -33,7 +35,7 @@ var (
 	// addrParamRe matches both address forms the frontend forwards: the
 	// canonical "Q" + 40 hex (case-insensitive Q) and the "0x" + 40 hex
 	// contract form. db.normalizeAddress canonicalises both downstream.
-	addrParamRe = regexp.MustCompile(`^([Qq]|0x|0X)[0-9a-fA-F]{40}$`)
+	addrParamRe = regexp.MustCompile(fmt.Sprintf(`^([Qq]|0x|0X)[0-9a-fA-F]{%d}$`, configs.NativeAddressBytes*2))
 	// validatorPubkeyRe matches a hex public-key lookup key (optional 0x
 	// prefix). Even-length and an upper bound are enforced in
 	// isValidValidatorID rather than the pattern, because Go's regexp

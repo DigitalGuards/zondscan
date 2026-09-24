@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"QRL2MongoDB/models"
+	"QRL2MongoDB/networkprofile"
 	"context"
 	"encoding/json"
 	"errors"
@@ -106,6 +107,9 @@ func redactTraceTransportError(endpoint string, err error) error {
 }
 
 func traceRPCWebSocket(ctx context.Context, endpoint string, request []byte) ([]byte, error) {
+	if err := networkprofile.GuardSource(ctx, endpoint); err != nil {
+		return nil, err
+	}
 	conn, _, err := websocket.DefaultDialer.DialContext(ctx, endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -126,6 +130,9 @@ func traceRPCWebSocket(ctx context.Context, endpoint string, request []byte) ([]
 	}
 	_, response, err := conn.ReadMessage()
 	if err != nil {
+		return nil, err
+	}
+	if err := networkprofile.GuardSource(ctx, endpoint); err != nil {
 		return nil, err
 	}
 	return response, nil

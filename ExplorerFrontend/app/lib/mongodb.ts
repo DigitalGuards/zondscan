@@ -1,6 +1,12 @@
 import 'server-only';
 
 import { MongoClient, type Db } from 'mongodb';
+import { assertNetworkCapability } from '../../network-config.cjs';
+import {
+  assertDatabaseNetwork,
+  databaseNetworkConfig,
+  validateDatabaseUri,
+} from './database-network';
 
 /**
  * Cached MongoDB client for server-side route handlers.
@@ -17,26 +23,21 @@ import { MongoClient, type Db } from 'mongodb';
  * be overridden with `MONGO_DB_NAME`.
  */
 
-const DB_NAME = process.env.MONGO_DB_NAME || 'qrldata-z';
-
 interface MongoCache {
   client: MongoClient;
   promise: Promise<MongoClient>;
+  uri: string;
 }
 
 declare global {
   var __faucetMongo: MongoCache | undefined;
 }
 
-function getClientPromise(): Promise<MongoClient> {
-  const uri = process.env.DATABASE_URL;
-  if (!uri) {
-    return Promise.reject(
-      new Error('DATABASE_URL is not configured; faucet cooldown store unavailable'),
-    );
-  }
-
+function getClientPromise(uri: string): Promise<MongoClient> {
   if (globalThis.__faucetMongo) {
+    if (globalThis.__faucetMongo.uri !== uri) {
+      return Promise.reject(new Error('Faucet database configuration changed; restart required'));
+    }
     return globalThis.__faucetMongo.promise;
   }
 
@@ -45,13 +46,27 @@ function getClientPromise(): Promise<MongoClient> {
     maxPoolSize: 5,
     serverSelectionTimeoutMS: 5000,
   });
-  const promise = client.connect();
-  globalThis.__faucetMongo = { client, promise };
+  const promise = client.connect().catch((error: unknown) => {
+    globalThis.__faucetMongo = undefined;
+    void client.close();
+    throw error;
+  });
+  globalThis.__faucetMongo = { client, promise, uri };
   return promise;
 }
 
 /** Resolve the faucet database handle, connecting (once) on first use. */
 export async function getFaucetDb(): Promise<Db> {
-  const client = await getClientPromise();
-  return client.db(DB_NAME);
+  const config = databaseNetworkConfig(process.env);
+  assertNetworkCapability(config.network);
+  const uri = process.env.DATABASE_URL;
+  if (!uri) throw new Error('DATABASE_URL is not configured; faucet cooldown store unavailable');
+  validateDatabaseUri(uri, config.database);
+  const client = await getClientPromise(uri);
+  const database = client.db(config.database);
+  const marker = await database
+    .collection<{ _id: string }>('explorerNetwork')
+    .findOne({ _id: 'identity' });
+  assertDatabaseNetwork(marker, config);
+  return database;
 }

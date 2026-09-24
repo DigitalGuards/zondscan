@@ -6,6 +6,7 @@ from datetime import datetime
 import json
 import requests
 from pymongo import MongoClient
+from network_profile import parse_profile, validate_sources, open_database, guard_source, NetworkIdentityError
 from dotenv import load_dotenv
 import logging
 
@@ -29,7 +30,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # MongoDB connection
-MONGO_URI = os.getenv('MONGOURI', 'mongodb://localhost:27017')
+MONGO_URI = os.getenv('MONGOURI', '')
+NETWORK_PROFILE = None
 NODE_URL = os.getenv('NODE_URL', 'https://qrlwallet.com/api/zond-rpc/testnet')
 
 def make_rpc_call(method, params):
@@ -43,8 +45,14 @@ def make_rpc_call(method, params):
     }
     
     try:
-        response = requests.post(NODE_URL, json=payload, headers=headers)
+        if NETWORK_PROFILE is not None:
+            guard_source(NETWORK_PROFILE, NODE_URL)
+        response = requests.post(NODE_URL, json=payload, headers=headers, timeout=15, allow_redirects=False)
+        if NETWORK_PROFILE is not None:
+            guard_source(NETWORK_PROFILE, NODE_URL)
         return response.json().get('result')
+    except NetworkIdentityError:
+        raise
     except Exception as e:
         logger.error(f"RPC call failed: {e}")
         return None
@@ -97,6 +105,8 @@ def get_token_info(contract_address):
                     name = bytes.fromhex(name_hex).decode('utf-8').strip()
                     is_token = True
                     logger.info(f"Decoded token name for {contract_address}: '{name}'")
+        except NetworkIdentityError:
+            raise
         except Exception as e:
             logger.error(f"Error decoding name for {contract_address}: {e}")
     
@@ -118,6 +128,8 @@ def get_token_info(contract_address):
                 symbol = bytes.fromhex(symbol_hex).decode('utf-8').strip()
                 is_token = True
                 logger.info(f"Decoded token symbol for {contract_address}: '{symbol}'")
+        except NetworkIdentityError:
+            raise
         except Exception as e:
             logger.error(f"Error decoding symbol for {contract_address}: {e}")
     
@@ -127,6 +139,8 @@ def get_token_info(contract_address):
         try:
             decimals = int(decimals_result[2:], 16)
             is_token = True
+        except NetworkIdentityError:
+            raise
         except Exception as e:
             logger.error(f"Error decoding decimals for {contract_address}: {e}")
     
@@ -182,6 +196,8 @@ def process_contract_creation(transfer_doc, contracts_collection):
             upsert=True
         )
         logger.info(f"MongoDB update result - Matched: {result.matched_count}, Modified: {result.modified_count}, Upserted: {result.upserted_id is not None}")
+    except NetworkIdentityError:
+        raise
     except Exception as e:
         logger.error(f"Error updating contract in MongoDB: {e}")
         return False
@@ -190,16 +206,19 @@ def process_contract_creation(transfer_doc, contracts_collection):
 
 def main():
     # Connect to MongoDB
-    logger.info(f"Connecting to MongoDB at {MONGO_URI}")
-    client = MongoClient(MONGO_URI)
-    db = client['qrldata-z']
+    global NETWORK_PROFILE
+    NETWORK_PROFILE = parse_profile(os.environ)
+    validate_sources(NETWORK_PROFILE, os.environ)
+    logger.info("Opening the configured explorer database")
+    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=10000)
+    db = open_database(client, NETWORK_PROFILE)
     
     # Get collections
     contracts_collection = db.contractCode
     transfer_collection = db.transfer
     
     # Print available databases and collections
-    logger.info("\nAvailable databases: %s", client.list_database_names())
+
     logger.info("Available collections: %s", db.list_collection_names())
     
     # Sample some documents from transfer collection
@@ -277,9 +296,13 @@ def main():
                 )
                 logger.info(f"Contract {contract_address} updated - Matched: {result.matched_count}, Modified: {result.modified_count}, Upserted: {result.upserted_id is not None}")
                 contracts_created += 1
+            except NetworkIdentityError:
+                raise
             except Exception as e:
                 logger.error(f"Error updating contract in MongoDB: {e}")
                 
+        except NetworkIdentityError:
+            raise
         except Exception as e:
             logger.error(f"Error processing transfer {i}/{total_transfers}: {str(e)}", exc_info=True)
     
