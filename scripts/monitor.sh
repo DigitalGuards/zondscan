@@ -2,7 +2,11 @@
 set -uo pipefail
 
 WEBHOOK="${DISCORD_WEBHOOK_URL:?Set DISCORD_WEBHOOK_URL environment variable}"
-STATE_FILE="/tmp/monitor-alert-state"
+# Kept out of world-writable /tmp so another local user cannot forge or
+# race the alert state. The file is rewritten every tick, so its mtime is a
+# heartbeat that external checks can use to spot a stopped monitor.
+STATE_FILE="${MONITOR_STATE_FILE:-$HOME/.local/state/monitor/alert-state}"
+mkdir -p "$(dirname "$STATE_FILE")"
 
 # Track which alerts have fired to avoid spam
 touch "$STATE_FILE"
