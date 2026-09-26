@@ -283,3 +283,8 @@ for CERT_FILE in "${MONITOR_SSL_DIR:-/nonexistent}"/*/cert.pub; do
         resolve "cert-expiry-$CERT_NAME" "Origin cert ($CERT_NAME) renewed"
     fi
 done
+
+# Heartbeat: touched only when a tick runs to completion. The alert-state
+# file is touched at the start of every tick, so it cannot tell a finished
+# tick from one that hung in a check.
+touch "$(dirname "$STATE_FILE")/last-complete"
