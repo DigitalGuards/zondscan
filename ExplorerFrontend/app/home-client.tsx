@@ -162,7 +162,7 @@ const TABLE_ROWS = 8;
 
 const ROW_CLASS = 'flex items-center gap-3 px-4 py-3 border-b border-border last:border-b-0 text-sm';
 
-function TableHeader({ icon, title, viewAllHref, tone }: { icon: React.ReactNode; title: string; viewAllHref: string; tone: 'accent' | 'quantum' }) {
+function TableHeader({ icon, title, tone }: { icon: React.ReactNode; title: string; tone: 'accent' | 'quantum' }) {
   return (
     <div className="panel-header">
       <h2 className="flex items-center gap-2.5 text-[15px] font-display font-semibold text-text-primary">
@@ -171,10 +171,21 @@ function TableHeader({ icon, title, viewAllHref, tone }: { icon: React.ReactNode
         </span>
         {title}
       </h2>
-      <Link href={viewAllHref} className="text-xs link-accent hover:underline">
-        View all &rarr;
-      </Link>
     </div>
+  );
+}
+
+// Full-width footer link (Etherscan pattern). Muted label, brighter on hover/focus.
+// The inset outline keeps the focus ring visible inside the card's overflow-hidden clip.
+function ViewAllFooter({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="flex h-12 w-full items-center justify-center gap-1.5 border-t border-border text-[12px] font-semibold uppercase tracking-[0.14em] text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary focus-visible:bg-surface-2 focus-visible:text-text-primary focus-visible:outline-offset-[-2px]"
+    >
+      {label}
+      <span aria-hidden="true">&rarr;</span>
+    </Link>
   );
 }
 
@@ -223,7 +234,7 @@ function getEpochFromBlock(blockNumber: number): number {
 function BlockTable({ blocks, status }: { blocks: BlockResult[] | null; status: HomeStatus }) {
   return (
     <section aria-label="Latest blocks" className="card overflow-hidden">
-      <TableHeader icon={icons.block} title="Latest Blocks" viewAllHref="/blocks/1" tone="accent" />
+      <TableHeader icon={icons.block} title="Latest Blocks" tone="accent" />
       <div>
         {status === 'loading'
           ? Array.from({ length: TABLE_ROWS }).map((_, i) => <SkeletonRow key={i} />)
@@ -277,6 +288,7 @@ function BlockTable({ blocks, status }: { blocks: BlockResult[] | null; status: 
               );
             })}
       </div>
+      <ViewAllFooter href="/blocks/1" label="View all blocks" />
     </section>
   );
 }
@@ -286,7 +298,7 @@ function BlockTable({ blocks, status }: { blocks: BlockResult[] | null; status: 
 function TransactionTable({ txs, status }: { txs: TxResult[] | null; status: HomeStatus }) {
   return (
     <section aria-label="Latest transactions" className="card overflow-hidden">
-      <TableHeader icon={icons.transactions} title="Latest Transactions" viewAllHref="/transactions/1" tone="quantum" />
+      <TableHeader icon={icons.transactions} title="Latest Transactions" tone="quantum" />
       <div>
         {status === 'loading'
           ? Array.from({ length: TABLE_ROWS }).map((_, i) => <SkeletonRow key={i} />)
@@ -339,6 +351,7 @@ function TransactionTable({ txs, status }: { txs: TxResult[] | null; status: Hom
               );
             })}
       </div>
+      <ViewAllFooter href="/transactions/1" label="View all transactions" />
     </section>
   );
 }
