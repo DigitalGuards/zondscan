@@ -176,6 +176,8 @@ function TableHeader({ icon, title, tone }: { icon: React.ReactNode; title: stri
 }
 
 // Full-width footer link (Etherscan pattern). Muted label, brighter on hover/focus.
+// Each card is a flex column with flex-1 rows, so the footer sits at the bottom of
+// the stretched grid cell and both cards' footers line up.
 // The inset outline keeps the focus ring visible inside the card's overflow-hidden clip.
 function ViewAllFooter({ href, label }: { href: string; label: string }) {
   return (
@@ -233,9 +235,9 @@ function getEpochFromBlock(blockNumber: number): number {
 
 function BlockTable({ blocks, status }: { blocks: BlockResult[] | null; status: HomeStatus }) {
   return (
-    <section aria-label="Latest blocks" className="card overflow-hidden">
+    <section aria-label="Latest blocks" className="card flex flex-col overflow-hidden">
       <TableHeader icon={icons.block} title="Latest Blocks" tone="accent" />
-      <div>
+      <div className="flex-1">
         {status === 'loading'
           ? Array.from({ length: TABLE_ROWS }).map((_, i) => <SkeletonRow key={i} />)
           : blocks === null ? <p className="p-4 text-sm text-text-muted">Latest blocks unavailable. Retrying automatically.</p>
@@ -297,9 +299,9 @@ function BlockTable({ blocks, status }: { blocks: BlockResult[] | null; status: 
 
 function TransactionTable({ txs, status }: { txs: TxResult[] | null; status: HomeStatus }) {
   return (
-    <section aria-label="Latest transactions" className="card overflow-hidden">
+    <section aria-label="Latest transactions" className="card flex flex-col overflow-hidden">
       <TableHeader icon={icons.transactions} title="Latest Transactions" tone="quantum" />
-      <div>
+      <div className="flex-1">
         {status === 'loading'
           ? Array.from({ length: TABLE_ROWS }).map((_, i) => <SkeletonRow key={i} />)
           : txs === null ? <p className="p-4 text-sm text-text-muted">Latest transactions unavailable. Retrying automatically.</p>
