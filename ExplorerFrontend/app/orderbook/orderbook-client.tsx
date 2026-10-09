@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowTopRightOnSquareIcon, PauseIcon, PlayIcon } from '@heroicons/react/24/outline';
+import { useQuery } from '@tanstack/react-query';
+import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
 import config from '../../config';
 import FundFlowPanel from './fund-flow';
 import OrderBookLoading from './loading';
@@ -60,26 +60,17 @@ function StatCard({
 }
 
 function StatusBadge({
-  paused,
   isFetching,
   isError,
   stale,
 }: {
-  paused: boolean;
   isFetching: boolean;
   isError: boolean;
   stale: boolean;
 }): JSX.Element {
-  const label = paused
-    ? 'Updates paused'
-    : isError || stale
-      ? 'Data delayed'
-      : isFetching
-        ? 'Updating'
-        : 'Live';
-  const tone = paused
-    ? 'border-border bg-surface-2 text-text-secondary'
-    : isError || stale
+  const label = isError || stale ? 'Data delayed' : isFetching ? 'Updating' : 'Live';
+  const tone =
+    isError || stale
       ? 'border-warning/30 bg-warning/10 text-warning'
       : 'border-success/30 bg-success/10 text-success';
   return (
@@ -96,27 +87,36 @@ function DepthTable({
   levels,
   side,
   maxCumulative,
+  reverse = false,
+  className = '',
 }: {
   levels: LadderLevel[];
   side: MarketSide;
   maxCumulative: number;
+  reverse?: boolean;
+  className?: string;
 }): JSX.Element {
   const title = side === 'buy' ? 'Bids' : 'Asks';
   const tone = side === 'buy' ? 'text-success' : 'text-error';
   const color = `color-mix(in srgb, ${side === 'buy' ? palette.success : palette.error} 10%, transparent)`;
+  // Reverse the display after calculating depth from the best price.
+  const displayedLevels = reverse ? [...levels].reverse() : levels;
   return (
-    <div className="min-w-0">
+    <div className={`min-w-0 ${className}`}>
       <h4 className={`px-4 py-2 text-xs font-semibold ${tone}`}>
         {title}{' '}
         <span className="font-normal text-text-muted">({side === 'buy' ? 'Buy' : 'Sell'})</span>
       </h4>
       <div
-        className="max-h-[26rem] overflow-auto px-4 pb-2"
+        className={`max-h-[26rem] overflow-auto px-4 pb-2 ${reverse ? 'flex flex-col-reverse' : ''}`}
         tabIndex={0}
         role="region"
         aria-label={`${title} price levels`}
       >
-        <table className="w-full table-fixed text-xs" aria-label={`${title} QRL USDT order book`}>
+        <table
+          className="w-full shrink-0 table-fixed text-xs"
+          aria-label={`${title} QRL USDT order book`}
+        >
           <thead className="sticky top-0 bg-surface">
             <tr className="text-[10px] text-text-muted sm:text-[11px]">
               <th scope="col" className="py-2 pr-1 text-left font-medium">
@@ -131,7 +131,7 @@ function DepthTable({
             </tr>
           </thead>
           <tbody>
-            {levels.map((level) => {
+            {displayedLevels.map((level) => {
               const width = `${Math.min(100, (level.cumulativeQuantity / maxCumulative) * 100)}%`;
               return (
                 <tr
@@ -231,18 +231,30 @@ function DepthLadder({
           </label>
         </div>
       </div>
-      <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 border-b border-border px-4 py-2 text-xs text-text-muted">
-        <span>
-          Spread{' '}
-          <span className="font-mono text-text-primary">
-            {spread === 0 ? '0.00' : formatMarketPrice(spread)} USDT
+      <div className="grid sm:grid-cols-2">
+        <DepthTable
+          levels={asks}
+          side="sell"
+          maxCumulative={maxCumulative}
+          reverse
+          className="sm:hidden"
+        />
+        <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 border-y border-border px-4 py-2 text-xs text-text-muted sm:order-first sm:col-span-2 sm:border-t-0">
+          <span>
+            Spread{' '}
+            <span className="font-mono text-text-primary">
+              {spread === 0 ? '0.00' : formatMarketPrice(spread)} USDT
+            </span>
           </span>
-        </span>
-        <span className="font-mono">{spreadBps.toFixed(1)} bps</span>
-      </div>
-      <div className="grid divide-y divide-border sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+          <span className="font-mono">{spreadBps.toFixed(1)} bps</span>
+        </div>
         <DepthTable levels={bids} side="buy" maxCumulative={maxCumulative} />
-        <DepthTable levels={asks} side="sell" maxCumulative={maxCumulative} />
+        <DepthTable
+          levels={asks}
+          side="sell"
+          maxCumulative={maxCumulative}
+          className="hidden border-l border-border sm:block"
+        />
       </div>
       <p className="border-t border-border px-4 py-2 text-[11px] text-text-muted">
         Total is cumulative QRL from the best price. Depth bars share the same scale.
@@ -324,11 +336,9 @@ function RecentTrades({ trades }: { trades: MarketTrade[] }): JSX.Element {
 }
 
 export default function OrderBookClient(): JSX.Element {
-  const [paused, setPaused] = useState(false);
   const [priceGrouping, setPriceGrouping] = useState<PriceGrouping>('0.001');
   const [rowsPerSide, setRowsPerSide] = useState<number>(12);
   const [now, setNow] = useState(0);
-  const queryClient = useQueryClient();
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 5_000);
@@ -344,10 +354,9 @@ export default function OrderBookClient(): JSX.Element {
       );
       return response.data;
     },
-    enabled: !paused,
-    refetchInterval: paused ? false : 3_000,
+    refetchInterval: 3_000,
     refetchIntervalInBackground: false,
-    refetchOnWindowFocus: !paused,
+    refetchOnWindowFocus: true,
     staleTime: 1_500,
     retry: 2,
   });
@@ -392,12 +401,6 @@ export default function OrderBookClient(): JSX.Element {
   const stale =
     !Number.isFinite(snapshotTime) ||
     Math.max(now, orderBookQuery.dataUpdatedAt) - snapshotTime > STALE_AFTER_MS;
-  const depthTotal = stats.bidQuantityInBand + stats.askQuantityInBand;
-  const bidShare = depthTotal > 0 ? (stats.bidQuantityInBand / depthTotal) * 100 : 50;
-  const toggleUpdates = (): void => {
-    if (!paused) void queryClient.cancelQueries({ queryKey: QUERY_KEY });
-    setPaused((value) => !value);
-  };
 
   return (
     <div className="page-content py-4 sm:py-6 lg:py-8">
@@ -406,7 +409,6 @@ export default function OrderBookClient(): JSX.Element {
           <div className="flex flex-wrap items-center gap-3">
             <h2 className="section-title">QRL / USDT</h2>
             <StatusBadge
-              paused={paused}
               isFetching={orderBookQuery.isFetching}
               isError={orderBookQuery.isError}
               stale={stale}
@@ -425,23 +427,10 @@ export default function OrderBookClient(): JSX.Element {
           >
             MEXC Spot <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" aria-hidden="true" />
           </a>
-          <button
-            type="button"
-            onClick={toggleUpdates}
-            aria-pressed={paused}
-            className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 font-medium text-text-secondary hover:text-text-primary"
-          >
-            {paused ? (
-              <PlayIcon className="h-4 w-4" aria-hidden="true" />
-            ) : (
-              <PauseIcon className="h-4 w-4" aria-hidden="true" />
-            )}
-            {paused ? 'Resume order book' : 'Pause order book'}
-          </button>
         </div>
       </header>
 
-      {(orderBookQuery.isError || stale) && !paused && (
+      {(orderBookQuery.isError || stale) && (
         <div
           className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning"
           role="status"
@@ -491,7 +480,7 @@ export default function OrderBookClient(): JSX.Element {
           ) : (
             'unavailable'
           )}
-          {paused ? ' · paused' : ' · refreshes every 3s'}
+          {' · refreshes every 3s'}
         </span>
       </div>
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
@@ -507,30 +496,6 @@ export default function OrderBookClient(): JSX.Element {
         />
         <RecentTrades trades={data.recentTrades} />
       </div>
-
-      <section className="card mt-4 px-4 py-3" aria-label="Visible order book liquidity">
-        <div className="flex flex-wrap justify-between gap-2 text-xs">
-          <p className="text-text-muted">Visible depth within {stats.bandPercent}% of midpoint</p>
-          <p>
-            <span className="text-success">
-              Bids {formatQrlQuantity(stats.bidQuantityInBand)} QRL
-            </span>
-            <span className="mx-3 text-text-muted">/</span>
-            <span className="text-error">
-              Asks {formatQrlQuantity(stats.askQuantityInBand)} QRL
-            </span>
-          </p>
-        </div>
-        {depthTotal > 0 && (
-          <div
-            className="mt-2 flex h-1.5 overflow-hidden rounded-full bg-error/70"
-            role="img"
-            aria-label={`${bidShare.toFixed(1)}% bid depth and ${(100 - bidShare).toFixed(1)}% ask depth within ${stats.bandPercent}% of midpoint`}
-          >
-            <div className="h-full bg-success" style={{ width: `${bidShare}%` }} />
-          </div>
-        )}
-      </section>
 
       <div className="mt-6">
         <FundFlowPanel />

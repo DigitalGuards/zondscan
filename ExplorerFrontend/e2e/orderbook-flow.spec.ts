@@ -120,7 +120,7 @@ const book: MarketOrderBookResponse = {
   },
 };
 
-for (const width of [320, 390, 1440]) {
+for (const width of [320, 390, 640, 1440]) {
   test(`standard orderbook and longer flow analysis at ${width}px`, async ({
     page,
     baseURL,
@@ -157,24 +157,53 @@ for (const width of [320, 390, 1440]) {
       /squirrel|arena|play by play|yard|score|team|formation/i
     );
     await expect(page.getByRole('heading', { name: 'Recent trades', exact: true })).toBeVisible();
+    const ladder = page.getByRole('region', { name: 'Order book', exact: true });
+    const bids = ladder.getByRole('table', { name: 'Bids QRL USDT order book' });
+    const asks = ladder.getByRole('table', { name: 'Asks QRL USDT order book' });
+    const bidRows = bids.locator('tbody tr');
+    const askRows = asks.locator('tbody tr');
+    const bestAsk = width < 640 ? askRows.last() : askRows.first();
+    const outerAsk = width < 640 ? askRows.first() : askRows.last();
+    await expect(bestAsk.locator('td')).toHaveText(['0.64', '150', '150']);
+    await expect(outerAsk.locator('td')).toHaveText(['0.651', '161', '1,866']);
+    await expect(bidRows.first().locator('td')).toHaveText(['0.635', '100', '100']);
+    const bidBox = (await bids.boundingBox())!;
+    const askBox = (await asks.boundingBox())!;
+    const spreadBox = (await ladder.getByText(/^Spread /).boundingBox())!;
+    if (width < 640) {
+      expect(askBox.y + askBox.height).toBeLessThanOrEqual(spreadBox.y);
+      expect(spreadBox.y + spreadBox.height).toBeLessThanOrEqual(bidBox.y);
+    } else {
+      expect(bidBox.y).toBe(askBox.y);
+      expect(bidBox.x + bidBox.width).toBeLessThan(askBox.x);
+      expect(spreadBox.y + spreadBox.height).toBeLessThanOrEqual(askBox.y);
+    }
+    await page.setViewportSize({ width, height: 1400 });
+    await ladder.screenshot({
+      path: testInfo.outputPath(`ladder-${width}-dark.png`),
+      style: 'nextjs-portal { display: none !important; }',
+    });
+    await page.setViewportSize({ width, height: 1000 });
     await page.getByLabel('Price grouping in USDT').selectOption('0.0001');
-    await page.getByLabel('Order book rows per side').selectOption('25');
-    await expect(
-      page.getByRole('table', { name: 'Bids QRL USDT order book' }).locator('tbody tr')
-    ).toHaveCount(25);
-    await expect(
-      page.getByRole('table', { name: 'Asks QRL USDT order book' }).locator('tbody tr')
-    ).toHaveCount(25);
+    for (const rows of [25, 50]) {
+      await page.getByLabel('Order book rows per side').selectOption(String(rows));
+      await expect(bidRows).toHaveCount(rows);
+      await expect(askRows).toHaveCount(rows);
+      await expect(bestAsk.locator('td')).toHaveText(['0.64', '150', '150']);
+      const regionBox = (await ladder
+        .getByRole('region', { name: 'Asks price levels' })
+        .boundingBox())!;
+      const bestAskBox = (await bestAsk.boundingBox())!;
+      expect(bestAskBox.y).toBeGreaterThanOrEqual(regionBox.y);
+      expect(bestAskBox.y + bestAskBox.height).toBeLessThanOrEqual(regionBox.y + regionBox.height);
+    }
     await page.getByLabel('Order book rows per side').selectOption('12');
-    await page.getByRole('button', { name: 'Pause order book', exact: true }).click();
     await expect(
-      page.getByRole('button', { name: 'Resume order book', exact: true })
-    ).toBeVisible();
-    const pausedRequests = bookRequests;
-    if (width === 1440) await page.waitForTimeout(3300);
-    expect(bookRequests).toBe(pausedRequests);
-    await page.getByRole('button', { name: 'Resume order book', exact: true }).click();
-    await expect.poll(() => bookRequests).toBeGreaterThan(pausedRequests);
+      page.getByRole('button', { name: /Pause order book|Resume order book/ })
+    ).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Visible order book liquidity' })).toHaveCount(0);
+    const previousRequests = bookRequests;
+    await expect.poll(() => bookRequests).toBeGreaterThan(previousRequests);
     for (const [label, count] of [
       ['7D', 28],
       ['30D', 30],
@@ -212,6 +241,12 @@ for (const width of [320, 390, 1440]) {
     await page.getByRole('button', { name: /^Appearance:/ }).click();
     await page.getByRole('menuitem', { name: /^Light/ }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await page.setViewportSize({ width, height: 1400 });
+    await ladder.screenshot({
+      path: testInfo.outputPath(`ladder-${width}-light.png`),
+      style: 'nextjs-portal { display: none !important; }',
+    });
+    await page.setViewportSize({ width, height: 1000 });
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({
       path: testInfo.outputPath(`orderbook-${width}-light.png`),
