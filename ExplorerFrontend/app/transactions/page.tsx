@@ -1,4 +1,3 @@
-import React from 'react';
 import type { Metadata } from 'next';
 import TransactionsList from './[query]/TransactionsList';
 import type { Transaction } from '@/app/types';
@@ -13,7 +12,8 @@ export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   ...sharedMetadata,
   title: 'Transactions | ZondScan',
-  description: 'Browse the latest transactions on the QRL 2.0 blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
+  description:
+    'Browse the latest transactions on the QRL 2.0 blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
   alternates: {
     ...sharedMetadata.alternates,
     canonical: 'https://zondscan.com/transactions',
@@ -21,7 +21,8 @@ export const metadata: Metadata = {
   openGraph: {
     ...sharedMetadata.openGraph,
     title: 'Transactions | ZondScan',
-    description: 'Browse the latest transactions on the QRL 2.0 blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
+    description:
+      'Browse the latest transactions on the QRL 2.0 blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
     url: 'https://zondscan.com/transactions',
     siteName: 'ZondScan',
     type: 'website',
@@ -29,7 +30,8 @@ export const metadata: Metadata = {
   twitter: {
     ...sharedMetadata.twitter,
     title: 'Transactions | ZondScan',
-    description: 'Browse the latest transactions on the QRL 2.0 blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
+    description:
+      'Browse the latest transactions on the QRL 2.0 blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
   },
 };
 
@@ -45,9 +47,9 @@ interface PageProps {
 async function getTransactions(page: string): Promise<TransactionsResponse> {
   const handlerUrl = config.handlerUrl;
   const response = await fetch(`${handlerUrl}/txs?page=${page}`, {
-    next: { revalidate: 10 }
+    next: { revalidate: 10 },
   });
-  
+
   if (!response.ok) {
     throw new Error('Failed to fetch transactions');
   }
@@ -58,20 +60,15 @@ async function getTransactions(page: string): Promise<TransactionsResponse> {
 export default async function Page({ searchParams }: PageProps): Promise<JSX.Element> {
   // Await searchParams
   const resolvedParams = await searchParams;
-  
+
   // Get page from searchParams or default to '1'
   const page = resolvedParams.page || '1';
-  
+
   // Fetch data
   const data = await getTransactions(page);
-  
+
   // Parse page number
   const currentPage = parseInt(page);
 
-  return (
-    <TransactionsList 
-      initialData={data} 
-      currentPage={currentPage} 
-    />
-  );
+  return <TransactionsList initialData={data} currentPage={currentPage} />;
 }

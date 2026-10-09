@@ -1,0 +1,433 @@
+{
+  "app/address/[query]/address-page-data.test.ts": {
+    "@typescript-eslint/require-await": 10
+  },
+  "app/address/[query]/address-page-data.ts": {
+    "@typescript-eslint/consistent-type-assertions": 2,
+    "@typescript-eslint/no-base-to-string": 2
+  },
+  "app/address/[query]/address-tabs.tsx": {
+    "@typescript-eslint/no-unnecessary-condition": 7,
+    "no-restricted-syntax": 1
+  },
+  "app/address/[query]/address-view.tsx": {
+    "@typescript-eslint/no-unnecessary-condition": 6,
+    "@typescript-eslint/no-unnecessary-type-conversion": 1,
+    "no-restricted-syntax": 1
+  },
+  "app/address/[query]/page.tsx": {
+    "@typescript-eslint/no-unnecessary-condition": 1
+  },
+  "app/address/[query]/panels/internal-panel.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 5,
+    "@typescript-eslint/no-unnecessary-type-conversion": 7,
+    "react-hooks/incompatible-library": 1
+  },
+  "app/address/[query]/panels/nfts-panel.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 4,
+    "@typescript-eslint/no-floating-promises": 1,
+    "@typescript-eslint/no-unnecessary-condition": 3,
+    "@typescript-eslint/no-unnecessary-type-conversion": 1,
+    "@typescript-eslint/no-unsafe-assignment": 1,
+    "@typescript-eslint/no-unsafe-member-access": 2,
+    "no-restricted-syntax": 2,
+    "react-hooks/incompatible-library": 1
+  },
+  "app/address/[query]/panels/token-transfers-panel.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 4,
+    "@typescript-eslint/no-floating-promises": 1,
+    "@typescript-eslint/no-unnecessary-condition": 3,
+    "@typescript-eslint/no-unnecessary-type-conversion": 1,
+    "@typescript-eslint/no-unsafe-argument": 2,
+    "@typescript-eslint/no-unsafe-assignment": 2,
+    "@typescript-eslint/no-unsafe-member-access": 4,
+    "no-restricted-syntax": 2,
+    "react-hooks/incompatible-library": 1
+  },
+  "app/address/[query]/panels/tokens-panel.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 4,
+    "@typescript-eslint/no-floating-promises": 1,
+    "@typescript-eslint/no-unnecessary-condition": 3,
+    "@typescript-eslint/no-unnecessary-type-conversion": 1,
+    "@typescript-eslint/no-unsafe-assignment": 1,
+    "@typescript-eslint/no-unsafe-member-access": 2,
+    "no-restricted-syntax": 2,
+    "react-hooks/incompatible-library": 1
+  },
+  "app/address/[query]/panels/transactions-panel.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 5,
+    "@typescript-eslint/no-unnecessary-type-conversion": 1,
+    "react-hooks/incompatible-library": 1
+  },
+  "app/address/[query]/panels/use-aggregate-page.ts": {
+    "@typescript-eslint/no-unnecessary-condition": 1,
+    "no-restricted-syntax": 1
+  },
+  "app/address/[query]/token-contract-view.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 10,
+    "@typescript-eslint/no-floating-promises": 5,
+    "@typescript-eslint/no-redundant-type-constituents": 3,
+    "@typescript-eslint/no-unnecessary-condition": 5,
+    "@typescript-eslint/no-unsafe-argument": 8,
+    "@typescript-eslint/no-unsafe-assignment": 5,
+    "@typescript-eslint/no-unsafe-member-access": 8
+  },
+  "app/api-explorer/api-reference.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 1
+  },
+  "app/api-explorer/page.tsx": {
+    "@typescript-eslint/no-base-to-string": 2,
+    "@typescript-eslint/no-unnecessary-condition": 3
+  },
+  "app/api/exchange-rates/route.test.ts": {
+    "@typescript-eslint/no-unsafe-member-access": 1
+  },
+  "app/block/[query]/block-detail-client.tsx": {
+    "@typescript-eslint/no-floating-promises": 1,
+    "@typescript-eslint/no-unnecessary-condition": 6,
+    "@typescript-eslint/no-unsafe-argument": 1,
+    "@typescript-eslint/no-unsafe-assignment": 20,
+    "@typescript-eslint/no-unsafe-member-access": 20,
+    "no-restricted-syntax": 2
+  },
+  "app/block/loading.tsx": {
+    "@typescript-eslint/no-unsafe-assignment": 3
+  },
+  "app/blocks/[query]/blocks-client.tsx": {
+    "@typescript-eslint/no-unnecessary-condition": 6,
+    "no-restricted-syntax": 1
+  },
+  "app/blocks/[query]/page.tsx": {
+    "@typescript-eslint/no-unsafe-return": 1
+  },
+  "app/components/AddressHighlights.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 2
+  },
+  "app/components/AiExplainCard.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 1,
+    "@typescript-eslint/no-misused-promises": 2
+  },
+  "app/components/BalanceCheckTool.tsx": {
+    "@typescript-eslint/no-deprecated": 1,
+    "@typescript-eslint/no-misused-promises": 1,
+    "@typescript-eslint/no-unsafe-argument": 1,
+    "@typescript-eslint/no-unsafe-member-access": 1,
+    "no-restricted-syntax": 1
+  },
+  "app/components/CollapsibleHex.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 1
+  },
+  "app/components/ConnectButton.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 3,
+    "@typescript-eslint/no-meaningless-void-operator": 1,
+    "@typescript-eslint/no-misused-promises": 3,
+    "@typescript-eslint/use-unknown-in-catch-callback-variable": 1,
+    "react-hooks/exhaustive-deps": 1
+  },
+  "app/components/ContractInteractionProvenance.test.tsx": {
+    "@typescript-eslint/no-unused-vars": 1
+  },
+  "app/components/ContractTabs.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 4,
+    "@typescript-eslint/no-redundant-type-constituents": 2
+  },
+  "app/components/CopyButton.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 1,
+    "@typescript-eslint/use-unknown-in-catch-callback-variable": 1
+  },
+  "app/components/DebouncedInput.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 1
+  },
+  "app/components/DownloadBtn.tsx": {
+    "@typescript-eslint/no-unnecessary-condition": 2,
+    "@typescript-eslint/no-useless-default-assignment": 2
+  },
+  "app/components/ImageWithFallback.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 1
+  },
+  "app/components/MarketSummary.tsx": {
+    "@typescript-eslint/no-unsafe-return": 1
+  },
+  "app/components/PreferenceDetails.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 1
+  },
+  "app/components/PreferencesProvider.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 2
+  },
+  "app/components/QRCodeButton.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 1
+  },
+  "app/components/QRCodeModal.test.tsx": {
+    "@typescript-eslint/require-await": 1
+  },
+  "app/components/QRCodeModal.tsx": {
+    "@typescript-eslint/no-deprecated": 1
+  },
+  "app/components/SearchBar.tsx": {
+    "@typescript-eslint/no-deprecated": 1
+  },
+  "app/components/SiteHeader.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 6,
+    "@typescript-eslint/no-unnecessary-condition": 2
+  },
+  "app/components/TabPillBar.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 1
+  },
+  "app/components/TimeDisplay.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 1
+  },
+  "app/components/TradingViewWidget.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 1
+  },
+  "app/components/VerifiedBadge.test.tsx": {
+    "@typescript-eslint/no-unused-vars": 1
+  },
+  "app/components/VerifiedSourceBundle.test.tsx": {
+    "@typescript-eslint/no-unused-vars": 1
+  },
+  "app/components/VerifiedSourceBundle.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 1
+  },
+  "app/contracts/contracts-client.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 8,
+    "@typescript-eslint/no-floating-promises": 1,
+    "@typescript-eslint/no-unnecessary-condition": 1,
+    "@typescript-eslint/no-unsafe-assignment": 6,
+    "@typescript-eslint/no-unsafe-member-access": 8,
+    "no-restricted-syntax": 1
+  },
+  "app/contracts/contracts-wrapper.tsx": {
+    "@typescript-eslint/no-unsafe-assignment": 1
+  },
+  "app/converter/converter-client.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 3
+  },
+  "app/epoch/[id]/epoch-detail-client.tsx": {
+    "@typescript-eslint/no-floating-promises": 1,
+    "@typescript-eslint/no-unsafe-argument": 1,
+    "no-restricted-syntax": 1
+  },
+  "app/epochs/[query]/epochs-client.tsx": {
+    "@typescript-eslint/no-unnecessary-condition": 4
+  },
+  "app/faucet/claim/route.test.ts": {
+    "@typescript-eslint/no-unsafe-assignment": 1,
+    "@typescript-eslint/no-unsafe-member-access": 4
+  },
+  "app/faucet/faucet-client.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 4,
+    "@typescript-eslint/no-deprecated": 1,
+    "@typescript-eslint/no-misused-promises": 1,
+    "@typescript-eslint/no-unnecessary-boolean-literal-compare": 1,
+    "@typescript-eslint/no-unnecessary-condition": 2
+  },
+  "app/gas/gas-client.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 1,
+    "@typescript-eslint/no-unnecessary-condition": 1,
+    "no-restricted-syntax": 2
+  },
+  "app/global-error.tsx": {
+    "@next/next/no-html-link-for-pages": 1,
+    "@typescript-eslint/no-unnecessary-condition": 1
+  },
+  "app/home-client.tsx": {
+    "@typescript-eslint/no-unnecessary-condition": 2
+  },
+  "app/lib/compilerProvenance.ts": {
+    "@typescript-eslint/no-deprecated": 1
+  },
+  "app/lib/contractExplainAuth.test.ts": {
+    "@typescript-eslint/require-await": 3
+  },
+  "app/lib/explorerTransaction.test.ts": {
+    "@typescript-eslint/require-await": 2
+  },
+  "app/lib/explorerTransaction.ts": {
+    "@typescript-eslint/no-unnecessary-condition": 1
+  },
+  "app/lib/helpers.ts": {
+    "@typescript-eslint/no-unnecessary-condition": 6
+  },
+  "app/lib/homeData.ts": {
+    "@typescript-eslint/no-unnecessary-condition": 1
+  },
+  "app/lib/hooks.ts": {
+    "@typescript-eslint/no-confusing-void-expression": 2
+  },
+  "app/lib/orderbook.ts": {
+    "@typescript-eslint/no-unnecessary-condition": 1
+  },
+  "app/lib/pendingTransaction.test.ts": {
+    "@typescript-eslint/no-unnecessary-condition": 1,
+    "@typescript-eslint/unbound-method": 1
+  },
+  "app/lib/pendingTransaction.ts": {
+    "@typescript-eslint/no-unsafe-assignment": 3,
+    "@typescript-eslint/no-unsafe-call": 1,
+    "@typescript-eslint/no-unsafe-member-access": 6,
+    "no-restricted-syntax": 2
+  },
+  "app/lib/qrlConnect.test.ts": {
+    "@typescript-eslint/require-await": 1
+  },
+  "app/lib/storedVerification.test.ts": {
+    "@typescript-eslint/no-unused-vars": 2
+  },
+  "app/lib/storedVerification.ts": {
+    "@typescript-eslint/no-deprecated": 2
+  },
+  "app/lib/transactionAmount.test.ts": {
+    "@typescript-eslint/no-confusing-void-expression": 1
+  },
+  "app/lib/vm64Abi.test.ts": {
+    "@typescript-eslint/no-confusing-void-expression": 1
+  },
+  "app/orderbook/fund-flow.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 6,
+    "@typescript-eslint/no-unnecessary-condition": 1,
+    "no-restricted-syntax": 1
+  },
+  "app/orderbook/orderbook-client.test.tsx": {
+    "@typescript-eslint/unbound-method": 2
+  },
+  "app/orderbook/orderbook-client.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 3,
+    "no-restricted-syntax": 1
+  },
+  "app/pending/[query]/PendingList.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 3,
+    "@typescript-eslint/no-misused-promises": 1,
+    "@typescript-eslint/no-unnecessary-condition": 2,
+    "no-restricted-syntax": 2
+  },
+  "app/pending/[query]/page.tsx": {
+    "no-restricted-syntax": 1
+  },
+  "app/pending/loading.tsx": {
+    "@typescript-eslint/no-unsafe-assignment": 1
+  },
+  "app/pending/tx/[hash]/pending-transaction-view.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 5,
+    "@typescript-eslint/no-unnecessary-condition": 9,
+    "no-restricted-syntax": 1
+  },
+  "app/richlist/page.tsx": {
+    "@typescript-eslint/no-unsafe-assignment": 2,
+    "@typescript-eslint/no-unsafe-member-access": 1
+  },
+  "app/richlist/richlist-client.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 2,
+    "@typescript-eslint/no-unnecessary-condition": 1
+  },
+  "app/settings/settings-client.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 5
+  },
+  "app/staking-calculator/staking-calculator-client.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 6,
+    "no-restricted-syntax": 2
+  },
+  "app/transactions/[query]/TransactionsList.tsx": {
+    "@typescript-eslint/no-unnecessary-condition": 6,
+    "@typescript-eslint/no-unnecessary-type-conversion": 1,
+    "@typescript-eslint/no-unsafe-return": 1,
+    "no-restricted-syntax": 1
+  },
+  "app/transactions/[query]/page.tsx": {
+    "@typescript-eslint/no-unsafe-assignment": 1,
+    "@typescript-eslint/no-unsafe-return": 1
+  },
+  "app/transactions/[query]/transactions-client.tsx": {
+    "@typescript-eslint/no-misused-promises": 1,
+    "@typescript-eslint/no-unsafe-argument": 1,
+    "@typescript-eslint/no-unsafe-assignment": 1
+  },
+  "app/transactions/page.tsx": {
+    "@typescript-eslint/no-unsafe-return": 1
+  },
+  "app/tx/[query]/page.tsx": {
+    "@typescript-eslint/no-unsafe-argument": 5,
+    "@typescript-eslint/no-unsafe-assignment": 17,
+    "@typescript-eslint/no-unsafe-member-access": 33,
+    "no-restricted-syntax": 3
+  },
+  "app/tx/[query]/transaction-view.tsx": {
+    "@typescript-eslint/no-unnecessary-condition": 2,
+    "no-restricted-syntax": 1
+  },
+  "app/tx/loading.tsx": {
+    "@typescript-eslint/no-unsafe-assignment": 1
+  },
+  "app/types/address.ts": {
+    "@typescript-eslint/no-redundant-type-constituents": 3
+  },
+  "app/types/transaction.ts": {
+    "@typescript-eslint/no-redundant-type-constituents": 4
+  },
+  "app/validators/[id]/validator-detail-client.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 1,
+    "@typescript-eslint/no-floating-promises": 1,
+    "@typescript-eslint/no-unnecessary-condition": 1,
+    "@typescript-eslint/no-unsafe-argument": 1,
+    "no-restricted-syntax": 1
+  },
+  "app/validators/components/EpochInfoPanel.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 1
+  },
+  "app/validators/components/ValidatorHistoryChart.tsx": {
+    "@typescript-eslint/no-unnecessary-condition": 6,
+    "@typescript-eslint/unbound-method": 1
+  },
+  "app/validators/components/ValidatorStatsCards.tsx": {
+    "@typescript-eslint/no-unsafe-assignment": 1
+  },
+  "app/validators/components/ValidatorStatusChart.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 8
+  },
+  "app/validators/components/ValidatorTable.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 10,
+    "@typescript-eslint/no-unnecessary-condition": 1,
+    "@typescript-eslint/no-unsafe-assignment": 1
+  },
+  "app/validators/page.tsx": {
+    "@typescript-eslint/require-await": 1
+  },
+  "app/validators/validators-client.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 1,
+    "@typescript-eslint/no-misused-promises": 3,
+    "@typescript-eslint/no-unsafe-argument": 3,
+    "@typescript-eslint/no-unsafe-member-access": 1,
+    "@typescript-eslint/use-unknown-in-catch-callback-variable": 4,
+    "no-restricted-syntax": 3
+  },
+  "app/verify-contract/verify-contract-client.tsx": {
+    "@typescript-eslint/no-confusing-void-expression": 10,
+    "@typescript-eslint/no-deprecated": 1,
+    "@typescript-eslint/no-misused-promises": 2,
+    "@typescript-eslint/no-unnecessary-condition": 1,
+    "@typescript-eslint/use-unknown-in-catch-callback-variable": 1,
+    "no-restricted-syntax": 3
+  },
+  "e2e/explorer-ui.spec.ts": {
+    "@typescript-eslint/no-confusing-void-expression": 2,
+    "@typescript-eslint/require-await": 1
+  },
+  "e2e/faucet.spec.ts": {
+    "@typescript-eslint/no-confusing-void-expression": 3,
+    "@typescript-eslint/require-await": 1
+  },
+  "e2e/orderbook-flow.spec.ts": {
+    "@typescript-eslint/no-confusing-void-expression": 2
+  },
+  "e2e/pending-transaction-flow.spec.ts": {
+    "@typescript-eslint/require-await": 2
+  },
+  "e2e/transaction-flow.spec.ts": {
+    "@typescript-eslint/require-await": 2
+  },
+  "eslint.config.mjs": {
+    "import/no-anonymous-default-export": 1
+  },
+  "postcss.config.mjs": {
+    "import/no-anonymous-default-export": 1
+  }
+}

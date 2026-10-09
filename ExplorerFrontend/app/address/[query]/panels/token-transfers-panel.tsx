@@ -16,7 +16,7 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import type { ColumnDef, Row } from '@tanstack/react-table';
+import type { Row } from '@tanstack/react-table';
 import { formatTokenAmount } from '../../../lib/helpers';
 import CopyButton from '../../../components/CopyButton';
 import AddressFingerprint from '../../../components/AddressFingerprint';
@@ -97,12 +97,14 @@ export default function TokenTransfersPanel({
   const previousHideZero = useRef<boolean | undefined>(undefined);
   useEffect(() => {
     if (!ready) return;
-    if (previousHideZero.current !== undefined && previousHideZero.current !== preferences.hideZeroTokenTransfers) {
+    if (
+      previousHideZero.current !== undefined &&
+      previousHideZero.current !== preferences.hideZeroTokenTransfers
+    ) {
       setPageParam(1);
     }
     previousHideZero.current = preferences.hideZeroTokenTransfers;
   }, [preferences.hideZeroTokenTransfers, ready, setPageParam]);
-
 
   useEffect(() => {
     let cancelled = false;
@@ -117,10 +119,9 @@ export default function TokenTransfersPanel({
         // page-1-indexed on the wire (matches sibling /address routes).
         // limit=250 matches the backend cap from PR #112 so the search box
         // filters across the full holder history without paging server-side.
-        const res = await axios.get(
-          `${config.handlerUrl}/address/${address}/token-transfers`,
-          { params: { page: 1, limit: 250 } },
-        );
+        const res = await axios.get(`${config.handlerUrl}/address/${address}/token-transfers`, {
+          params: { page: 1, limit: 250 },
+        });
         if (cancelled) return;
         const next: TokenTransferRow[] = Array.isArray(res.data?.transfers)
           ? res.data.transfers
@@ -145,30 +146,35 @@ export default function TokenTransfersPanel({
 
   const data = useMemo(
     () =>
-      rows.filter(row => !preferences.hideZeroTokenTransfers || !isZeroTokenTransfer(row)).map((row) => {
-        const decimals = typeof row.tokenDecimals === 'number' ? row.tokenDecimals : 0;
-        let tsSeconds = 0;
-        if (row.timestamp) {
-          try {
-            tsSeconds = row.timestamp.startsWith('0x')
-              ? parseInt(row.timestamp, 16)
-              : parseInt(row.timestamp, 10);
-            if (Number.isNaN(tsSeconds)) tsSeconds = 0;
-          } catch {
-            tsSeconds = 0;
+      rows
+        .filter((row) => !preferences.hideZeroTokenTransfers || !isZeroTokenTransfer(row))
+        .map((row) => {
+          const decimals = typeof row.tokenDecimals === 'number' ? row.tokenDecimals : 0;
+          let tsSeconds = 0;
+          if (row.timestamp) {
+            try {
+              tsSeconds = row.timestamp.startsWith('0x')
+                ? parseInt(row.timestamp, 16)
+                : parseInt(row.timestamp, 10);
+              if (Number.isNaN(tsSeconds)) tsSeconds = 0;
+            } catch {
+              tsSeconds = 0;
+            }
           }
-        }
-        return {
-          ...row,
-          formattedAmount: formatTokenAmount(row.amount, decimals),
-          tsSeconds,
-        };
-      }),
-    [rows, preferences.hideZeroTokenTransfers],
+          return {
+            ...row,
+            formattedAmount: formatTokenAmount(row.amount, decimals),
+            tsSeconds,
+          };
+        }),
+    [rows, preferences.hideZeroTokenTransfers]
   );
   const hiddenTransfers = rows.length - data.length;
   const pagination = {
-    pageIndex: Math.min(pageParam - 1, Math.max(0, Math.ceil(data.length / TRANSFERS_PAGE_SIZE) - 1)),
+    pageIndex: Math.min(
+      pageParam - 1,
+      Math.max(0, Math.ceil(data.length / TRANSFERS_PAGE_SIZE) - 1)
+    ),
     pageSize: TRANSFERS_PAGE_SIZE,
   };
 
@@ -197,21 +203,18 @@ export default function TokenTransfersPanel({
                   className="text-accent hover:text-accent-hover font-medium"
                   title={contractAddress}
                 >
-                  {label || (contractAddress ? (
-                    <AddressFingerprint address={contractAddress} />
-                  ) : 'Token')}
+                  {label ||
+                    (contractAddress ? <AddressFingerprint address={contractAddress} /> : 'Token')}
                 </Link>
                 <div className="flex items-center gap-2 text-xs text-text-secondary">
                   <span className="font-mono">{badge}</span>
                   {tokenID && <span className="font-mono">#{tokenID}</span>}
-                  {symbol && symbol !== name && (
-                    <span className="font-mono">({symbol})</span>
-                  )}
+                  {symbol && symbol !== name && <span className="font-mono">({symbol})</span>}
                 </div>
               </div>
             );
           },
-        },
+        }
       ),
       columnHelper.accessor((row) => ({ from: row.from, to: row.to }), {
         id: 'Parties',
@@ -280,17 +283,19 @@ export default function TokenTransfersPanel({
       }),
       columnHelper.accessor('tsSeconds', {
         header: 'Timestamp',
-        cell: (info) => <span><TimeDisplay timestamp={info.getValue()} /></span>,
+        cell: (info) => (
+          <span>
+            <TimeDisplay timestamp={info.getValue()} />
+          </span>
+        ),
       }),
     ],
-    [],
+    []
   );
 
   const table = useReactTable({
     data,
-    columns: columns as ColumnDef<
-      TokenTransferRow & { formattedAmount: string; tsSeconds: number }
-    >[],
+    columns,
     state: { globalFilter: filter, pagination },
     onGlobalFilterChange: setFilter,
     onPaginationChange: (updater) => {
@@ -318,7 +323,7 @@ export default function TokenTransfersPanel({
   }
 
   const renderCard = (
-    row: Row<TokenTransferRow & { formattedAmount: string; tsSeconds: number }>,
+    row: Row<TokenTransferRow & { formattedAmount: string; tsSeconds: number }>
   ): JSX.Element => {
     const r = row.original;
     const badge = r.tokenStandard ? r.tokenStandard.replace(/^ERC-/, 'QRC-') : 'Token';
@@ -387,7 +392,9 @@ export default function TokenTransfersPanel({
 
           <div>
             <div className="text-xs text-text-secondary">Time</div>
-            <div className="text-sm text-text-primary"><TimeDisplay timestamp={r.tsSeconds} /></div>
+            <div className="text-sm text-text-primary">
+              <TimeDisplay timestamp={r.tsSeconds} />
+            </div>
           </div>
         </div>
       </div>
@@ -397,17 +404,24 @@ export default function TokenTransfersPanel({
   return (
     <div className="w-full">
       <div className="p-4 border-b border-border">
-        {hiddenTransfers > 0 && <p className="mb-3 text-xs text-text-muted">
-          {hiddenTransfers} zero-quantity transfer{hiddenTransfers === 1 ? '' : 's'} hidden from the loaded records.
-          {' '}<button type="button" className="text-accent hover:underline" onClick={() => updatePreferences({ hideZeroTokenTransfers: false })}>Show zero transfers</button>
-        </p>}
+        {hiddenTransfers > 0 && (
+          <p className="mb-3 text-xs text-text-muted">
+            {hiddenTransfers} zero-quantity transfer{hiddenTransfers === 1 ? '' : 's'} hidden from
+            the loaded records.{' '}
+            <button
+              type="button"
+              className="text-accent hover:underline"
+              onClick={() => updatePreferences({ hideZeroTokenTransfers: false })}
+            >
+              Show zero transfers
+            </button>
+          </p>
+        )}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="text-sm text-text-secondary">
             {total.toLocaleString('en-US')} transfer{total === 1 ? '' : 's'}
             {rows.length < total && (
-              <span className="ml-2 text-xs">
-                (showing {rows.length.toLocaleString('en-US')})
-              </span>
+              <span className="ml-2 text-xs">(showing {rows.length.toLocaleString('en-US')})</span>
             )}
           </div>
           <DebouncedInput
@@ -425,7 +439,11 @@ export default function TokenTransfersPanel({
       </div>
 
       <div className="overflow-x-auto">
-        {data.length === 0 && rows.length > 0 && <p className="p-6 text-sm text-text-muted">All loaded transfers are hidden by your display settings.</p>}
+        {data.length === 0 && rows.length > 0 && (
+          <p className="p-6 text-sm text-text-muted">
+            All loaded transfers are hidden by your display settings.
+          </p>
+        )}
         {isMobile ? (
           <div className="overflow-hidden">
             {table.getRowModel().rows.map((row) => renderCard(row))}

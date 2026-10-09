@@ -1,8 +1,9 @@
 'use client';
 
+import { parseEpochsData, type EpochsData } from '../../lib/listResponses';
+
 import TimeDisplay from '../../components/TimeDisplay';
 
-import React from 'react';
 import Link from 'next/link';
 import axios from 'axios';
 import config from '../../../config';
@@ -13,27 +14,13 @@ import SearchBar from '../../components/SearchBar';
 import StatusBadge from '../../components/StatusBadge';
 import Pagination from '../../components/Pagination';
 
-interface EpochItem {
-  epoch: string;
-  timestamp: number;
-  status: string;
-  validatorsCount: number;
-  activeCount: number;
-  totalStaked: string;
-}
-
-interface EpochsData {
-  epochs: EpochItem[];
-  total: number;
-  finalizedEpoch: string;
-  justifiedEpoch: string;
-}
-
 const ITEMS_PER_PAGE = 15;
 
 const fetchEpochs = async (page: string): Promise<EpochsData> => {
-  const response = await axios.get<EpochsData>(`${config.handlerUrl}/epochs?page=${page}&limit=${ITEMS_PER_PAGE}`);
-  return response.data;
+  const response = await axios.get<unknown>(
+    `${config.handlerUrl}/epochs?page=${page}&limit=${ITEMS_PER_PAGE}`
+  );
+  return parseEpochsData(response.data);
 };
 
 interface EpochsClientProps {
@@ -70,7 +57,9 @@ export default function EpochsClient({ initialData, initialPage }: EpochsClientP
         <h1 className="section-title mb-4">Epochs</h1>
         <div className="bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-xl">
           <p className="font-bold">Error:</p>
-          <p className="text-sm">{error instanceof Error ? error.message : 'Failed to load epochs'}</p>
+          <p className="text-sm">
+            {error instanceof Error ? error.message : 'Failed to load epochs'}
+          </p>
         </div>
       </div>
     );
@@ -89,24 +78,48 @@ export default function EpochsClient({ initialData, initialPage }: EpochsClientP
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Epoch</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Time</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Status</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">Validators</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">Active</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:table-cell">Total Staked</th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">
+                  Epoch
+                </th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">
+                  Time
+                </th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">
+                  Validators
+                </th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">
+                  Active
+                </th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:table-cell">
+                  Total Staked
+                </th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 Array.from({ length: ITEMS_PER_PAGE }).map((_, i) => (
                   <tr key={i} className="border-b border-border last:border-b-0">
-                    <td className="px-4 py-3"><div className="h-4 w-12 skeleton" /></td>
-                    <td className="px-4 py-3"><div className="h-4 w-16 skeleton" /></td>
-                    <td className="px-4 py-3"><div className="h-4 w-16 skeleton" /></td>
-                    <td className="px-4 py-3 hidden sm:table-cell"><div className="h-4 w-10 skeleton" /></td>
-                    <td className="px-4 py-3 hidden sm:table-cell"><div className="h-4 w-10 skeleton" /></td>
-                    <td className="px-4 py-3 hidden md:table-cell"><div className="h-4 w-24 skeleton" /></td>
+                    <td className="px-4 py-3">
+                      <div className="h-4 w-12 skeleton" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="h-4 w-16 skeleton" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="h-4 w-16 skeleton" />
+                    </td>
+                    <td className="px-4 py-3 hidden sm:table-cell">
+                      <div className="h-4 w-10 skeleton" />
+                    </td>
+                    <td className="px-4 py-3 hidden sm:table-cell">
+                      <div className="h-4 w-10 skeleton" />
+                    </td>
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      <div className="h-4 w-24 skeleton" />
+                    </td>
                   </tr>
                 ))
               ) : !data?.epochs?.length ? (
@@ -122,11 +135,16 @@ export default function EpochsClient({ initialData, initialPage }: EpochsClientP
                     className="border-b border-border last:border-b-0 hover:bg-surface transition-colors"
                   >
                     <td className="px-4 py-3">
-                      <Link href={`/epoch/${epoch.epoch}`} className="text-accent hover:text-accent-hover hover:underline font-medium tabular-nums">
+                      <Link
+                        href={`/epoch/${epoch.epoch}`}
+                        className="text-accent hover:text-accent-hover hover:underline font-medium tabular-nums"
+                      >
                         {formatNumberWithCommas(epoch.epoch)}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-text-secondary tabular-nums"><TimeDisplay timestamp={epoch.timestamp} relative /></td>
+                    <td className="px-4 py-3 text-text-secondary tabular-nums">
+                      <TimeDisplay timestamp={epoch.timestamp} relative />
+                    </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={epoch.status} />
                     </td>

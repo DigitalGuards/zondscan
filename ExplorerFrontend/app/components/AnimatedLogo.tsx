@@ -1,7 +1,6 @@
-"use client"
+'use client';
 
-import React from "react"
-import Image from "next/image"
+import Image from 'next/image';
 
 /**
  * ZondScan logo mark.
@@ -14,12 +13,12 @@ import Image from "next/image"
  * drops ~360 KB of media from every first paint.
  */
 export default function AnimatedLogo({
-  className = "",
-  alt = "",
+  className = '',
+  alt = '',
 }: {
-  className?: string
+  className?: string;
   /** Accessible name. Leave empty (decorative) when the surrounding link already has visible text. */
-  alt?: string
+  alt?: string;
 }) {
   return (
     <div className={`relative h-full w-full ${className}`}>
@@ -42,5 +41,5 @@ export default function AnimatedLogo({
                    group-hover:drop-shadow-[0_0_22px_rgba(255,167,41,0.45)]"
       />
     </div>
-  )
+  );
 }

@@ -48,15 +48,24 @@ export default function GlobalError({
             padding: '2rem',
           }}
         >
-          <h1 style={{ color: '#ffa729', fontSize: '1.5rem', marginTop: 0, marginBottom: '0.75rem' }}>
+          <h1
+            style={{ color: '#ffa729', fontSize: '1.5rem', marginTop: 0, marginBottom: '0.75rem' }}
+          >
             Something went wrong
           </h1>
           <p style={{ color: '#9aa3b2', marginBottom: '1.5rem' }}>
-            The application hit an unexpected error in its layout. You can try
-            reloading, or go to the home page.
+            The application hit an unexpected error in its layout. You can try reloading, or go to
+            the home page.
           </p>
           {error?.digest ? (
-            <p style={{ color: '#667085', fontSize: '0.75rem', fontFamily: 'monospace', marginBottom: '1.5rem' }}>
+            <p
+              style={{
+                color: '#667085',
+                fontSize: '0.75rem',
+                fontFamily: 'monospace',
+                marginBottom: '1.5rem',
+              }}
+            >
               Error ID: {error.digest}
             </p>
           ) : null}
@@ -81,7 +90,6 @@ export default function GlobalError({
                 so we must do a hard navigation rather than a client-side
                 push. The lint rule's normal next/link guidance doesn't
                 apply at this boundary. */}
-            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
             <a
               href="/"
               style={{

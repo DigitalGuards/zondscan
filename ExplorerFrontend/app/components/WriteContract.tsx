@@ -7,23 +7,11 @@ import ConnectButton from './ConnectButton';
 import type { QRLConnectProvider } from '../lib/qrlConnect';
 import type { ContractData } from '../types/address';
 import { assertVm64AbiSupport } from '../lib/vm64Abi';
+import { parseAbiFunctions, type AbiFunction } from '../lib/contractAbi';
+import { isRecord, errorMessage } from '../lib/guards';
 import { classifyStoredVerification } from '../lib/storedVerification';
 import ContractInteractionProvenanceNotice from './ContractInteractionProvenanceNotice';
 import { sendExplorerTransaction } from '../lib/explorerTransaction';
-
-interface AbiInput {
-  name: string;
-  type: string;
-  components?: AbiInput[];
-}
-
-interface AbiFunction {
-  type: 'function';
-  name: string;
-  stateMutability: 'view' | 'pure' | 'nonpayable' | 'payable';
-  inputs: AbiInput[];
-  outputs?: { name: string; type: string }[];
-}
 
 interface WriteContractProps {
   contractData: ContractData;
@@ -44,26 +32,20 @@ export default function WriteContract({ contractData }: WriteContractProps): JSX
   const [provider, setProvider] = useState<QRLConnectProvider | null>(null);
   const verificationStatus = useMemo(
     () => classifyStoredVerification(contractData),
-    [contractData],
+    [contractData]
   );
 
-  const writeFns = useMemo(() => {
-    if (
-      !contractData.verified ||
-      verificationStatus !== 'digest-backed' ||
-      !contractData.abi
-    ) {
-      return [] as AbiFunction[];
+  const writeFns = useMemo<AbiFunction[]>(() => {
+    if (!contractData.verified || verificationStatus !== 'digest-backed' || !contractData.abi) {
+      return [];
     }
     try {
-      const parsed = JSON.parse(contractData.abi) as AbiFunction[];
+      const parsed = parseAbiFunctions(contractData.abi);
       return parsed.filter(
-        f =>
-          f.type === 'function' &&
-          (f.stateMutability === 'nonpayable' || f.stateMutability === 'payable'),
+        (f) => f.stateMutability === 'nonpayable' || f.stateMutability === 'payable'
       );
     } catch {
-      return [] as AbiFunction[];
+      return [];
     }
   }, [contractData.abi, contractData.verified, verificationStatus]);
 
@@ -75,20 +57,12 @@ export default function WriteContract({ contractData }: WriteContractProps): JSX
     );
   }
   if (verificationStatus !== 'digest-backed') {
-    return (
-      <ContractInteractionProvenanceNotice
-        status={verificationStatus}
-        interaction="Write"
-      />
-    );
+    return <ContractInteractionProvenanceNotice status={verificationStatus} interaction="Write" />;
   }
   if (writeFns.length === 0) {
     return (
       <div className="space-y-3">
-        <ContractInteractionProvenanceNotice
-          status={verificationStatus}
-          interaction="Write"
-        />
+        <ContractInteractionProvenanceNotice status={verificationStatus} interaction="Write" />
         <div className="rounded-lg border border-border bg-card-gradient p-4 text-sm text-text-secondary">
           This contract has no state-changing functions to call.
         </div>
@@ -98,10 +72,7 @@ export default function WriteContract({ contractData }: WriteContractProps): JSX
 
   return (
     <div className="space-y-3 md:space-y-4">
-      <ContractInteractionProvenanceNotice
-        status={verificationStatus}
-        interaction="Write"
-      />
+      <ContractInteractionProvenanceNotice status={verificationStatus} interaction="Write" />
       <div className="rounded-lg border border-border bg-card-gradient p-3 md:p-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
         <div>
           <div className="text-xs md:text-sm font-medium text-text-primary">Wallet pairing</div>
@@ -115,7 +86,7 @@ export default function WriteContract({ contractData }: WriteContractProps): JSX
       <div className="space-y-2 md:space-y-3">
         {writeFns.map((fn, idx) => (
           <WriteFunctionCard
-            key={`${fn.name}-${idx}-${fn.inputs.map(i => i.type).join(',')}`}
+            key={`${fn.name}-${idx}-${fn.inputs.map((i) => i.type).join(',')}`}
             fn={fn}
             address={contractData.address}
             account={account}
@@ -146,8 +117,9 @@ function WriteFunctionCard({
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
 
-  const setVal = (i: number, v: string) =>
-    setValues(cur => cur.map((x, j) => (j === i ? v : x)));
+  const setVal = (i: number, v: string) => {
+    setValues((cur) => cur.map((x, j) => (j === i ? v : x)));
+  };
 
   const onWrite = async () => {
     if (!provider || !account) {
@@ -161,7 +133,7 @@ function WriteFunctionCard({
     try {
       assertVm64AbiSupport();
       const args = fn.inputs.map((input, i) => parseArg(values[i] ?? '', input.type));
-      const data = zondAbi.encodeFunctionCall(fn as never, args as never[]);
+      const data = zondAbi.encodeFunctionCall(fn, args);
 
       const tx: Record<string, string> = {
         from: account,
@@ -176,26 +148,28 @@ function WriteFunctionCard({
       setTxHash(result);
     } catch (e) {
       // EIP-1193 user-rejection: code 4001.
-      const code = (e as { code?: number } | undefined)?.code;
+      const code = isRecord(e) ? e.code : undefined;
       if (code === 4001) {
         setRejected(true);
         setError('Request rejected in wallet');
       } else {
-        setError(e instanceof Error ? e.message : String(e));
+        setError(errorMessage(e));
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const sig = `${fn.name}(${fn.inputs.map(i => `${i.type}${i.name ? ' ' + i.name : ''}`).join(', ')})`;
+  const sig = `${fn.name}(${fn.inputs.map((i) => `${i.type}${i.name ? ' ' + i.name : ''}`).join(', ')})`;
   const disabled = loading || !account || !provider;
 
   return (
     <div className="rounded-lg border border-border bg-card-gradient">
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => {
+          setOpen((o) => !o);
+        }}
         aria-expanded={open}
         className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left"
       >
@@ -217,7 +191,9 @@ function WriteFunctionCard({
               </div>
               <input
                 value={values[i] ?? ''}
-                onChange={e => setVal(i, e.target.value)}
+                onChange={(e) => {
+                  setVal(i, e.target.value);
+                }}
                 placeholder={placeholderFor(input.type)}
                 className="form-input font-mono text-xs"
               />
@@ -231,7 +207,9 @@ function WriteFunctionCard({
               </div>
               <input
                 value={value}
-                onChange={e => setValue(e.target.value)}
+                onChange={(e) => {
+                  setValue(e.target.value);
+                }}
                 placeholder="0.0"
                 className="form-input font-mono text-xs"
               />
@@ -240,7 +218,9 @@ function WriteFunctionCard({
 
           <button
             type="button"
-            onClick={onWrite}
+            onClick={() => {
+              void onWrite();
+            }}
             disabled={disabled}
             className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-accent text-background text-xs font-medium hover:bg-accent-hover transition-colors disabled:opacity-50"
           >
@@ -262,7 +242,10 @@ function WriteFunctionCard({
           {txHash && !error && (
             <div className="rounded-md border border-green-500/40 bg-green-500/10 p-2 text-xs text-green-300">
               <div className="mb-1">Broadcast:</div>
-              <Link href={`/tx/${txHash}`} className="font-mono text-accent hover:text-accent-hover break-all">
+              <Link
+                href={`/tx/${txHash}`}
+                className="font-mono text-accent hover:text-accent-hover break-all"
+              >
                 {txHash}
               </Link>
             </div>

@@ -8,6 +8,7 @@ import type { Collection, ObjectId } from 'mongodb';
 import { getFaucetDb } from './mongodb';
 import { canonicalizeQrlAddress } from './qrlAddress';
 import { publicTurnstileSiteKey } from '../faucet/captcha';
+import { errorMessage, isRecord, isArray } from './guards';
 
 /**
  * Server-only faucet core: configuration, QRL address handling, account
@@ -78,9 +79,7 @@ export function getFaucetConfig(): FaucetConfig {
   // An environment alias keeps the public key runtime-configurable in Next builds.
   const runtimeEnv = process.env;
   const siteKey = runtimeEnv.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
-  const captchaEnabled = Boolean(
-    process.env.TURNSTILE_SECRET && siteKey,
-  );
+  const captchaEnabled = Boolean(process.env.TURNSTILE_SECRET && siteKey);
   // The faucet needs both a funding seed AND a Mongo connection for the
   // cooldown store; without the latter every claim would fail at runtime, so
   // we only report "online" when both are present.
@@ -95,7 +94,7 @@ export function getFaucetConfig(): FaucetConfig {
         'Set TURNSTILE_SECRET + NEXT_PUBLIC_TURNSTILE_SITE_KEY before exposing it publicly' +
         (isProd && !allowNoCaptcha
           ? '. Claims are disabled until captcha is configured (set FAUCET_ALLOW_NO_CAPTCHA=true to override).'
-          : '.'),
+          : '.')
     );
   }
 
@@ -123,7 +122,7 @@ export class FaucetError extends Error {
       | 'INSUFFICIENT_FAUCET_FUNDS'
       | 'BROADCAST_FAILED',
     message: string,
-    public meta?: Record<string, unknown>,
+    public meta?: Record<string, unknown>
   ) {
     super(message);
     this.name = 'FaucetError';
@@ -173,14 +172,12 @@ export function ipCooldownKey(ip: string | null): string | null {
   if (halves.length === 2) {
     const fill = 8 - head.length - tail.length;
     if (fill < 0) return raw;
-    groups = [...head, ...Array(fill).fill('0'), ...tail];
+    groups = [...head, ...Array.from({ length: fill }, () => '0'), ...tail];
   } else {
     groups = head;
   }
   if (groups.length < 4) return raw;
-  const prefix = groups
-    .slice(0, 4)
-    .map(g => (g || '0').toLowerCase().replace(/^0+(?=.)/, ''));
+  const prefix = groups.slice(0, 4).map((g) => (g || '0').toLowerCase().replace(/^0+(?=.)/, ''));
   return prefix.join(':') + '::/64';
 }
 
@@ -225,10 +222,28 @@ function getSeed(): string {
   return cachedSeed;
 }
 
+function rpcQuantity(value: unknown): bigint {
+  if (
+    (typeof value === 'bigint' && value >= BigInt(0)) ||
+    (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) ||
+    (typeof value === 'string' && /^(?:\d+|0x[0-9a-fA-F]+)$/.test(value))
+  ) {
+    return BigInt(value);
+  }
+  throw new FaucetError('BROADCAST_FAILED', 'The node returned an invalid transaction quantity');
+}
+
 /** Canonical `Q…` address of the configured faucet account. */
 export function getFaucetAddress(): string {
   if (!cachedFaucetAddress) {
-    const account = getWeb3().qrl.accounts.seedToAccount(getSeed());
+    const account: unknown = getWeb3().qrl.accounts.seedToAccount(getSeed());
+    if (
+      !isRecord(account) ||
+      typeof account.address !== 'string' ||
+      !canonicalizeQrlAddress(account.address)
+    ) {
+      throw new FaucetError('NOT_CONFIGURED', 'Invalid faucet funding account');
+    }
     cachedFaucetAddress = account.address;
   }
   return cachedFaucetAddress;
@@ -260,7 +275,7 @@ function runExclusive<T>(fn: () => Promise<T>): Promise<T> {
   // rejection propagate into the *next* waiter's run.
   dripLock = result.then(
     () => undefined,
-    () => undefined,
+    () => undefined
   );
   return result;
 }
@@ -269,12 +284,15 @@ function runExclusive<T>(fn: () => Promise<T>): Promise<T> {
 async function drippedQuantaSince(windowStart: Date): Promise<bigint> {
   const db = await getFaucetDb();
   const col = db.collection<FaucetClaim>(CLAIMS_COLLECTION);
-  const rows = await col
+  const rows: unknown = await col
     .find({ createdAt: { $gt: windowStart } }, { projection: { amount: 1 } })
     .toArray();
-  return rows.reduce((acc, r) => {
-    const v = String(r.amount ?? '');
-    return /^\d+$/.test(v) ? acc + BigInt(v) : acc;
+  if (!isArray(rows)) throw new FaucetError('BROADCAST_FAILED', 'Invalid faucet claim history');
+  return rows.reduce<bigint>((acc, r) => {
+    if (!isRecord(r) || typeof r.amount !== 'string' || !/^\d+$/.test(r.amount)) {
+      throw new FaucetError('BROADCAST_FAILED', 'Invalid faucet claim amount');
+    }
+    return acc + BigInt(r.amount);
   }, BigInt(0));
 }
 
@@ -306,7 +324,7 @@ async function dripExclusive(to: string): Promise<DripResult> {
     if (used > BigInt(dailyCapQuanta)) {
       throw new FaucetError(
         'DAILY_CAP',
-        'The faucet has reached its daily limit. Please try again tomorrow.',
+        'The faucet has reached its daily limit. Please try again tomorrow.'
       );
     }
   }
@@ -316,12 +334,13 @@ async function dripExclusive(to: string): Promise<DripResult> {
   // Gas: 21000 for a native transfer; fee derived from the node's gas price.
   const gas = BigInt(21000);
   const oneGquanta = BigInt('1000000000'); // 1 gquanta fallback
-  let baseGasPrice: bigint;
+  let gasPrice: unknown;
   try {
-    baseGasPrice = BigInt(await web3.qrl.getGasPrice());
+    gasPrice = await web3.qrl.getGasPrice();
   } catch {
-    baseGasPrice = oneGquanta;
+    gasPrice = oneGquanta;
   }
+  let baseGasPrice = rpcQuantity(gasPrice);
   if (baseGasPrice <= BigInt(0)) baseGasPrice = oneGquanta;
   const maxPriorityFeePerGas = baseGasPrice;
   const maxFeePerGas = baseGasPrice * BigInt(2);
@@ -329,10 +348,10 @@ async function dripExclusive(to: string): Promise<DripResult> {
   // Guard against an empty faucet before we bother signing.
   let balance: bigint;
   try {
-    balance = BigInt(await web3.qrl.getBalance(from));
+    balance = rpcQuantity(await web3.qrl.getBalance(from));
   } catch (err) {
     throw new FaucetError('BROADCAST_FAILED', 'Unable to reach the QRL node', {
-      cause: (err as Error).message,
+      cause: errorMessage(err),
     });
   }
   const maxCost = value + gas * maxFeePerGas;
@@ -340,11 +359,14 @@ async function dripExclusive(to: string): Promise<DripResult> {
     throw new FaucetError(
       'INSUFFICIENT_FAUCET_FUNDS',
       'The faucet is temporarily out of funds. Please try again later.',
-      { faucetAddress: from },
+      { faucetAddress: from }
     );
   }
 
-  const nonce = await web3.qrl.getTransactionCount(from, 'pending');
+  const nonce = rpcQuantity(await web3.qrl.getTransactionCount(from, 'pending'));
+  if (nonce > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new FaucetError('BROADCAST_FAILED', 'The node returned an unsafe transaction nonce');
+  }
 
   const tx = {
     from,
@@ -360,12 +382,21 @@ async function dripExclusive(to: string): Promise<DripResult> {
   let rawTransaction: string;
   let txHash: string;
   try {
-    const signed = await web3.qrl.accounts.signTransaction(tx, seed);
+    const signed: unknown = await web3.qrl.accounts.signTransaction(tx, seed);
+    if (
+      !isRecord(signed) ||
+      typeof signed.rawTransaction !== 'string' ||
+      !/^0x(?:[0-9a-fA-F]{2})+$/.test(signed.rawTransaction) ||
+      typeof signed.transactionHash !== 'string' ||
+      !/^0x[0-9a-fA-F]{64}$/.test(signed.transactionHash)
+    ) {
+      throw new FaucetError('BROADCAST_FAILED', 'The signer returned an invalid transaction');
+    }
     rawTransaction = signed.rawTransaction;
     txHash = signed.transactionHash;
   } catch (err) {
     throw new FaucetError('BROADCAST_FAILED', 'Failed to sign the faucet transaction', {
-      cause: (err as Error).message,
+      cause: errorMessage(err),
     });
   }
 
@@ -374,13 +405,19 @@ async function dripExclusive(to: string): Promise<DripResult> {
   // insufficient funds the balance check missed, etc.).
   await new Promise<void>((resolve, reject) => {
     const pe = web3.qrl.sendSignedTransaction(rawTransaction);
-    pe.on('transactionHash', () => resolve());
-    pe.on('error', (e: Error) => reject(e));
+    pe.on('transactionHash', () => {
+      resolve();
+    });
+    pe.on('error', (e: unknown) => {
+      reject(e instanceof Error ? e : new Error(errorMessage(e)));
+    });
     // If a receipt arrives first (fast chains), that's success too.
-    pe.on('receipt', () => resolve());
-  }).catch((err: Error) => {
+    pe.on('receipt', () => {
+      resolve();
+    });
+  }).catch((err: unknown) => {
     throw new FaucetError('BROADCAST_FAILED', 'The node rejected the faucet transaction', {
-      cause: err.message,
+      cause: errorMessage(err),
     });
   });
 
@@ -394,7 +431,10 @@ async function dripExclusive(to: string): Promise<DripResult> {
  * a no-op (returns true) so the faucet still works in dev without captcha keys;
  * production deploys set both keys to enforce it.
  */
-export async function verifyTurnstile(token: string | undefined, ip: string | null): Promise<boolean> {
+export async function verifyTurnstile(
+  token: string | undefined,
+  ip: string | null
+): Promise<boolean> {
   const secret = process.env.TURNSTILE_SECRET;
   if (!secret) return true; // captcha not enforced
   if (!token) return false;
@@ -410,8 +450,8 @@ export async function verifyTurnstile(token: string | undefined, ip: string | nu
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body,
     });
-    const data = (await res.json()) as { success?: boolean };
-    return data.success === true;
+    const data: unknown = await res.json();
+    return isRecord(data) && data.success === true;
   } catch {
     return false;
   }
@@ -528,7 +568,7 @@ export async function claimSlot(address: string, ip: string | null): Promise<Cla
         },
       ],
     },
-    { sort: { createdAt: 1 } },
+    { sort: { createdAt: 1 } }
   );
 
   if (rival) {
@@ -551,7 +591,7 @@ export async function finalizeClaim(claimId: ObjectId, result: DripResult): Prom
   const col = db.collection<FaucetClaim>(CLAIMS_COLLECTION);
   await col.updateOne(
     { _id: claimId },
-    { $set: { txHash: result.txHash, amount: result.amount, address: result.to } },
+    { $set: { txHash: result.txHash, amount: result.amount, address: result.to } }
   );
 }
 

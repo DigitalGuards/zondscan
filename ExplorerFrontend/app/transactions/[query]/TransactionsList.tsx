@@ -57,7 +57,9 @@ export default function TransactionsList({
 
   return (
     <div className="py-4 sm:py-6 lg:py-8">
-      <h1 className="section-title mb-4"><InterfaceText text="Transactions" /></h1>
+      <h1 className="section-title mb-4">
+        <InterfaceText text="Transactions" />
+      </h1>
 
       <div className="mb-6">
         <SearchBar />
@@ -77,13 +79,27 @@ export default function TransactionsList({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="text-left px-2 2xl:px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider"><InterfaceText text="Hash" /></th>
-                    <th className="text-left px-2 2xl:px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:[display:table-cell]">Type</th>
-                    <th className="text-left px-2 2xl:px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden xl:[display:table-cell]"><InterfaceText text="From" /></th>
-                    <th className="text-left px-2 2xl:px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden xl:[display:table-cell]"><InterfaceText text="To" /></th>
-                    <th className="text-left px-2 2xl:px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:[display:table-cell]"><InterfaceText text="Block" /></th>
-                    <th className="text-right px-2 2xl:px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider"><InterfaceText text="Amount" /></th>
-                    <th className="text-left px-2 2xl:px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider"><InterfaceText text="Time" /></th>
+                    <th className="text-left px-2 2xl:px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">
+                      <InterfaceText text="Hash" />
+                    </th>
+                    <th className="text-left px-2 2xl:px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:[display:table-cell]">
+                      Type
+                    </th>
+                    <th className="text-left px-2 2xl:px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden xl:[display:table-cell]">
+                      <InterfaceText text="From" />
+                    </th>
+                    <th className="text-left px-2 2xl:px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden xl:[display:table-cell]">
+                      <InterfaceText text="To" />
+                    </th>
+                    <th className="text-left px-2 2xl:px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:[display:table-cell]">
+                      <InterfaceText text="Block" />
+                    </th>
+                    <th className="text-right px-2 2xl:px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">
+                      <InterfaceText text="Amount" />
+                    </th>
+                    <th className="text-left px-2 2xl:px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">
+                      <InterfaceText text="Time" />
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -92,7 +108,7 @@ export default function TransactionsList({
                     // The API capitalises field names (BlockNumber/From/To)
                     // while the index signature on Transaction allows both
                     // cases. Parse the block number defensively for hex/decimal.
-                    const blockRaw = (tx.BlockNumber ?? tx.blockNumber) as string | number | undefined;
+                    const blockRaw = tx.BlockNumber ?? tx.blockNumber;
                     const blockNum = (() => {
                       if (blockRaw === undefined || blockRaw === null) return null;
                       if (typeof blockRaw === 'number') return blockRaw;
@@ -103,8 +119,10 @@ export default function TransactionsList({
                       const n = parseInt(String(blockRaw), 10);
                       return Number.isFinite(n) ? n : null;
                     })();
-                    const fromAddr = (tx.From ?? tx.from) as string | undefined;
-                    const toAddr = (tx.To ?? tx.to) as string | undefined;
+                    const fromValue = tx.From ?? tx.from;
+                    const fromAddr = typeof fromValue === 'string' ? fromValue : undefined;
+                    const toValue = tx.To ?? tx.to;
+                    const toAddr = typeof toValue === 'string' ? toValue : undefined;
 
                     return (
                       <tr
@@ -119,10 +137,17 @@ export default function TransactionsList({
                               title={tx.TxHash}
                             >
                               <span className="sm:hidden">{truncateHash(tx.TxHash, 6, 4)}</span>
-                              <span className="hidden sm:inline">{truncateHash(tx.TxHash, 10, 6)}</span>
+                              <span className="hidden sm:inline">
+                                {truncateHash(tx.TxHash, 10, 6)}
+                              </span>
                             </Link>
                             <span className="hidden sm:inline-flex">
-                              <CopyButton value={tx.TxHash} label="Copy hash" size="sm" stopPropagation />
+                              <CopyButton
+                                value={tx.TxHash}
+                                label="Copy hash"
+                                size="sm"
+                                stopPropagation
+                              />
                             </span>
                           </div>
                         </td>

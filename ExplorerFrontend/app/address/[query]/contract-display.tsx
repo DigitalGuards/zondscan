@@ -1,4 +1,3 @@
-import React from 'react';
 import { decodeToHex, formatAddress } from '../../lib/helpers';
 import CopyButton from '../../components/CopyButton';
 import AddressFingerprint from '../../components/AddressFingerprint';
@@ -15,11 +14,11 @@ export default function ContractDisplay({ contractCode }: ContractDisplayProps):
   // Decode base64 contract addresses to hex
   const rawCreatorAddress = `0x${decodeToHex(contractCode.contractCreatorAddress)}`;
   const creatorAddress = formatAddress(rawCreatorAddress);
-  
+
   return (
     <div className="rounded-xl bg-surface-2 border border-border p-4 md:p-6 space-y-4">
       <h3 className="font-display text-lg font-semibold text-text-primary">Contract Information</h3>
-      
+
       <div className="space-y-3">
         {/* Creator Address */}
         <div>
@@ -37,7 +36,7 @@ export default function ContractDisplay({ contractCode }: ContractDisplayProps):
         <div>
           <div className="text-sm text-text-secondary mb-1">Contract Size</div>
           <div className="text-sm text-text-secondary">
-            {Math.ceil(contractCode.contractCode.length * 3 / 4)} bytes
+            {Math.ceil((contractCode.contractCode.length * 3) / 4)} bytes
           </div>
         </div>
       </div>

@@ -1,38 +1,27 @@
-import { sha256 } from "@noble/hashes/sha256.js";
-import {
-  bytesToHex,
-  concatBytes,
-  utf8ToBytes,
-} from "@noble/hashes/utils.js";
+import { isArray, isRecord } from './guards';
+import { sha256 } from '@noble/hashes/sha256.js';
+import { bytesToHex, concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
-import type {
-  CompilerProvenance,
-  CompilerProvenanceComponent,
-} from "../types/address";
+import type { CompilerProvenance, CompilerProvenanceComponent } from '../types/address';
 
-export const COMPILER_PROVENANCE_SCHEMA_V2 =
-  "qrl.contract-compiler-provenance.v2";
-const NATIVE_COMPONENT_NAMES = ["hypc", "nsjail", "policy"] as const;
+export const COMPILER_PROVENANCE_SCHEMA_V2 = 'qrl.contract-compiler-provenance.v2';
+const NATIVE_COMPONENT_NAMES = ['hypc', 'nsjail', 'policy'] as const;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
 export type CompilerProvenanceState =
-  | { status: "legacy-unrecorded" }
-  | { status: "invalid-recorded" }
-  | { status: "digest-backed"; provenance: CompilerProvenance };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+  | { status: 'legacy-unrecorded' }
+  | { status: 'invalid-recorded' }
+  | { status: 'digest-backed'; provenance: CompilerProvenance };
 
 function parseComponent(
   value: unknown,
-  expectedName: (typeof NATIVE_COMPONENT_NAMES)[number],
+  expectedName: (typeof NATIVE_COMPONENT_NAMES)[number]
 ): CompilerProvenanceComponent | null {
   if (!isRecord(value)) return null;
   if (
-    typeof value.name !== "string" ||
+    typeof value.name !== 'string' ||
     value.name !== expectedName ||
-    typeof value.sha256 !== "string" ||
+    typeof value.sha256 !== 'string' ||
     !SHA256_PATTERN.test(value.sha256)
   ) {
     return null;
@@ -42,7 +31,7 @@ function parseComponent(
 
 function encodeUint64BE(value: number): Uint8Array {
   if (!Number.isSafeInteger(value) || value < 0) {
-    throw new RangeError("compiler provenance length must be a safe unsigned integer");
+    throw new RangeError('compiler provenance length must be a safe unsigned integer');
   }
   const encoded = new Uint8Array(8);
   const view = new DataView(encoded.buffer);
@@ -61,26 +50,23 @@ export function nativeSandboxCompilerExecutionDigestV2(
   buildId: string,
   hypcSHA256: string,
   nsjailSHA256: string,
-  policySHA256: string,
+  policySHA256: string
 ): string {
   const components = [
-    ["hypc", hypcSHA256],
-    ["nsjail", nsjailSHA256],
-    ["policy", policySHA256],
+    ['hypc', hypcSHA256],
+    ['nsjail', nsjailSHA256],
+    ['policy', policySHA256],
   ] as const;
   return bytesToHex(
     sha256(
       concatBytes(
         encodeField(COMPILER_PROVENANCE_SCHEMA_V2),
-        encodeField("native"),
+        encodeField('native'),
         encodeField(buildId),
         encodeUint64BE(components.length),
-        ...components.flatMap(([name, digest]) => [
-          encodeField(name),
-          encodeField(digest),
-        ]),
-      ),
-    ),
+        ...components.flatMap(([name, digest]) => [encodeField(name), encodeField(digest)])
+      )
+    )
   );
 }
 
@@ -90,53 +76,52 @@ export function nativeSandboxCompilerExecutionDigestV2(
  */
 export function classifyCompilerProvenance(
   value: unknown,
-  compilerVersion?: string,
+  compilerVersion?: string
 ): CompilerProvenanceState {
   if (value === undefined) {
-    return { status: "legacy-unrecorded" };
+    return { status: 'legacy-unrecorded' };
   }
-  if (!isRecord(value)) return { status: "invalid-recorded" };
+  if (!isRecord(value)) return { status: 'invalid-recorded' };
 
   const rawComponents = value.components;
-  if (
-    !Array.isArray(rawComponents) ||
-    rawComponents.length !== NATIVE_COMPONENT_NAMES.length
-  ) {
-    return { status: "invalid-recorded" };
+  if (!isArray(rawComponents) || rawComponents.length !== NATIVE_COMPONENT_NAMES.length) {
+    return { status: 'invalid-recorded' };
   }
-  const components = NATIVE_COMPONENT_NAMES.map((name, index) =>
-    parseComponent(rawComponents[index], name),
-  );
+  const hypc = parseComponent(rawComponents[0], 'hypc');
+  const nsjail = parseComponent(rawComponents[1], 'nsjail');
+  const policy = parseComponent(rawComponents[2], 'policy');
   if (
-    components.some((component) => component === null) ||
+    !hypc ||
+    !nsjail ||
+    !policy ||
     value.schema !== COMPILER_PROVENANCE_SCHEMA_V2 ||
-    value.kind !== "native" ||
-    typeof value.buildId !== "string" ||
+    value.kind !== 'native' ||
+    typeof value.buildId !== 'string' ||
     value.buildId.length === 0 ||
-    typeof compilerVersion !== "string" ||
+    typeof compilerVersion !== 'string' ||
     compilerVersion.length === 0 ||
     compilerVersion !== value.buildId ||
-    typeof value.executionDigest !== "string" ||
+    typeof value.executionDigest !== 'string' ||
     !SHA256_PATTERN.test(value.executionDigest) ||
     value.executionDigest !==
       nativeSandboxCompilerExecutionDigestV2(
         value.buildId,
-        components[0]!.sha256,
-        components[1]!.sha256,
-        components[2]!.sha256,
+        hypc.sha256,
+        nsjail.sha256,
+        policy.sha256
       )
   ) {
-    return { status: "invalid-recorded" };
+    return { status: 'invalid-recorded' };
   }
 
   return {
-    status: "digest-backed",
+    status: 'digest-backed',
     provenance: {
       schema: value.schema,
       kind: value.kind,
       buildId: value.buildId,
       executionDigest: value.executionDigest,
-      components: components as CompilerProvenanceComponent[],
+      components: [hypc, nsjail, policy],
     },
   };
 }

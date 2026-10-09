@@ -1,17 +1,18 @@
-"use client";
+'use client';
 
-import { useEffect, useMemo, useState } from "react";
-import axios, { AxiosError } from "axios";
-import type { ContractData } from "../types/address";
+import { useEffect, useMemo, useState } from 'react';
+import axios from 'axios';
+import { isRecord, errorMessage, InvalidInputError } from '../lib/guards';
+import type { ContractData } from '../types/address';
 import {
   hasAuthoritativeCreatorProvenance,
   parseContractExplainChallenge,
   signContractExplainChallenge,
-} from "../lib/contractExplainAuth";
-import { canonicalizeQrlAddress } from "../lib/qrlAddress";
-import { classifyStoredVerification } from "../lib/storedVerification";
-import { getQrlConnect } from "../lib/qrlConnect";
-import config from "../../config";
+} from '../lib/contractExplainAuth';
+import { canonicalizeQrlAddress } from '../lib/qrlAddress';
+import { classifyStoredVerification } from '../lib/storedVerification';
+import { getQrlConnect } from '../lib/qrlConnect';
+import config from '../../config';
 
 interface AiExplainCardProps {
   contractData: ContractData;
@@ -23,6 +24,17 @@ interface ExplainResponse {
   generatedAt: string;
   model: string;
   cached: boolean;
+}
+
+function isExplainResponse(value: unknown): value is ExplainResponse {
+  return (
+    isRecord(value) &&
+    typeof value.address === 'string' &&
+    typeof value.explanation === 'string' &&
+    typeof value.generatedAt === 'string' &&
+    typeof value.model === 'string' &&
+    typeof value.cached === 'boolean'
+  );
 }
 
 /**
@@ -38,54 +50,47 @@ interface ExplainResponse {
  */
 export default function AiExplainCard(props: AiExplainCardProps): JSX.Element {
   const { contractData } = props;
-  return (
-    <AiExplainCardRecord
-      key={aiExplainRecordIdentity(contractData)}
-      {...props}
-    />
-  );
+  return <AiExplainCardRecord key={aiExplainRecordIdentity(contractData)} {...props} />;
 }
 
 export function aiExplainRecordIdentity(contractData: ContractData): string {
   return [
     contractData.address,
-    contractData.creatorAddressProvenance ?? "",
-    contractData.verificationRecordSchema ?? "",
-    contractData.compilerVersion ?? "",
-    contractData.compilerProvenance?.executionDigest ?? "",
-    contractData.sourceBundleDigest ?? "",
-    contractData.verificationArtifactDigest ?? "",
-    contractData.aiExplanationSourceDigest ?? "",
-  ].join("\u0000");
+    contractData.creatorAddressProvenance ?? '',
+    contractData.verificationRecordSchema ?? '',
+    contractData.compilerVersion ?? '',
+    contractData.compilerProvenance?.executionDigest ?? '',
+    contractData.sourceBundleDigest ?? '',
+    contractData.verificationArtifactDigest ?? '',
+    contractData.aiExplanationSourceDigest ?? '',
+  ].join('\u0000');
 }
 
-function AiExplainCardRecord({
-  contractData,
-}: AiExplainCardProps): JSX.Element | null {
+function AiExplainCardRecord({ contractData }: AiExplainCardProps): JSX.Element | null {
   const verificationStatus = useMemo(
     () => classifyStoredVerification(contractData),
-    [contractData],
+    [contractData]
   );
   const creatorAuthorizationAvailable = hasAuthoritativeCreatorProvenance(
-    contractData.creatorAddressProvenance,
+    contractData.creatorAddressProvenance
   );
   const cachedExplanationIsBound =
-    verificationStatus === "digest-backed" &&
-    typeof contractData.sourceBundleDigest === "string" &&
+    verificationStatus === 'digest-backed' &&
+    typeof contractData.sourceBundleDigest === 'string' &&
     contractData.aiExplanationSourceDigest === contractData.sourceBundleDigest;
   // Pre-load any cached explanation that arrived with the address payload
   // so the user sees the body immediately on page load (no extra round-trip).
   const [explanation, setExplanation] = useState<string | null>(
-    cachedExplanationIsBound ? (contractData.aiExplanation ?? null) : null,
+    cachedExplanationIsBound ? (contractData.aiExplanation ?? null) : null
   );
   const [generatedAt, setGeneratedAt] = useState<string | null>(
-    cachedExplanationIsBound ? (contractData.aiExplanationAt ?? null) : null,
+    cachedExplanationIsBound ? (contractData.aiExplanationAt ?? null) : null
   );
   const [model, setModel] = useState<string | null>(
-    cachedExplanationIsBound ? (contractData.aiExplanationModel ?? null) : null,
+    cachedExplanationIsBound ? (contractData.aiExplanationModel ?? null) : null
   );
   const [cached, setCached] = useState<boolean>(
-    cachedExplanationIsBound && Boolean(contractData.aiExplanation),
+    cachedExplanationIsBound && Boolean(contractData.aiExplanation)
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,8 +99,8 @@ function AiExplainCardRecord({
   const [isOwner, setIsOwner] = useState<boolean>(false);
 
   useEffect(() => {
-    if (verificationStatus !== "digest-backed" || !creatorAuthorizationAvailable) return;
-    if (typeof window === "undefined") return;
+    if (verificationStatus !== 'digest-backed' || !creatorAuthorizationAvailable) return;
+    if (typeof window === 'undefined') return;
     const creator = canonicalizeQrlAddress(contractData.creatorAddress);
     if (!creator) return;
     let qrl;
@@ -107,39 +112,36 @@ function AiExplainCardRecord({
     }
     const check = (): void => {
       const accounts = qrl.getAccounts();
-      const account =
-        accounts.length === 1 ? canonicalizeQrlAddress(accounts[0]) : null;
+      const account = accounts.length === 1 ? canonicalizeQrlAddress(accounts[0]) : null;
       setIsOwner(account === creator);
     };
     check();
     const onChange = (): void => check();
-    qrl.on("accountsChanged", onChange);
-    qrl.on("connect", onChange);
-    qrl.on("disconnect", onChange);
+    qrl.on('accountsChanged', onChange);
+    qrl.on('connect', onChange);
+    qrl.on('disconnect', onChange);
     return () => {
-      qrl.off("accountsChanged", onChange);
-      qrl.off("connect", onChange);
-      qrl.off("disconnect", onChange);
+      qrl.off('accountsChanged', onChange);
+      qrl.off('connect', onChange);
+      qrl.off('disconnect', onChange);
     };
   }, [contractData.creatorAddress, creatorAuthorizationAvailable, verificationStatus]);
 
   if (!contractData.verified) return null;
 
-  if (verificationStatus !== "digest-backed") {
-    const legacy = verificationStatus === "legacy-unrecorded";
+  if (verificationStatus !== 'digest-backed') {
+    const legacy = verificationStatus === 'legacy-unrecorded';
     return (
       <div
-        role={legacy ? "status" : "alert"}
+        role={legacy ? 'status' : 'alert'}
         data-ai-explain-status={verificationStatus}
         className={`rounded-lg border p-3 text-xs md:text-sm text-text-secondary ${
-          legacy
-            ? "border-warning/30 bg-warning/10"
-            : "border-error/30 bg-error/10"
+          legacy ? 'border-warning/30 bg-warning/10' : 'border-error/30 bg-error/10'
         }`}
       >
         {legacy
-          ? "AI explanation unavailable: this legacy verification lacks the current deployment-bound artifact digest."
-          : "AI explanation unavailable: compiler, source-bundle, or deployment provenance is invalid."}
+          ? 'AI explanation unavailable: this legacy verification lacks the current deployment-bound artifact digest.'
+          : 'AI explanation unavailable: compiler, source-bundle, or deployment provenance is invalid.'}
       </div>
     );
   }
@@ -149,43 +151,35 @@ function AiExplainCardRecord({
     setError(null);
     try {
       const endpoint = `${config.handlerUrl}/contract/explain/${contractData.address}`;
-      const url = `${endpoint}${
-        regenerate ? "?regenerate=1" : ""
-      }`;
+      const url = `${endpoint}${regenerate ? '?regenerate=1' : ''}`;
       let body: unknown;
       if (regenerate) {
-        if (typeof window === "undefined") {
-          throw new Error("Contract creator authorization requires a browser wallet");
+        if (typeof window === 'undefined') {
+          throw new Error('Contract creator authorization requires a browser wallet');
         }
         const creator = canonicalizeQrlAddress(contractData.creatorAddress);
         const contract = canonicalizeQrlAddress(contractData.address);
         if (!creatorAuthorizationAvailable || !creator || !contract) {
-          throw new Error("Contract creator authorization is unavailable");
+          throw new Error('Contract creator authorization is unavailable');
         }
-        const challengeResponse = await axios.post<unknown>(
-          `${endpoint}/challenge`,
-        );
-        const challenge = parseContractExplainChallenge(
-          challengeResponse.data,
-          {
-            contract,
-            signer: creator,
-            origin: window.location.origin,
-          },
-        );
+        const challengeResponse = await axios.post<unknown>(`${endpoint}/challenge`);
+        const challenge = parseContractExplainChallenge(challengeResponse.data, {
+          contract,
+          signer: creator,
+          origin: window.location.origin,
+        });
         body = await signContractExplainChallenge(getQrlConnect(), challenge);
       }
-      const r = await axios.post<ExplainResponse>(url, body);
+      const r = await axios.post<unknown>(url, body);
+      if (!isExplainResponse(r.data))
+        throw new InvalidInputError('Invalid contract explanation response');
       setExplanation(r.data.explanation);
       setGeneratedAt(r.data.generatedAt);
       setModel(r.data.model);
       setCached(r.data.cached);
     } catch (e) {
-      const ae = e as AxiosError;
-      const msg =
-        (ae.response?.data as { error?: string } | undefined)?.error ??
-        (e instanceof Error ? e.message : String(e));
-      setError(msg);
+      const data: unknown = axios.isAxiosError(e) ? e.response?.data : undefined;
+      setError(isRecord(data) && typeof data.error === 'string' ? data.error : errorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -200,8 +194,8 @@ function AiExplainCardRecord({
           </div>
           <div className="text-xs text-text-secondary mt-0.5">
             {explanation
-              ? `Generated ${formatStamp(generatedAt)}${cached ? " (cached)" : ""}${model ? ` · ${model}` : ""}`
-              : "Have Claude summarise what this verified contract does. Costs a one-time generate per contract."}
+              ? `Generated ${formatStamp(generatedAt)}${cached ? ' (cached)' : ''}${model ? ` · ${model}` : ''}`
+              : 'Have Claude summarise what this verified contract does. Costs a one-time generate per contract.'}
           </div>
         </div>
         <div className="flex gap-2">
@@ -212,7 +206,7 @@ function AiExplainCardRecord({
               disabled={loading}
               className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-accent text-background text-xs font-medium hover:bg-accent-hover transition-colors disabled:opacity-50"
             >
-              {loading ? "Analysing…" : "Explain with AI"}
+              {loading ? 'Analysing…' : 'Explain with AI'}
             </button>
           )}
           {explanation && creatorAuthorizationAvailable && isOwner && (
@@ -223,14 +217,14 @@ function AiExplainCardRecord({
               className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-card-gradient border border-border hover:border-accent text-xs text-text-secondary hover:text-accent transition-colors disabled:opacity-50"
               title="Regenerate (limited to 5 per 7-day window)"
             >
-              {loading ? "Analysing…" : "Regenerate"}
+              {loading ? 'Analysing…' : 'Regenerate'}
             </button>
           )}
           {explanation && (!creatorAuthorizationAvailable || !isOwner) && (
             <span className="text-[10px] text-text-muted self-center">
               {creatorAuthorizationAvailable
-                ? "Only the contract creator can regenerate."
-                : "Creator authorization requires deployment evidence."}
+                ? 'Only the contract creator can regenerate.'
+                : 'Creator authorization requires deployment evidence.'}
             </span>
           )}
         </div>
@@ -248,9 +242,8 @@ function AiExplainCardRecord({
             {explanation}
           </div>
           <div className="text-[10px] text-text-muted">
-            AI-generated summary. May contain inaccuracies. Not financial
-            advice, verify the source code yourself before interacting with this
-            contract.
+            AI-generated summary. May contain inaccuracies. Not financial advice, verify the source
+            code yourself before interacting with this contract.
           </div>
         </>
       )}
@@ -259,7 +252,7 @@ function AiExplainCardRecord({
 }
 
 function formatStamp(iso: string | null): string {
-  if (!iso) return "just now";
+  if (!iso) return 'just now';
   try {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;

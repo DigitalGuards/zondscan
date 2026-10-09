@@ -1,5 +1,7 @@
 'use client';
 
+import { isOneOf } from '../lib/guards';
+
 import { useState } from 'react';
 import { useTranslation } from '../components/InterfaceText';
 import { LANGUAGES } from '../lib/i18n';
@@ -210,9 +212,10 @@ export default function SettingsClient() {
                   disabled={!ready}
                   id="interface-language"
                   value={locale}
-                  onChange={(event) =>
-                    save({ locale: event.target.value as ExplorerPreferences['locale'] })
-                  }
+                  onChange={(event) => {
+                    if (isOneOf(event.target.value, ['en', 'zh', 'es', 'ru']))
+                      save({ locale: event.target.value });
+                  }}
                   className="form-select w-full sm:w-44"
                 >
                   {LANGUAGES.map((language) => (
@@ -252,9 +255,21 @@ export default function SettingsClient() {
                   disabled={!ready}
                   id="display-currency"
                   value={preferences.currency}
-                  onChange={(event) =>
-                    save({ currency: event.target.value as ExplorerPreferences['currency'] })
-                  }
+                  onChange={(event) => {
+                    if (
+                      isOneOf(event.target.value, [
+                        'USD',
+                        'EUR',
+                        'GBP',
+                        'CHF',
+                        'CAD',
+                        'AUD',
+                        'JPY',
+                        'CNY',
+                      ])
+                    )
+                      save({ currency: event.target.value });
+                  }}
                   className="form-select w-full sm:w-64 lg:w-72"
                 >
                   {CURRENCIES.map((currency) => (
@@ -302,11 +317,10 @@ export default function SettingsClient() {
                   disabled={!ready}
                   id="address-display"
                   value={preferences.addressDisplay}
-                  onChange={(event) =>
-                    save({
-                      addressDisplay: event.target.value as ExplorerPreferences['addressDisplay'],
-                    })
-                  }
+                  onChange={(event) => {
+                    if (isOneOf(event.target.value, ['middle', 'back']))
+                      save({ addressDisplay: event.target.value });
+                  }}
                   className="form-select w-full sm:w-44"
                 >
                   <option value="middle">{t('Middle truncation')}</option>
@@ -329,9 +343,10 @@ export default function SettingsClient() {
                   disabled={!ready}
                   id="time-zone"
                   value={preferences.timeZone}
-                  onChange={(event) =>
-                    save({ timeZone: event.target.value as ExplorerPreferences['timeZone'] })
-                  }
+                  onChange={(event) => {
+                    if (isOneOf(event.target.value, ['utc', 'local']))
+                      save({ timeZone: event.target.value });
+                  }}
                   className="form-select w-full sm:w-44"
                 >
                   <option value="utc">{t('UTC')}</option>

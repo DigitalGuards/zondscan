@@ -1,5 +1,7 @@
 'use client';
 
+import { isOneOf } from '../../lib/guards';
+
 import AddressText from '../../components/AddressText';
 import TimeDisplay from '../../components/TimeDisplay';
 import { usePreferences } from '../../components/PreferencesProvider';
@@ -8,157 +10,163 @@ import { isZeroTokenTransfer } from '../../lib/preferences';
 import { useState, useEffect, useCallback } from 'react';
 import ImageWithFallback from '../../components/ImageWithFallback';
 import Link from 'next/link';
-import CopyButton from "../../components/CopyButton";
-import AddressFingerprint from "../../components/AddressFingerprint";
-import QRCodeButton from "../../components/QRCodeButton";
-import ContractTabs from "../../components/ContractTabs";
-import TabPillBar from "../../components/TabPillBar";
-import VerifiedBadge from "../../components/VerifiedBadge";
-import type { ContractData } from "../../types/address";
-import { compactQrlAddress, compactTokenIDLabel, formatAmount, NATIVE_UNIT } from "../../lib/helpers";
-import { canonicalizeQrlAddress } from "../../lib/qrlAddress";
-import Breadcrumbs from "../../components/Breadcrumbs";
-import { setUrlParams, useUrlIntParam, useUrlParam } from "../../lib/use-url-param";
-import ResolvedQnsIdentity from "./resolved-qns-identity";
+import CopyButton from '../../components/CopyButton';
+import AddressFingerprint from '../../components/AddressFingerprint';
+import QRCodeButton from '../../components/QRCodeButton';
+import ContractTabs from '../../components/ContractTabs';
+import TabPillBar from '../../components/TabPillBar';
+import VerifiedBadge from '../../components/VerifiedBadge';
+import type { ContractData } from '../../types/address';
+import {
+  compactQrlAddress,
+  compactTokenIDLabel,
+  formatAmount,
+  NATIVE_UNIT,
+} from '../../lib/helpers';
+import { canonicalizeQrlAddress } from '../../lib/qrlAddress';
+import Breadcrumbs from '../../components/Breadcrumbs';
+import { setUrlParams, useUrlIntParam, useUrlParam } from '../../lib/use-url-param';
+import ResolvedQnsIdentity from './resolved-qns-identity';
 
 // Tab set for the pill bar below. ?tab values outside this list (hand-edited
 // URLs) fall back to the overview pane.
 const TOKEN_TABS = ['overview', 'holders', 'transfers', 'tokens'] as const;
 type TokenTab = (typeof TOKEN_TABS)[number];
 function parseTokenTab(raw: string): TokenTab {
-    return (TOKEN_TABS as readonly string[]).includes(raw)
-        ? (raw as TokenTab)
-        : 'overview';
+  return isOneOf(raw, TOKEN_TABS) ? raw : 'overview';
 }
 
 interface TokenInfo {
-    contractAddress: string;
-    name: string;
-    symbol: string;
-    decimals: number;
-    totalSupply: string;
-    holderCount: number;
-    transferCount: number;
-    creatorAddress: string;
-    creationTxHash: string;
-    creationBlock: string;
-    // Optional backend flag for contracts baked into the chain at genesis
-    // (no deployment tx). Absent on handlers predating it.
-    genesisContract?: boolean;
+  contractAddress: string;
+  name: string;
+  symbol: string;
+  decimals: number;
+  totalSupply: string;
+  holderCount: number;
+  transferCount: number;
+  creatorAddress: string;
+  creationTxHash: string;
+  creationBlock: string;
+  // Optional backend flag for contracts baked into the chain at genesis
+  // (no deployment tx). Absent on handlers predating it.
+  genesisContract?: boolean;
 }
 
 interface TokenHolder {
-    contractAddress: string;
-    holderAddress: string;
-    balance: string;
-    blockNumber: string;
-    updatedAt: string;
-    // Phase 2: per-id storage for NFT collections. Always absent for ERC-20.
-    tokenID?: string;
-    tokenStandard?: 'ERC-20' | 'ERC-721' | 'ERC-1155' | string;
+  contractAddress: string;
+  holderAddress: string;
+  balance: string;
+  blockNumber: string;
+  updatedAt: string;
+  // Phase 2: per-id storage for NFT collections. Always absent for ERC-20.
+  tokenID?: string;
+  tokenStandard?: 'ERC-20' | 'ERC-721' | 'ERC-1155' | string;
 }
 
 interface TokenIDSummary {
-    tokenID: string;
-    holderCount: number;
-    tokenStandard?: string;
-    blockNumber?: string;
-    updatedAt?: string;
-    // Phase 3b: off-chain per-token metadata pulled from contractURI /
-    // tokenURI / uri(id). Absent on tokens whose metadata fetcher pass
-    // hasn't completed or whose contract doesn't implement the getter.
-    name?: string;
-    description?: string;
-    image?: string;
+  tokenID: string;
+  holderCount: number;
+  tokenStandard?: string;
+  blockNumber?: string;
+  updatedAt?: string;
+  // Phase 3b: off-chain per-token metadata pulled from contractURI /
+  // tokenURI / uri(id). Absent on tokens whose metadata fetcher pass
+  // hasn't completed or whose contract doesn't implement the getter.
+  name?: string;
+  description?: string;
+  image?: string;
 }
 
 interface TokenTransfer {
-    contractAddress: string;
-    from: string;
-    to: string;
-    amount: string;
-    blockNumber: string;
-    txHash: string;
-    timestamp: string;
-    tokenSymbol: string;
-    tokenDecimals: number;
-    tokenName: string;
-    transferType: string;
+  contractAddress: string;
+  from: string;
+  to: string;
+  amount: string;
+  blockNumber: string;
+  txHash: string;
+  timestamp: string;
+  tokenSymbol: string;
+  tokenDecimals: number;
+  tokenName: string;
+  transferType: string;
 }
 
 interface CreationTxData {
-    BlockNumber: string;
-    BlockTimestamp: string;
-    From: string;
-    TxHash: string;
-    GasUsed: string;
-    GasPrice: string;
-    Value: string;
+  BlockNumber: string;
+  BlockTimestamp: string;
+  From: string;
+  TxHash: string;
+  GasUsed: string;
+  GasPrice: string;
+  Value: string;
 }
 
 interface TokenContractViewProps {
-    address: string;
-    qnsName?: string;
-    // Accept the shared ContractData shape so verification fields flow
-    // through to the Code/Read/Write tabs alongside the existing
-    // creator/symbol/decimals metadata.
-    contractData: Partial<ContractData> & {
-        creatorAddress?: string;
-        creationTransaction?: string;
-        contractCode?: string;
-        isToken?: boolean;
-        name?: string;
-        symbol?: string;
-        decimals?: number;
-        totalSupply?: string;
-        status?: string;
-        creationBlockNumber?: string;
-        // Optional genesis flag mirrored from the contract-info payload;
-        // treat absence as "deployed normally".
-        genesisContract?: boolean;
-    };
-    handlerUrl: string;
+  address: string;
+  qnsName?: string;
+  // Accept the shared ContractData shape so verification fields flow
+  // through to the Code/Read/Write tabs alongside the existing
+  // creator/symbol/decimals metadata.
+  contractData: Partial<ContractData> & {
+    creatorAddress?: string;
+    creationTransaction?: string;
+    contractCode?: string;
+    isToken?: boolean;
+    name?: string;
+    symbol?: string;
+    decimals?: number;
+    totalSupply?: string;
+    status?: string;
+    creationBlockNumber?: string;
+    // Optional genesis flag mirrored from the contract-info payload;
+    // treat absence as "deployed normally".
+    genesisContract?: boolean;
+  };
+  handlerUrl: string;
 }
 
 const AddressDisplay = ({ address }: { address: string }) => {
-    if (!address) return <span className="text-text-muted">Unknown</span>;
+  if (!address) return <span className="text-text-muted">Unknown</span>;
 
-    const canonicalAddress = canonicalizeQrlAddress(address) ?? address;
-    return (
-        <Link href={`/address/${canonicalAddress}`} className="text-accent hover:text-accent-hover font-mono text-xs md:text-sm min-w-0 max-w-full">
-            <AddressText address={canonicalAddress} />
-        </Link>
-    );
+  const canonicalAddress = canonicalizeQrlAddress(address) ?? address;
+  return (
+    <Link
+      href={`/address/${canonicalAddress}`}
+      className="text-accent hover:text-accent-hover font-mono text-xs md:text-sm min-w-0 max-w-full"
+    >
+      <AddressText address={canonicalAddress} />
+    </Link>
+  );
 };
 
 const formatTokenAmount = (amount: string, decimals: number): string => {
-    if (!amount) return '0';
+  if (!amount) return '0';
 
-    // Handle hex amounts
-    let value = amount;
-    if (amount.startsWith('0x')) {
-        try {
-            value = BigInt(amount).toString();
-        } catch {
-            return '0';
-        }
+  // Handle hex amounts
+  let value = amount;
+  if (amount.startsWith('0x')) {
+    try {
+      value = BigInt(amount).toString();
+    } catch {
+      return '0';
     }
+  }
 
-    // Format with decimals
-    const len = value.length;
-    if (len <= decimals) {
-        const zeros = '0'.repeat(decimals - len);
-        return `0.${zeros}${value}`.replace(/\.?0+$/, '') || '0';
-    }
+  // Format with decimals
+  const len = value.length;
+  if (len <= decimals) {
+    const zeros = '0'.repeat(decimals - len);
+    return `0.${zeros}${value}`.replace(/\.?0+$/, '') || '0';
+  }
 
-    const intPart = value.slice(0, len - decimals);
-    const decPart = value.slice(len - decimals);
-    const formatted = decPart ? `${intPart}.${decPart}`.replace(/\.?0+$/, '') : intPart;
+  const intPart = value.slice(0, len - decimals);
+  const decPart = value.slice(len - decimals);
+  const formatted = decPart ? `${intPart}.${decPart}`.replace(/\.?0+$/, '') : intPart;
 
-    // Add thousand separators
-    const parts = formatted.split('.');
-    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    return parts.join('.');
+  // Add thousand separators
+  const parts = formatted.split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return parts.join('.');
 };
 
 // Only render contract-supplied metadata URLs that use an http(s) scheme.
@@ -167,906 +175,1036 @@ const formatTokenAmount = (amount: string, decimals: number): string => {
 // prevents the anchor from becoming an XSS vector.
 const isHttpUrl = (u?: string): boolean => !!u && /^https?:\/\//i.test(u);
 
+export default function TokenContractView({
+  address,
+  contractData,
+  handlerUrl,
+  qnsName,
+}: TokenContractViewProps) {
+  const { preferences, updatePreferences } = usePreferences();
+  const tokenStandard = contractData.tokenStandard;
+  const isNFT = tokenStandard === 'ERC-721' || tokenStandard === 'ERC-1155';
+  // URL-backed tab + per-tab pages + tokenID filter so the browser Back
+  // button restores the exact view. All
+  // writes use replace (shallow History-API, no RSC refetch); pages are
+  // 1-based in the URL for readability and converted to the 0-based
+  // values the fetches use.
+  const [rawTab, setRawTab] = useUrlParam('tab', 'overview');
+  const parsedTab = parseTokenTab(rawTab);
+  // Non-NFT contracts have no Tokens tab; clamp a stray ?tab=tokens.
+  const activeTab = parsedTab === 'tokens' && !isNFT ? 'overview' : parsedTab;
+  const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null);
+  const [holders, setHolders] = useState<TokenHolder[]>([]);
+  const [transfers, setTransfers] = useState<TokenTransfer[]>([]);
+  const visibleTransfers = transfers.filter(
+    (transfer) =>
+      !preferences.hideZeroTokenTransfers || !isZeroTokenTransfer({ ...transfer, tokenStandard })
+  );
+  const hiddenTransfers = transfers.length - visibleTransfers.length;
+  const [holdersTotal, setHoldersTotal] = useState(0);
+  const [transfersTotal, setTransfersTotal] = useState(0);
+  const [holdersPageParam, setHoldersPageParam] = useUrlIntParam('hp', 1);
+  const [transfersPageParam, setTransfersPageParam] = useUrlIntParam('tp', 1);
+  const holdersPage = holdersPageParam - 1;
+  const transfersPage = transfersPageParam - 1;
+  const setHoldersPage = useCallback(
+    (p: number) => setHoldersPageParam(p + 1),
+    [setHoldersPageParam]
+  );
+  const setTransfersPage = useCallback(
+    (p: number) => setTransfersPageParam(p + 1),
+    [setTransfersPageParam]
+  );
+  const [loading, setLoading] = useState(true);
+  const [creationTx, setCreationTx] = useState<CreationTxData | null>(null);
+  // Phase 2: NFT-specific state. holderTokenIDFilter narrows /holders to
+  // a single tokenID; tokensList drives the new "Tokens" tab listing.
+  const [holderTokenIDFilter] = useUrlParam('tokenId', '');
+  const [holderTokenIDInput, setHolderTokenIDInput] = useState<string>(holderTokenIDFilter);
+  // Keep the filter input display in sync when ?tokenId changes from
+  // outside the input (Back/Forward, Tokens-tab row click), adjusting
+  // state during render by tracking the previous value.
+  const [prevTokenIDFilter, setPrevTokenIDFilter] = useState(holderTokenIDFilter);
+  if (holderTokenIDFilter !== prevTokenIDFilter) {
+    setPrevTokenIDFilter(holderTokenIDFilter);
+    setHolderTokenIDInput(holderTokenIDFilter);
+  }
+  const [tokensList, setTokensList] = useState<TokenIDSummary[]>([]);
+  const [tokensTotal, setTokensTotal] = useState(0);
+  const [tokensPageParam, setTokensPageParam] = useUrlIntParam('kp', 1);
+  const tokensPage = tokensPageParam - 1;
+  const setTokensPage = useCallback((p: number) => setTokensPageParam(p + 1), [setTokensPageParam]);
+  const limit = 25;
 
-export default function TokenContractView({ address, contractData, handlerUrl, qnsName }: TokenContractViewProps) {
-    const { preferences, updatePreferences } = usePreferences();
-    const tokenStandard = contractData.tokenStandard;
-    const isNFT = tokenStandard === 'ERC-721' || tokenStandard === 'ERC-1155';
-    // URL-backed tab + per-tab pages + tokenID filter so the browser Back
-    // button restores the exact view instead of resetting to Overview. All
-    // writes use replace (shallow History-API, no RSC refetch); pages are
-    // 1-based in the URL for readability and converted to the 0-based
-    // values the fetches use.
-    const [rawTab, setRawTab] = useUrlParam('tab', 'overview');
-    const parsedTab = parseTokenTab(rawTab);
-    // Non-NFT contracts have no Tokens tab; clamp a stray ?tab=tokens.
-    const activeTab = parsedTab === 'tokens' && !isNFT ? 'overview' : parsedTab;
-    const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null);
-    const [holders, setHolders] = useState<TokenHolder[]>([]);
-    const [transfers, setTransfers] = useState<TokenTransfer[]>([]);
-    const visibleTransfers = transfers.filter(transfer => !preferences.hideZeroTokenTransfers || !isZeroTokenTransfer({ ...transfer, tokenStandard }));
-    const hiddenTransfers = transfers.length - visibleTransfers.length;
-    const [holdersTotal, setHoldersTotal] = useState(0);
-    const [transfersTotal, setTransfersTotal] = useState(0);
-    const [holdersPageParam, setHoldersPageParam] = useUrlIntParam('hp', 1);
-    const [transfersPageParam, setTransfersPageParam] = useUrlIntParam('tp', 1);
-    const holdersPage = holdersPageParam - 1;
-    const transfersPage = transfersPageParam - 1;
-    const setHoldersPage = useCallback(
-        (p: number) => setHoldersPageParam(p + 1),
-        [setHoldersPageParam],
-    );
-    const setTransfersPage = useCallback(
-        (p: number) => setTransfersPageParam(p + 1),
-        [setTransfersPageParam],
-    );
-    const [loading, setLoading] = useState(true);
-    const [creationTx, setCreationTx] = useState<CreationTxData | null>(null);
-    // Phase 2: NFT-specific state. holderTokenIDFilter narrows /holders to
-    // a single tokenID; tokensList drives the new "Tokens" tab listing.
-    const [holderTokenIDFilter] = useUrlParam('tokenId', '');
-    const [holderTokenIDInput, setHolderTokenIDInput] = useState<string>(holderTokenIDFilter);
-    // Keep the filter input display in sync when ?tokenId changes from
-    // outside the input (Back/Forward, Tokens-tab row click), adjusting
-    // state during render via a prev-value tracker instead of an effect.
-    const [prevTokenIDFilter, setPrevTokenIDFilter] = useState(holderTokenIDFilter);
-    if (holderTokenIDFilter !== prevTokenIDFilter) {
-        setPrevTokenIDFilter(holderTokenIDFilter);
-        setHolderTokenIDInput(holderTokenIDFilter);
-    }
-    const [tokensList, setTokensList] = useState<TokenIDSummary[]>([]);
-    const [tokensTotal, setTokensTotal] = useState(0);
-    const [tokensPageParam, setTokensPageParam] = useUrlIntParam('kp', 1);
-    const tokensPage = tokensPageParam - 1;
-    const setTokensPage = useCallback(
-        (p: number) => setTokensPageParam(p + 1),
-        [setTokensPageParam],
-    );
-    const limit = 25;
+  // Fetch token info
+  useEffect(() => {
+    const fetchTokenInfo = async () => {
+      try {
+        const res = await fetch(`${handlerUrl}/token/${address}/info`);
+        if (res.ok) {
+          const data = await res.json();
+          setTokenInfo(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch token info:', error);
+      }
+    };
+    fetchTokenInfo();
+  }, [address, handlerUrl]);
 
-    // Fetch token info
-    useEffect(() => {
-        const fetchTokenInfo = async () => {
-            try {
-                const res = await fetch(`${handlerUrl}/token/${address}/info`);
-                if (res.ok) {
-                    const data = await res.json();
-                    setTokenInfo(data);
-                }
-            } catch (error) {
-                console.error('Failed to fetch token info:', error);
-            }
-        };
-        fetchTokenInfo();
-    }, [address, handlerUrl]);
+  // Fetch creation transaction details
+  useEffect(() => {
+    const creationTxHash = tokenInfo?.creationTxHash || contractData.creationTransaction;
+    if (!creationTxHash) return;
 
-    // Fetch creation transaction details
-    useEffect(() => {
-        const creationTxHash = tokenInfo?.creationTxHash || contractData.creationTransaction;
-        if (!creationTxHash) return;
+    const fetchCreationTx = async (): Promise<void> => {
+      try {
+        const res = await fetch(`${handlerUrl}/tx/${creationTxHash}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.response) {
+            setCreationTx(data.response);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch creation tx:', error);
+      }
+    };
+    fetchCreationTx();
+  }, [tokenInfo?.creationTxHash, contractData.creationTransaction, handlerUrl]);
 
-        const fetchCreationTx = async (): Promise<void> => {
-            try {
-                const res = await fetch(`${handlerUrl}/tx/${creationTxHash}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.response) {
-                        setCreationTx(data.response);
-                    }
-                }
-            } catch (error) {
-                console.error('Failed to fetch creation tx:', error);
-            }
-        };
-        fetchCreationTx();
-    }, [tokenInfo?.creationTxHash, contractData.creationTransaction, handlerUrl]);
+  // Fetch holders when tab is active. Phase 2: append ?tokenID= when the
+  // filter is set so the backend returns rows for that specific id only.
+  useEffect(() => {
+    if (activeTab !== 'holders') return;
 
-    // Fetch holders when tab is active. Phase 2: append ?tokenID= when the
-    // filter is set so the backend returns rows for that specific id only.
-    useEffect(() => {
-        if (activeTab !== 'holders') return;
+    const fetchHolders = async () => {
+      setLoading(true);
+      try {
+        const qs = new URLSearchParams({
+          page: String(holdersPage),
+          limit: String(limit),
+        });
+        if (holderTokenIDFilter) qs.set('tokenID', holderTokenIDFilter);
+        const res = await fetch(`${handlerUrl}/token/${address}/holders?${qs.toString()}`);
+        if (res.ok) {
+          const data = await res.json();
+          setHolders(data.holders || []);
+          setHoldersTotal(data.totalHolders || 0);
+        }
+      } catch (error) {
+        console.error('Failed to fetch holders:', error);
+      }
+      setLoading(false);
+    };
+    fetchHolders();
+  }, [address, handlerUrl, activeTab, holdersPage, holderTokenIDFilter]);
 
-        const fetchHolders = async () => {
-            setLoading(true);
-            try {
-                const qs = new URLSearchParams({
-                    page: String(holdersPage),
-                    limit: String(limit),
-                });
-                if (holderTokenIDFilter) qs.set('tokenID', holderTokenIDFilter);
-                const res = await fetch(`${handlerUrl}/token/${address}/holders?${qs.toString()}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    setHolders(data.holders || []);
-                    setHoldersTotal(data.totalHolders || 0);
-                }
-            } catch (error) {
-                console.error('Failed to fetch holders:', error);
-            }
-            setLoading(false);
-        };
-        fetchHolders();
-    }, [address, handlerUrl, activeTab, holdersPage, holderTokenIDFilter]);
+  // Fetch tokens (distinct tokenID list) when the tokens tab is active.
+  useEffect(() => {
+    if (activeTab !== 'tokens') return;
 
-    // Fetch tokens (distinct tokenID list) when the tokens tab is active.
-    useEffect(() => {
-        if (activeTab !== 'tokens') return;
+    const fetchTokens = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(
+          `${handlerUrl}/token/${address}/tokens?page=${tokensPage}&limit=${limit}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setTokensList(data.tokens || []);
+          setTokensTotal(data.totalTokenIDs || 0);
+        }
+      } catch (error) {
+        console.error('Failed to fetch tokens:', error);
+      }
+      setLoading(false);
+    };
+    fetchTokens();
+  }, [address, handlerUrl, activeTab, tokensPage]);
 
-        const fetchTokens = async () => {
-            setLoading(true);
-            try {
-                const res = await fetch(`${handlerUrl}/token/${address}/tokens?page=${tokensPage}&limit=${limit}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    setTokensList(data.tokens || []);
-                    setTokensTotal(data.totalTokenIDs || 0);
-                }
-            } catch (error) {
-                console.error('Failed to fetch tokens:', error);
-            }
-            setLoading(false);
-        };
-        fetchTokens();
-    }, [address, handlerUrl, activeTab, tokensPage]);
+  // Fetch transfers when tab is active
+  useEffect(() => {
+    if (activeTab !== 'transfers') return;
 
-    // Fetch transfers when tab is active
-    useEffect(() => {
-        if (activeTab !== 'transfers') return;
+    const fetchTransfers = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(
+          `${handlerUrl}/token/${address}/transfers?page=${transfersPage}&limit=${limit}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setTransfers(data.transfers || []);
+          setTransfersTotal(data.totalTransfers || 0);
+        }
+      } catch (error) {
+        console.error('Failed to fetch transfers:', error);
+      }
+      setLoading(false);
+    };
+    fetchTransfers();
+  }, [address, handlerUrl, activeTab, transfersPage]);
 
-        const fetchTransfers = async () => {
-            setLoading(true);
-            try {
-                const res = await fetch(`${handlerUrl}/token/${address}/transfers?page=${transfersPage}&limit=${limit}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    setTransfers(data.transfers || []);
-                    setTransfersTotal(data.totalTransfers || 0);
-                }
-            } catch (error) {
-                console.error('Failed to fetch transfers:', error);
-            }
-            setLoading(false);
-        };
-        fetchTransfers();
-    }, [address, handlerUrl, activeTab, transfersPage]);
+  const decimals = tokenInfo?.decimals ?? contractData.decimals ?? 18;
+  const rawSymbol = tokenInfo?.symbol ?? contractData.symbol ?? '';
+  const rawName = tokenInfo?.name ?? contractData.name ?? '';
+  // Phase 3a: prefer the off-chain metadata-name over the on-chain
+  // name() because most NFT collections leave name() empty and put the
+  // human-readable title in the contractURI JSON instead. The on-chain
+  // symbol still wins for the badge (collection JSONs don't carry one).
+  const metaName = contractData.metadataName?.trim() || '';
+  const metaImage = contractData.metadataImage?.trim() || '';
+  const metaDescription = contractData.metadataDescription?.trim() || '';
+  const metaExternalURL = contractData.metadataExternalURL?.trim() || '';
+  // ERC-1155 collections often omit name()/symbol(), so fall back to a
+  // truncated address when the token name is unavailable.
+  const addrShort = compactQrlAddress(address);
+  const symbol = rawSymbol || addrShort;
+  const name = metaName || rawName || addrShort;
+  const totalSupply = tokenInfo?.totalSupply ?? contractData.totalSupply ?? '0';
+  const creatorAddress =
+    creationTx?.From || tokenInfo?.creatorAddress || contractData.creatorAddress || '';
+  const creationTxHash = tokenInfo?.creationTxHash || contractData.creationTransaction || '';
+  // Genesis contracts are baked into the chain at block 0 and have no
+  // deployment transaction; the backend flags them via the optional
+  // genesisContract boolean, with a '0x0' creation block as the same
+  // signal on payloads carrying the block but not the flag.
+  const isGenesisContract =
+    tokenInfo?.genesisContract === true ||
+    contractData.genesisContract === true ||
+    contractData.creationBlockNumber === '0x0';
+  const badgeLabel =
+    tokenStandard === 'ERC-721'
+      ? 'QRC-721 NFT'
+      : tokenStandard === 'ERC-1155'
+        ? 'QRC-1155 Multi-Token'
+        : 'QRC-20 Token';
+  const badgeClasses = isNFT ? 'bg-purple-500/20 text-purple-300' : 'bg-success/20 text-success';
 
-    const decimals = tokenInfo?.decimals ?? contractData.decimals ?? 18;
-    const rawSymbol = tokenInfo?.symbol ?? contractData.symbol ?? '';
-    const rawName = tokenInfo?.name ?? contractData.name ?? '';
-    // Phase 3a: prefer the off-chain metadata-name over the on-chain
-    // name() because most NFT collections leave name() empty and put the
-    // human-readable title in the contractURI JSON instead. The on-chain
-    // symbol still wins for the badge (collection JSONs don't carry one).
-    const metaName = contractData.metadataName?.trim() || '';
-    const metaImage = contractData.metadataImage?.trim() || '';
-    const metaDescription = contractData.metadataDescription?.trim() || '';
-    const metaExternalURL = contractData.metadataExternalURL?.trim() || '';
-    // ERC-1155 collections often omit name()/symbol(), so fall back to a
-    // truncated address rather than rendering "Unknown Token" / "TOKEN".
-    const addrShort = compactQrlAddress(address);
-    const symbol = rawSymbol || addrShort;
-    const name = metaName || rawName || addrShort;
-    const totalSupply = tokenInfo?.totalSupply ?? contractData.totalSupply ?? '0';
-    const creatorAddress = creationTx?.From || tokenInfo?.creatorAddress || contractData.creatorAddress || '';
-    const creationTxHash = tokenInfo?.creationTxHash || contractData.creationTransaction || '';
-    // Genesis contracts are baked into the chain at block 0 and have no
-    // deployment transaction; the backend flags them via the optional
-    // genesisContract boolean, with a '0x0' creation block as the same
-    // signal on payloads carrying the block but not the flag.
-    const isGenesisContract =
-        tokenInfo?.genesisContract === true ||
-        contractData.genesisContract === true ||
-        contractData.creationBlockNumber === '0x0';
-    const badgeLabel =
-        tokenStandard === 'ERC-721'
-            ? 'QRC-721 NFT'
-            : tokenStandard === 'ERC-1155'
-              ? 'QRC-1155 Multi-Token'
-              : 'QRC-20 Token';
-    const badgeClasses = isNFT
-        ? 'bg-purple-500/20 text-purple-300'
-        : 'bg-success/20 text-success';
+  const tabs: { id: typeof activeTab; label: string }[] = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'holders', label: `Holders${tokenInfo ? ` (${tokenInfo.holderCount})` : ''}` },
+    { id: 'transfers', label: `Transfers${tokenInfo ? ` (${tokenInfo.transferCount})` : ''}` },
+  ];
+  // Phase 2: only NFT collections have a meaningful per-id list.
+  if (isNFT) {
+    tabs.push({ id: 'tokens', label: 'Tokens' });
+  }
 
-    const tabs: { id: typeof activeTab; label: string }[] = [
-        { id: 'overview', label: 'Overview' },
-        { id: 'holders', label: `Holders${tokenInfo ? ` (${tokenInfo.holderCount})` : ''}` },
-        { id: 'transfers', label: `Transfers${tokenInfo ? ` (${tokenInfo.transferCount})` : ''}` },
-    ];
-    // Phase 2: only NFT collections have a meaningful per-id list.
-    if (isNFT) {
-        tabs.push({ id: 'tokens', label: 'Tokens' });
-    }
+  // Three-step breadcrumb: Home > Contracts > <standard tab> > <this contract>.
+  // The middle step deep-links back to the /contracts page with the
+  // correct tab pre-selected so a back-step lands the user where they
+  // came from.
+  const tabHref =
+    tokenStandard === 'ERC-721'
+      ? '/contracts?tab=erc721'
+      : tokenStandard === 'ERC-1155'
+        ? '/contracts?tab=erc1155'
+        : tokenStandard === 'ERC-20'
+          ? '/contracts?tab=erc20'
+          : '/contracts';
+  const tabLabel =
+    tokenStandard === 'ERC-721'
+      ? 'NFTs'
+      : tokenStandard === 'ERC-1155'
+        ? 'Multi-Token'
+        : tokenStandard === 'ERC-20'
+          ? 'Tokens'
+          : 'All';
 
-    // Three-step breadcrumb: Home > Contracts > <standard tab> > <this contract>.
-    // The middle step deep-links back to the /contracts page with the
-    // correct tab pre-selected so a back-step lands the user where they
-    // came from.
-    const tabHref =
-        tokenStandard === 'ERC-721'  ? '/contracts?tab=erc721'
-      : tokenStandard === 'ERC-1155' ? '/contracts?tab=erc1155'
-      : tokenStandard === 'ERC-20'   ? '/contracts?tab=erc20'
-      :                                '/contracts';
-    const tabLabel =
-        tokenStandard === 'ERC-721'  ? 'NFTs'
-      : tokenStandard === 'ERC-1155' ? 'Multi-Token'
-      : tokenStandard === 'ERC-20'   ? 'Tokens'
-      :                                'All';
-
-    return (
-        <div className="detail-content">
-            <Breadcrumbs items={[
-                { label: 'Contracts', translateLabel: true, href: '/contracts' },
-                { label: tabLabel, href: tabHref },
-                {
-                    label: qnsName ?? (symbol || compactQrlAddress(address)),
-                    fullLabel: qnsName || symbol ? undefined : address,
-                },
-            ]} />
-            {/* Token Header Card */}
-            <div className="relative overflow-hidden rounded-xl md:card mb-4 md:mb-6">
-                <div className="p-4 md:p-6 lg:p-8">
-                    {/* Token Identity */}
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-border">
-                        <div className="flex items-center gap-4">
-                            {/* Token Icon. Phase 3a: render the off-chain
+  return (
+    <div className="detail-content">
+      <Breadcrumbs
+        items={[
+          { label: 'Contracts', translateLabel: true, href: '/contracts' },
+          { label: tabLabel, href: tabHref },
+          {
+            label: qnsName ?? (symbol || compactQrlAddress(address)),
+            fullLabel: qnsName || symbol ? undefined : address,
+          },
+        ]}
+      />
+      {/* Token Header Card */}
+      <div className="relative overflow-hidden rounded-xl md:card mb-4 md:mb-6">
+        <div className="p-4 md:p-6 lg:p-8">
+          {/* Token Identity */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-border">
+            <div className="flex items-center gap-4">
+              {/* Token Icon. Phase 3a: render the off-chain
                                 metadata image when present, fall back to the
                                 first-character monogram. Fixed 64px square so
                                 the layout doesn't shift while the next/image
                                 loader resolves. */}
-                            {metaImage ? (
-                                <div className="relative w-12 h-12 md:w-16 md:h-16 rounded-full overflow-hidden border border-border bg-background-tertiary">
-                                    <ImageWithFallback
-                                        src={metaImage}
-                                        alt={name}
-                                        fill
-                                        sizes="64px"
-                                        className="object-cover"
-                                        fallback={
-                                            <div className="absolute inset-0 bg-gradient-to-br from-accent to-accent-dark flex items-center justify-center text-xl md:text-2xl font-bold text-background">
-                                                {symbol.charAt(0)}
-                                            </div>
-                                        }
-                                    />
-                                </div>
-                            ) : (
-                                <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-gradient-to-br from-accent to-accent-dark flex items-center justify-center text-xl md:text-2xl font-bold text-background">
-                                    {symbol.charAt(0)}
-                                </div>
-                            )}
-                            <div className="min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                    <h1 className="text-xl md:text-2xl font-bold text-text-primary">{name}</h1>
-                                    {rawSymbol && (
-                                        <span className="px-2 py-0.5 rounded bg-accent/20 text-accent text-sm font-medium">
-                                            {rawSymbol}
-                                        </span>
-                                    )}
-                                    {isHttpUrl(metaExternalURL) && (
-                                        <a
-                                            href={metaExternalURL}
-                                            target="_blank"
-                                            rel="noreferrer noopener nofollow"
-                                            className="text-xs text-text-secondary hover:text-accent underline"
-                                            title="External URL from contract metadata"
-                                        >
-                                            site ↗
-                                        </a>
-                                    )}
-                                </div>
-                                {metaDescription && (
-                                    <p className="text-xs md:text-sm text-text-secondary mt-1 line-clamp-2 max-w-prose">
-                                        {metaDescription}
-                                    </p>
-                                )}
-                                {qnsName ? (
-                                    <ResolvedQnsIdentity name={qnsName} address={address} />
-                                ) : (
-                                    <div className="flex items-center gap-2 mt-1 min-w-0">
-                                        <AddressFingerprint
-                                            address={address}
-                                            className="text-xs md:text-sm text-text-secondary font-mono"
-                                        />
-                                        <CopyButton value={address} label="Copy address" />
-                                        <QRCodeButton address={address} />
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                        <div className={`px-3 py-1.5 rounded-lg text-sm font-medium self-start ${badgeClasses}`}>
-                            {badgeLabel}
-                        </div>
-                    </div>
+              {metaImage ? (
+                <div className="relative w-12 h-12 md:w-16 md:h-16 rounded-full overflow-hidden border border-border bg-background-tertiary">
+                  <ImageWithFallback
+                    src={metaImage}
+                    alt={name}
+                    fill
+                    sizes="64px"
+                    className="object-cover"
+                    fallback={
+                      <div className="absolute inset-0 bg-gradient-to-br from-accent to-accent-dark flex items-center justify-center text-xl md:text-2xl font-bold text-background">
+                        {symbol.charAt(0)}
+                      </div>
+                    }
+                  />
+                </div>
+              ) : (
+                <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-gradient-to-br from-accent to-accent-dark flex items-center justify-center text-xl md:text-2xl font-bold text-background">
+                  {symbol.charAt(0)}
+                </div>
+              )}
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-xl md:text-2xl font-bold text-text-primary">{name}</h1>
+                  {rawSymbol && (
+                    <span className="px-2 py-0.5 rounded bg-accent/20 text-accent text-sm font-medium">
+                      {rawSymbol}
+                    </span>
+                  )}
+                  {isHttpUrl(metaExternalURL) && (
+                    <a
+                      href={metaExternalURL}
+                      target="_blank"
+                      rel="noreferrer noopener nofollow"
+                      className="text-xs text-text-secondary hover:text-accent underline"
+                      title="External URL from contract metadata"
+                    >
+                      site ↗
+                    </a>
+                  )}
+                </div>
+                {metaDescription && (
+                  <p className="text-xs md:text-sm text-text-secondary mt-1 line-clamp-2 max-w-prose">
+                    {metaDescription}
+                  </p>
+                )}
+                {qnsName ? (
+                  <ResolvedQnsIdentity name={qnsName} address={address} />
+                ) : (
+                  <div className="flex items-center gap-2 mt-1 min-w-0">
+                    <AddressFingerprint
+                      address={address}
+                      className="text-xs md:text-sm text-text-secondary font-mono"
+                    />
+                    <CopyButton value={address} label="Copy address" />
+                    <QRCodeButton address={address} />
+                  </div>
+                )}
+              </div>
+            </div>
+            <div
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium self-start ${badgeClasses}`}
+            >
+              {badgeLabel}
+            </div>
+          </div>
 
-                    {/* Token Stats Grid. Decimals hidden for NFT collections (no
+          {/* Token Stats Grid. Decimals hidden for NFT collections (no
                         fractional units); for ERC-1155 totalSupply is the
                         operator's reported aggregate and may not be meaningful
                         per-id (Phase 2 will surface per-id supply on the holders
                         endpoint). */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="bg-background-tertiary rounded-lg p-3 md:p-4">
-                            <div className="text-xs md:text-sm text-text-secondary mb-1">
-                                {tokenStandard === 'ERC-721' ? 'Total Items' : 'Total Supply'}
-                            </div>
-                            <div
-                                className="text-sm md:text-base font-semibold text-text-primary truncate"
-                                title={isNFT ? totalSupply : formatTokenAmount(totalSupply, decimals)}
-                            >
-                                {isNFT
-                                    ? (totalSupply !== '0' ? `${totalSupply}${rawSymbol ? ' ' + rawSymbol : ''}` : '-')
-                                    : `${formatTokenAmount(totalSupply, decimals)}${rawSymbol ? ' ' + rawSymbol : ''}`}
-                            </div>
-                        </div>
-                        <div className="bg-background-tertiary rounded-lg p-3 md:p-4">
-                            <div className="text-xs md:text-sm text-text-secondary mb-1">Holders</div>
-                            <div className="text-sm md:text-base font-semibold text-text-primary">
-                                {tokenInfo?.holderCount?.toLocaleString() ?? '-'}
-                            </div>
-                        </div>
-                        <div className="bg-background-tertiary rounded-lg p-3 md:p-4">
-                            <div className="text-xs md:text-sm text-text-secondary mb-1">Transfers</div>
-                            <div className="text-sm md:text-base font-semibold text-text-primary">
-                                {tokenInfo?.transferCount?.toLocaleString() ?? '-'}
-                            </div>
-                        </div>
-                        <div className="bg-background-tertiary rounded-lg p-3 md:p-4">
-                            <div className="text-xs md:text-sm text-text-secondary mb-1">
-                                {isNFT ? 'Standard' : 'Decimals'}
-                            </div>
-                            <div className="text-sm md:text-base font-semibold text-text-primary">
-                                {isNFT ? (tokenStandard?.replace(/^ERC-/, 'QRC-') ?? '-') : decimals}
-                            </div>
-                        </div>
-                    </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-background-tertiary rounded-lg p-3 md:p-4">
+              <div className="text-xs md:text-sm text-text-secondary mb-1">
+                {tokenStandard === 'ERC-721' ? 'Total Items' : 'Total Supply'}
+              </div>
+              <div
+                className="text-sm md:text-base font-semibold text-text-primary truncate"
+                title={isNFT ? totalSupply : formatTokenAmount(totalSupply, decimals)}
+              >
+                {isNFT
+                  ? totalSupply !== '0'
+                    ? `${totalSupply}${rawSymbol ? ' ' + rawSymbol : ''}`
+                    : '-'
+                  : `${formatTokenAmount(totalSupply, decimals)}${rawSymbol ? ' ' + rawSymbol : ''}`}
+              </div>
+            </div>
+            <div className="bg-background-tertiary rounded-lg p-3 md:p-4">
+              <div className="text-xs md:text-sm text-text-secondary mb-1">Holders</div>
+              <div className="text-sm md:text-base font-semibold text-text-primary">
+                {tokenInfo?.holderCount?.toLocaleString() ?? '-'}
+              </div>
+            </div>
+            <div className="bg-background-tertiary rounded-lg p-3 md:p-4">
+              <div className="text-xs md:text-sm text-text-secondary mb-1">Transfers</div>
+              <div className="text-sm md:text-base font-semibold text-text-primary">
+                {tokenInfo?.transferCount?.toLocaleString() ?? '-'}
+              </div>
+            </div>
+            <div className="bg-background-tertiary rounded-lg p-3 md:p-4">
+              <div className="text-xs md:text-sm text-text-secondary mb-1">
+                {isNFT ? 'Standard' : 'Decimals'}
+              </div>
+              <div className="text-sm md:text-base font-semibold text-text-primary">
+                {isNFT ? (tokenStandard?.replace(/^ERC-/, 'QRC-') ?? '-') : decimals}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="mb-4">
+        <TabPillBar
+          ariaLabel="Token contract sections"
+          activeKey={activeTab}
+          onSelect={setRawTab}
+          tabs={tabs.map((tab) => ({ key: tab.id, label: tab.label }))}
+        />
+      </div>
+
+      {/* Tab Content */}
+      <div className="card overflow-hidden">
+        {/* Overview Tab */}
+        {activeTab === 'overview' && (
+          <div className="p-4 md:p-6 space-y-6">
+            <div>
+              <h3 className="font-display text-lg font-semibold text-text-primary mb-4">
+                Contract Details
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <div className="text-xs md:text-sm text-text-secondary mb-1">Creator</div>
+                  <div className="flex items-center gap-2">
+                    <AddressDisplay address={creatorAddress} />
+                    {creatorAddress && <CopyButton value={creatorAddress} label="Copy address" />}
+                  </div>
                 </div>
+
+                <div>
+                  <div className="text-xs md:text-sm text-text-secondary mb-1">Contract Size</div>
+                  <div className="text-sm text-text-secondary">
+                    {contractData.contractCode
+                      ? `${Math.floor(contractData.contractCode.length * 0.75).toLocaleString()} bytes`
+                      : '-'}
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* Tabs */}
-            <div className="mb-4">
-                <TabPillBar
-                    ariaLabel="Token contract sections"
-                    activeKey={activeTab}
-                    onSelect={setRawTab}
-                    tabs={tabs.map((tab) => ({ key: tab.id, label: tab.label }))}
-                />
-            </div>
-
-            {/* Tab Content */}
-            <div className="card overflow-hidden">
-                {/* Overview Tab */}
-                {activeTab === 'overview' && (
-                    <div className="p-4 md:p-6 space-y-6">
-                        <div>
-                            <h3 className="font-display text-lg font-semibold text-text-primary mb-4">Contract Details</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <div className="text-xs md:text-sm text-text-secondary mb-1">Creator</div>
-                                    <div className="flex items-center gap-2">
-                                        <AddressDisplay address={creatorAddress} />
-                                        {creatorAddress && (
-                                            <CopyButton value={creatorAddress} label="Copy address" />
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <div className="text-xs md:text-sm text-text-secondary mb-1">Contract Size</div>
-                                    <div className="text-sm text-text-secondary">
-                                        {contractData.contractCode
-                                            ? `${Math.floor(contractData.contractCode.length * 0.75).toLocaleString()} bytes`
-                                            : '-'
-                                        }
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Contract Code (verified source / ABI / bytecode) + Read / Write tabs.
+            {/* Contract Code (verified source / ABI / bytecode) + Read / Write tabs.
                             Replaces the standalone bytecode block on token pages too, same
                             behaviour as the address page, just nested inside the Overview tab. */}
-                        {contractData.contractCode && (
-                            <div>
-                                <div className="flex items-center gap-2 flex-wrap mb-4">
-                                    <h3 className="font-display text-lg font-semibold text-text-primary">Contract</h3>
-                                    {contractData.verified && (
-                                        <VerifiedBadge
-                                            record={contractData}
-                                        />
-                                    )}
-                                </div>
-                                <ContractTabs
-                                    // Forward the whole contractData and only override
-                                    // the few required-string fields that ContractData
-                                    // wants non-optional. Avoids hand-listing every
-                                    // optional verification field, adding a new field
-                                    // to ContractData just flows through.
-                                    contractData={{
-                                        ...contractData,
-                                        creatorAddress: creatorAddress,
-                                        address: address,
-                                        contractCode: contractData.contractCode,
-                                        creationTransaction: contractData.creationTransaction ?? '',
-                                        isToken: contractData.isToken ?? true,
-                                        status: contractData.status ?? '',
-                                        decimals: contractData.decimals ?? 0,
-                                        name: contractData.name ?? '',
-                                        symbol: contractData.symbol ?? '',
-                                        updatedAt: contractData.updatedAt ?? '',
-                                        verified: contractData.verified ?? false,
-                                    }}
-                                />
-                            </div>
-                        )}
+            {contractData.contractCode && (
+              <div>
+                <div className="flex items-center gap-2 flex-wrap mb-4">
+                  <h3 className="font-display text-lg font-semibold text-text-primary">Contract</h3>
+                  {contractData.verified && <VerifiedBadge record={contractData} />}
+                </div>
+                <ContractTabs
+                  // Forward the whole contractData and only override
+                  // the few required-string fields that ContractData
+                  // wants non-optional. Avoids hand-listing every
+                  // optional verification field, adding a new field
+                  // to ContractData just flows through.
+                  contractData={{
+                    ...contractData,
+                    creatorAddress: creatorAddress,
+                    address: address,
+                    contractCode: contractData.contractCode,
+                    creationTransaction: contractData.creationTransaction ?? '',
+                    isToken: contractData.isToken ?? true,
+                    status: contractData.status ?? '',
+                    decimals: contractData.decimals ?? 0,
+                    name: contractData.name ?? '',
+                    symbol: contractData.symbol ?? '',
+                    updatedAt: contractData.updatedAt ?? '',
+                    verified: contractData.verified ?? false,
+                  }}
+                />
+              </div>
+            )}
 
-                        {/* Creation Transaction Details */}
-                        <div>
-                            <h3 className="font-display text-lg font-semibold text-text-primary mb-4">Creation Transaction</h3>
-                            <div className="bg-background-tertiary rounded-lg p-4 space-y-3">
-                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
-                                    <div className="text-xs md:text-sm text-text-secondary">Transaction Hash</div>
-                                    <div className="flex items-center gap-2 min-w-0">
-                                        {creationTxHash ? (
-                                            <>
-                                                <Link
-                                                    href={`/tx/${creationTxHash}`}
-                                                    className="text-accent hover:text-accent-hover font-mono text-xs md:text-sm break-all"
-                                                >
-                                                    {creationTxHash}
-                                                </Link>
-                                                <CopyButton value={creationTxHash} label="Copy transaction hash" />
-                                            </>
-                                        ) : (
-                                            <span className="text-xs md:text-sm text-text-secondary">
-                                                {isGenesisContract ? 'Genesis contract' : 'Unknown'}
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
+            {/* Creation Transaction Details */}
+            <div>
+              <h3 className="font-display text-lg font-semibold text-text-primary mb-4">
+                Creation Transaction
+              </h3>
+              <div className="bg-background-tertiary rounded-lg p-4 space-y-3">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+                  <div className="text-xs md:text-sm text-text-secondary">Transaction Hash</div>
+                  <div className="flex items-center gap-2 min-w-0">
+                    {creationTxHash ? (
+                      <>
+                        <Link
+                          href={`/tx/${creationTxHash}`}
+                          className="text-accent hover:text-accent-hover font-mono text-xs md:text-sm break-all"
+                        >
+                          {creationTxHash}
+                        </Link>
+                        <CopyButton value={creationTxHash} label="Copy transaction hash" />
+                      </>
+                    ) : (
+                      <span className="text-xs md:text-sm text-text-secondary">
+                        {isGenesisContract ? 'Genesis contract' : 'Unknown'}
+                      </span>
+                    )}
+                  </div>
+                </div>
 
-                                <div className="border-t border-border" />
+                <div className="border-t border-border" />
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <div className="flex justify-between md:flex-col">
-                                        <div className="text-xs md:text-sm text-text-secondary">Block</div>
-                                        {(() => {
-                                            // Only link when a block is actually known; a bare
-                                            // /block/ href renders as a broken link.
-                                            const creationBlock = creationTx?.BlockNumber || tokenInfo?.creationBlock || '';
-                                            if (!creationBlock) {
-                                                return (
-                                                    <span className="text-sm text-text-secondary">
-                                                        {isGenesisContract ? 'Genesis' : '-'}
-                                                    </span>
-                                                );
-                                            }
-                                            return (
-                                                <Link
-                                                    href={`/block/${creationBlock}`}
-                                                    className="text-accent hover:text-accent-hover text-sm"
-                                                >
-                                                    {parseInt(creationBlock, 16).toLocaleString()}
-                                                </Link>
-                                            );
-                                        })()}
-                                    </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="flex justify-between md:flex-col">
+                    <div className="text-xs md:text-sm text-text-secondary">Block</div>
+                    {(() => {
+                      // Only link when a block is actually known; a bare
+                      // /block/ href renders as a broken link.
+                      const creationBlock =
+                        creationTx?.BlockNumber || tokenInfo?.creationBlock || '';
+                      if (!creationBlock) {
+                        return (
+                          <span className="text-sm text-text-secondary">
+                            {isGenesisContract ? 'Genesis' : '-'}
+                          </span>
+                        );
+                      }
+                      return (
+                        <Link
+                          href={`/block/${creationBlock}`}
+                          className="text-accent hover:text-accent-hover text-sm"
+                        >
+                          {parseInt(creationBlock, 16).toLocaleString()}
+                        </Link>
+                      );
+                    })()}
+                  </div>
 
-                                    <div className="flex justify-between md:flex-col">
-                                        <div className="text-xs md:text-sm text-text-secondary">Timestamp</div>
-                                        <div className="text-sm text-text-secondary">
-                                            {creationTx?.BlockTimestamp
-                                                ? <TimeDisplay timestamp={creationTx.BlockTimestamp} />
-                                                : '-'}
-                                        </div>
-                                    </div>
-
-                                    <div className="flex justify-between md:flex-col">
-                                        <div className="text-xs md:text-sm text-text-secondary">Gas Used</div>
-                                        <div className="text-sm text-text-secondary">
-                                            {creationTx?.GasUsed
-                                                ? parseInt(creationTx.GasUsed, 16).toLocaleString()
-                                                : '-'}
-                                        </div>
-                                    </div>
-
-                                    <div className="flex justify-between md:flex-col">
-                                        <div className="text-xs md:text-sm text-text-secondary">Gas Price</div>
-                                        <div className="text-sm text-text-secondary">
-                                            {creationTx?.GasPrice
-                                                ? `${(parseInt(creationTx.GasPrice, 16) / 1e9).toFixed(2)} Shor`
-                                                : '-'}
-                                        </div>
-                                    </div>
-
-                                    <div className="flex justify-between md:flex-col">
-                                        <div className="text-xs md:text-sm text-text-secondary">Transaction Fee</div>
-                                        <div className="text-sm text-text-secondary">
-                                            {(() => {
-                                                if (!creationTx?.GasUsed || !creationTx?.GasPrice) return '-';
-                                                const [formattedFee, feeUnit] = formatAmount(`0x${(BigInt(creationTx.GasUsed) * BigInt(creationTx.GasPrice)).toString(16)}`);
-                                                return `${formattedFee} ${feeUnit}`;
-                                            })()}
-                                        </div>
-                                    </div>
-
-                                    <div className="flex justify-between md:flex-col">
-                                        <div className="text-xs md:text-sm text-text-secondary">Value</div>
-                                        <div className="text-sm text-text-secondary">
-                                            {(() => {
-                                                if (!creationTx?.Value) return `0 ${NATIVE_UNIT}`;
-                                                const [formattedValue, valueUnit] = formatAmount(creationTx.Value);
-                                                return `${formattedValue} ${valueUnit}`;
-                                            })()}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                  <div className="flex justify-between md:flex-col">
+                    <div className="text-xs md:text-sm text-text-secondary">Timestamp</div>
+                    <div className="text-sm text-text-secondary">
+                      {creationTx?.BlockTimestamp ? (
+                        <TimeDisplay timestamp={creationTx.BlockTimestamp} />
+                      ) : (
+                        '-'
+                      )}
                     </div>
-                )}
+                  </div>
 
-                {/* Holders Tab */}
-                {activeTab === 'holders' && (
-                    <div>
-                        {/* Phase 2: per-tokenID filter for NFT collections. The input
+                  <div className="flex justify-between md:flex-col">
+                    <div className="text-xs md:text-sm text-text-secondary">Gas Used</div>
+                    <div className="text-sm text-text-secondary">
+                      {creationTx?.GasUsed
+                        ? parseInt(creationTx.GasUsed, 16).toLocaleString()
+                        : '-'}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between md:flex-col">
+                    <div className="text-xs md:text-sm text-text-secondary">Gas Price</div>
+                    <div className="text-sm text-text-secondary">
+                      {creationTx?.GasPrice
+                        ? `${(parseInt(creationTx.GasPrice, 16) / 1e9).toFixed(2)} Shor`
+                        : '-'}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between md:flex-col">
+                    <div className="text-xs md:text-sm text-text-secondary">Transaction Fee</div>
+                    <div className="text-sm text-text-secondary">
+                      {(() => {
+                        if (!creationTx?.GasUsed || !creationTx?.GasPrice) return '-';
+                        const [formattedFee, feeUnit] = formatAmount(
+                          `0x${(BigInt(creationTx.GasUsed) * BigInt(creationTx.GasPrice)).toString(16)}`
+                        );
+                        return `${formattedFee} ${feeUnit}`;
+                      })()}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between md:flex-col">
+                    <div className="text-xs md:text-sm text-text-secondary">Value</div>
+                    <div className="text-sm text-text-secondary">
+                      {(() => {
+                        if (!creationTx?.Value) return `0 ${NATIVE_UNIT}`;
+                        const [formattedValue, valueUnit] = formatAmount(creationTx.Value);
+                        return `${formattedValue} ${valueUnit}`;
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Holders Tab */}
+        {activeTab === 'holders' && (
+          <div>
+            {/* Phase 2: per-tokenID filter for NFT collections. The input
                             debounces locally and only sets the actual filter on submit,
                             so each keystroke doesn't trigger a network request. */}
-                        {isNFT && (
-                            <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-border bg-background-tertiary">
-                                <label htmlFor="tokenIDFilter" className="text-xs text-text-secondary">
-                                    Filter by tokenID:
-                                </label>
-                                <input
-                                    id="tokenIDFilter"
-                                    type="text"
-                                    inputMode="numeric"
-                                    placeholder="e.g. 1"
-                                    value={holderTokenIDInput}
-                                    onChange={(e) => setHolderTokenIDInput(e.target.value.replace(/[^0-9]/g, ''))}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                            // Filter + page reset in one URL write so Back
-                                            // restores both atomically.
-                                            setUrlParams({ tokenId: holderTokenIDInput.trim() || null, hp: null }, 'replace');
-                                        }
-                                    }}
-                                    className="px-2 py-1 rounded bg-background-tertiary border border-border text-sm text-text-primary font-mono w-32"
-                                />
-                                <button
-                                    onClick={() => {
-                                        setUrlParams({ tokenId: holderTokenIDInput.trim() || null, hp: null }, 'replace');
-                                    }}
-                                    className="px-3 py-1 rounded bg-accent/20 text-accent text-sm hover:bg-accent/30"
-                                >
-                                    Apply
-                                </button>
-                                {holderTokenIDFilter && (
-                                    <button
-                                        onClick={() => {
-                                            setHolderTokenIDInput('');
-                                            setUrlParams({ tokenId: null, hp: null }, 'replace');
-                                        }}
-                                        className="px-3 py-1 rounded bg-surface-2 text-sm hover:bg-surface-3"
-                                    >
-                                        Clear
-                                    </button>
-                                )}
-                                {holderTokenIDFilter && (
-                                    <span className="text-xs text-text-secondary">
-                                        Showing holders of tokenID <span className="font-mono text-text-primary">{holderTokenIDFilter}</span>
-                                    </span>
-                                )}
-                            </div>
-                        )}
-
-                        {loading ? (
-                            <div className="p-8 text-center text-text-secondary">Loading holders...</div>
-                        ) : holders.length === 0 ? (
-                            <div className="p-8 text-center text-text-secondary">No holders found</div>
-                        ) : (
-                            <>
-                                <div className="overflow-x-auto">
-                                    <table aria-label="Token holders" className="w-full">
-                                        <thead className="bg-background-tertiary">
-                                            <tr>
-                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase">#</th>
-                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase">Address</th>
-                                                {isNFT && holderTokenIDFilter === '' && (
-                                                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase hidden md:table-cell">
-                                                        {tokenStandard === 'ERC-721' ? 'NFTs owned' : 'Total quantity'}
-                                                    </th>
-                                                )}
-                                                {isNFT && holderTokenIDFilter !== '' && (
-                                                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase">Token ID</th>
-                                                )}
-                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-text-secondary uppercase">Balance</th>
-                                                {!isNFT && (
-                                                    <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-text-secondary uppercase hidden md:table-cell">Share</th>
-                                                )}
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-border">
-                                            {holders.map((holder, idx) => {
-                                                const totalSupplyBigInt = totalSupply ? BigInt(totalSupply) : BigInt(0);
-                                                let sharePercent = 0;
-                                                try {
-                                                    const share = totalSupplyBigInt > BigInt(0) && holder.balance
-                                                        ? ((BigInt(holder.balance) * BigInt(10000)) / totalSupplyBigInt)
-                                                        : BigInt(0);
-                                                    sharePercent = Number(share) / 100;
-                                                } catch {
-                                                    sharePercent = 0;
-                                                }
-
-                                                const rowKey = holder.tokenID
-                                                    ? `${holder.holderAddress}-${holder.tokenID}`
-                                                    : holder.holderAddress;
-
-                                                // ERC-721 balance column is the per-id "1"; show
-                                                // a count instead in the aggregated view (which is
-                                                // the sum coming from the backend).
-                                                const balanceCell = isNFT
-                                                    ? holder.balance
-                                                    : `${formatTokenAmount(holder.balance, decimals)}${rawSymbol ? ' ' + rawSymbol : ''}`;
-
-                                                return (
-                                                    <tr key={rowKey} className="hover:bg-surface-2">
-                                                        <td className="px-4 py-3 text-sm text-text-secondary">
-                                                            {holdersPage * limit + idx + 1}
-                                                        </td>
-                                                        <td className="px-4 py-3">
-                                                            <AddressDisplay address={holder.holderAddress} />
-                                                        </td>
-                                                        {isNFT && holderTokenIDFilter === '' && (
-                                                            <td className="px-4 py-3 text-left text-sm text-text-secondary font-mono hidden md:table-cell">
-                                                                {holder.balance}
-                                                            </td>
-                                                        )}
-                                                        {isNFT && holderTokenIDFilter !== '' && (
-                                                            <td className="px-4 py-3 text-left text-sm text-text-primary font-mono">
-                                                                #{holder.tokenID ?? holderTokenIDFilter}
-                                                            </td>
-                                                        )}
-                                                        <td className="px-4 py-3 text-right text-sm text-text-primary font-mono">
-                                                            {balanceCell}
-                                                        </td>
-                                                        {!isNFT && (
-                                                            <td className="px-4 py-3 text-right text-sm text-text-secondary hidden md:table-cell">
-                                                                {sharePercent.toFixed(2)}%
-                                                            </td>
-                                                        )}
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                </div>
-
-                                {/* Pagination */}
-                                {holdersTotal > limit && (
-                                    <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-                                        <div className="text-sm text-text-secondary">
-                                            Showing {holdersPage * limit + 1} - {Math.min((holdersPage + 1) * limit, holdersTotal)} of {holdersTotal}
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <button
-                                                aria-label="Go to previous page"
-                                                onClick={() => setHoldersPage(Math.max(0, holdersPage - 1))}
-                                                disabled={holdersPage === 0}
-                                                className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
-                                            >
-                                                Previous
-                                            </button>
-                                            <button
-                                                aria-label="Go to next page"
-                                                onClick={() => setHoldersPage(holdersPage + 1)}
-                                                disabled={(holdersPage + 1) * limit >= holdersTotal}
-                                                className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
-                                            >
-                                                Next
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                            </>
-                        )}
-                    </div>
+            {isNFT && (
+              <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-border bg-background-tertiary">
+                <label htmlFor="tokenIDFilter" className="text-xs text-text-secondary">
+                  Filter by tokenID:
+                </label>
+                <input
+                  id="tokenIDFilter"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="e.g. 1"
+                  value={holderTokenIDInput}
+                  onChange={(e) => setHolderTokenIDInput(e.target.value.replace(/[^0-9]/g, ''))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      // Filter + page reset in one URL write so Back
+                      // restores both atomically.
+                      setUrlParams(
+                        { tokenId: holderTokenIDInput.trim() || null, hp: null },
+                        'replace'
+                      );
+                    }
+                  }}
+                  className="px-2 py-1 rounded bg-background-tertiary border border-border text-sm text-text-primary font-mono w-32"
+                />
+                <button
+                  onClick={() => {
+                    setUrlParams(
+                      { tokenId: holderTokenIDInput.trim() || null, hp: null },
+                      'replace'
+                    );
+                  }}
+                  className="px-3 py-1 rounded bg-accent/20 text-accent text-sm hover:bg-accent/30"
+                >
+                  Apply
+                </button>
+                {holderTokenIDFilter && (
+                  <button
+                    onClick={() => {
+                      setHolderTokenIDInput('');
+                      setUrlParams({ tokenId: null, hp: null }, 'replace');
+                    }}
+                    className="px-3 py-1 rounded bg-surface-2 text-sm hover:bg-surface-3"
+                  >
+                    Clear
+                  </button>
                 )}
+                {holderTokenIDFilter && (
+                  <span className="text-xs text-text-secondary">
+                    Showing holders of tokenID{' '}
+                    <span className="font-mono text-text-primary">{holderTokenIDFilter}</span>
+                  </span>
+                )}
+              </div>
+            )}
 
-                {/* Tokens Tab. Phase 2: lists every distinct tokenID minted
+            {loading ? (
+              <div className="p-8 text-center text-text-secondary">Loading holders...</div>
+            ) : holders.length === 0 ? (
+              <div className="p-8 text-center text-text-secondary">No holders found</div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table aria-label="Token holders" className="w-full">
+                    <thead className="bg-background-tertiary">
+                      <tr>
+                        <th
+                          scope="col"
+                          className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase"
+                        >
+                          #
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase"
+                        >
+                          Address
+                        </th>
+                        {isNFT && holderTokenIDFilter === '' && (
+                          <th
+                            scope="col"
+                            className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase hidden md:table-cell"
+                          >
+                            {tokenStandard === 'ERC-721' ? 'NFTs owned' : 'Total quantity'}
+                          </th>
+                        )}
+                        {isNFT && holderTokenIDFilter !== '' && (
+                          <th
+                            scope="col"
+                            className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase"
+                          >
+                            Token ID
+                          </th>
+                        )}
+                        <th
+                          scope="col"
+                          className="px-4 py-3 text-right text-xs font-medium text-text-secondary uppercase"
+                        >
+                          Balance
+                        </th>
+                        {!isNFT && (
+                          <th
+                            scope="col"
+                            className="px-4 py-3 text-right text-xs font-medium text-text-secondary uppercase hidden md:table-cell"
+                          >
+                            Share
+                          </th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {holders.map((holder, idx) => {
+                        const totalSupplyBigInt = totalSupply ? BigInt(totalSupply) : BigInt(0);
+                        let sharePercent = 0;
+                        try {
+                          const share =
+                            totalSupplyBigInt > BigInt(0) && holder.balance
+                              ? (BigInt(holder.balance) * BigInt(10000)) / totalSupplyBigInt
+                              : BigInt(0);
+                          sharePercent = Number(share) / 100;
+                        } catch {
+                          sharePercent = 0;
+                        }
+
+                        const rowKey = holder.tokenID
+                          ? `${holder.holderAddress}-${holder.tokenID}`
+                          : holder.holderAddress;
+
+                        // ERC-721 balance column is the per-id "1"; show
+                        // a count instead in the aggregated view (which is
+                        // the sum coming from the backend).
+                        const balanceCell = isNFT
+                          ? holder.balance
+                          : `${formatTokenAmount(holder.balance, decimals)}${rawSymbol ? ' ' + rawSymbol : ''}`;
+
+                        return (
+                          <tr key={rowKey} className="hover:bg-surface-2">
+                            <td className="px-4 py-3 text-sm text-text-secondary">
+                              {holdersPage * limit + idx + 1}
+                            </td>
+                            <td className="px-4 py-3">
+                              <AddressDisplay address={holder.holderAddress} />
+                            </td>
+                            {isNFT && holderTokenIDFilter === '' && (
+                              <td className="px-4 py-3 text-left text-sm text-text-secondary font-mono hidden md:table-cell">
+                                {holder.balance}
+                              </td>
+                            )}
+                            {isNFT && holderTokenIDFilter !== '' && (
+                              <td className="px-4 py-3 text-left text-sm text-text-primary font-mono">
+                                #{holder.tokenID ?? holderTokenIDFilter}
+                              </td>
+                            )}
+                            <td className="px-4 py-3 text-right text-sm text-text-primary font-mono">
+                              {balanceCell}
+                            </td>
+                            {!isNFT && (
+                              <td className="px-4 py-3 text-right text-sm text-text-secondary hidden md:table-cell">
+                                {sharePercent.toFixed(2)}%
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination */}
+                {holdersTotal > limit && (
+                  <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+                    <div className="text-sm text-text-secondary">
+                      Showing {holdersPage * limit + 1} -{' '}
+                      {Math.min((holdersPage + 1) * limit, holdersTotal)} of {holdersTotal}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        aria-label="Go to previous page"
+                        onClick={() => setHoldersPage(Math.max(0, holdersPage - 1))}
+                        disabled={holdersPage === 0}
+                        className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        aria-label="Go to next page"
+                        onClick={() => setHoldersPage(holdersPage + 1)}
+                        disabled={(holdersPage + 1) * limit >= holdersTotal}
+                        className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Tokens Tab. Phase 2: lists every distinct tokenID minted
                     on this NFT contract, with the holder count for each id.
                     Clicking a row jumps to the holders tab filtered to that id. */}
-                {activeTab === 'tokens' && (
-                    <div>
-                        {loading ? (
-                            <div className="p-8 text-center text-text-secondary">Loading tokens...</div>
-                        ) : tokensList.length === 0 ? (
-                            <div className="p-8 text-center text-text-secondary">No tokens have been minted yet</div>
-                        ) : (
-                            <>
-                                <div className="overflow-x-auto">
-                                    <table aria-label="Token IDs" className="w-full">
-                                        <thead className="bg-background-tertiary">
-                                            <tr>
-                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase w-16"></th>
-                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase">Token</th>
-                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-text-secondary uppercase">Holders</th>
-                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-text-secondary uppercase hidden md:table-cell">Standard</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-border">
-                                            {tokensList.map((t) => {
-                                                // Phase 3b: render the off-chain image if the fetcher has
-                                                // populated it; fall back to a #N monogram tile. The "Token"
-                                                // column shows the metadata name when present, otherwise
-                                                // just "#<id>" - keeps unfetched / no-metadata cases clean.
-                                                const tokenLabel = t.name?.trim() || `#${t.tokenID}`;
-                                                const subLabel = t.name?.trim() ? `#${t.tokenID}` : null;
-                                                return (
-                                                    <tr
-                                                        key={t.tokenID}
-                                                        className="hover:bg-surface-2 cursor-pointer"
-                                                        onClick={() => {
-                                                            // Tab + filter + page in ONE URL write so Back
-                                                            // undoes the jump atomically; the filter input
-                                                            // syncs from ?tokenId via the render tracker.
-                                                            setUrlParams({ tab: 'holders', tokenId: t.tokenID, hp: null }, 'replace');
-                                                        }}
-                                                    >
-                                                        <td className="px-4 py-3">
-                                                            {t.image ? (
-                                                                <div className="relative w-10 h-10 rounded-md overflow-hidden border border-border bg-background-tertiary">
-                                                                    <ImageWithFallback
-                                                                        src={t.image}
-                                                                        alt={tokenLabel}
-                                                                        fill
-                                                                        sizes="40px"
-                                                                        className="object-cover"
-                                                                        fallback={
-                                                                            <div className="absolute inset-0 bg-surface-3 flex items-center justify-center text-xs font-mono text-text-secondary">
-                                                                                {compactTokenIDLabel(t.tokenID)}
-                                                                            </div>
-                                                                        }
-                                                                    />
-                                                                </div>
-                                                            ) : (
-                                                                <div
-                                                                    className="w-10 h-10 rounded-md bg-surface-3 flex items-center justify-center text-xs font-mono text-text-secondary"
-                                                                    title={`#${t.tokenID}`}
-                                                                >
-                                                                    #{compactTokenIDLabel(t.tokenID)}
-                                                                </div>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-4 py-3 text-sm">
-                                                            <div className="text-text-primary">{tokenLabel}</div>
-                                                            {subLabel && <div className="text-xs text-text-muted font-mono">{subLabel}</div>}
-                                                        </td>
-                                                        <td className="px-4 py-3 text-right text-sm text-text-primary">{t.holderCount}</td>
-                                                        <td className="px-4 py-3 text-right text-xs text-text-secondary hidden md:table-cell">
-                                                            {t.tokenStandard ? t.tokenStandard.replace(/^ERC-/, 'QRC-') : '-'}
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
+        {activeTab === 'tokens' && (
+          <div>
+            {loading ? (
+              <div className="p-8 text-center text-text-secondary">Loading tokens...</div>
+            ) : tokensList.length === 0 ? (
+              <div className="p-8 text-center text-text-secondary">
+                No tokens have been minted yet
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table aria-label="Token IDs" className="w-full">
+                    <thead className="bg-background-tertiary">
+                      <tr>
+                        <th
+                          scope="col"
+                          className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase w-16"
+                        ></th>
+                        <th
+                          scope="col"
+                          className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase"
+                        >
+                          Token
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-4 py-3 text-right text-xs font-medium text-text-secondary uppercase"
+                        >
+                          Holders
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-4 py-3 text-right text-xs font-medium text-text-secondary uppercase hidden md:table-cell"
+                        >
+                          Standard
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {tokensList.map((t) => {
+                        // Phase 3b: render the off-chain image if the fetcher has
+                        // populated it; fall back to a #N monogram tile. The "Token"
+                        // column shows the metadata name when present, otherwise
+                        // just "#<id>" - keeps unfetched / no-metadata cases clean.
+                        const tokenLabel = t.name?.trim() || `#${t.tokenID}`;
+                        const subLabel = t.name?.trim() ? `#${t.tokenID}` : null;
+                        return (
+                          <tr
+                            key={t.tokenID}
+                            className="hover:bg-surface-2 cursor-pointer"
+                            onClick={() => {
+                              // Tab + filter + page in ONE URL write so Back
+                              // undoes the jump atomically; the filter input
+                              // syncs from ?tokenId via the render tracker.
+                              setUrlParams(
+                                { tab: 'holders', tokenId: t.tokenID, hp: null },
+                                'replace'
+                              );
+                            }}
+                          >
+                            <td className="px-4 py-3">
+                              {t.image ? (
+                                <div className="relative w-10 h-10 rounded-md overflow-hidden border border-border bg-background-tertiary">
+                                  <ImageWithFallback
+                                    src={t.image}
+                                    alt={tokenLabel}
+                                    fill
+                                    sizes="40px"
+                                    className="object-cover"
+                                    fallback={
+                                      <div className="absolute inset-0 bg-surface-3 flex items-center justify-center text-xs font-mono text-text-secondary">
+                                        {compactTokenIDLabel(t.tokenID)}
+                                      </div>
+                                    }
+                                  />
                                 </div>
-
-                                {/* Pagination */}
-                                {tokensTotal > limit && (
-                                    <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-                                        <div className="text-sm text-text-secondary">
-                                            Showing {tokensPage * limit + 1} - {Math.min((tokensPage + 1) * limit, tokensTotal)} of {tokensTotal}
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <button
-                                                aria-label="Go to previous page"
-                                                onClick={() => setTokensPage(Math.max(0, tokensPage - 1))}
-                                                disabled={tokensPage === 0}
-                                                className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
-                                            >
-                                                Previous
-                                            </button>
-                                            <button
-                                                aria-label="Go to next page"
-                                                onClick={() => setTokensPage(tokensPage + 1)}
-                                                disabled={(tokensPage + 1) * limit >= tokensTotal}
-                                                className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
-                                            >
-                                                Next
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                            </>
-                        )}
-                    </div>
-                )}
-
-                {/* Transfers Tab */}
-                {activeTab === 'transfers' && (
-                    <div>
-                        {hiddenTransfers > 0 && <p className="p-4 text-sm text-text-muted">
-                            {hiddenTransfers} zero-quantity transfers hidden on this page.{' '}
-                            <button type="button" className="text-accent hover:underline" onClick={() => updatePreferences({ hideZeroTokenTransfers: false })}>Show zero transfers</button>
-                        </p>}
-                        {loading ? (
-                            <div className="p-8 text-center text-text-secondary">Loading transfers...</div>
-                        ) : transfers.length === 0 ? (
-                            <div className="p-8 text-center text-text-secondary">No transfers found</div>
-                        ) : (
-                            <>
-                                <div className="overflow-x-auto">
-                                    <table aria-label="Token transfers" className="w-full">
-                                        <thead className="bg-background-tertiary">
-                                            <tr>
-                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase">Tx Hash</th>
-                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase">From</th>
-                                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase">To</th>
-                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-text-secondary uppercase">Amount</th>
-                                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-text-secondary uppercase hidden md:table-cell">Time</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-border">
-                                            {visibleTransfers.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-text-muted">All transfers on this page are hidden by your preferences.</td></tr>}
-                                            {visibleTransfers.map((transfer) => (
-                                                <tr key={`${transfer.txHash}-${transfer.from}-${transfer.to}`} className="hover:bg-surface-2">
-                                                    <td className="px-4 py-3">
-                                                        <Link
-                                                            href={`/tx/${transfer.txHash}`}
-                                                            className="text-accent hover:text-accent-hover font-mono text-xs"
-                                                        >
-                                                            {transfer.txHash.slice(0, 10)}...{transfer.txHash.slice(-8)}
-                                                        </Link>
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        <AddressDisplay address={transfer.from} />
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        <AddressDisplay address={transfer.to} />
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right text-sm text-text-primary font-mono">
-                                                        {formatTokenAmount(transfer.amount, transfer.tokenDecimals || decimals)}{rawSymbol ? ' ' + rawSymbol : ''}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right text-xs text-text-secondary hidden md:table-cell">
-                                                        <TimeDisplay timestamp={transfer.timestamp} />
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                              ) : (
+                                <div
+                                  className="w-10 h-10 rounded-md bg-surface-3 flex items-center justify-center text-xs font-mono text-text-secondary"
+                                  title={`#${t.tokenID}`}
+                                >
+                                  #{compactTokenIDLabel(t.tokenID)}
                                 </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              <div className="text-text-primary">{tokenLabel}</div>
+                              {subLabel && (
+                                <div className="text-xs text-text-muted font-mono">{subLabel}</div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm text-text-primary">
+                              {t.holderCount}
+                            </td>
+                            <td className="px-4 py-3 text-right text-xs text-text-secondary hidden md:table-cell">
+                              {t.tokenStandard ? t.tokenStandard.replace(/^ERC-/, 'QRC-') : '-'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
 
-                                {/* Pagination */}
-                                {transfersTotal > limit && (
-                                    <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-                                        <div className="text-sm text-text-secondary">
-                                            Records {transfersPage * limit + 1} - {Math.min((transfersPage + 1) * limit, transfersTotal)} of {transfersTotal}
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <button
-                                                aria-label="Go to previous page"
-                                                onClick={() => setTransfersPage(Math.max(0, transfersPage - 1))}
-                                                disabled={transfersPage === 0}
-                                                className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
-                                            >
-                                                Previous
-                                            </button>
-                                            <button
-                                                aria-label="Go to next page"
-                                                onClick={() => setTransfersPage(transfersPage + 1)}
-                                                disabled={(transfersPage + 1) * limit >= transfersTotal}
-                                                className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
-                                            >
-                                                Next
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                            </>
-                        )}
+                {/* Pagination */}
+                {tokensTotal > limit && (
+                  <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+                    <div className="text-sm text-text-secondary">
+                      Showing {tokensPage * limit + 1} -{' '}
+                      {Math.min((tokensPage + 1) * limit, tokensTotal)} of {tokensTotal}
                     </div>
+                    <div className="flex gap-2">
+                      <button
+                        aria-label="Go to previous page"
+                        onClick={() => setTokensPage(Math.max(0, tokensPage - 1))}
+                        disabled={tokensPage === 0}
+                        className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        aria-label="Go to next page"
+                        onClick={() => setTokensPage(tokensPage + 1)}
+                        disabled={(tokensPage + 1) * limit >= tokensTotal}
+                        className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
                 )}
-            </div>
-        </div>
-    );
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Transfers Tab */}
+        {activeTab === 'transfers' && (
+          <div>
+            {hiddenTransfers > 0 && (
+              <p className="p-4 text-sm text-text-muted">
+                {hiddenTransfers} zero-quantity transfers hidden on this page.{' '}
+                <button
+                  type="button"
+                  className="text-accent hover:underline"
+                  onClick={() => updatePreferences({ hideZeroTokenTransfers: false })}
+                >
+                  Show zero transfers
+                </button>
+              </p>
+            )}
+            {loading ? (
+              <div className="p-8 text-center text-text-secondary">Loading transfers...</div>
+            ) : transfers.length === 0 ? (
+              <div className="p-8 text-center text-text-secondary">No transfers found</div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table aria-label="Token transfers" className="w-full">
+                    <thead className="bg-background-tertiary">
+                      <tr>
+                        <th
+                          scope="col"
+                          className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase"
+                        >
+                          Tx Hash
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase"
+                        >
+                          From
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase"
+                        >
+                          To
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-4 py-3 text-right text-xs font-medium text-text-secondary uppercase"
+                        >
+                          Amount
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-4 py-3 text-right text-xs font-medium text-text-secondary uppercase hidden md:table-cell"
+                        >
+                          Time
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {visibleTransfers.length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-8 text-center text-sm text-text-muted">
+                            All transfers on this page are hidden by your preferences.
+                          </td>
+                        </tr>
+                      )}
+                      {visibleTransfers.map((transfer) => (
+                        <tr
+                          key={`${transfer.txHash}-${transfer.from}-${transfer.to}`}
+                          className="hover:bg-surface-2"
+                        >
+                          <td className="px-4 py-3">
+                            <Link
+                              href={`/tx/${transfer.txHash}`}
+                              className="text-accent hover:text-accent-hover font-mono text-xs"
+                            >
+                              {transfer.txHash.slice(0, 10)}...{transfer.txHash.slice(-8)}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-3">
+                            <AddressDisplay address={transfer.from} />
+                          </td>
+                          <td className="px-4 py-3">
+                            <AddressDisplay address={transfer.to} />
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm text-text-primary font-mono">
+                            {formatTokenAmount(transfer.amount, transfer.tokenDecimals || decimals)}
+                            {rawSymbol ? ' ' + rawSymbol : ''}
+                          </td>
+                          <td className="px-4 py-3 text-right text-xs text-text-secondary hidden md:table-cell">
+                            <TimeDisplay timestamp={transfer.timestamp} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination */}
+                {transfersTotal > limit && (
+                  <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+                    <div className="text-sm text-text-secondary">
+                      Records {transfersPage * limit + 1} -{' '}
+                      {Math.min((transfersPage + 1) * limit, transfersTotal)} of {transfersTotal}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        aria-label="Go to previous page"
+                        onClick={() => setTransfersPage(Math.max(0, transfersPage - 1))}
+                        disabled={transfersPage === 0}
+                        className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        aria-label="Go to next page"
+                        onClick={() => setTransfersPage(transfersPage + 1)}
+                        disabled={(transfersPage + 1) * limit >= transfersTotal}
+                        className="px-3 py-1 rounded bg-surface-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-3"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }

@@ -1,5 +1,7 @@
 'use client';
 
+import { isRecord } from '../../lib/guards';
+
 import TimeDisplay from '../../components/TimeDisplay';
 import AddressText from '../../components/AddressText';
 
@@ -7,7 +9,12 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
 import config from '../../../config';
-import { formatNumberWithCommas, truncateHash, formatAddress, formatStaked } from '../../lib/helpers';
+import {
+  formatNumberWithCommas,
+  truncateHash,
+  formatAddress,
+  formatStaked,
+} from '../../lib/helpers';
 import SearchBar from '../../components/SearchBar';
 import StatusBadge from '../../components/StatusBadge';
 
@@ -66,7 +73,9 @@ const ZERO_ADDRESS = 'Q' + '0'.repeat(128);
 function SummaryRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center py-2.5 border-b border-border/70 last:border-b-0">
-      <span className="text-text-muted text-[13px] w-44 flex-shrink-0 mb-0.5 sm:mb-0">{label}:</span>
+      <span className="text-text-muted text-[13px] w-44 flex-shrink-0 mb-0.5 sm:mb-0">
+        {label}:
+      </span>
       <span className="text-text-primary text-sm">{children}</span>
     </div>
   );
@@ -88,8 +97,13 @@ export default function EpochDetailClient({ epochId }: { epochId: string }): JSX
         setError(null);
         const res = await axios.get(`${config.handlerUrl}/epoch/${epochId}`);
         setData(res.data);
-      } catch (err: any) {
-        setError(err.response?.data?.error || 'Failed to load epoch data');
+      } catch (err: unknown) {
+        const errorData: unknown = axios.isAxiosError(err) ? err.response?.data : undefined;
+        setError(
+          isRecord(errorData) && typeof errorData.error === 'string' && errorData.error
+            ? errorData.error
+            : 'Failed to load epoch data'
+        );
       } finally {
         setLoading(false);
       }
@@ -104,8 +118,20 @@ export default function EpochDetailClient({ epochId }: { epochId: string }): JSX
       {/* Header with navigation */}
       <div className="flex items-center justify-between mb-4">
         <h1 id="epoch-heading" className="flex items-center gap-2 section-title">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-5 w-5 sm:h-6 sm:w-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
           </svg>
           Epoch {formatNumberWithCommas(epochId)}
         </h1>
@@ -162,27 +188,44 @@ export default function EpochDetailClient({ epochId }: { epochId: string }): JSX
           {/* Summary Panel */}
           <div className="card-simple overflow-hidden mb-6">
             <div className="px-4 py-3 border-b border-border">
-              <h2 className="text-[15px] font-display font-semibold text-text-primary">Epoch Details</h2>
+              <h2 className="text-[15px] font-display font-semibold text-text-primary">
+                Epoch Details
+              </h2>
             </div>
             <div className="px-4 py-2">
               <SummaryRow label="Epoch">{formatNumberWithCommas(data.epoch)}</SummaryRow>
-              <SummaryRow label="Status"><StatusBadge status={data.status} /></SummaryRow>
+              <SummaryRow label="Status">
+                <StatusBadge status={data.status} />
+              </SummaryRow>
               <SummaryRow label="Time">
                 {data.timestamp > 0 ? (
                   <span>
                     <TimeDisplay timestamp={data.timestamp} relative />
-                    <span className="text-text-muted ml-2">(<TimeDisplay timestamp={data.timestamp} />)</span>
+                    <span className="text-text-muted ml-2">
+                      (<TimeDisplay timestamp={data.timestamp} />)
+                    </span>
                   </span>
-                ) : '…'}
+                ) : (
+                  '…'
+                )}
               </SummaryRow>
-              <SummaryRow label="Validators">{formatNumberWithCommas(data.validatorsCount.toString())}</SummaryRow>
-              <SummaryRow label="Active">{formatNumberWithCommas(data.activeCount.toString())}</SummaryRow>
-              {data.pendingCount > 0 && <SummaryRow label="Pending">{data.pendingCount}</SummaryRow>}
+              <SummaryRow label="Validators">
+                {formatNumberWithCommas(data.validatorsCount.toString())}
+              </SummaryRow>
+              <SummaryRow label="Active">
+                {formatNumberWithCommas(data.activeCount.toString())}
+              </SummaryRow>
+              {data.pendingCount > 0 && (
+                <SummaryRow label="Pending">{data.pendingCount}</SummaryRow>
+              )}
               {data.exitedCount > 0 && <SummaryRow label="Exited">{data.exitedCount}</SummaryRow>}
-              {data.slashedCount > 0 && <SummaryRow label="Slashed">{data.slashedCount}</SummaryRow>}
+              {data.slashedCount > 0 && (
+                <SummaryRow label="Slashed">{data.slashedCount}</SummaryRow>
+              )}
               <SummaryRow label="Total Staked">{formatStaked(data.totalStaked)}</SummaryRow>
               <SummaryRow label="Slots">
-                {data.proposedCount + data.missedCount} ({data.proposedCount} Proposed{data.missedCount > 0 ? `, ${data.missedCount} Missed` : ''})
+                {data.proposedCount + data.missedCount} ({data.proposedCount} Proposed
+                {data.missedCount > 0 ? `, ${data.missedCount} Missed` : ''})
               </SummaryRow>
             </div>
           </div>
@@ -196,13 +239,27 @@ export default function EpochDetailClient({ epochId }: { epochId: string }): JSX
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="text-left px-4 py-2.5 text-[11px] font-normal text-text-muted uppercase tracking-wider">Slot</th>
-                    <th className="text-left px-4 py-2.5 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden lg:table-cell">Block Hash</th>
-                    <th className="text-left px-4 py-2.5 text-[11px] font-normal text-text-muted uppercase tracking-wider">Status</th>
-                    <th className="text-left px-4 py-2.5 text-[11px] font-normal text-text-muted uppercase tracking-wider">Time</th>
-                    <th className="text-left px-4 py-2.5 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">Proposer</th>
-                    <th className="text-left px-4 py-2.5 text-[11px] font-normal text-text-muted uppercase tracking-wider">Txns</th>
-                    <th className="text-left px-4 py-2.5 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:table-cell">Gas Used</th>
+                    <th className="text-left px-4 py-2.5 text-[11px] font-normal text-text-muted uppercase tracking-wider">
+                      Slot
+                    </th>
+                    <th className="text-left px-4 py-2.5 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden lg:table-cell">
+                      Block Hash
+                    </th>
+                    <th className="text-left px-4 py-2.5 text-[11px] font-normal text-text-muted uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="text-left px-4 py-2.5 text-[11px] font-normal text-text-muted uppercase tracking-wider">
+                      Time
+                    </th>
+                    <th className="text-left px-4 py-2.5 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">
+                      Proposer
+                    </th>
+                    <th className="text-left px-4 py-2.5 text-[11px] font-normal text-text-muted uppercase tracking-wider">
+                      Txns
+                    </th>
+                    <th className="text-left px-4 py-2.5 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:table-cell">
+                      Gas Used
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -218,11 +275,16 @@ export default function EpochDetailClient({ epochId }: { epochId: string }): JSX
                       >
                         <td className="px-4 py-2 tabular-nums">
                           {isProposed ? (
-                            <Link href={`/block/${slot.slot}`} className="text-accent hover:text-accent-hover hover:underline font-medium">
+                            <Link
+                              href={`/block/${slot.slot}`}
+                              className="text-accent hover:text-accent-hover hover:underline font-medium"
+                            >
                               {formatNumberWithCommas(slot.slot.toString())}
                             </Link>
                           ) : (
-                            <span className="text-text-muted">{formatNumberWithCommas(slot.slot.toString())}</span>
+                            <span className="text-text-muted">
+                              {formatNumberWithCommas(slot.slot.toString())}
+                            </span>
                           )}
                         </td>
                         <td className="px-4 py-2 hidden lg:table-cell">
@@ -246,7 +308,10 @@ export default function EpochDetailClient({ epochId }: { epochId: string }): JSX
                         </td>
                         <td className="px-4 py-2 hidden sm:table-cell">
                           {isProposed && proposer && proposer !== ZERO_ADDRESS ? (
-                            <Link href={`/address/${proposer}`} className="text-text-secondary hover:text-accent hover:underline font-mono text-xs transition-colors">
+                            <Link
+                              href={`/address/${proposer}`}
+                              className="text-text-secondary hover:text-accent hover:underline font-mono text-xs transition-colors"
+                            >
                               <AddressText address={proposer} />
                             </Link>
                           ) : isProposed ? (

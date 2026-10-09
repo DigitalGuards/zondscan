@@ -1,11 +1,17 @@
 'use client';
 
+import { isRecord } from '../../lib/guards';
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import Link from 'next/link';
 import config from '../../../config';
-import { epochsToDays, formatValidatorBalance, withdrawalCredentialsToAddress } from '../../lib/helpers';
+import {
+  epochsToDays,
+  formatValidatorBalance,
+  withdrawalCredentialsToAddress,
+} from '../../lib/helpers';
 import Badge from '../../components/Badge';
 import CollapsibleHex from '../../components/CollapsibleHex';
 import CopyButton from '../../components/CopyButton';
@@ -46,9 +52,14 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
         const response = await axios.get(`${config.handlerUrl}/validator/${id}`);
         setValidator(response.data);
         setError(null);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Error fetching validator:', err);
-        setError(err.response?.data?.error || 'Failed to load validator details');
+        const errorData: unknown = axios.isAxiosError(err) ? err.response?.data : undefined;
+        setError(
+          isRecord(errorData) && typeof errorData.error === 'string' && errorData.error
+            ? errorData.error
+            : 'Failed to load validator details'
+        );
       } finally {
         setLoading(false);
       }
@@ -140,9 +151,7 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h1 className="section-title">
-            Validator #{validator.index}
-          </h1>
+          <h1 className="section-title">Validator #{validator.index}</h1>
           <p className="text-text-secondary mt-1">
             Current Epoch: {parseInt(validator.currentEpoch).toLocaleString()}
           </p>
@@ -159,16 +168,16 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
             </div>
           )}
         </div>
-        <div className="flex items-center gap-4">
-          {getStatusBadge(validator.status)}
-        </div>
+        <div className="flex items-center gap-4">{getStatusBadge(validator.status)}</div>
       </div>
 
       {/* Key Info Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
         <div className="card p-4">
           <h3 className="text-sm font-medium text-text-secondary mb-1">Effective Balance</h3>
-          <p className="font-display text-xl font-semibold text-text-primary">{amount} {unit}</p>
+          <p className="font-display text-xl font-semibold text-text-primary">
+            {amount} {unit}
+          </p>
         </div>
         <div className="card p-4">
           <h3 className="text-sm font-medium text-text-secondary mb-1">Age</h3>
@@ -182,12 +191,18 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
       {/* Details Section */}
       <div className="card overflow-hidden">
         <div className="p-4 border-b border-border">
-          <h2 className="font-display text-lg font-semibold text-text-primary">Validator Details</h2>
+          <h2 className="font-display text-lg font-semibold text-text-primary">
+            Validator Details
+          </h2>
         </div>
         <div className="divide-y divide-border">
           {/* Public Key (2592-byte ML-DSA-87 key, collapsed by default) */}
           <div className="p-4">
-            <CollapsibleHex label="Public Key" hex={validator.publicKeyHex} copyLabel="Copy public key" />
+            <CollapsibleHex
+              label="Public Key"
+              hex={validator.publicKeyHex}
+              copyLabel="Copy public key"
+            />
           </div>
 
           {/* Withdrawal Credentials (raw 32-byte form of the address above) */}
@@ -198,7 +213,11 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
                 <code className="text-sm text-text-secondary font-mono break-all">
                   {validator.withdrawalCredentialsHex}
                 </code>
-                <CopyButton value={validator.withdrawalCredentialsHex} label="Copy withdrawal credentials" size="sm" />
+                <CopyButton
+                  value={validator.withdrawalCredentialsHex}
+                  label="Copy withdrawal credentials"
+                  size="sm"
+                />
               </div>
             </div>
           </div>
@@ -227,24 +246,34 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${
-                    validator.exitEpoch === FAR_FUTURE_EPOCH ? 'bg-surface-3' : 'bg-red-400'
-                  }`}></div>
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      validator.exitEpoch === FAR_FUTURE_EPOCH ? 'bg-surface-3' : 'bg-red-400'
+                    }`}
+                  ></div>
                   <span className="text-text-secondary">Exit</span>
                 </div>
                 <span className="text-text-secondary font-mono">
-                  {validator.exitEpoch === FAR_FUTURE_EPOCH ? 'Not scheduled' : `Epoch ${formatEpoch(validator.exitEpoch)}`}
+                  {validator.exitEpoch === FAR_FUTURE_EPOCH
+                    ? 'Not scheduled'
+                    : `Epoch ${formatEpoch(validator.exitEpoch)}`}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${
-                    validator.withdrawableEpoch === FAR_FUTURE_EPOCH ? 'bg-surface-3' : 'bg-purple-400'
-                  }`}></div>
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      validator.withdrawableEpoch === FAR_FUTURE_EPOCH
+                        ? 'bg-surface-3'
+                        : 'bg-purple-400'
+                    }`}
+                  ></div>
                   <span className="text-text-secondary">Withdrawable</span>
                 </div>
                 <span className="text-text-secondary font-mono">
-                  {validator.withdrawableEpoch === FAR_FUTURE_EPOCH ? 'Not scheduled' : `Epoch ${formatEpoch(validator.withdrawableEpoch)}`}
+                  {validator.withdrawableEpoch === FAR_FUTURE_EPOCH
+                    ? 'Not scheduled'
+                    : `Epoch ${formatEpoch(validator.withdrawableEpoch)}`}
                 </span>
               </div>
             </div>

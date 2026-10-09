@@ -48,7 +48,9 @@ export default function TradingViewWidget(): JSX.Element {
         popup_height: '650',
       });
     };
-    let script = document.getElementById('tradingview-script') as HTMLScriptElement | null;
+    const existingScript = document.getElementById('tradingview-script');
+    if (existingScript && !(existingScript instanceof HTMLScriptElement)) return;
+    let script = existingScript;
     if (!script) {
       const newScript = document.createElement('script');
       newScript.id = 'tradingview-script';

@@ -1,27 +1,34 @@
-'use client'
+'use client';
 
-import dynamic from 'next/dynamic'
-import { Suspense } from 'react'
+import type { ListedContract } from '../lib/listResponses';
+
+import dynamic from 'next/dynamic';
+import { Suspense } from 'react';
 
 const ContractsClient = dynamic(() => import('./contracts-client'), {
   ssr: false,
-})
+});
 
 interface ContractsWrapperProps {
-  initialData: any[];
+  initialData: ListedContract[];
   totalContracts: number;
 }
 
-export default function ContractsWrapper({ initialData, totalContracts }: ContractsWrapperProps): JSX.Element {
+export default function ContractsWrapper({
+  initialData,
+  totalContracts,
+}: ContractsWrapperProps): JSX.Element {
   return (
-    <Suspense fallback={
-      <div role="status" aria-label="Loading contracts" className="p-4 space-y-4">
-        {[...Array(5)].map((_, i) => (
-          <div key={i} className="h-16 skeleton" />
-        ))}
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div role="status" aria-label="Loading contracts" className="p-4 space-y-4">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="h-16 skeleton" />
+          ))}
+        </div>
+      }
+    >
       <ContractsClient initialData={initialData} totalContracts={totalContracts} />
     </Suspense>
-  )
+  );
 }

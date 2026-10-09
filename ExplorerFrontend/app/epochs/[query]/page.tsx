@@ -1,3 +1,4 @@
+import { parseEpochsData, type EpochsData } from '../../lib/listResponses';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import EpochsClient from './epochs-client';
@@ -6,18 +7,11 @@ import { sharedMetadata } from '../../lib/seo/metaData';
 
 export const dynamic = 'force-dynamic';
 
-interface EpochsData {
-  epochs: any[];
-  total: number;
-  finalizedEpoch: string;
-  justifiedEpoch: string;
-}
-
 async function getEpochs(page: string): Promise<EpochsData> {
   try {
     const response = await fetch(`${config.handlerUrl}/epochs?page=${page}&limit=15`, {
       method: 'GET',
-      headers: { 'Accept': 'application/json' },
+      headers: { Accept: 'application/json' },
     });
 
     if (!response.ok) {
@@ -25,7 +19,8 @@ async function getEpochs(page: string): Promise<EpochsData> {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    return response.json();
+    const data: unknown = await response.json();
+    return parseEpochsData(data);
   } catch (error) {
     console.error('Error fetching epochs:', error);
     throw error;
@@ -36,7 +31,11 @@ interface PageProps {
   params: Promise<{ query: string }>;
 }
 
-export async function generateMetadata({ params }: { params: Promise<{ query: string }> }): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ query: string }>;
+}): Promise<Metadata> {
   const resolvedParams = await params;
   const pageNumber = resolvedParams.query || '1';
 

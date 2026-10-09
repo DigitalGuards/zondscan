@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
@@ -457,10 +457,12 @@ export default function PendingTransactionView({
                           <span className="text-text-muted"> x </span>
                           <span>
                             {(() => {
+                              const quantity = decodedTransfer.values?.[i];
+                              if (quantity === undefined) return null;
                               try {
-                                return BigInt(decodedTransfer.values![i]).toLocaleString('en-US');
+                                return BigInt(quantity).toLocaleString('en-US');
                               } catch {
-                                return decodedTransfer.values![i];
+                                return quantity;
                               }
                             })()}
                           </span>

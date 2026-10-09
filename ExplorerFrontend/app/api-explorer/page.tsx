@@ -1,3 +1,4 @@
+import { isRecord, isArray } from '../lib/guards';
 import type { Metadata } from 'next';
 import { sharedMetadata } from '../lib/seo/metaData';
 import { getTaggedEndpoints } from '../lib/openapi';
@@ -80,10 +81,6 @@ const POST_CURL: Record<string, string> = {
   '/faucet/claim': `curl -s -X POST "${SERVER}/faucet/claim" -H "Content-Type: application/json" -d '{"address":"${EXAMPLE_WALLET}","turnstileToken":"<turnstile-token>"}'`,
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 function slugify(value: string): string {
   return value
     .toLowerCase()
@@ -94,7 +91,7 @@ function slugify(value: string): string {
 function describeType(param: OpenApiParameter): string {
   const schema = param.schema ?? {};
   const enumRaw = schema['enum'];
-  if (Array.isArray(enumRaw)) return enumRaw.map(String).join(' | ');
+  if (isArray(enumRaw)) return enumRaw.map(String).join(' | ');
   const type = schema['type'];
   return typeof type === 'string' ? type : 'string';
 }
@@ -119,7 +116,7 @@ function getBodySummary(operation: OpenApiOperation): EndpointBodyData | null {
   const schema = media['schema'];
   if (!isRecord(schema)) return null;
   const requiredRaw = schema['required'];
-  const required = Array.isArray(requiredRaw)
+  const required = isArray(requiredRaw)
     ? requiredRaw.filter((r): r is string => typeof r === 'string')
     : [];
   const props = schema['properties'];
@@ -171,7 +168,7 @@ function exampleQuery(path: string, parameters: OpenApiParameter[]): string {
 function buildRequest(
   method: string,
   path: string,
-  parameters: OpenApiParameter[],
+  parameters: OpenApiParameter[]
 ): { curl: string; tryItUrl: string | null } {
   if (method === 'GET') {
     const query = exampleQuery(path, parameters);
@@ -189,7 +186,7 @@ function toCard(
   method: string,
   path: string,
   operation: OpenApiOperation,
-  anchor: string,
+  anchor: string
 ): EndpointCardData {
   const parameters = operation.parameters ?? [];
   const { curl, tryItUrl } = buildRequest(method, path, parameters);
@@ -252,7 +249,10 @@ function MiniNav(): JSX.Element {
         <ul className="space-y-1">
           {sections.map((s) => (
             <li key={s.slug}>
-              <a href={`#${s.slug}`} className="nav-link text-sm flex items-center justify-between gap-2 py-0.5">
+              <a
+                href={`#${s.slug}`}
+                className="nav-link text-sm flex items-center justify-between gap-2 py-0.5"
+              >
                 <span>{s.tag}</span>
                 <span className="text-xs text-text-muted font-mono">{s.endpoints.length}</span>
               </a>
@@ -275,9 +275,9 @@ function Hero(): JSX.Element {
         Free public REST API for QRL 2.0 data. No API key. No signup.
       </h1>
       <p className="mt-4 text-text-secondary max-w-2xl leading-relaxed">
-        {totalEndpoints} endpoints serve blocks, transactions, addresses, tokens, validators, gas data, and contract
-        tooling for the QRL 2.0 public testnet, straight from the ZondScan indexer. The whole surface is described by
-        one OpenAPI 3.1 document.
+        {totalEndpoints} endpoints serve blocks, transactions, addresses, tokens, validators, gas
+        data, and contract tooling for the QRL 2.0 public testnet, straight from the ZondScan
+        indexer. The whole surface is described by one OpenAPI 3.1 document.
       </p>
       <div className="mt-6 flex flex-wrap gap-3">
         <a href="/openapi.json" className="btn-primary text-sm">
@@ -298,7 +298,11 @@ function Hero(): JSX.Element {
 
 function GettingStarted(): JSX.Element {
   return (
-    <section id="getting-started" aria-labelledby="getting-started-heading" className="scroll-mt-20 mb-12">
+    <section
+      id="getting-started"
+      aria-labelledby="getting-started-heading"
+      className="scroll-mt-20 mb-12"
+    >
       <h2 id="getting-started-heading" className="section-title mb-4">
         Getting started
       </h2>
@@ -312,8 +316,8 @@ function GettingStarted(): JSX.Element {
             <code>{BASE_URL}</code>
           </pre>
           <p className="text-sm text-text-muted mt-2">
-            The search redirect and the faucet endpoints are served by the explorer web app at the site root; the
-            reference below shows their full paths.
+            The search redirect and the faucet endpoints are served by the explorer web app at the
+            site root; the reference below shows their full paths.
           </p>
         </div>
         <div>
@@ -325,8 +329,8 @@ function GettingStarted(): JSX.Element {
             <code>{FIRST_REQUEST_CURL}</code>
           </pre>
           <p className="text-sm text-text-muted mt-2">
-            This returns the five newest blocks as JSON. Every data endpoint responds with JSON and needs no
-            authentication headers.
+            This returns the five newest blocks as JSON. Every data endpoint responds with JSON and
+            needs no authentication headers.
           </p>
         </div>
         <p className="text-sm text-text-secondary">
@@ -352,18 +356,20 @@ function Conventions(): JSX.Element {
           <h3 className="font-display text-sm font-semibold text-text-primary mb-2">Pagination</h3>
           <p className="text-sm text-text-secondary leading-relaxed">
             List endpoints take <span className="chip font-mono">page</span> and{' '}
-            <span className="chip font-mono">limit</span> query parameters, and limit is capped at 100 items. Most list
-            endpoints number pages from 1. The contract and token list endpoints number pages from 0. Each endpoint
-            below documents its own defaults.
+            <span className="chip font-mono">limit</span> query parameters, and limit is capped at
+            100 items. Most list endpoints number pages from 1. The contract and token list
+            endpoints number pages from 0. Each endpoint below documents its own defaults.
           </p>
         </div>
         <div className="card p-4 sm:p-5">
-          <h3 className="font-display text-sm font-semibold text-text-primary mb-2">Numeric encoding</h3>
+          <h3 className="font-display text-sm font-semibold text-text-primary mb-2">
+            Numeric encoding
+          </h3>
           <p className="text-sm text-text-secondary leading-relaxed">
-            On-chain quantities such as block fields, gas values, and raw transaction values are 0x-prefixed
-            hexadecimal strings. Indexed aggregates are decimal strings or JSON numbers. Coin amounts are denominated
-            in Quanta (1 Quanta = 10^9 Shor = 10^18 Planck), and fields carrying exact amounts use decimal strings. See
-            the{' '}
+            On-chain quantities such as block fields, gas values, and raw transaction values are
+            0x-prefixed hexadecimal strings. Indexed aggregates are decimal strings or JSON numbers.
+            Coin amounts are denominated in Quanta (1 Quanta = 10^9 Shor = 10^18 Planck), and fields
+            carrying exact amounts use decimal strings. See the{' '}
             <a href="/learn/quanta-shor-planck" className="link-accent">
               units guide
             </a>{' '}
@@ -378,16 +384,17 @@ function Conventions(): JSX.Element {
           <h3 className="font-display text-sm font-semibold text-text-primary mb-2">Addresses</h3>
           <p className="text-sm text-text-secondary leading-relaxed">
             Addresses in responses are Q-prefixed, the canonical QRL 2.0 form, for example{' '}
-            <span className="chip font-mono break-all">{EXAMPLE_WALLET}</span>. Most lookup parameters accept both
-            the Q form and the 0x form of the same 128 hex characters; each parameter documents its accepted forms.
+            <span className="chip font-mono break-all">{EXAMPLE_WALLET}</span>. Most lookup
+            parameters accept both the Q form and the 0x form of the same 128 hex characters; each
+            parameter documents its accepted forms.
           </p>
         </div>
         <div className="card p-4 sm:p-5">
           <h3 className="font-display text-sm font-semibold text-text-primary mb-2">Caching</h3>
           <p className="text-sm text-text-secondary leading-relaxed">
-            Hot endpoints are cached server side for 5 to 30 seconds, noted per endpoint in the reference below. The
-            transaction detail endpoint is deliberately uncached so a newly mined transaction shows its true
-            confirmation count immediately.
+            Hot endpoints are cached server side for 5 to 30 seconds, noted per endpoint in the
+            reference below. The transaction detail endpoint is deliberately uncached so a newly
+            mined transaction shows its true confirmation count immediately.
           </p>
         </div>
       </div>
@@ -404,14 +411,15 @@ function RateLimits(): JSX.Element {
       <div className="card p-4 sm:p-6 space-y-4">
         <p className="text-sm text-text-secondary leading-relaxed">
           GET endpoints carry no rate limits today beyond fair use. They respond with{' '}
-          <span className="chip font-mono">Access-Control-Allow-Origin: *</span>, so any web page can call them
-          directly from the browser.
+          <span className="chip font-mono">Access-Control-Allow-Origin: *</span>, so any web page
+          can call them directly from the browser.
         </p>
         <p className="text-sm text-text-secondary leading-relaxed">
-          POST endpoints allow cross-origin browser access only from the explorer&apos;s own origins and from
-          browser-extension origins. Browser apps hosted elsewhere should call POST endpoints from their server. The
-          three contract POST endpoints carry per-IP rate limits; when a limit is exhausted the API returns 429 with
-          the body <span className="chip font-mono">{'{"error": "rate limit exceeded"}'}</span>.
+          POST endpoints allow cross-origin browser access only from the explorer&apos;s own origins
+          and from browser-extension origins. Browser apps hosted elsewhere should call POST
+          endpoints from their server. The three contract POST endpoints carry per-IP rate limits;
+          when a limit is exhausted the API returns 429 with the body{' '}
+          <span className="chip font-mono">{'{"error": "rate limit exceeded"}'}</span>.
         </p>
         <div className="well overflow-x-auto">
           <table className="w-full text-sm">
@@ -430,12 +438,16 @@ function RateLimits(): JSX.Element {
             </thead>
             <tbody>
               <tr className="border-b border-border">
-                <td className="px-3 py-2 font-mono text-text-primary whitespace-nowrap">POST /api/contract/verify</td>
+                <td className="px-3 py-2 font-mono text-text-primary whitespace-nowrap">
+                  POST /api/contract/verify
+                </td>
                 <td className="px-3 py-2 text-text-secondary whitespace-nowrap">5 requests</td>
                 <td className="px-3 py-2 text-text-secondary whitespace-nowrap">5 per minute</td>
               </tr>
               <tr className="border-b border-border">
-                <td className="px-3 py-2 font-mono text-text-primary whitespace-nowrap">POST /api/contract/call</td>
+                <td className="px-3 py-2 font-mono text-text-primary whitespace-nowrap">
+                  POST /api/contract/call
+                </td>
                 <td className="px-3 py-2 text-text-secondary whitespace-nowrap">60 requests</td>
                 <td className="px-3 py-2 text-text-secondary whitespace-nowrap">60 per minute</td>
               </tr>
@@ -450,9 +462,9 @@ function RateLimits(): JSX.Element {
           </table>
         </div>
         <p className="text-sm text-text-muted leading-relaxed">
-          AI explanations are additionally capped at 5 regenerations per contract per rolling 7 day window. The faucet
-          claim endpoint uses a cooldown per address and per IP (24 hours by default) and reports the remaining wait in
-          a Retry-After header.
+          AI explanations are additionally capped at 5 regenerations per contract per rolling 7 day
+          window. The faucet claim endpoint uses a cooldown per address and per IP (24 hours by
+          default) and reports the remaining wait in a Retry-After header.
         </p>
       </div>
     </section>
@@ -460,16 +472,21 @@ function RateLimits(): JSX.Element {
 }
 
 function LocalDevelopment(): JSX.Element {
-  const cloneCommands = 'git clone https://github.com/DigitalGuards/zondscan.git\ncd zondscan\ndocker compose up -d';
+  const cloneCommands =
+    'git clone https://github.com/DigitalGuards/zondscan.git\ncd zondscan\ndocker compose up -d';
   return (
-    <section id="local-development" aria-labelledby="local-development-heading" className="scroll-mt-20 mb-12">
+    <section
+      id="local-development"
+      aria-labelledby="local-development-heading"
+      className="scroll-mt-20 mb-12"
+    >
       <h2 id="local-development-heading" className="section-title mb-4">
         Run it locally
       </h2>
       <div className="card p-4 sm:p-6 space-y-4">
         <p className="text-sm text-text-secondary leading-relaxed">
-          The whole explorer stack is open source: the chain synchronizer, the REST API, and this frontend live in one
-          repository at{' '}
+          The whole explorer stack is open source: the chain synchronizer, the REST API, and this
+          frontend live in one repository at{' '}
           <a
             href="https://github.com/DigitalGuards/zondscan"
             target="_blank"
@@ -478,7 +495,8 @@ function LocalDevelopment(): JSX.Element {
           >
             github.com/DigitalGuards/zondscan
           </a>
-          . Docker Compose starts every service: the frontend serves on port 3000 and the API on port 8082.
+          . Docker Compose starts every service: the frontend serves on port 3000 and the API on
+          port 8082.
         </p>
         <div>
           <div className="flex items-center justify-between mb-2">
@@ -510,8 +528,8 @@ export default function ApiDocumentationPage(): JSX.Element {
               Endpoint reference
             </h2>
             <p className="text-sm text-text-secondary mb-6">
-              Every endpoint, grouped the same way as the OpenAPI document. Each card links to itself, so anchors are
-              shareable.
+              Every endpoint, grouped the same way as the OpenAPI document. Each card links to
+              itself, so anchors are shareable.
             </p>
             <ApiReference sections={sections} />
           </section>

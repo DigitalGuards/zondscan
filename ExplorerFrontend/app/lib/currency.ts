@@ -1,4 +1,5 @@
 import type { CurrencyPreference } from './preferences';
+import { isArray, isOneOf, isRecord } from './guards';
 
 export const CURRENCIES: readonly { code: CurrencyPreference; name: string }[] = [
   { code: 'USD', name: 'United States Dollar' },
@@ -37,35 +38,42 @@ function isValidRate(value: unknown): value is number {
 
 /** Validate both the source and the age before converting any USD amount. */
 export function parseExchangeRates(value: unknown, now = Date.now()): ExchangeRates | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const data = value as Partial<ExchangeRates>;
+  if (!isRecord(value)) return null;
+  const data = value;
   if (data.base !== 'USD' || !isValidDate(data.date, now)) return null;
-  if (!data.rates || typeof data.rates !== 'object' || Array.isArray(data.rates)) return null;
+  if (!isRecord(data.rates)) return null;
   if (data.rates.USD !== 1) return null;
-  const rates = {} as Record<CurrencyPreference, number>;
-  for (const { code } of CURRENCIES) {
-    if (!isValidRate(data.rates[code])) return null;
-    rates[code] = data.rates[code];
-  }
+  const { USD, EUR, GBP, CHF, CAD, AUD, JPY, CNY } = data.rates;
+  if (
+    !isValidRate(EUR) ||
+    !isValidRate(GBP) ||
+    !isValidRate(CHF) ||
+    !isValidRate(CAD) ||
+    !isValidRate(AUD) ||
+    !isValidRate(JPY) ||
+    !isValidRate(CNY)
+  )
+    return null;
+  const rates = { USD, EUR, GBP, CHF, CAD, AUD, JPY, CNY };
   return { base: 'USD', date: data.date, rates };
 }
 
 /** Frankfurter v2 is requested with providers=ECB and one shared USD base. */
 export function parseFrankfurterRates(value: unknown, now = Date.now()): ExchangeRates | null {
-  if (!Array.isArray(value) || value.length !== CURRENCIES.length - 1) return null;
+  if (!isArray(value) || value.length !== CURRENCIES.length - 1) return null;
   const rates: Partial<Record<CurrencyPreference, number>> = { USD: 1 };
   let date: string | undefined;
   for (const entry of value) {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
+    if (!isRecord(entry)) return null;
     const { base, quote, rate } = entry;
-    if (base !== 'USD' || !CURRENCIES.some(({ code }) => code !== 'USD' && code === quote)) {
+    if (base !== 'USD' || !isOneOf(quote, ['EUR', 'GBP', 'CHF', 'CAD', 'AUD', 'JPY', 'CNY'])) {
       return null;
     }
     if (!isValidDate(entry.date, now) || !isValidRate(rate)) return null;
     if (date && date !== entry.date) return null;
-    if (rates[quote as CurrencyPreference] !== undefined) return null;
+    if (rates[quote] !== undefined) return null;
     date = entry.date;
-    rates[quote as CurrencyPreference] = rate;
+    rates[quote] = rate;
   }
   return parseExchangeRates({ base: 'USD', date, rates }, now);
 }

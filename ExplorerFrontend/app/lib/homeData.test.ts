@@ -20,7 +20,17 @@ const fixtures: Record<string, Record<string, unknown>> = {
   },
   '/latestblock': { blockNumber: 1234 },
   '/txs?page=1': { total: 9876 },
-  '/epoch': { headEpoch: '42' },
+  '/epoch': {
+    headEpoch: '42',
+    headSlot: '1',
+    finalizedEpoch: '40',
+    justifiedEpoch: '41',
+    slotsPerEpoch: 32,
+    secondsPerSlot: 60,
+    slotInEpoch: 1,
+    timeToNextEpoch: 1,
+    updatedAt: 1,
+  },
   '/blocks?page=1&limit=10': {
     blocks: [{ number: '0x4d2', timestamp: '0x1', hash: 'block', miner: '', transactions: [] }],
   },
@@ -43,6 +53,29 @@ function snapshot() {
 }
 
 describe('independent homepage snapshot readiness', () => {
+  it.each([null, [], false, 'invalid'])('rejects malformed response envelope %p', async (value) => {
+    const state = snapshot();
+    await loadHomeData(() => Promise.resolve(value), new AbortController().signal, state.publish);
+    expect(Object.values(state.read().status).every((status) => status === 'error')).toBe(true);
+  });
+
+  it('preserves the last block snapshot when a later response contains malformed rows', async () => {
+    const state = snapshot();
+    await loadHomeData(
+      (path) => Promise.resolve(fixtures[path]),
+      new AbortController().signal,
+      state.publish
+    );
+    const blocks = state.read().blocks;
+    await loadHomeData(
+      (path) => Promise.resolve(path.startsWith('/blocks?') ? { blocks: [null] } : fixtures[path]),
+      new AbortController().signal,
+      state.publish
+    );
+    expect(state.read().status.blocks).toBe('error');
+    expect(state.read().blocks).toBe(blocks);
+  });
+
   it('publishes stats and both tables before the exact count resolves', async () => {
     const total = deferred();
     const state = snapshot();
@@ -183,7 +216,13 @@ describe('independent homepage snapshot readiness', () => {
 
   it('keeps recent transactions deduplicated and limited without using them as the total count', async () => {
     const state = snapshot();
-    const rows = Array.from({ length: 12 }, (_, index) => ({ TxHash: `tx${index}` }));
+    const rows = Array.from({ length: 12 }, (_, index) => ({
+      TxHash: `tx${index}`,
+      TimeStamp: 1,
+      From: '',
+      To: '',
+      Amount: '1',
+    }));
     await loadHomeData(
       (path) =>
         Promise.resolve(

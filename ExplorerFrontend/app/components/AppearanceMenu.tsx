@@ -10,7 +10,6 @@ import {
   SunIcon,
   CloudIcon,
 } from '@heroicons/react/24/outline';
-import type { ThemePreference } from '../lib/preferences';
 import { usePreferences } from './PreferencesProvider';
 
 export const APPEARANCES = [
@@ -23,7 +22,7 @@ export const APPEARANCES = [
 export default function AppearanceMenu() {
   const { t } = useTranslation();
   const { preferences, updatePreferences } = usePreferences();
-  const selected = APPEARANCES.find((item) => item.value === preferences.theme)!;
+  const selected = APPEARANCES.find((item) => item.value === preferences.theme) ?? APPEARANCES[2];
   const Icon = selected.icon;
   return (
     <Menu>
@@ -49,7 +48,7 @@ export default function AppearanceMenu() {
             as="button"
             type="button"
             aria-label={`${t(item.label)}${preferences.theme === item.value ? ' (current)' : ''}`}
-            onClick={() => updatePreferences({ theme: item.value as ThemePreference })}
+            onClick={() => updatePreferences({ theme: item.value })}
             className="menu-option"
           >
             <item.icon className="size-4 text-text-muted" aria-hidden="true" />
