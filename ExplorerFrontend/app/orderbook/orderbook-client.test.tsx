@@ -6,7 +6,6 @@ import OrderBookClient from './orderbook-client';
 
 jest.mock('@tanstack/react-query', () => ({
   useQuery: jest.fn(),
-  useQueryClient: () => ({ cancelQueries: jest.fn() }),
 }));
 jest.mock('axios');
 jest.mock('./fund-flow', () => ({
@@ -86,7 +85,6 @@ it('renders conventional market labels, explicit units and the independent analy
     'Spread',
     '24h volume',
     '+1.30% in 24h',
-    'Visible depth within 2% of midpoint',
     'Fund flow analysis',
     '7.75',
   ])
@@ -97,7 +95,10 @@ it('renders conventional market labels, explicit units and the independent analy
   expect(html).toContain('aria-label="Order book rows per side"');
   expect(html).toContain('value="0.001" selected');
   expect(html).toContain('value="12" selected');
-  expect(html).toContain('Pause order book');
+  expect(html).not.toMatch(
+    /Pause order book|Resume order book|midpoint|Visible order book liquidity/
+  );
+  expect(html).toContain('refreshes every 3s');
   expect(html).toContain('>Live</span>');
 });
 
@@ -122,7 +123,6 @@ it('shows explicit empty book and trade states', () => {
   expect(html).toContain('No bids in this snapshot.');
   expect(html).toContain('No asks in this snapshot.');
   expect(html).toContain('No recent trades available.');
-  expect(html).not.toContain('50.0% bid depth');
 });
 
 it('labels missing quote volume without treating it as zero', () => {
@@ -149,9 +149,10 @@ it('provides an initial error and retry without inventing market values', () => 
 it('keeps bounded polling and forwards cancellation to the data request', async () => {
   render();
   const options = jest.mocked(useQuery).mock.calls[0][0];
-  expect(options.enabled).toBe(true);
+  expect(options.enabled).not.toBe(false);
   expect(options.refetchInterval).toBe(3_000);
   expect(options.refetchIntervalInBackground).toBe(false);
+  expect(options.refetchOnWindowFocus).toBe(true);
   expect(options.retry).toBe(2);
   jest.mocked(axios.get).mockResolvedValueOnce({ data: fixture });
   const signal = new AbortController().signal;
