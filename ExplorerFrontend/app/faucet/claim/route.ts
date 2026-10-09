@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { isRecord } from '../../lib/guards';
 
 import {
   FaucetError,
@@ -40,23 +41,23 @@ function clientIp(req: NextRequest): string | null {
 /** GET /faucet/claim - public status so the page can render config/disabled state. */
 export function GET(): NextResponse {
   const cfg = getFaucetConfig();
-  return NextResponse.json({
-    configured: cfg.configured,
-    captchaEnabled: cfg.captchaEnabled,
-    turnstileSiteKey: cfg.turnstileSiteKey,
-    dripQuanta: cfg.dripQuanta,
-    cooldownHours: cfg.cooldownHours,
-  }, { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json(
+    {
+      configured: cfg.configured,
+      captchaEnabled: cfg.captchaEnabled,
+      turnstileSiteKey: cfg.turnstileSiteKey,
+      dripQuanta: cfg.dripQuanta,
+      cooldownHours: cfg.cooldownHours,
+    },
+    { headers: { 'Cache-Control': 'no-store' } }
+  );
 }
 
 /** POST /faucet/claim - verify captcha + cooldown, then sign and broadcast a drip. */
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const cfg = getFaucetConfig();
   if (!cfg.configured) {
-    return NextResponse.json(
-      { error: 'The faucet is not currently available.' },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: 'The faucet is not currently available.' }, { status: 503 });
   }
 
   // Refuse to serve an unprotected faucet in production. Without a captcha the
@@ -64,27 +65,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // (seed set, Turnstile missing) production deploy is disabled rather than
   // openly drainable. `FAUCET_ALLOW_NO_CAPTCHA=true` is the explicit opt-out.
   if (!cfg.captchaEnabled && !cfg.allowNoCaptcha) {
-    return NextResponse.json(
-      { error: 'The faucet is temporarily unavailable.' },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: 'The faucet is temporarily unavailable.' }, { status: 503 });
   }
 
-  let payload: { address?: string; turnstileToken?: string };
+  let payload: unknown;
   try {
     payload = await req.json();
     // A literal `null`/non-object body is valid JSON but would throw on the
     // property access below, outside any try/catch - guard it here.
-    if (!payload || typeof payload !== 'object') throw new Error('non-object body');
+    if (!isRecord(payload)) throw new Error('non-object body');
   } catch {
     return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
   }
 
+  if (
+    !isRecord(payload) ||
+    (payload.address !== undefined && typeof payload.address !== 'string') ||
+    (payload.turnstileToken !== undefined && typeof payload.turnstileToken !== 'string')
+  ) {
+    return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
+  }
   const address = normalizeQrlAddress(payload.address || '');
   if (!address) {
     return NextResponse.json(
       { error: 'Enter a valid QRL address with exactly 128 hex characters.' },
-      { status: 400 },
+      { status: 400 }
     );
   }
 
@@ -94,7 +99,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!captchaOk) {
     return NextResponse.json(
       { error: 'Captcha verification failed. Please try again.' },
-      { status: 400 },
+      { status: 400 }
     );
   }
 
@@ -109,7 +114,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     console.error('faucet cooldown check failed:', err);
     return NextResponse.json(
       { error: 'The faucet is temporarily unavailable. Please try again later.' },
-      { status: 503 },
+      { status: 503 }
     );
   }
   if (!slot.ok || !slot.claimId) {
@@ -119,7 +124,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         error: 'You have already claimed recently. Please wait before claiming again.',
         retryAfterSeconds: remaining,
       },
-      { status: 429, headers: { 'Retry-After': String(remaining) } },
+      { status: 429, headers: { 'Retry-After': String(remaining) } }
     );
   }
 
@@ -151,7 +156,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     console.error('faucet claim failed:', err);
     return NextResponse.json(
       { error: 'Something went wrong while sending testnet funds.' },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

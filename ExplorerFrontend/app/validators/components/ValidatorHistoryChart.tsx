@@ -57,13 +57,8 @@ export default function ValidatorHistoryChart({
   width = 600,
   height = 300,
 }: ValidatorHistoryChartProps) {
-  const {
-    showTooltip,
-    hideTooltip,
-    tooltipData,
-    tooltipLeft,
-    tooltipTop,
-  } = useTooltip<HistoryRecord>();
+  const { showTooltip, hideTooltip, tooltipData, tooltipLeft, tooltipTop } =
+    useTooltip<HistoryRecord>();
 
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
@@ -79,7 +74,7 @@ export default function ValidatorHistoryChart({
     () =>
       scaleTime({
         range: [0, innerWidth],
-        domain: extent(sortedData, getDate) as [Date, Date],
+        domain: extent(sortedData, getDate).map((date) => date ?? new Date(0)),
       }),
     [innerWidth, sortedData]
   );
@@ -94,7 +89,9 @@ export default function ValidatorHistoryChart({
     [innerHeight, sortedData, getValue]
   );
 
-  const handleTooltip = (event: React.TouchEvent<SVGRectElement> | React.MouseEvent<SVGRectElement>) => {
+  const handleTooltip = (
+    event: React.TouchEvent<SVGRectElement> | React.MouseEvent<SVGRectElement>
+  ) => {
     const { x } = localPoint(event) || { x: 0 };
     const x0 = xScale.invert(x - margin.left);
     const index = bisectDate(sortedData, x0, 1);
@@ -130,10 +127,7 @@ export default function ValidatorHistoryChart({
 
   if (sortedData.length < 2) {
     return (
-      <EmptyState
-        title="Not enough data yet"
-        description="Check back as more epochs complete."
-      />
+      <EmptyState title="Not enough data yet" description="Check back as more epochs complete." />
     );
   }
 
@@ -148,12 +142,7 @@ export default function ValidatorHistoryChart({
           toOpacity={0}
         />
         <Group left={margin.left} top={margin.top}>
-          <GridRows
-            scale={yScale}
-            width={innerWidth}
-            stroke={gridColor}
-            numTicks={5}
-          />
+          <GridRows scale={yScale} width={innerWidth} stroke={gridColor} numTicks={5} />
           <AreaClosed
             data={sortedData}
             x={(d) => xScale(getDate(d)) ?? 0}
@@ -188,7 +177,7 @@ export default function ValidatorHistoryChart({
             numTicks={5}
             stroke={axisColor}
             tickStroke={axisColor}
-            tickFormat={(v) => formatYAxis(v as number)}
+            tickFormat={(v) => formatYAxis(Number(v))}
             tickLabelProps={{
               fill: chartTheme.tickLabel,
               fontSize: 11,
@@ -223,18 +212,10 @@ export default function ValidatorHistoryChart({
         </Group>
       </svg>
       {tooltipData && (
-        <TooltipWithBounds
-          top={tooltipTop}
-          left={tooltipLeft}
-          style={tooltipStyles}
-        >
+        <TooltipWithBounds top={tooltipTop} left={tooltipLeft} style={tooltipStyles}>
           <div className="text-sm">
-            <div className="text-text-secondary">
-              Epoch {tooltipData.epoch}
-            </div>
-            <div className="text-text-primary font-semibold">
-              {formatTooltipValue(tooltipData)}
-            </div>
+            <div className="text-text-secondary">Epoch {tooltipData.epoch}</div>
+            <div className="text-text-primary font-semibold">{formatTooltipValue(tooltipData)}</div>
             <div className="text-text-secondary text-xs">
               {new Date(tooltipData.timestamp * 1000).toLocaleDateString()}
             </div>

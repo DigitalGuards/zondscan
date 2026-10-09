@@ -7,13 +7,32 @@ import Script from 'next/script';
 
 import { formatDuration, NATIVE_UNIT } from '../lib/helpers';
 import { canonicalizeQrlAddress } from '../lib/qrlAddress';
-import { mountFaucetCaptcha, parseFaucetStatus, type FaucetStatus, type TurnstileApi } from './captcha';
+import { isRecord, InvalidInputError } from '../lib/guards';
+import {
+  mountFaucetCaptcha,
+  parseFaucetStatus,
+  type FaucetStatus,
+  type TurnstileApi,
+} from './captcha';
 
 interface ClaimSuccess {
   txHash: string;
   amount: string;
   to: string;
   explorerUrl: string;
+}
+
+function isClaimSuccess(value: unknown): value is ClaimSuccess {
+  return (
+    isRecord(value) &&
+    typeof value.txHash === 'string' &&
+    /^0x[0-9a-fA-F]{64}$/.test(value.txHash) &&
+    typeof value.amount === 'string' &&
+    /^\d+$/.test(value.amount) &&
+    typeof value.to === 'string' &&
+    canonicalizeQrlAddress(value.to) !== null &&
+    value.explorerUrl === `/tx/${value.txHash}`
+  );
 }
 
 // Minimal typing for the Cloudflare Turnstile global injected by api.js.
@@ -57,7 +76,7 @@ export default function FaucetClient(): JSX.Element {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);
     fetch('/faucet/claim', { cache: 'no-store', signal: controller.signal })
-      .then(r => {
+      .then((r) => {
         if (!r.ok) throw new Error('Status request failed');
         return r.json();
       })
@@ -111,7 +130,7 @@ export default function FaucetClient(): JSX.Element {
           setCaptchaToken(token);
           if (token) setCaptchaError(null);
         },
-        () => setCaptchaError('Captcha verification failed. Please try again.'),
+        () => setCaptchaError('Captcha verification failed. Please try again.')
       );
       disposeWidgetRef.current = dispose;
     }, 0);
@@ -127,7 +146,8 @@ export default function FaucetClient(): JSX.Element {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     if (submittingRef.current || !status?.configured) return;
-    if (status.captchaEnabled && (!status.turnstileSiteKey || !tokenRef.current || captchaError)) return;
+    if (status.captchaEnabled && (!status.turnstileSiteKey || !tokenRef.current || captchaError))
+      return;
     submittingRef.current = true;
     setIsLoading(true);
     setError(null);
@@ -159,10 +179,17 @@ export default function FaucetClient(): JSX.Element {
           turnstileToken: claimToken || undefined,
         }),
       });
-      const data = await res.json();
+      const data: unknown = await res.json();
 
       if (!res.ok) {
-        if (res.status === 429 && data.retryAfterSeconds) {
+        if (!isRecord(data) || typeof data.error !== 'string')
+          throw new InvalidInputError('Invalid faucet error');
+        if (
+          res.status === 429 &&
+          typeof data.retryAfterSeconds === 'number' &&
+          Number.isFinite(data.retryAfterSeconds) &&
+          data.retryAfterSeconds > 0
+        ) {
           setError(`${data.error} (try again in ~${formatDuration(data.retryAfterSeconds)})`);
         } else {
           setError(data.error || 'Failed to claim testnet funds.');
@@ -175,16 +202,17 @@ export default function FaucetClient(): JSX.Element {
       // no-op. Errors above skip this and surface immediately.
       const elapsed = performance.now() - startedAt;
       if (elapsed < MIN_SENDING_MS) {
-        await new Promise(resolve => setTimeout(resolve, MIN_SENDING_MS - elapsed));
+        await new Promise((resolve) => setTimeout(resolve, MIN_SENDING_MS - elapsed));
       }
 
-      setResult(data as ClaimSuccess);
+      if (!isClaimSuccess(data)) throw new InvalidInputError('Invalid faucet claim response');
+      setResult(data);
     } catch {
       setError('Network error. Please try again.');
     } finally {
       setIsLoading(false);
       submittingRef.current = false;
-      setCaptchaAttempt(attempt => attempt + 1);
+      setCaptchaAttempt((attempt) => attempt + 1);
     }
   };
 
@@ -224,15 +252,22 @@ export default function FaucetClient(): JSX.Element {
           Get free testnet Quanta to experiment with transactions, contracts, and tooling.
           {status && (
             <>
-              {' '}Sends <span className="text-accent font-semibold">{status.dripQuanta} {NATIVE_UNIT}</span> per
-              address, once every {status.cooldownHours}h.
+              {' '}
+              Sends{' '}
+              <span className="text-accent font-semibold">
+                {status.dripQuanta} {NATIVE_UNIT}
+              </span>{' '}
+              per address, once every {status.cooldownHours}h.
             </>
           )}
         </p>
 
         <div className="w-full max-w-md card p-8">
           {disabled ? (
-            <div role="alert" className="w-full p-4 bg-background rounded-lg border border-yellow-500/40 text-center">
+            <div
+              role="alert"
+              className="w-full p-4 bg-background rounded-lg border border-yellow-500/40 text-center"
+            >
               <div className="text-sm text-yellow-300">
                 {error || 'The faucet is currently offline. Please check back later.'}
               </div>
@@ -256,11 +291,16 @@ export default function FaucetClient(): JSX.Element {
               {status?.captchaEnabled && <div ref={turnstileRef} className="self-center" />}
 
               {captchaError && (
-                <div role="alert" className="text-sm text-error">{captchaError}</div>
+                <div role="alert" className="text-sm text-error">
+                  {captchaError}
+                </div>
               )}
 
               {result && (
-                <div role="status" className="w-full p-4 bg-background rounded-lg border border-green-500/40">
+                <div
+                  role="status"
+                  className="w-full p-4 bg-background rounded-lg border border-green-500/40"
+                >
                   <div className="text-sm text-text-secondary">
                     {result.amount} {NATIVE_UNIT} broadcast to your address
                   </div>
@@ -277,21 +317,43 @@ export default function FaucetClient(): JSX.Element {
               )}
 
               {error && (
-                <div role="alert" className="w-full p-4 bg-background rounded-lg border border-red-500/50">
+                <div
+                  role="alert"
+                  className="w-full p-4 bg-background rounded-lg border border-red-500/50"
+                >
                   <div className="text-sm text-error">{error}</div>
                 </div>
               )}
 
               <button
                 type="submit"
-                disabled={isLoading || (status?.captchaEnabled === true && (!captchaToken || !!captchaError))}
+                disabled={
+                  isLoading ||
+                  (status?.captchaEnabled === true && (!captchaToken || !!captchaError))
+                }
                 className="w-full px-6 py-3 bg-accent text-background font-semibold rounded-lg hover:bg-accent-hover hover:shadow-glow-accent transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
               >
                 {isLoading ? (
                   <div className="flex items-center justify-center">
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-background" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    <svg
+                      className="animate-spin -ml-1 mr-3 h-5 w-5 text-background"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
                     </svg>
                     Sending...
                   </div>

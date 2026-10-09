@@ -14,13 +14,8 @@ import {
   getFilteredRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import type { ColumnDef, Row } from '@tanstack/react-table';
-import {
-  formatAddress,
-  formatAmount,
-  normalizeHexString,
-  NATIVE_UNIT,
-} from '../../../lib/helpers';
+import type { Row } from '@tanstack/react-table';
+import { formatAddress, formatAmount, normalizeHexString, NATIVE_UNIT } from '../../../lib/helpers';
 import CopyButton from '../../../components/CopyButton';
 import DebouncedInput from '../../../components/DebouncedInput';
 import { DownloadBtn } from '../../../components/DownloadBtn';
@@ -33,11 +28,7 @@ import {
   truncateMiddle,
   useIsMobile,
 } from './_table-utils';
-import {
-  PAGE_LIMIT,
-  fetchAllAggregateRows,
-  useAggregatePage,
-} from './use-aggregate-page';
+import { PAGE_LIMIT, fetchAllAggregateRows, useAggregatePage } from './use-aggregate-page';
 import { useUrlIntParam } from '../../../lib/use-url-param';
 
 /**
@@ -74,7 +65,6 @@ const columnHelper = createColumnHelper<
   Transaction & { formattedAmount: string; formattedFees: string }
 >();
 
-
 interface TransactionsPanelProps {
   address: string;
   /** Page-1 rows from the parent's live aggregate poll. */
@@ -99,8 +89,8 @@ export default function TransactionsPanel({
   const pageQuery = useAggregatePage(address, page);
   const pageRows = pageQuery.data?.transactions_by_address;
   const rows = useMemo(
-    () => (page === 1 ? transactions : pageRows ?? []),
-    [page, transactions, pageRows],
+    () => (page === 1 ? transactions : (pageRows ?? [])),
+    [page, transactions, pageRows]
   );
 
   // Guard against a zero/absent total (e.g. count query failed server-side)
@@ -121,7 +111,7 @@ export default function TransactionsPanel({
           formattedFees,
         };
       }),
-    [rows],
+    [rows]
   );
 
   const columns = useMemo(
@@ -132,9 +122,7 @@ export default function TransactionsPanel({
         // Descending position within the full history, newest = total.
         // row.index is the position in this page's data array, stable
         // under the in-page search filter.
-        cell: (info) => (
-          <span>{effectiveTotal - ((page - 1) * PAGE_LIMIT + info.row.index)}</span>
-        ),
+        cell: (info) => <span>{effectiveTotal - ((page - 1) * PAGE_LIMIT + info.row.index)}</span>,
       }),
       columnHelper.accessor('InOut', {
         header: 'In/Out',
@@ -145,12 +133,8 @@ export default function TransactionsPanel({
         header: 'From/To',
         cell: (info) => {
           const { from, to } = info.getValue();
-          const fromAddress = from
-            ? formatAddress('0x' + normalizeHexString(from))
-            : '';
-          const toAddress = to
-            ? formatAddress('0x' + normalizeHexString(to))
-            : '';
+          const fromAddress = from ? formatAddress('0x' + normalizeHexString(from)) : '';
+          const toAddress = to ? formatAddress('0x' + normalizeHexString(to)) : '';
           return (
             <div className="flex flex-col gap-1">
               {fromAddress && (
@@ -189,7 +173,11 @@ export default function TransactionsPanel({
       }),
       columnHelper.accessor('TimeStamp', {
         header: 'Timestamp',
-        cell: (info) => <span><TimeDisplay timestamp={info.getValue()} /></span>,
+        cell: (info) => (
+          <span>
+            <TimeDisplay timestamp={info.getValue()} />
+          </span>
+        ),
       }),
       columnHelper.accessor('formattedAmount', {
         header: 'Amount',
@@ -200,13 +188,12 @@ export default function TransactionsPanel({
         cell: (info) => <span>{info.getValue()}</span>,
       }),
     ],
-    [effectiveTotal, page],
+    [effectiveTotal, page]
   );
 
-  const table = useReactTable({
+  const table = useReactTable<Transaction & { formattedAmount: string; formattedFees: string }>({
     data,
-    // @ts-expect-error - ColumnDef types conflict with the index signature on Transaction.
-    columns: columns as ColumnDef<Transaction & { formattedAmount: string; formattedFees: string }>[],
+    columns,
     state: { globalFilter: filter },
     onGlobalFilterChange: setFilter,
     getCoreRowModel: getCoreRowModel(),
@@ -225,7 +212,7 @@ export default function TransactionsPanel({
   }
 
   const renderCard = (
-    row: Row<Transaction & { formattedAmount: string; formattedFees: string }>,
+    row: Row<Transaction & { formattedAmount: string; formattedFees: string }>
   ): JSX.Element => {
     const r = row.original;
     return (
@@ -292,7 +279,9 @@ export default function TransactionsPanel({
 
           <div>
             <div className="text-xs text-text-secondary">Time</div>
-            <div className="text-sm text-text-primary"><TimeDisplay timestamp={r.TimeStamp} /></div>
+            <div className="text-sm text-text-primary">
+              <TimeDisplay timestamp={r.TimeStamp} />
+            </div>
           </div>
         </div>
       </div>
@@ -317,9 +306,7 @@ export default function TransactionsPanel({
             <DownloadBtn
               data={rows}
               fileName={`transactions-${address}`}
-              getData={() =>
-                fetchAllAggregateRows(address, (p) => p.transactions_by_address)
-              }
+              getData={() => fetchAllAggregateRows(address, (p) => p.transactions_by_address)}
             />
           </div>
         </div>
@@ -331,18 +318,16 @@ export default function TransactionsPanel({
           <button
             type="button"
             className="underline hover:text-red-300"
-            onClick={() => { void pageQuery.refetch(); }}
+            onClick={() => {
+              void pageQuery.refetch();
+            }}
           >
             Retry
           </button>
         </div>
       )}
 
-      <div
-        className={`overflow-x-auto${
-          pageQuery.isFetching && page > 1 ? ' opacity-60' : ''
-        }`}
-      >
+      <div className={`overflow-x-auto${pageQuery.isFetching && page > 1 ? ' opacity-60' : ''}`}>
         {rows.length === 0 && pageQuery.isFetching ? (
           // First visit to a page > 1 has no previous query data to hold
           // on screen (page 1 lives in the parent poll), so show an

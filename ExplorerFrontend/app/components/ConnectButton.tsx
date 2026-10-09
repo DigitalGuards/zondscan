@@ -1,18 +1,14 @@
-"use client";
+'use client';
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { QRCodeCanvas } from "qrcode.react";
-import {
-  getQrlConnect,
-  ConnectionStatus,
-  type QRLConnectProvider,
-} from "../lib/qrlConnect";
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { QRCodeCanvas } from 'qrcode.react';
+import { getQrlConnect, ConnectionStatus, type QRLConnectProvider } from '../lib/qrlConnect';
 import {
   getRestorableWalletSession,
   parseAuthorizedQrlAccount,
   requestAuthorizedQrlAccount,
-} from "../lib/qrlAccounts";
-import AddressFingerprint from "./AddressFingerprint";
+} from '../lib/qrlAccounts';
+import AddressFingerprint from './AddressFingerprint';
 
 interface ConnectButtonProps {
   /** Called whenever the connected account changes (or null on disconnect). */
@@ -22,12 +18,12 @@ interface ConnectButtonProps {
 }
 
 const STATUS_LABEL: Record<ConnectionStatus, string> = {
-  [ConnectionStatus.DISCONNECTED]: "Disconnected",
-  [ConnectionStatus.CONNECTING]: "Connecting to relay…",
-  [ConnectionStatus.WAITING]: "Waiting for wallet scan…",
-  [ConnectionStatus.KEY_EXCHANGE]: "Exchanging keys…",
-  [ConnectionStatus.CONNECTED]: "Connected",
-  [ConnectionStatus.RECONNECTING]: "Reconnecting…",
+  [ConnectionStatus.DISCONNECTED]: 'Disconnected',
+  [ConnectionStatus.CONNECTING]: 'Connecting to relay…',
+  [ConnectionStatus.WAITING]: 'Waiting for wallet scan…',
+  [ConnectionStatus.KEY_EXCHANGE]: 'Exchanging keys…',
+  [ConnectionStatus.CONNECTED]: 'Connected',
+  [ConnectionStatus.RECONNECTING]: 'Reconnecting…',
 };
 
 /**
@@ -47,7 +43,7 @@ const STATUS_LABEL: Record<ConnectionStatus, string> = {
 // than calling setState() inside useEffect) satisfies the new
 // `react-hooks/set-state-in-effect` rule.
 function initialAccount(): string | null {
-  if (typeof window === "undefined") return null;
+  if (typeof window === 'undefined') return null;
   try {
     return getRestorableWalletSession(getQrlConnect()).account;
   } catch {
@@ -56,7 +52,7 @@ function initialAccount(): string | null {
   return null;
 }
 function initialStatus(): ConnectionStatus {
-  if (typeof window === "undefined") return ConnectionStatus.DISCONNECTED;
+  if (typeof window === 'undefined') return ConnectionStatus.DISCONNECTED;
   try {
     const qrl = getQrlConnect();
     if (qrl.hasStoredSession()) return ConnectionStatus.RECONNECTING;
@@ -66,10 +62,7 @@ function initialStatus(): ConnectionStatus {
   return ConnectionStatus.DISCONNECTED;
 }
 
-export default function ConnectButton({
-  onAccount,
-  onProvider,
-}: ConnectButtonProps): JSX.Element {
+export default function ConnectButton({ onAccount, onProvider }: ConnectButtonProps): JSX.Element {
   const [open, setOpen] = useState(false);
   const [uri, setUri] = useState<string | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>(initialStatus);
@@ -105,9 +98,7 @@ export default function ConnectButton({
         })
         .catch(async (e) => {
           const authorizationError =
-            e instanceof Error
-              ? e.message
-              : "Wallet account authorization failed";
+            e instanceof Error ? e.message : 'Wallet account authorization failed';
           if (active) {
             setAccount(null);
             onAccount?.(null);
@@ -121,10 +112,8 @@ export default function ConnectButton({
             const detail =
               retirementError instanceof Error
                 ? retirementError.message
-                : "relay channel retirement failed";
-            setError(
-              `${authorizationError}. The relay session is still active: ${detail}`,
-            );
+                : 'relay channel retirement failed';
+            setError(`${authorizationError}. The relay session is still active: ${detail}`);
           }
         })
         .finally(() => {
@@ -150,9 +139,7 @@ export default function ConnectButton({
       } catch (e) {
         setAccount(null);
         onAccount?.(null);
-        setError(
-          e instanceof Error ? e.message : "Wallet returned an invalid account",
-        );
+        setError(e instanceof Error ? e.message : 'Wallet returned an invalid account');
       }
     };
     const onDisconnect = () => {
@@ -169,21 +156,20 @@ export default function ConnectButton({
     };
     const onStatusChanged = (s: ConnectionStatus) => setStatus(s);
 
-    qrl.on("connect", onConnect);
-    qrl.on("accountsChanged", onAccountsChanged);
-    qrl.on("disconnect", onDisconnect);
-    qrl.on("statusChanged", onStatusChanged);
+    qrl.on('connect', onConnect);
+    qrl.on('accountsChanged', onAccountsChanged);
+    qrl.on('disconnect', onDisconnect);
+    qrl.on('statusChanged', onStatusChanged);
 
     return () => {
       active = false;
-      qrl.off("connect", onConnect);
-      qrl.off("accountsChanged", onAccountsChanged);
-      qrl.off("disconnect", onDisconnect);
-      qrl.off("statusChanged", onStatusChanged);
+      qrl.off('connect', onConnect);
+      qrl.off('accountsChanged', onAccountsChanged);
+      qrl.off('disconnect', onDisconnect);
+      qrl.off('statusChanged', onStatusChanged);
     };
     // `account` is read once at mount only, listing it would re-attach
     // listeners on every account change, which is wrong.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onAccount, onProvider]);
 
   const openPairing = useCallback(async () => {
@@ -226,9 +212,7 @@ export default function ConnectButton({
       setOpen(false);
       setUri(null);
     } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "Unable to retire the relay session",
-      );
+      setError(e instanceof Error ? e.message : 'Unable to retire the relay session');
     }
   }, []);
 
@@ -242,9 +226,7 @@ export default function ConnectButton({
       setOpen(false);
       setUri(null);
     } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "Unable to retire the relay session",
-      );
+      setError(e instanceof Error ? e.message : 'Unable to retire the relay session');
     } finally {
       setDisconnecting(false);
     }
@@ -303,13 +285,13 @@ export default function ConnectButton({
                 className="text-xs text-text-secondary hover:text-text-primary"
                 aria-label="Close"
               >
-                {disconnecting ? "Disconnecting…" : "✕"}
+                {disconnecting ? 'Disconnecting…' : '✕'}
               </button>
             </div>
 
             <p className="text-xs text-text-secondary">
-              Scan the QR with MyQRLWallet (mobile) or tap the URI to deep-link
-              if you&apos;re on a phone.
+              Scan the QR with MyQRLWallet (mobile) or tap the URI to deep-link if you&apos;re on a
+              phone.
             </p>
 
             <div className="flex justify-center">
@@ -324,14 +306,10 @@ export default function ConnectButton({
               )}
             </div>
 
-            <div className="text-[10px] text-text-muted font-mono break-all">
-              {uri ?? ""}
-            </div>
+            <div className="text-[10px] text-text-muted font-mono break-all">{uri ?? ''}</div>
 
             <div className="flex items-center justify-between text-xs">
-              <span className="text-text-secondary">
-                {STATUS_LABEL[status]}
-              </span>
+              <span className="text-text-secondary">{STATUS_LABEL[status]}</span>
               <button
                 type="button"
                 onClick={newConnection}

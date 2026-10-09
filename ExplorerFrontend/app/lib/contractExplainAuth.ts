@@ -1,17 +1,14 @@
+import { isRecord } from './guards';
 import type { QrlSignedMessageResult } from '@qrlwallet/connect';
 import { shake256 } from '@noble/hashes/sha3.js';
-import {
-  bytesToHex,
-  hexToBytes,
-  utf8ToBytes,
-} from '@noble/hashes/utils.js';
+import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { canonicalizeQrlAddress } from './qrlAddress';
+import { parseAuthorizedQrlAccount } from './qrlAccounts';
 
 const CHALLENGE_ID_PATTERN = /^[0-9a-f]{64}$/;
 const MESSAGE_HEX_PATTERN = /^0x(?:[0-9a-f]{2})+$/;
-const UTC_SECONDS_PATTERN =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+const UTC_SECONDS_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const MAX_MESSAGE_BYTES = 16 * 1024;
 const ML_DSA_87_DESCRIPTOR = '0x010000';
 const QRL_SIGN_MESSAGE_V1 = utf8ToBytes('QRL-SIGN-MSG-v1');
@@ -51,20 +48,11 @@ interface ChallengeExpectation {
   now?: number;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function hasExactKeys(
-  value: Record<string, unknown>,
-  keys: readonly string[],
-): boolean {
+function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
   const actual = Reflect.ownKeys(value);
   return (
     actual.length === keys.length &&
-    actual.every(
-      (key) => typeof key === 'string' && keys.includes(key),
-    )
+    actual.every((key) => typeof key === 'string' && keys.includes(key))
   );
 }
 
@@ -132,7 +120,7 @@ function normalizeOrigin(value: unknown): string {
 
 export function parseContractExplainChallenge(
   value: unknown,
-  expectation: ChallengeExpectation,
+  expectation: ChallengeExpectation
 ): ContractExplainChallenge {
   const keys = [
     'challengeId',
@@ -146,10 +134,7 @@ export function parseContractExplainChallenge(
   if (!isRecord(value) || !hasExactKeys(value, keys)) {
     throw new Error('Invalid contract explanation challenge');
   }
-  if (
-    typeof value.challengeId !== 'string' ||
-    !CHALLENGE_ID_PATTERN.test(value.challengeId)
-  ) {
+  if (typeof value.challengeId !== 'string' || !CHALLENGE_ID_PATTERN.test(value.challengeId)) {
     throw new Error('Invalid contract explanation challenge ID');
   }
   if (
@@ -166,11 +151,7 @@ export function parseContractExplainChallenge(
   const expectedSigner = requireCanonicalAddress(expectation.signer, 'signer');
   const origin = normalizeOrigin(value.origin);
   const expectedOrigin = normalizeOrigin(expectation.origin);
-  if (
-    contract !== expectedContract ||
-    signer !== expectedSigner ||
-    origin !== expectedOrigin
-  ) {
+  if (contract !== expectedContract || signer !== expectedSigner || origin !== expectedOrigin) {
     throw new Error('Contract explanation challenge binding mismatch');
   }
 
@@ -178,10 +159,7 @@ export function parseContractExplainChallenge(
   if (chainId !== value.chainId) {
     throw new Error('Invalid contract explanation chain ID');
   }
-  if (
-    typeof value.expiresAt !== 'string' ||
-    !UTC_SECONDS_PATTERN.test(value.expiresAt)
-  ) {
+  if (typeof value.expiresAt !== 'string' || !UTC_SECONDS_PATTERN.test(value.expiresAt)) {
     throw new Error('Invalid contract explanation challenge expiry');
   }
   const expiresAt = new Date(value.expiresAt);
@@ -204,30 +182,18 @@ export function parseContractExplainChallenge(
   };
 }
 
-function currentCanonicalAccount(
-  provider: ContractExplainWalletProvider,
-): string {
-  const accounts = provider.getAccounts();
-  if (accounts.length !== 1) {
-    throw new Error('Connect the contract creator wallet to regenerate');
-  }
-  const account = canonicalizeQrlAddress(accounts[0]);
-  if (!account) {
-    throw new Error('Wallet returned an invalid current QRL account');
-  }
-  return account;
+function currentCanonicalAccount(provider: ContractExplainWalletProvider): string {
+  return parseAuthorizedQrlAccount(provider.getAccounts());
 }
 
 async function assertWalletBinding(
   provider: ContractExplainWalletProvider,
-  challenge: ContractExplainChallenge,
+  challenge: ContractExplainChallenge
 ): Promise<void> {
   if (currentCanonicalAccount(provider) !== challenge.signer) {
     throw new Error('The connected wallet is not the contract creator');
   }
-  const chainId = normalizeQrlChainId(
-    await provider.request({ method: 'qrl_chainId' }),
-  );
+  const chainId = normalizeQrlChainId(await provider.request({ method: 'qrl_chainId' }));
   if (chainId !== challenge.chainId) {
     throw new Error('Switch the wallet to the challenge network');
   }
@@ -235,7 +201,7 @@ async function assertWalletBinding(
 
 export async function signContractExplainChallenge(
   provider: ContractExplainWalletProvider,
-  challenge: ContractExplainChallenge,
+  challenge: ContractExplainChallenge
 ): Promise<ContractExplainProof> {
   if (new Date(challenge.expiresAt).getTime() <= Date.now()) {
     throw new Error('Contract explanation challenge expired');

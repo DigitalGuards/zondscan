@@ -3,7 +3,6 @@ import InterfaceText from '../../components/InterfaceText';
 
 import TimeDisplay from '../../components/TimeDisplay';
 
-import React from 'react';
 import Link from 'next/link';
 import axios from 'axios';
 import config from '../../../config';
@@ -17,7 +16,9 @@ import Pagination from '../../components/Pagination';
 const ITEMS_PER_PAGE = 10;
 
 const fetchBlocks = async (page: string): Promise<BlocksResponse> => {
-  const response = await axios.get<BlocksResponse>(`${config.handlerUrl}/blocks?page=${page}&limit=${ITEMS_PER_PAGE}`);
+  const response = await axios.get<BlocksResponse>(
+    `${config.handlerUrl}/blocks?page=${page}&limit=${ITEMS_PER_PAGE}`
+  );
   return response.data;
 };
 
@@ -64,7 +65,9 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
 
   return (
     <div className="py-4 sm:py-6 lg:py-8">
-      <h1 className="section-title mb-4"><InterfaceText text="Blocks" /></h1>
+      <h1 className="section-title mb-4">
+        <InterfaceText text="Blocks" />
+      </h1>
 
       <div className="mb-6">
         <SearchBar />
@@ -75,24 +78,48 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider"><InterfaceText text="Block" /></th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell"><InterfaceText text="Hash" /></th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">Txns</th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden lg:table-cell"><InterfaceText text="Activity" /></th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider"><InterfaceText text="Time" /></th>
-                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:table-cell"><InterfaceText text="Gas Used" /></th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">
+                  <InterfaceText text="Block" />
+                </th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">
+                  <InterfaceText text="Hash" />
+                </th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">
+                  Txns
+                </th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden lg:table-cell">
+                  <InterfaceText text="Activity" />
+                </th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">
+                  <InterfaceText text="Time" />
+                </th>
+                <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:table-cell">
+                  <InterfaceText text="Gas Used" />
+                </th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 Array.from({ length: ITEMS_PER_PAGE }).map((_, i) => (
                   <tr key={i} className="border-b border-border last:border-b-0">
-                    <td className="px-4 py-3"><div className="h-4 w-16 skeleton" /></td>
-                    <td className="px-4 py-3 hidden sm:table-cell"><div className="h-4 w-24 skeleton" /></td>
-                    <td className="px-4 py-3"><div className="h-4 w-8 skeleton" /></td>
-                    <td className="px-4 py-3 hidden lg:table-cell"><div className="h-4 w-20 skeleton" /></td>
-                    <td className="px-4 py-3"><div className="h-4 w-16 skeleton" /></td>
-                    <td className="px-4 py-3 hidden md:table-cell"><div className="h-4 w-16 skeleton" /></td>
+                    <td className="px-4 py-3">
+                      <div className="h-4 w-16 skeleton" />
+                    </td>
+                    <td className="px-4 py-3 hidden sm:table-cell">
+                      <div className="h-4 w-24 skeleton" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="h-4 w-8 skeleton" />
+                    </td>
+                    <td className="px-4 py-3 hidden lg:table-cell">
+                      <div className="h-4 w-20 skeleton" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="h-4 w-16 skeleton" />
+                    </td>
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      <div className="h-4 w-16 skeleton" />
+                    </td>
                   </tr>
                 ))
               ) : isError ? (
@@ -139,13 +166,21 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
                         {activity ? (
                           <span className="text-xs font-mono flex items-center gap-2">
                             {activity.tokenTransfers > 0 && (
-                              <span className="text-accent" title="Token / NFT transfers across this block's txs">
-                                {activity.tokenTransfers} token{activity.tokenTransfers === 1 ? '' : 's'}
+                              <span
+                                className="text-accent"
+                                title="Token / NFT transfers across this block's txs"
+                              >
+                                {activity.tokenTransfers} token
+                                {activity.tokenTransfers === 1 ? '' : 's'}
                               </span>
                             )}
                             {activity.internalCalls > 0 && (
-                              <span className="text-text-secondary" title="Internal contract calls across this block's txs">
-                                {activity.internalCalls} call{activity.internalCalls === 1 ? '' : 's'}
+                              <span
+                                className="text-text-secondary"
+                                title="Internal contract calls across this block's txs"
+                              >
+                                {activity.internalCalls} call
+                                {activity.internalCalls === 1 ? '' : 's'}
                               </span>
                             )}
                           </span>

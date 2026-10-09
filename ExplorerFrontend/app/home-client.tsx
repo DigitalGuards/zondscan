@@ -8,8 +8,22 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
-import { formatNumberWithCommas, formatStaked, formatGasPrice, truncateHash, formatAddress, NATIVE_UNIT } from './lib/helpers';
-import { initialHomeData, loadHomeData, type BlockResult, type HomeData, type HomeStatus, type TxResult } from './lib/homeData';
+import {
+  formatNumberWithCommas,
+  formatStaked,
+  formatGasPrice,
+  truncateHash,
+  formatAddress,
+  NATIVE_UNIT,
+} from './lib/helpers';
+import {
+  initialHomeData,
+  loadHomeData,
+  type BlockResult,
+  type HomeData,
+  type HomeStatus,
+  type TxResult,
+} from './lib/homeData';
 import config from '../config.js';
 import SearchBar from './components/SearchBar';
 import TransactionAmount from './components/TransactionAmount';
@@ -54,49 +68,145 @@ function parseTimestamp(ts: string | number | undefined): number {
 
 const icons = {
   epoch: (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className="h-3.5 w-3.5"
+      aria-hidden="true"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+      />
     </svg>
   ),
   slot: (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className="h-3.5 w-3.5"
+      aria-hidden="true"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
       <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
     </svg>
   ),
   gas: (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className="h-3.5 w-3.5"
+      aria-hidden="true"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
       <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M3 21h18" />
     </svg>
   ),
   block: (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className="h-3.5 w-3.5"
+      aria-hidden="true"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+      />
     </svg>
   ),
   validators: (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className="h-3.5 w-3.5"
+      aria-hidden="true"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+      />
     </svg>
   ),
   transactions: (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className="h-3.5 w-3.5"
+      aria-hidden="true"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+      />
     </svg>
   ),
   staked: (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className="h-3.5 w-3.5"
+      aria-hidden="true"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+      />
     </svg>
   ),
   marketCap: (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className="h-3.5 w-3.5"
+      aria-hidden="true"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
       <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
     </svg>
   ),
   circulating: (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className="h-3.5 w-3.5"
+      aria-hidden="true"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+      />
     </svg>
   ),
 };
@@ -114,16 +224,66 @@ interface Stat {
 function StatBar({ data }: { data: HomeData }) {
   const fiat = useDisplayCurrency();
   const stats: Stat[] = [
-    { label: 'Epoch', value: data.epochInfo?.headEpoch ?? null, status: data.status.epochInfo, icon: icons.epoch },
-    { label: 'Avg Gas Price', value: data.avgGasPriceHex ? `${formatGasPrice(data.avgGasPriceHex)} Shor` : null, status: data.status.avgGasPriceHex, icon: icons.gas },
-    { label: 'Block Height', value: data.blockHeight === null ? null : formatNumberWithCommas(data.blockHeight.toString()), status: data.status.blockHeight, icon: icons.block, live: true },
-    { label: 'Validators', value: data.validatorCount === null ? null : formatNumberWithCommas(data.validatorCount.toString()), status: data.status.overview, icon: icons.validators },
-    { label: `Staked ${NATIVE_UNIT}`, value: data.totalStaked === null ? null : formatStaked(data.totalStaked), status: data.status.totalStaked, icon: icons.staked },
-    { label: 'Transactions', value: data.totalTransactions === null ? null : formatNumberWithCommas(data.totalTransactions.toString()), status: data.status.totalTransactions, icon: icons.transactions },
-    { label: `Market Cap (${fiat.currency})`, value: data.marketCap !== null && data.marketCap > 0 ? fiat.format(data.marketCap, { style: 'decimal', maximumFractionDigits: 0 }) : null, status: data.status.overview, icon: icons.marketCap },
+    {
+      label: 'Epoch',
+      value: data.epochInfo?.headEpoch ?? null,
+      status: data.status.epochInfo,
+      icon: icons.epoch,
+    },
+    {
+      label: 'Avg Gas Price',
+      value: data.avgGasPriceHex ? `${formatGasPrice(data.avgGasPriceHex)} Shor` : null,
+      status: data.status.avgGasPriceHex,
+      icon: icons.gas,
+    },
+    {
+      label: 'Block Height',
+      value: data.blockHeight === null ? null : formatNumberWithCommas(data.blockHeight.toString()),
+      status: data.status.blockHeight,
+      icon: icons.block,
+      live: true,
+    },
+    {
+      label: 'Validators',
+      value:
+        data.validatorCount === null
+          ? null
+          : formatNumberWithCommas(data.validatorCount.toString()),
+      status: data.status.overview,
+      icon: icons.validators,
+    },
+    {
+      label: `Staked ${NATIVE_UNIT}`,
+      value: data.totalStaked === null ? null : formatStaked(data.totalStaked),
+      status: data.status.totalStaked,
+      icon: icons.staked,
+    },
+    {
+      label: 'Transactions',
+      value:
+        data.totalTransactions === null
+          ? null
+          : formatNumberWithCommas(data.totalTransactions.toString()),
+      status: data.status.totalTransactions,
+      icon: icons.transactions,
+    },
+    {
+      label: `Market Cap (${fiat.currency})`,
+      value:
+        data.marketCap !== null && data.marketCap > 0
+          ? fiat.format(data.marketCap, { style: 'decimal', maximumFractionDigits: 0 })
+          : null,
+      status: data.status.overview,
+      icon: icons.marketCap,
+    },
     // Unit lives on the label line per the Quanta layout convention; the
     // value stays a bare number so the 8-cell strip keeps its width budget.
-    { label: `Circulating ${NATIVE_UNIT}`, value: data.circulating === null ? null : formatNumberWithCommas(data.circulating), status: data.status.overview, icon: icons.circulating },
+    {
+      label: `Circulating ${NATIVE_UNIT}`,
+      value: data.circulating === null ? null : formatNumberWithCommas(data.circulating),
+      status: data.status.overview,
+      icon: icons.circulating,
+    },
   ];
 
   return (
@@ -140,8 +300,17 @@ function StatBar({ data }: { data: HomeData }) {
             {stat.status === 'loading' ? (
               <div className="skeleton h-7 w-20" aria-label={`Loading ${stat.label}`} />
             ) : (
-              <span title={stat.status === 'error' && stat.value !== null ? 'Last available value; refresh failed' : undefined} className="font-display text-lg sm:text-xl font-semibold text-text-primary tabular-nums inline-flex items-center gap-2">
-                {stat.live && stat.value !== null && stat.status === 'ready' && <span className="live-dot" aria-hidden="true" />}
+              <span
+                title={
+                  stat.status === 'error' && stat.value !== null
+                    ? 'Last available value; refresh failed'
+                    : undefined
+                }
+                className="font-display text-lg sm:text-xl font-semibold text-text-primary tabular-nums inline-flex items-center gap-2"
+              >
+                {stat.live && stat.value !== null && stat.status === 'ready' && (
+                  <span className="live-dot" aria-hidden="true" />
+                )}
                 {stat.value ?? <span className="text-sm text-text-muted">Unavailable</span>}
               </span>
             )}
@@ -160,13 +329,24 @@ function StatBar({ data }: { data: HomeData }) {
 
 const TABLE_ROWS = 8;
 
-const ROW_CLASS = 'flex items-center gap-3 px-4 py-3 border-b border-border last:border-b-0 text-sm';
+const ROW_CLASS =
+  'flex items-center gap-3 px-4 py-3 border-b border-border last:border-b-0 text-sm';
 
-function TableHeader({ icon, title, tone }: { icon: React.ReactNode; title: string; tone: 'accent' | 'quantum' }) {
+function TableHeader({
+  icon,
+  title,
+  tone,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  tone: 'accent' | 'quantum';
+}) {
   return (
     <div className="panel-header">
       <h2 className="flex items-center gap-2.5 text-[15px] font-display font-semibold text-text-primary">
-        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-lg ${tone === 'accent' ? 'bg-accent/10 text-accent' : 'bg-quantum/10 text-quantum'}`}>
+        <span
+          className={`inline-flex items-center justify-center w-7 h-7 rounded-lg ${tone === 'accent' ? 'bg-accent/10 text-accent' : 'bg-quantum/10 text-quantum'}`}
+        >
           {icon}
         </span>
         {title}
@@ -193,21 +373,21 @@ function ViewAllFooter({ href, label }: { href: string; label: string }) {
 
 function RowIcon({ children, tone }: { children: React.ReactNode; tone: 'accent' | 'quantum' }) {
   return (
-    <div className={`flex-shrink-0 w-8 h-8 rounded-lg border flex items-center justify-center
-                     ${tone === 'accent'
-                       ? 'bg-accent/[0.07] border-accent/10 text-accent/80'
-                       : 'bg-quantum/[0.07] border-quantum/10 text-quantum/80'}`}>
+    <div
+      className={`flex-shrink-0 w-8 h-8 rounded-lg border flex items-center justify-center
+                     ${
+                       tone === 'accent'
+                         ? 'bg-accent/[0.07] border-accent/10 text-accent/80'
+                         : 'bg-quantum/[0.07] border-quantum/10 text-quantum/80'
+                     }`}
+    >
       {children}
     </div>
   );
 }
 
 function ValueBadge({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="chip num text-[11px]">
-      {children}
-    </span>
-  );
+  return <span className="chip num text-[11px]">{children}</span>;
 }
 
 function SkeletonRow() {
@@ -238,57 +418,73 @@ function BlockTable({ blocks, status }: { blocks: BlockResult[] | null; status: 
     <section aria-label="Latest blocks" className="card flex flex-col overflow-hidden">
       <TableHeader icon={icons.block} title="Latest Blocks" tone="accent" />
       <div className="flex-1">
-        {status === 'loading'
-          ? Array.from({ length: TABLE_ROWS }).map((_, i) => <SkeletonRow key={i} />)
-          : blocks === null ? <p className="p-4 text-sm text-text-muted">Latest blocks unavailable. Retrying automatically.</p>
-          : blocks.length === 0 ? <p className="p-4 text-sm text-text-muted">No blocks yet.</p>
-          : blocks.slice(0, TABLE_ROWS).map((block, idx) => {
-              const blockNum = parseHex(block.number);
-              const epoch = getEpochFromBlock(blockNum);
-              const timestamp = parseHex(block.timestamp);
-              const txCount = block.transactions?.length || 0;
-              const miner = block.miner ? formatAddress(block.miner) : '';
+        {status === 'loading' ? (
+          Array.from({ length: TABLE_ROWS }).map((_, i) => <SkeletonRow key={i} />)
+        ) : blocks === null ? (
+          <p className="p-4 text-sm text-text-muted">
+            Latest blocks unavailable. Retrying automatically.
+          </p>
+        ) : blocks.length === 0 ? (
+          <p className="p-4 text-sm text-text-muted">No blocks yet.</p>
+        ) : (
+          blocks.slice(0, TABLE_ROWS).map((block, idx) => {
+            const blockNum = parseHex(block.number);
+            const epoch = getEpochFromBlock(blockNum);
+            const timestamp = parseHex(block.timestamp);
+            const txCount = block.transactions?.length || 0;
+            const miner = block.miner ? formatAddress(block.miner) : '';
 
-              return (
-                <div key={`${block.number}-${idx}`} className={`${ROW_CLASS} hover:bg-surface transition-colors`}>
-                  <RowIcon tone="accent">{icons.block}</RowIcon>
+            return (
+              <div
+                key={`${block.number}-${idx}`}
+                className={`${ROW_CLASS} hover:bg-surface transition-colors`}
+              >
+                <RowIcon tone="accent">{icons.block}</RowIcon>
 
-                  <div className="flex-1 min-w-0">
-                    <Link
-                      href={`/block/${blockNum}`}
-                      className="block link-accent hover:underline font-medium num truncate"
-                    >
-                      {formatNumberWithCommas(blockNum.toString())}
-                    </Link>
-                    <span className="text-[11px] text-text-muted tabular-nums"><TimeDisplay timestamp={timestamp} relative /></span>
-                  </div>
+                <div className="flex-1 min-w-0">
+                  <Link
+                    href={`/block/${blockNum}`}
+                    className="block link-accent hover:underline font-medium num truncate"
+                  >
+                    {formatNumberWithCommas(blockNum.toString())}
+                  </Link>
+                  <span className="text-[11px] text-text-muted tabular-nums">
+                    <TimeDisplay timestamp={timestamp} relative />
+                  </span>
+                </div>
 
-                  <div className="flex-1 min-w-0 hidden sm:block">
-                    {miner ? (
-                      <div className="flex items-start gap-1 text-[12px] min-w-0">
-                        <span className="text-text-muted">Miner</span>
-                        <Link
-                          href={`/address/${miner}`}
-                          className="text-text-secondary hover:text-accent hover:underline font-mono min-w-0 max-w-full"
-                        >
-                          <AddressText address={miner} />
-                        </Link>
-                      </div>
-                    ) : null}
-                    <div className="text-[11px] text-text-muted tabular-nums">
-                      <Link href={`/block/${blockNum}`} className="hover:text-accent hover:underline">
-                        {txCount} txn{txCount === 1 ? '' : 's'}
+                <div className="flex-1 min-w-0 hidden sm:block">
+                  {miner ? (
+                    <div className="flex items-start gap-1 text-[12px] min-w-0">
+                      <span className="text-text-muted">Miner</span>
+                      <Link
+                        href={`/address/${miner}`}
+                        className="text-text-secondary hover:text-accent hover:underline font-mono min-w-0 max-w-full"
+                      >
+                        <AddressText address={miner} />
                       </Link>
-                      <span className="text-text-muted/70"> · epoch {formatNumberWithCommas(epoch.toString())}</span>
                     </div>
-                  </div>
-
-                  <div className="flex-shrink-0">
-                    <ValueBadge>{txCount} txn{txCount === 1 ? '' : 's'}</ValueBadge>
+                  ) : null}
+                  <div className="text-[11px] text-text-muted tabular-nums">
+                    <Link href={`/block/${blockNum}`} className="hover:text-accent hover:underline">
+                      {txCount} txn{txCount === 1 ? '' : 's'}
+                    </Link>
+                    <span className="text-text-muted/70">
+                      {' '}
+                      · epoch {formatNumberWithCommas(epoch.toString())}
+                    </span>
                   </div>
                 </div>
-              );
-            })}
+
+                <div className="flex-shrink-0">
+                  <ValueBadge>
+                    {txCount} txn{txCount === 1 ? '' : 's'}
+                  </ValueBadge>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
       <ViewAllFooter href="/blocks/1" label="View all blocks" />
     </section>
@@ -302,56 +498,77 @@ function TransactionTable({ txs, status }: { txs: TxResult[] | null; status: Hom
     <section aria-label="Latest transactions" className="card flex flex-col overflow-hidden">
       <TableHeader icon={icons.transactions} title="Latest Transactions" tone="quantum" />
       <div className="flex-1">
-        {status === 'loading'
-          ? Array.from({ length: TABLE_ROWS }).map((_, i) => <SkeletonRow key={i} />)
-          : txs === null ? <p className="p-4 text-sm text-text-muted">Latest transactions unavailable. Retrying automatically.</p>
-          : txs.length === 0 ? <p className="p-4 text-sm text-text-muted">No transactions yet.</p>
-          : txs.slice(0, TABLE_ROWS).map((tx, idx) => {
-              const timestamp = parseTimestamp(tx.TimeStamp);
-              const from = tx.From ? formatAddress(tx.From) : '';
-              const to = tx.To ? formatAddress(tx.To) : '';
+        {status === 'loading' ? (
+          Array.from({ length: TABLE_ROWS }).map((_, i) => <SkeletonRow key={i} />)
+        ) : txs === null ? (
+          <p className="p-4 text-sm text-text-muted">
+            Latest transactions unavailable. Retrying automatically.
+          </p>
+        ) : txs.length === 0 ? (
+          <p className="p-4 text-sm text-text-muted">No transactions yet.</p>
+        ) : (
+          txs.slice(0, TABLE_ROWS).map((tx, idx) => {
+            const timestamp = parseTimestamp(tx.TimeStamp);
+            const from = tx.From ? formatAddress(tx.From) : '';
+            const to = tx.To ? formatAddress(tx.To) : '';
 
-              return (
-                <div key={`${tx.TxHash}-${idx}`} className={`${ROW_CLASS} hover:bg-surface transition-colors`}>
-                  <RowIcon tone="quantum">{icons.transactions}</RowIcon>
+            return (
+              <div
+                key={`${tx.TxHash}-${idx}`}
+                className={`${ROW_CLASS} hover:bg-surface transition-colors`}
+              >
+                <RowIcon tone="quantum">{icons.transactions}</RowIcon>
 
-                  <div className="flex-1 min-w-0">
-                    <Link
-                      href={`/tx/${tx.TxHash}`}
-                      className="block link-accent hover:underline font-mono text-[13px] truncate"
-                    >
-                      {truncateHash(tx.TxHash, 10, 6)}
-                    </Link>
-                    <span className="text-[11px] text-text-muted tabular-nums"><TimeDisplay timestamp={timestamp} relative /></span>
+                <div className="flex-1 min-w-0">
+                  <Link
+                    href={`/tx/${tx.TxHash}`}
+                    className="block link-accent hover:underline font-mono text-[13px] truncate"
+                  >
+                    {truncateHash(tx.TxHash, 10, 6)}
+                  </Link>
+                  <span className="text-[11px] text-text-muted tabular-nums">
+                    <TimeDisplay timestamp={timestamp} relative />
+                  </span>
+                </div>
+
+                <div className="flex-1 min-w-0 hidden sm:block">
+                  <div className="flex items-start gap-1 text-[12px] min-w-0">
+                    <span className="text-text-muted w-8 flex-shrink-0">From</span>
+                    {from ? (
+                      <Link
+                        href={`/address/${from}`}
+                        className="text-text-secondary hover:text-accent hover:underline font-mono min-w-0 max-w-full"
+                      >
+                        <AddressText address={from} />
+                      </Link>
+                    ) : (
+                      <span className="text-text-muted">…</span>
+                    )}
                   </div>
-
-                  <div className="flex-1 min-w-0 hidden sm:block">
-                    <div className="flex items-start gap-1 text-[12px] min-w-0">
-                      <span className="text-text-muted w-8 flex-shrink-0">From</span>
-                      {from ? (
-                        <Link href={`/address/${from}`} className="text-text-secondary hover:text-accent hover:underline font-mono min-w-0 max-w-full">
-                          <AddressText address={from} />
-                        </Link>
-                      ) : <span className="text-text-muted">…</span>}
-                    </div>
-                    <div className="flex items-start gap-1 text-[12px] min-w-0">
-                      <span className="text-text-muted w-8 flex-shrink-0">To</span>
-                      {to ? (
-                        <Link href={`/address/${to}`} className="text-text-secondary hover:text-accent hover:underline font-mono min-w-0 max-w-full">
-                          <AddressText address={to} />
-                        </Link>
-                      ) : <span className="text-text-muted">…</span>}
-                    </div>
-                  </div>
-
-                  <div className="flex-shrink-0">
-                    <ValueBadge>
-                      <TransactionAmount amount={tx.Amount} />
-                    </ValueBadge>
+                  <div className="flex items-start gap-1 text-[12px] min-w-0">
+                    <span className="text-text-muted w-8 flex-shrink-0">To</span>
+                    {to ? (
+                      <Link
+                        href={`/address/${to}`}
+                        className="text-text-secondary hover:text-accent hover:underline font-mono min-w-0 max-w-full"
+                      >
+                        <AddressText address={to} />
+                      </Link>
+                    ) : (
+                      <span className="text-text-muted">…</span>
+                    )}
                   </div>
                 </div>
-              );
-            })}
+
+                <div className="flex-shrink-0">
+                  <ValueBadge>
+                    <TransactionAmount amount={tx.Amount} />
+                  </ValueBadge>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
       <ViewAllFooter href="/transactions/1" label="View all transactions" />
     </section>
@@ -374,11 +591,17 @@ export default function HomeClient(): JSX.Element {
     queryFn: async ({ signal }) => {
       const current = ++generation.current;
       await loadHomeData(
-        async (path, requestSignal) => (await axios.get(config.handlerUrl + path, { signal: requestSignal, timeout: 15000 })).data,
+        async (path, requestSignal) =>
+          (
+            await axios.get<unknown>(config.handlerUrl + path, {
+              signal: requestSignal,
+              timeout: 15000,
+            })
+          ).data,
         signal,
-        update => {
+        (update) => {
           if (!signal.aborted && current === generation.current) setData(update);
-        },
+        }
       );
       return Date.now();
     },
@@ -416,8 +639,20 @@ export default function HomeClient(): JSX.Element {
               role="status"
               className="mb-4 px-3 py-2.5 rounded-xl bg-warning/10 border border-warning/25 text-warning text-xs sm:text-sm flex items-center gap-2"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-4 w-4 flex-shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
               </svg>
               Initializing explorer data... This may take a few minutes.
             </div>
@@ -425,7 +660,8 @@ export default function HomeClient(): JSX.Element {
 
           {Object.values(data.status).includes('error') && (
             <p role="status" className="mb-4 text-xs sm:text-sm text-text-muted">
-              Some explorer data could not be refreshed. Showing available data and retrying automatically.
+              Some explorer data could not be refreshed. Showing available data and retrying
+              automatically.
             </p>
           )}
 

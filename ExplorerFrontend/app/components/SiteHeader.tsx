@@ -142,7 +142,7 @@ function DesktopMenu({ group, pathname, open, onOpen, onClose }: DesktopMenuProp
     const items = Array.from(
       event.currentTarget.querySelectorAll<HTMLAnchorElement>('[role="menuitem"]')
     );
-    const current = items.indexOf(document.activeElement as HTMLAnchorElement);
+    const current = items.findIndex((item) => item === document.activeElement);
     let next: number | undefined;
     if (event.key === 'ArrowDown') next = (current + 1) % items.length;
     if (event.key === 'ArrowUp') next = (current - 1 + items.length) % items.length;
@@ -166,7 +166,7 @@ function DesktopMenu({ group, pathname, open, onOpen, onClose }: DesktopMenuProp
           !element.closest('[inert]') &&
           element.getClientRects().length > 0
       );
-      const index = focusable.indexOf(buttonRef.current!);
+      const index = focusable.findIndex((element) => element === buttonRef.current);
       const target = focusable[index + (event.shiftKey ? -1 : 1)];
       if (target) {
         event.preventDefault();
@@ -316,7 +316,7 @@ export default function SiteHeader() {
       });
       main
         .querySelectorAll('[data-search-placement="page"]')
-        .forEach((element) => observer!.observe(element));
+        .forEach((element) => observer?.observe(element));
       update();
     };
     const mutations = new MutationObserver(observe);

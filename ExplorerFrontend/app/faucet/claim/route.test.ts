@@ -1,6 +1,7 @@
 jest.mock('server-only', () => ({}));
 
-import { GET } from './route';
+import { GET, POST } from './route';
+import { NextRequest } from 'next/server';
 
 describe('public faucet runtime status', () => {
   const original = { ...process.env };
@@ -16,6 +17,20 @@ describe('public faucet runtime status', () => {
   afterEach(() => {
     process.env = { ...original };
   });
+
+  it.each([null, [], false, { address: {} }, { address: 'bad', turnstileToken: 42 }])(
+    'rejects malformed request %p before captcha, storage, or signing',
+    async (body) => {
+      const request = new NextRequest('https://explorer.invalid/faucet/claim', {
+        method: 'POST',
+        body: JSON.stringify(body),
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const result = await POST(request);
+      expect(result.status).toBe(400);
+      expect(await result.json()).toEqual({ error: 'Invalid request body.' });
+    }
+  );
 
   it('serializes only explicitly allowed public fields with no caching', async () => {
     const response = GET();

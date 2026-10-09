@@ -1,3 +1,4 @@
+import { isArray, isRecord } from './guards';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { canonicalizeQrlAddress, QRL_ADDRESS_HEX_LENGTH } from './qrlAddress';
@@ -54,7 +55,9 @@ export function formatStaked(shor: string): string {
     const remainder = val % BigInt(1_000_000_000);
     const decimalStr = remainder.toString().padStart(9, '0').replace(/0+$/, '');
     const result = formatNumberWithCommas(qrlBase.toString());
-    return decimalStr.length > 0 ? `${result}.${decimalStr} ${NATIVE_UNIT}` : `${result} ${NATIVE_UNIT}`;
+    return decimalStr.length > 0
+      ? `${result}.${decimalStr} ${NATIVE_UNIT}`
+      : `${result} ${NATIVE_UNIT}`;
   } catch {
     return `0 ${NATIVE_UNIT}`;
   }
@@ -86,7 +89,7 @@ export function decodeToHex(input: string, _format?: string): string {
     const binary = atob(input);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
   } catch {
     return '';
   }
@@ -94,7 +97,7 @@ export function decodeToHex(input: string, _format?: string): string {
 
 export function toFixed(x: number | string | undefined | null): string {
   if (x === undefined || x === null) {
-    return "0";
+    return '0';
   }
 
   // Convert to number if it's a string
@@ -102,14 +105,14 @@ export function toFixed(x: number | string | undefined | null): string {
 
   // Check if it's a valid number
   if (isNaN(num)) {
-    return "0";
+    return '0';
   }
 
   if (Math.abs(num) < 1.0) {
     const e = parseInt(num.toString().split('e-')[1]);
     if (e) {
       const val = num * Math.pow(10, e - 1);
-      return '0.' + (new Array(e)).join('0') + val.toString().substring(2);
+      return '0.' + new Array(e).join('0') + val.toString().substring(2);
     }
   } else if (num.toString().includes('e+')) {
     // For large numbers in scientific notation, use BigInt to format correctly.
@@ -167,11 +170,20 @@ export function formatBigGas(s: string | undefined | null): string {
 // decimals so they don't round to 0; sub-mShor values fall through to
 // exponential.
 export function formatGasPrice(planck: number | string | undefined | null): string {
-  if (planck === undefined || planck === null || planck === 0 || planck === '0' || planck === '0x0') {
+  if (
+    planck === undefined ||
+    planck === null ||
+    planck === 0 ||
+    planck === '0' ||
+    planck === '0x0'
+  ) {
     return '0';
   }
   try {
-    const value = typeof planck === 'string' && planck.startsWith('0x') ? BigInt(planck) : BigInt(String(planck));
+    const value =
+      typeof planck === 'string' && planck.startsWith('0x')
+        ? BigInt(planck)
+        : BigInt(String(planck));
     const shor = Number(value) / 1e9;
     if (shor < 0.001) return shor.toExponential(2);
     if (shor < 1) return parseFloat(shor.toFixed(4)).toString();
@@ -188,11 +200,20 @@ export function formatGasPrice(planck: number | string | undefined | null): stri
 // Returns [value_string, unit_string] so callers can style the unit
 // independently.
 export function formatPlanckAdaptive(planck: number | string | undefined | null): [string, string] {
-  if (planck === undefined || planck === null || planck === 0 || planck === '0' || planck === '0x0') {
+  if (
+    planck === undefined ||
+    planck === null ||
+    planck === 0 ||
+    planck === '0' ||
+    planck === '0x0'
+  ) {
     return ['0', 'Planck'];
   }
   try {
-    const v = typeof planck === 'string' && planck.startsWith('0x') ? BigInt(planck) : BigInt(String(planck));
+    const v =
+      typeof planck === 'string' && planck.startsWith('0x')
+        ? BigInt(planck)
+        : BigInt(String(planck));
     if (v === BigInt(0)) return ['0', 'Planck'];
     const SHOR = BigInt(1_000_000_000);
     const QUANTA = BigInt('1000000000000000000');
@@ -234,7 +255,8 @@ export function formatAmount(amount: number | string | undefined | null): [strin
     // Handle decimal numbers (convert to planck/shor format first)
     else if (typeof amount === 'number' || (typeof amount === 'string' && !isNaN(Number(amount)))) {
       const floatValue = parseFloat(String(amount));
-      if (floatValue < 1000000000000000000) { // If number is already in QRL format
+      if (floatValue < 1000000000000000000) {
+        // If number is already in QRL format
         totalNum = floatValue;
       } else {
         const value = BigInt(Math.floor(floatValue));
@@ -317,9 +339,9 @@ export function formatTimestamp(timestamp: number | undefined | null): string {
 
 export function formatNumberWithCommas(x: number | string | undefined | null): string {
   if (x === undefined || x === null) {
-    return "0";
+    return '0';
   }
-  return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 export function epochsToDays(epochs: number): number {
@@ -330,7 +352,11 @@ export function epochsToDays(epochs: number): number {
   return (epochs * 128 * 60) / (24 * 60 * 60);
 }
 
-export function truncateHash(hash: string | undefined | null, startLength = 6, endLength = 4): string {
+export function truncateHash(
+  hash: string | undefined | null,
+  startLength = 6,
+  endLength = 4
+): string {
   if (!hash || hash.length < startLength + endLength) return hash || '';
   return `${hash.slice(0, startLength)}...${hash.slice(-endLength)}`;
 }
@@ -362,7 +388,12 @@ export type DecodedTokenStandard = 'ERC-20' | 'ERC-721' | 'ERC-1155';
 
 export interface DecodedTokenTransfer {
   standard: DecodedTokenStandard;
-  methodName: 'transfer' | 'transferFrom' | 'safeTransferFrom' | 'safeBatchTransferFrom' | 'setApprovalForAll';
+  methodName:
+    | 'transfer'
+    | 'transferFrom'
+    | 'safeTransferFrom'
+    | 'safeBatchTransferFrom'
+    | 'setApprovalForAll';
   to?: string;
   from?: string;
   /** ERC-20 raw uint256 amount, as a decimal string. */
@@ -452,7 +483,9 @@ function abiUintArray(data: string, arrOffset: number): string[] | null {
  *   ERC-1155: safeTransferFrom (0xf242432a), safeBatchTransferFrom (0x2eb2c2d6)
  *   Both NFT: setApprovalForAll (0xa22cb465)
  */
-export function decodeTokenTransferInput(inputData: string | undefined | null): DecodedTokenTransfer | null {
+export function decodeTokenTransferInput(
+  inputData: string | undefined | null
+): DecodedTokenTransfer | null {
   if (
     !inputData ||
     inputData === '0x' ||
@@ -528,7 +561,7 @@ export function decodeTokenTransferInput(inputData: string | undefined | null): 
         const to = abiAddress(data, args + ABI_WORD_HEX_LENGTH);
         const tokenID = abiUint(data, args + ABI_WORD_HEX_LENGTH * 2);
         const bytesOffset = safeNumberFromWord(
-          data.slice(args + ABI_WORD_HEX_LENGTH * 3, args + ABI_WORD_HEX_LENGTH * 4),
+          data.slice(args + ABI_WORD_HEX_LENGTH * 3, args + ABI_WORD_HEX_LENGTH * 4)
         );
         if (
           from === null ||
@@ -558,7 +591,7 @@ export function decodeTokenTransferInput(inputData: string | undefined | null): 
         const tokenID = abiUint(data, args + ABI_WORD_HEX_LENGTH * 2);
         const value = abiUint(data, args + ABI_WORD_HEX_LENGTH * 3);
         const bytesOffset = safeNumberFromWord(
-          data.slice(args + ABI_WORD_HEX_LENGTH * 4, args + ABI_WORD_HEX_LENGTH * 5),
+          data.slice(args + ABI_WORD_HEX_LENGTH * 4, args + ABI_WORD_HEX_LENGTH * 5)
         );
         if (
           from === null ||
@@ -589,10 +622,10 @@ export function decodeTokenTransferInput(inputData: string | undefined | null): 
         const from = abiAddress(data, args);
         const to = abiAddress(data, args + ABI_WORD_HEX_LENGTH);
         const idsOffsetBytes = safeNumberFromWord(
-          data.slice(args + ABI_WORD_HEX_LENGTH * 2, args + ABI_WORD_HEX_LENGTH * 3),
+          data.slice(args + ABI_WORD_HEX_LENGTH * 2, args + ABI_WORD_HEX_LENGTH * 3)
         );
         const valuesOffsetBytes = safeNumberFromWord(
-          data.slice(args + ABI_WORD_HEX_LENGTH * 3, args + ABI_WORD_HEX_LENGTH * 4),
+          data.slice(args + ABI_WORD_HEX_LENGTH * 3, args + ABI_WORD_HEX_LENGTH * 4)
         );
         const minimumDynamicOffset = ABI_WORD_BYTES * 5;
         if (
@@ -628,7 +661,7 @@ export function decodeTokenTransferInput(inputData: string | undefined | null): 
         if (data.length !== args + ABI_WORD_HEX_LENGTH * 2) return null;
         const operator = abiAddress(data, args);
         const approved = boolFromWord(
-          data.slice(args + ABI_WORD_HEX_LENGTH, args + ABI_WORD_HEX_LENGTH * 2),
+          data.slice(args + ABI_WORD_HEX_LENGTH, args + ABI_WORD_HEX_LENGTH * 2)
         );
         if (operator === null || approved === null) return null;
         return {
@@ -680,20 +713,15 @@ export interface DecodedEvent {
 // QRVM event signatures carry the 32-byte Keccak hash in the high half of a
 // 64-byte topic, followed by 32 zero bytes.
 const TOPIC_TRANSFER =
-  '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' +
-  EVENT_TOPIC_PADDING;
+  '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' + EVENT_TOPIC_PADDING;
 const TOPIC_TRANSFER_SINGLE =
-  '0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62' +
-  EVENT_TOPIC_PADDING;
+  '0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62' + EVENT_TOPIC_PADDING;
 const TOPIC_TRANSFER_BATCH =
-  '0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb' +
-  EVENT_TOPIC_PADDING;
+  '0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb' + EVENT_TOPIC_PADDING;
 const TOPIC_APPROVAL =
-  '0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925' +
-  EVENT_TOPIC_PADDING;
+  '0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925' + EVENT_TOPIC_PADDING;
 const TOPIC_APPROVAL_FOR_ALL =
-  '0x17307eab39ab6107e8899845ad3d59bd9653f200f220920489ca2b5937696c31' +
-  EVENT_TOPIC_PADDING;
+  '0x17307eab39ab6107e8899845ad3d59bd9653f200f220920489ca2b5937696c31' + EVENT_TOPIC_PADDING;
 
 function topicToAddress(topic: string): string | null {
   const word = abiWordBody(topic);
@@ -711,12 +739,15 @@ function normaliseDataBody(data: string): string | null {
 }
 
 function dataUint(dataBody: string, charOffset: number): string | null {
-  return uint256FromWord(dataBody.slice(charOffset, charOffset + ABI_WORD_HEX_LENGTH))?.toString() ?? null;
+  return (
+    uint256FromWord(dataBody.slice(charOffset, charOffset + ABI_WORD_HEX_LENGTH))?.toString() ??
+    null
+  );
 }
 
 function dataUintArray(dataBody: string, arrCharOffset: number): string[] | null {
   const len = safeNumberFromWord(
-    dataBody.slice(arrCharOffset, arrCharOffset + ABI_WORD_HEX_LENGTH),
+    dataBody.slice(arrCharOffset, arrCharOffset + ABI_WORD_HEX_LENGTH)
   );
   if (len === null || len > MAX_DYNAMIC_ITEMS) return null;
   const valuesOffset = arrCharOffset + ABI_WORD_HEX_LENGTH;
@@ -865,7 +896,8 @@ export function decodeEventLog(topics: string[], data: string, abi?: string): De
       }
       return {
         name: 'TransferSingle',
-        signature: 'TransferSingle(address operator, address from, address to, uint256 id, uint256 value)',
+        signature:
+          'TransferSingle(address operator, address from, address to, uint256 id, uint256 value)',
         standard: 'ERC-1155',
         args: [
           { label: 'operator', type: 'address', value: operator },
@@ -887,7 +919,7 @@ export function decodeEventLog(topics: string[], data: string, abi?: string): De
       const to = topicToAddress(topics[3]);
       const idsOffsetBytes = safeNumberFromWord(dataBody.slice(0, ABI_WORD_HEX_LENGTH));
       const valuesOffsetBytes = safeNumberFromWord(
-        dataBody.slice(ABI_WORD_HEX_LENGTH, ABI_WORD_HEX_LENGTH * 2),
+        dataBody.slice(ABI_WORD_HEX_LENGTH, ABI_WORD_HEX_LENGTH * 2)
       );
       const minimumDynamicOffset = ABI_WORD_BYTES * 2;
       if (
@@ -908,7 +940,8 @@ export function decodeEventLog(topics: string[], data: string, abi?: string): De
       if (ids === null || values === null || ids.length !== values.length) return null;
       return {
         name: 'TransferBatch',
-        signature: 'TransferBatch(address operator, address from, address to, uint256[] ids, uint256[] values)',
+        signature:
+          'TransferBatch(address operator, address from, address to, uint256[] ids, uint256[] values)',
         standard: 'ERC-1155',
         args: [
           { label: 'operator', type: 'address', value: operator },
@@ -946,6 +979,26 @@ interface AbiEventEntry {
   inputs?: AbiEventInput[];
 }
 
+function isAbiEntry(value: unknown): value is AbiEventEntry & AbiFunctionEntry {
+  return (
+    isRecord(value) &&
+    (value.type === undefined || typeof value.type === 'string') &&
+    (value.name === undefined || typeof value.name === 'string') &&
+    (value.anonymous === undefined || typeof value.anonymous === 'boolean') &&
+    (value.stateMutability === undefined || typeof value.stateMutability === 'string') &&
+    (value.inputs === undefined || (isArray(value.inputs) && value.inputs.every(isAbiEntryInput)))
+  );
+}
+
+function isAbiEntryInput(value: unknown): value is AbiEventInput {
+  return (
+    isRecord(value) &&
+    (value.name === undefined || typeof value.name === 'string') &&
+    (value.type === undefined || typeof value.type === 'string') &&
+    (value.indexed === undefined || typeof value.indexed === 'boolean')
+  );
+}
+
 // Canonicalise an ABI type for keccak256 signature construction. Solidity
 // ABIs emit `uint`/`int` aliases that must be expanded to `uint256`/`int256`
 // before hashing, otherwise the computed selector won't match the on-chain
@@ -964,7 +1017,7 @@ function canonicaliseAbiType(t: string | undefined): string {
 // Compute the canonical event signature ("Transfer(address,address,uint256)")
 // and its keccak256 topic hash for an ABI entry.
 function eventSignatureAndHash(entry: AbiEventEntry): { signature: string; hash: string } | null {
-  if (!entry || !entry.name || !Array.isArray(entry.inputs)) return null;
+  if (!entry || !entry.name || !isArray(entry.inputs)) return null;
   const types = entry.inputs.map((i) => canonicaliseAbiType(i.type)).filter(Boolean);
   if (types.length !== entry.inputs.length) return null;
   const sig = `${entry.name}(${types.join(',')})`;
@@ -1041,12 +1094,13 @@ function decodeEventViaAbi(topics: string[], data: string, abiJson: string): Dec
   } catch {
     return null;
   }
-  if (!Array.isArray(parsed)) return null;
+  if (!isArray(parsed)) return null;
   const targetTopic = (topics[0] || '').toLowerCase();
   if (!targetTopic) return null;
 
   for (const raw of parsed) {
-    const entry = raw as AbiEventEntry;
+    if (!isAbiEntry(raw)) continue;
+    const entry = raw;
     if (!entry || entry.type !== 'event' || entry.anonymous) continue;
     const sig = eventSignatureAndHash(entry);
     if (!sig || sig.hash !== targetTopic) continue;
@@ -1078,7 +1132,8 @@ function decodeEventViaAbi(topics: string[], data: string, abiJson: string): Dec
     // Recombine into original input order so the view labels stay consistent
     // with the ABI declaration.
     const args: DecodedEventArg[] = [];
-    let ix = 0, nx = 0;
+    let ix = 0,
+      nx = 0;
     for (const inp of inputs) {
       if (inp.indexed) args.push(indexedArgs[ix++]);
       else args.push((nonIndexedArgs ?? [])[nx++]);
@@ -1131,7 +1186,7 @@ export interface DecodedFunctionCall {
 // hashing rules as eventSignatureAndHash, but truncated to the first
 // 4 bytes (8 hex chars) per the Solidity / EVM convention.
 function functionSelector(entry: AbiFunctionEntry): { signature: string; selector: string } | null {
-  if (!entry || !entry.name || !Array.isArray(entry.inputs)) return null;
+  if (!entry || !entry.name || !isArray(entry.inputs)) return null;
   const types = entry.inputs.map((i) => canonicaliseAbiType(i.type)).filter(Boolean);
   if (types.length !== entry.inputs.length) return null;
   const sig = `${entry.name}(${types.join(',')})`;
@@ -1152,11 +1207,11 @@ function decodeDynamicAt(
   type: string,
   argsBlock: string,
   headOffset: number,
-  minimumOffsetBytes: number,
+  minimumOffsetBytes: number
 ): DecodedEventArg | null {
   if (headOffset + ABI_WORD_HEX_LENGTH > argsBlock.length) return null;
   const ptrBytes = safeNumberFromWord(
-    argsBlock.slice(headOffset, headOffset + ABI_WORD_HEX_LENGTH),
+    argsBlock.slice(headOffset, headOffset + ABI_WORD_HEX_LENGTH)
   );
   if (
     ptrBytes === null ||
@@ -1205,7 +1260,10 @@ function decodeDynamicAt(
  * existing decodeTokenTransferInput (which covers the well-known ERC
  * token selectors only) returns null.
  */
-export function decodeContractCall(input: string | undefined | null, abiJson: string | undefined): DecodedFunctionCall | null {
+export function decodeContractCall(
+  input: string | undefined | null,
+  abiJson: string | undefined
+): DecodedFunctionCall | null {
   if (!input || input === '0x' || input.length < 10 || !abiJson) return null;
   if (!/^0x[0-9a-fA-F]+$/.test(input)) return null;
   const data = input.toLowerCase();
@@ -1217,14 +1275,15 @@ export function decodeContractCall(input: string | undefined | null, abiJson: st
   } catch {
     return null;
   }
-  if (!Array.isArray(parsed)) return null;
+  if (!isArray(parsed)) return null;
 
   // argsBlock is the calldata without "0x" and without the 4-byte selector.
   // We index into this string in char-offset units (1 byte = 2 chars).
   const argsBlock = data.slice(10);
 
   for (const raw of parsed) {
-    const entry = raw as AbiFunctionEntry;
+    if (!isAbiEntry(raw)) continue;
+    const entry = raw;
     if (!entry || entry.type !== 'function') continue;
     const matched = functionSelector(entry);
     if (!matched || matched.selector !== selector) continue;
@@ -1250,7 +1309,7 @@ export function decodeContractCall(input: string | undefined | null, abiJson: st
           t,
           argsBlock,
           headSlotStart,
-          inputs.length * ABI_WORD_BYTES,
+          inputs.length * ABI_WORD_BYTES
         );
         if (decoded) {
           args.push(decoded);
@@ -1264,8 +1323,7 @@ export function decodeContractCall(input: string | undefined | null, abiJson: st
         continue;
       }
       // Static type, decode the slot directly.
-      const slot =
-        '0x' + argsBlock.slice(headSlotStart, headSlotStart + ABI_WORD_HEX_LENGTH);
+      const slot = '0x' + argsBlock.slice(headSlotStart, headSlotStart + ABI_WORD_HEX_LENGTH);
       const decoded = decodeAbiSlot(inp.name || `arg${i}`, inp.type || 'raw', slot);
       if (decoded === null) return null;
       args.push(decoded);
@@ -1318,7 +1376,10 @@ export function decimalToSmallestUnit(value: string, decimals: number = 18): str
  * @param decimals - The number of decimals for the token
  * @returns Formatted amount string
  */
-export function formatTokenAmount(amount: string | undefined | null, decimals: number = 18): string {
+export function formatTokenAmount(
+  amount: string | undefined | null,
+  decimals: number = 18
+): string {
   if (!amount || amount === '0' || amount === '0x0') {
     return '0';
   }
@@ -1388,9 +1449,9 @@ export function qNormaliseAbiValue(v: unknown, type: string): unknown {
   }
   // Strip the last `[N]` or `[]` dimension and recurse so nested array
   // types (e.g. `address[][]`) get fully unwound.
-  if (/\[\d*\]$/.test(type) && Array.isArray(v)) {
+  if (/\[\d*\]$/.test(type) && isArray(v)) {
     const innerType = type.replace(/\[\d*\]$/, '');
-    return v.map(x => qNormaliseAbiValue(x, innerType));
+    return v.map((x) => qNormaliseAbiValue(x, innerType));
   }
   return v;
 }
@@ -1459,9 +1520,7 @@ export function convertUnits(
  * closed because a 12-byte prefix plus a 64-byte address cannot fit the
  * consensus field while that field remains 32 bytes wide.
  */
-export function withdrawalCredentialsToAddress(
-  credsHex: string | null | undefined
-): string | null {
+export function withdrawalCredentialsToAddress(credsHex: string | null | undefined): string | null {
   if (!credsHex) return null;
   const hex = credsHex.trim().toLowerCase().replace(/^0x/, '');
   if (!new RegExp(`^[0-9a-f]{${QRL_ADDRESS_HEX_LENGTH}}$`).test(hex)) return null;

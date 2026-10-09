@@ -1,5 +1,7 @@
 'use client';
 
+import { isRecord, isStringRecord } from '../lib/guards';
+
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import axios, { AxiosError } from 'axios';
@@ -44,7 +46,15 @@ interface VerificationJob extends VerificationJobArtifactInput {
   result?: VerificationJobResult;
 }
 
-const COMMON_LICENSES = ['MIT', 'GPL-3.0', 'Apache-2.0', 'BSD-2-Clause', 'BSD-3-Clause', 'Unlicense', 'No license'];
+const COMMON_LICENSES = [
+  'MIT',
+  'GPL-3.0',
+  'Apache-2.0',
+  'BSD-2-Clause',
+  'BSD-3-Clause',
+  'Unlicense',
+  'No license',
+];
 
 /**
  * Client-side verify-contract form. Posts to /contract/verify and polls
@@ -83,14 +93,19 @@ export default function VerifyContractClient(): JSX.Element {
   // backend.
   useEffect(() => {
     let cancelled = false;
-    axios.get<CompilerInfo>(`${config.handlerUrl}/contract/compiler-info`)
-      .then(r => {
+    axios
+      .get<CompilerInfo>(`${config.handlerUrl}/contract/compiler-info`)
+      .then((r) => {
         if (cancelled) return;
         setCompilerInfo(r.data);
         setSelectedBuild(r.data.default || r.data.buildId || '');
       })
-      .catch(e => { if (!cancelled) setCompilerErr(extractAxiosError(e)); });
-    return () => { cancelled = true; };
+      .catch((e) => {
+        if (!cancelled) setCompilerErr(extractAxiosError(e));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Available builds, tolerant of an older single-build backend that only
@@ -123,10 +138,13 @@ export default function VerifyContractClient(): JSX.Element {
         setJob(r.data);
       } catch (e) {
         if (cancelled) return;
-        setJob(j => j ? { ...j, status: 'failed', error: extractAxiosError(e) } : j);
+        setJob((j) => (j ? { ...j, status: 'failed', error: extractAxiosError(e) } : j));
       }
     }, 1500);
-    return () => { cancelled = true; clearInterval(id); };
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, [jobId, isTerminal]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -138,15 +156,17 @@ export default function VerifyContractClient(): JSX.Element {
     let imports: Record<string, string> | undefined;
     if (importsText.trim()) {
       try {
-        const parsed = JSON.parse(importsText) as unknown;
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          imports = parsed as Record<string, string>;
+        const parsed: unknown = JSON.parse(importsText);
+        if (isStringRecord(parsed)) {
+          imports = parsed;
         } else {
           setSubmitError('Imports must be a JSON object: { "Filename.hyp": "<source>" }');
           return;
         }
       } catch (e) {
-        setSubmitError('Imports field is not valid JSON: ' + (e instanceof Error ? e.message : String(e)));
+        setSubmitError(
+          'Imports field is not valid JSON: ' + (e instanceof Error ? e.message : String(e))
+        );
         return;
       }
     }
@@ -198,17 +218,24 @@ export default function VerifyContractClient(): JSX.Element {
       {alreadyVerified && (
         <div className="rounded-lg border border-green-500/40 bg-green-500/10 text-green-300 text-xs md:text-sm p-3">
           This contract is already verified.{' '}
-          <Link href={`/address/${alreadyVerified}`} className="underline">Go to address page →</Link>
+          <Link href={`/address/${alreadyVerified}`} className="underline">
+            Go to address page →
+          </Link>
         </div>
       )}
 
       {job && (
-        <div className={`rounded-lg border p-3 text-xs md:text-sm ${
-          trustedSuccess ? 'border-green-500/40 bg-green-500/10 text-green-300' :
-          invalidSuccess ? 'border-red-500/40 bg-red-500/10 text-red-300' :
-          job.status === 'failed' ? 'border-red-500/40 bg-red-500/10 text-red-300' :
-          'border-border bg-card-gradient text-text-secondary'
-        }`}>
+        <div
+          className={`rounded-lg border p-3 text-xs md:text-sm ${
+            trustedSuccess
+              ? 'border-green-500/40 bg-green-500/10 text-green-300'
+              : invalidSuccess
+                ? 'border-red-500/40 bg-red-500/10 text-red-300'
+                : job.status === 'failed'
+                  ? 'border-red-500/40 bg-red-500/10 text-red-300'
+                  : 'border-border bg-card-gradient text-text-secondary'
+          }`}
+        >
           <div className="font-medium">
             {job.status === 'pending' && 'Queued…'}
             {job.status === 'compiling' && 'Compiling + matching bytecode…'}
@@ -218,13 +245,15 @@ export default function VerifyContractClient(): JSX.Element {
           </div>
           {trustedSuccess && (
             <div className="mt-1">
-              <Link href={`/address/${job.address}`} className="underline">View verified contract →</Link>
+              <Link href={`/address/${job.address}`} className="underline">
+                View verified contract →
+              </Link>
             </div>
           )}
           {invalidSuccess && (
             <p className="mt-1">
-              The successful job response fails the deployment-bound artifact
-              integrity check. Refresh after the backend record is repaired.
+              The successful job response fails the deployment-bound artifact integrity check.
+              Refresh after the backend record is repaired.
             </p>
           )}
           {trustedSuccess && typeof job.result?.artifactDigest === 'string' && (
@@ -259,13 +288,14 @@ export default function VerifyContractClient(): JSX.Element {
             ) : (
               <select
                 value={selectedBuild}
-                onChange={e => setSelectedBuild(e.target.value)}
+                onChange={(e) => setSelectedBuild(e.target.value)}
                 disabled={submitting}
                 className="form-input font-mono text-xs"
               >
-                {compilerBuilds.map(b => (
+                {compilerBuilds.map((b) => (
                   <option key={b.buildId} value={b.buildId}>
-                    {b.language} {b.buildId}{b.default ? ' (default)' : ''}
+                    {b.language} {b.buildId}
+                    {b.default ? ' (default)' : ''}
                   </option>
                 ))}
               </select>
@@ -277,7 +307,7 @@ export default function VerifyContractClient(): JSX.Element {
           <input
             required
             value={address}
-            onChange={e => setAddress(e.target.value)}
+            onChange={(e) => setAddress(e.target.value)}
             placeholder="Q…"
             className="form-input font-mono"
           />
@@ -287,7 +317,7 @@ export default function VerifyContractClient(): JSX.Element {
           <input
             required
             value={contractName}
-            onChange={e => setContractName(e.target.value)}
+            onChange={(e) => setContractName(e.target.value)}
             placeholder="e.g. SimpleERC721"
             className="form-input"
           />
@@ -299,7 +329,7 @@ export default function VerifyContractClient(): JSX.Element {
               <input
                 type="checkbox"
                 checked={optimizerEnabled}
-                onChange={e => setOptimizerEnabled(e.target.checked)}
+                onChange={(e) => setOptimizerEnabled(e.target.checked)}
                 className="form-checkbox"
               />
               Enabled
@@ -310,7 +340,7 @@ export default function VerifyContractClient(): JSX.Element {
               type="number"
               min={0}
               value={optimizerRuns}
-              onChange={e => setOptimizerRuns(Number(e.target.value))}
+              onChange={(e) => setOptimizerRuns(Number(e.target.value))}
               disabled={!optimizerEnabled}
               className="form-input"
             />
@@ -318,10 +348,14 @@ export default function VerifyContractClient(): JSX.Element {
           <Field label="License">
             <select
               value={license}
-              onChange={e => setLicense(e.target.value)}
+              onChange={(e) => setLicense(e.target.value)}
               className="form-input"
             >
-              {COMMON_LICENSES.map(l => <option key={l} value={l}>{l}</option>)}
+              {COMMON_LICENSES.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
             </select>
           </Field>
         </div>
@@ -329,17 +363,20 @@ export default function VerifyContractClient(): JSX.Element {
         <Field label="EVM version (optional)">
           <input
             value={evmVersion}
-            onChange={e => setEvmVersion(e.target.value)}
+            onChange={(e) => setEvmVersion(e.target.value)}
             placeholder="e.g. shanghai"
             className="form-input"
           />
         </Field>
 
-        <Field label="Source code (single file)" hint="Submit the contract source as a single .hyp file. Multi-file imports go in the Imports field below.">
+        <Field
+          label="Source code (single file)"
+          hint="Submit the contract source as a single .hyp file. Multi-file imports go in the Imports field below."
+        >
           <textarea
             required
             value={sourceCode}
-            onChange={e => setSourceCode(e.target.value)}
+            onChange={(e) => setSourceCode(e.target.value)}
             rows={14}
             placeholder="// SPDX-License-Identifier: MIT&#10;pragma hyperion ^0.0.2;&#10;contract MyContract { … }"
             className="form-input font-mono text-xs"
@@ -352,17 +389,17 @@ export default function VerifyContractClient(): JSX.Element {
         >
           <textarea
             value={importsText}
-            onChange={e => setImportsText(e.target.value)}
+            onChange={(e) => setImportsText(e.target.value)}
             rows={6}
             placeholder='{"Context.hyp": "// SPDX-License-Identifier: MIT&#10;pragma hyperion ^0.0.2;&#10;abstract contract Context { … }"}'
             className="form-input font-mono text-xs"
           />
         </Field>
 
-        <Field label="Constructor arguments (optional)" hint="Hex-encoded ABI tuple. Advisory, not used for the byte-match check.">
+        <Field label="Constructor arguments (optional)" hint="Hex-encoded ABI tuple for reference.">
           <input
             value={constructorArgs}
-            onChange={e => setConstructorArgs(e.target.value)}
+            onChange={(e) => setConstructorArgs(e.target.value)}
             placeholder="0x…"
             className="form-input font-mono text-xs"
           />
@@ -370,7 +407,7 @@ export default function VerifyContractClient(): JSX.Element {
 
         <button
           type="submit"
-          disabled={submitting || (job?.status === 'pending' || job?.status === 'compiling')}
+          disabled={submitting || job?.status === 'pending' || job?.status === 'compiling'}
           className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-accent text-background text-sm font-medium hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {submitting ? 'Submitting…' : 'Verify & Publish'}
@@ -380,7 +417,15 @@ export default function VerifyContractClient(): JSX.Element {
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div>
       <div className="text-xs md:text-sm text-text-secondary mb-1">{label}</div>
@@ -392,8 +437,12 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 function extractAxiosError(e: unknown): string {
   if (e instanceof AxiosError) {
-    const d = e.response?.data as { error?: string; message?: string } | undefined;
-    return d?.error || d?.message || e.message;
+    const d: unknown = e.response?.data;
+    if (isRecord(d)) {
+      if (typeof d.error === 'string' && d.error) return d.error;
+      if (typeof d.message === 'string' && d.message) return d.message;
+    }
+    return e.message;
   }
   return e instanceof Error ? e.message : String(e);
 }

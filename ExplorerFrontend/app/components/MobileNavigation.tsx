@@ -35,7 +35,8 @@ export default function MobileNavigation({ pathname, onNavigate }: MobileNavigat
   const { t } = useTranslation();
   const { preferences, updatePreferences } = usePreferences();
   const appearanceName = useId();
-  const selectedAppearance = APPEARANCES.find((item) => item.value === preferences.theme)!;
+  const selectedAppearance =
+    APPEARANCES.find((item) => item.value === preferences.theme) ?? APPEARANCES[2];
   const AppearanceIcon = selectedAppearance.icon;
 
   return (

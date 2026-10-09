@@ -1,5 +1,8 @@
 'use client';
 
+import { isOneOf } from '../lib/guards';
+import { parseContractsResponse, type ListedContract as ContractData } from '../lib/listResponses';
+
 import AddressText from '../components/AddressText';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -13,27 +16,7 @@ import EmptyState from '../components/EmptyState';
 
 const TAB_TYPES = ['erc20', 'erc721', 'erc1155', 'contracts'] as const;
 function parseTab(raw: string | null): TabType {
-  return (TAB_TYPES as readonly string[]).includes(raw ?? '')
-    ? (raw as TabType)
-    : 'erc20';
-}
-
-interface ContractData {
-  _id: string;
-  creatorAddress: string;
-  address: string;
-  name?: string;
-  symbol?: string;
-  decimals?: number;
-  totalSupply?: string;
-  creationBlockNumber?: string;
-  isToken: boolean;
-  tokenStandard?: 'ERC-20' | 'ERC-721' | 'ERC-1155' | string;
-  // Phase 3a: off-chain collection metadata. metadataName preferred over
-  // on-chain name() when both exist, NFT collections typically leave
-  // name() empty and put the display title in the contractURI JSON.
-  metadataName?: string;
-  metadataImage?: string;
+  return isOneOf(raw, TAB_TYPES) ? raw : 'erc20';
 }
 
 interface ContractsClientProps {
@@ -95,7 +78,9 @@ function TabButton({
       aria-controls="contracts-tabpanel"
       onClick={() => onSelect(tab)}
       className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-        active ? 'bg-accent text-background border border-accent font-semibold' : 'bg-surface-2 text-text-secondary border border-border hover:bg-surface-3 hover:text-text-primary'
+        active
+          ? 'bg-accent text-background border border-accent font-semibold'
+          : 'bg-surface-2 text-text-secondary border border-border hover:bg-surface-3 hover:text-text-primary'
       }`}
     >
       {label}
@@ -150,7 +135,7 @@ function formatBlockNumber(blockNum: string | undefined): string {
 export default function ContractsClient({ initialData, totalContracts }: ContractsClientProps) {
   // URL-backed tab / search / page so deep-links like
   // /contracts?tab=erc1155&page=3 land on the right view and the browser
-  // Back button restores it instead of dumping the user on page 1. The URL
+  // Back button restores it. The URL
   // is the single source of truth (no useState mirrors); tab and search
   // write with replace (no history spam), page writes with push so Back
   // walks pages the same way /blocks does. setUrlParams is a shallow
@@ -165,10 +150,7 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
   const [pageParam, setPageParam] = useUrlIntParam('page', 1, { history: 'push' });
   // 1-based in the URL for readability; 0-based for the fetch + render math.
   const currentPage = pageParam - 1;
-  const setCurrentPage = useCallback(
-    (p: number) => setPageParam(p + 1),
-    [setPageParam],
-  );
+  const setCurrentPage = useCallback((p: number) => setPageParam(p + 1), [setPageParam]);
   // ?q is authoritative (mount, Back/Forward); the input keeps a local
   // mirror so typing stays responsive while the URL write debounces.
   const [searchQuery] = useUrlParam('q', '');
@@ -199,7 +181,8 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
   // page so DB cost stays predictable.
   useEffect(() => {
     let cancelled = false;
-    axios.get(`${config.handlerUrl}/contracts/counts`)
+    axios
+      .get(`${config.handlerUrl}/contracts/counts`)
       .then((r) => {
         if (cancelled) return;
         const d = r.data;
@@ -246,11 +229,12 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
         params.isToken = false;
       }
 
-      const response = await axios.get(`${config.handlerUrl}/contracts`, { params });
+      const response = await axios.get<unknown>(`${config.handlerUrl}/contracts`, { params });
 
-      if (response.data?.response) {
-        setContracts(response.data.response);
-        setTotal(response.data.total || 0);
+      const parsed = parseContractsResponse(response.data);
+      if (parsed.response) {
+        setContracts(parsed.response);
+        setTotal(parsed.total);
       }
     } catch (error) {
       console.error('Error fetching contracts:', error);
@@ -301,30 +285,70 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
       {/* Header */}
       <div className="mb-6">
         <h1 className="section-title mb-2">Smart Contracts</h1>
-        <p className="text-text-secondary">Browse deployed tokens and smart contracts on the QRL 2.0 network</p>
+        <p className="text-text-secondary">
+          Browse deployed tokens and smart contracts on the QRL 2.0 network
+        </p>
       </div>
 
       {/* Tabs, QRC-X is the QRL-branded form of the EIP standards; the
           underlying tokenStandard string stays "ERC-X" in the DB / API. */}
       <div role="tablist" className="flex flex-wrap gap-2 mb-6">
-        <TabButton tab="erc20" label="Tokens (QRC-20)" count={tabCounts.erc20} activeTab={activeTab} onSelect={setActiveTab} />
-        <TabButton tab="erc721" label="NFTs (QRC-721)" count={tabCounts.erc721} activeTab={activeTab} onSelect={setActiveTab} />
-        <TabButton tab="erc1155" label="Multi-Token (QRC-1155)" count={tabCounts.erc1155} activeTab={activeTab} onSelect={setActiveTab} />
-        <TabButton tab="contracts" label="Other Contracts" count={tabCounts.contracts} activeTab={activeTab} onSelect={setActiveTab} />
+        <TabButton
+          tab="erc20"
+          label="Tokens (QRC-20)"
+          count={tabCounts.erc20}
+          activeTab={activeTab}
+          onSelect={setActiveTab}
+        />
+        <TabButton
+          tab="erc721"
+          label="NFTs (QRC-721)"
+          count={tabCounts.erc721}
+          activeTab={activeTab}
+          onSelect={setActiveTab}
+        />
+        <TabButton
+          tab="erc1155"
+          label="Multi-Token (QRC-1155)"
+          count={tabCounts.erc1155}
+          activeTab={activeTab}
+          onSelect={setActiveTab}
+        />
+        <TabButton
+          tab="contracts"
+          label="Other Contracts"
+          count={tabCounts.contracts}
+          activeTab={activeTab}
+          onSelect={setActiveTab}
+        />
       </div>
 
       {/* Search */}
       <div className="mb-6">
         <div className="relative">
           <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-            <svg className="w-4 h-4 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            <svg
+              className="w-4 h-4 text-text-muted"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
             </svg>
           </div>
           <input
             type="text"
             aria-label="Search contracts"
-            placeholder={activeTab === 'contracts' ? 'Search by contract address...' : 'Search by token name or address...'}
+            placeholder={
+              activeTab === 'contracts'
+                ? 'Search by contract address...'
+                : 'Search by token name or address...'
+            }
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             className="w-full p-3 pl-10 bg-surface-2 border border-border rounded-lg text-text-secondary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
@@ -334,9 +358,7 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
 
       {/* Results Count */}
       <div className="mb-4 text-sm text-text-secondary">
-        {loading
-          ? 'Loading...'
-          : `${total} ${TAB_RESULT_NOUN[activeTab]} found`}
+        {loading ? 'Loading...' : `${total} ${TAB_RESULT_NOUN[activeTab]} found`}
       </div>
 
       {/* Content */}
@@ -424,7 +446,8 @@ export default function ContractsClient({ initialData, totalContracts }: Contrac
 // table with a different column subset, the original split-into-three
 // approach gave each tab its own visual identity, which read as four
 // different pages stitched together.
-const TH_BASE = 'px-4 py-3 text-left text-[11px] font-medium text-text-muted uppercase tracking-[0.12em]';
+const TH_BASE =
+  'px-4 py-3 text-left text-[11px] font-medium text-text-muted uppercase tracking-[0.12em]';
 const TD_BASE = 'px-4 py-4 whitespace-nowrap';
 
 const TAB_TABLE_LABEL: Record<TabType, string> = {
@@ -454,16 +477,28 @@ function ContractRowsTable({
             <th scope="col" className={TH_BASE}>
               {variant === 'contracts' ? 'Contract' : variant === 'erc20' ? 'Token' : 'Collection'}
             </th>
-            <th scope="col" className={TH_BASE}>Contract Address</th>
-            <th scope="col" className={`hidden sm:table-cell ${TH_BASE}`}>Type</th>
+            <th scope="col" className={TH_BASE}>
+              Contract Address
+            </th>
+            <th scope="col" className={`hidden sm:table-cell ${TH_BASE}`}>
+              Type
+            </th>
             {showDecimalsAndSupply && (
-              <th scope="col" className={`hidden md:table-cell ${TH_BASE}`}>Decimals</th>
+              <th scope="col" className={`hidden md:table-cell ${TH_BASE}`}>
+                Decimals
+              </th>
             )}
             {showDecimalsAndSupply && (
-              <th scope="col" className={`hidden lg:table-cell ${TH_BASE}`}>Total Supply</th>
+              <th scope="col" className={`hidden lg:table-cell ${TH_BASE}`}>
+                Total Supply
+              </th>
             )}
-            <th scope="col" className={`hidden lg:table-cell ${TH_BASE}`}>Creator</th>
-            <th scope="col" className={`hidden xl:table-cell ${TH_BASE}`}>Created at Block</th>
+            <th scope="col" className={`hidden lg:table-cell ${TH_BASE}`}>
+              Creator
+            </th>
+            <th scope="col" className={`hidden xl:table-cell ${TH_BASE}`}>
+              Created at Block
+            </th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -495,12 +530,10 @@ function ContractRow({
   // Contract" + truncated address for non-token contracts. Same physical
   // layout in both cases, only the colour palette + text vary.
   const avatarSeed = isToken
-    ? (contract.symbol || contract.name || '?')
+    ? contract.symbol || contract.name || '?'
     : contract.address.replace(/^Q/i, '');
   const avatarChar = (avatarSeed.charAt(0) || '?').toUpperCase();
-  const avatarGradient = isToken
-    ? 'from-accent to-accent-dark'
-    : 'from-surface-3 to-surface-2';
+  const avatarGradient = isToken ? 'from-accent to-accent-dark' : 'from-surface-3 to-surface-2';
   const avatarTextColor = isToken ? 'text-background' : 'text-text-primary';
 
   // Some standards (ERC-1155 in particular) don't expose name()/symbol(),
@@ -509,17 +542,22 @@ function ContractRow({
   // Fall through to a truncated address + standard-label so the row
   // remains identifiable instead of a generic "Unknown".
   const standardFallback =
-    variant === 'erc20' ? 'Token'
-    : variant === 'erc721' ? 'NFT Collection'
-    : variant === 'erc1155' ? 'Multi-Token Collection'
-    : 'Contract';
+    variant === 'erc20'
+      ? 'Token'
+      : variant === 'erc721'
+        ? 'NFT Collection'
+        : variant === 'erc1155'
+          ? 'Multi-Token Collection'
+          : 'Contract';
   const displayName = (contract.metadataName?.trim() || contract.name || '').trim();
   const primary = isToken
-    ? (displayName || <AddressText address={contract.address} leading={10} trailing={8} />)
+    ? displayName || <AddressText address={contract.address} leading={10} trailing={8} />
     : 'Smart Contract';
-  const secondary = isToken
-    ? (contract.symbol || standardFallback)
-    : <AddressText address={contract.address} leading={6} trailing={4} />;
+  const secondary = isToken ? (
+    contract.symbol || standardFallback
+  ) : (
+    <AddressText address={contract.address} leading={6} trailing={4} />
+  );
 
   const typeBadge = (() => {
     if (variant === 'erc20') return <Badge variant="success">QRC-20</Badge>;
@@ -574,8 +612,12 @@ function ContractRow({
           href={`/address/${contract.address}`}
           className="text-accent hover:underline font-mono text-sm"
         >
-          <span className="hidden sm:inline"><AddressText address={contract.address} leading={10} trailing={8} /></span>
-          <span className="sm:hidden"><AddressText address={contract.address} leading={6} trailing={4} /></span>
+          <span className="hidden sm:inline">
+            <AddressText address={contract.address} leading={10} trailing={8} />
+          </span>
+          <span className="sm:hidden">
+            <AddressText address={contract.address} leading={6} trailing={4} />
+          </span>
         </Link>
       </td>
       <td className={`hidden sm:table-cell ${TD_BASE}`}>{typeBadge}</td>

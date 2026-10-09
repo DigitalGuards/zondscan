@@ -1,5 +1,7 @@
 'use client';
 
+import { isOneOf } from '../lib/guards';
+
 import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -203,7 +205,10 @@ function DepthLadder({
             Group
             <select
               value={grouping}
-              onChange={(event) => onGroupingChange(event.target.value as PriceGrouping)}
+              onChange={(event) => {
+                if (isOneOf(event.target.value, PRICE_GROUPINGS))
+                  onGroupingChange(event.target.value);
+              }}
               className="min-h-9 rounded-md border border-border bg-surface-2 px-2 font-mono text-xs text-text-primary focus:border-accent"
               aria-label="Price grouping in USDT"
             >

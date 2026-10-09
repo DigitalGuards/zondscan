@@ -1,3 +1,4 @@
+import { isRecord, isArray } from '../../lib/guards';
 import type { AddressData } from '@/app/types';
 import { decodeToHex, formatAddress } from '../../lib/helpers';
 import { canonicalizeQrlAddress } from '../../lib/qrlAddress';
@@ -15,14 +16,11 @@ type ExplorerRequestInit = RequestInit & {
 
 export type ExplorerFetch = (
   input: string,
-  init?: ExplorerRequestInit,
+  init?: ExplorerRequestInit
 ) => Promise<ExplorerFetchResponse>;
 
 export type QnsResolutionErrorKind =
-  | 'qns-invalid'
-  | 'qns-unconfigured'
-  | 'qns-missing'
-  | 'qns-upstream';
+  'qns-invalid' | 'qns-unconfigured' | 'qns-missing' | 'qns-upstream';
 
 export type QnsResolutionResult =
   | { ok: true; name: string; address: string }
@@ -62,10 +60,6 @@ function handlerBase(handlerUrl: string | undefined): string | null {
   return base || null;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 async function readJson(response: ExplorerFetchResponse): Promise<unknown> {
   try {
     return await response.json();
@@ -87,7 +81,7 @@ function payloadError(payload: unknown): string | null {
 export async function resolveQnsName(
   input: string,
   handlerUrl: string | undefined,
-  fetcher: ExplorerFetch = defaultFetch,
+  fetcher: ExplorerFetch = defaultFetch
 ): Promise<QnsResolutionResult> {
   const name = normalizeQnsName(input);
   if (!name) {
@@ -124,7 +118,11 @@ export async function resolveQnsName(
 
   const payload = await readJson(response);
   if (response.ok && response.status === 200) {
-    if (!isRecord(payload) || typeof payload.name !== 'string' || typeof payload.address !== 'string') {
+    if (
+      !isRecord(payload) ||
+      typeof payload.name !== 'string' ||
+      typeof payload.address !== 'string'
+    ) {
       return {
         ok: false,
         kind: 'qns-upstream',
@@ -198,7 +196,7 @@ export async function resolveQnsName(
 async function fetchAddressData(
   address: string,
   handlerUrl: string | undefined,
-  fetcher: ExplorerFetch,
+  fetcher: ExplorerFetch
 ): Promise<AddressData | null> {
   const base = handlerBase(handlerUrl);
   if (!base) return null;
@@ -213,7 +211,7 @@ async function fetchAddressData(
     if (!isRecord(payload)) return null;
 
     const transactions = payload.transactions_by_address;
-    if (Array.isArray(transactions)) {
+    if (isArray(transactions)) {
       payload.transactions_by_address = transactions.map((transaction) => {
         if (!isRecord(transaction)) return transaction;
         const gasUsed = transaction.gasUsed;
@@ -271,7 +269,7 @@ async function fetchAddressData(
 export async function loadAddressPageData(
   query: string,
   handlerUrl: string | undefined,
-  fetcher: ExplorerFetch = defaultFetch,
+  fetcher: ExplorerFetch = defaultFetch
 ): Promise<AddressPageLoadResult> {
   const normalizedName = normalizeQnsName(query);
   let address: string;

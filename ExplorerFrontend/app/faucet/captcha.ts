@@ -1,3 +1,5 @@
+import { isRecord } from '../lib/guards';
+
 export interface FaucetStatus {
   configured: boolean;
   captchaEnabled: boolean;
@@ -11,16 +13,17 @@ export function publicTurnstileSiteKey(value: unknown): string | null {
 }
 
 export function parseFaucetStatus(value: unknown): FaucetStatus | null {
-  if (!value || typeof value !== 'object') return null;
-  const status = value as Record<string, unknown>;
+  if (!isRecord(value)) return null;
+  const status = value;
   if (
     typeof status.configured !== 'boolean' ||
     typeof status.captchaEnabled !== 'boolean' ||
     typeof status.dripQuanta !== 'string' ||
     !/^\d+$/.test(status.dripQuanta) ||
     BigInt(status.dripQuanta) <= BigInt(0) ||
+    typeof status.cooldownHours !== 'number' ||
     !Number.isSafeInteger(status.cooldownHours) ||
-    (status.cooldownHours as number) <= 0
+    status.cooldownHours <= 0
   )
     return null;
   return {
@@ -28,7 +31,7 @@ export function parseFaucetStatus(value: unknown): FaucetStatus | null {
     captchaEnabled: status.captchaEnabled,
     turnstileSiteKey: publicTurnstileSiteKey(status.turnstileSiteKey),
     dripQuanta: status.dripQuanta,
-    cooldownHours: status.cooldownHours as number,
+    cooldownHours: status.cooldownHours,
   };
 }
 
