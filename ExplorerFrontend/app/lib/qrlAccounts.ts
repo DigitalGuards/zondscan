@@ -1,3 +1,4 @@
+import { isArray } from './guards';
 import { canonicalizeQrlAddress } from './qrlAddress';
 
 interface WalletAccountProvider {
@@ -12,7 +13,7 @@ export interface RestorableWalletSession {
 }
 
 export function parseAuthorizedQrlAccount(accounts: unknown): string {
-  if (!Array.isArray(accounts) || accounts.length !== 1 || typeof accounts[0] !== 'string') {
+  if (!isArray(accounts) || accounts.length !== 1 || typeof accounts[0] !== 'string') {
     throw new Error('Wallet authorization must return exactly one current-format QRL address');
   }
   const account = canonicalizeQrlAddress(accounts[0]);
@@ -23,14 +24,14 @@ export function parseAuthorizedQrlAccount(accounts: unknown): string {
 }
 
 export async function requestAuthorizedQrlAccount(
-  provider: Pick<WalletAccountProvider, 'request'>,
+  provider: Pick<WalletAccountProvider, 'request'>
 ): Promise<string> {
   const accounts = await provider.request({ method: 'qrl_requestAccounts' });
   return parseAuthorizedQrlAccount(accounts);
 }
 
 export function getRestorableWalletSession(
-  provider: Pick<WalletAccountProvider, 'getAccounts' | 'hasStoredSession'>,
+  provider: Pick<WalletAccountProvider, 'getAccounts' | 'hasStoredSession'>
 ): RestorableWalletSession {
   try {
     if (!provider.hasStoredSession()) return { restorable: false, account: null };

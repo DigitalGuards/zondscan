@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { convertUnits, NATIVE_UNIT } from '../lib/helpers';
 import type { ConvertibleUnit } from '../lib/helpers';
 
@@ -58,7 +58,12 @@ function Converter(): JSX.Element {
           <div className="space-y-6">
             {/* Amount Input */}
             <div>
-              <label htmlFor="amount-input" className="block text-sm font-medium text-text-secondary mb-2">Amount</label>
+              <label
+                htmlFor="amount-input"
+                className="block text-sm font-medium text-text-secondary mb-2"
+              >
+                Amount
+              </label>
               <input
                 id="amount-input"
                 type="text"
@@ -73,7 +78,12 @@ function Converter(): JSX.Element {
             {/* Unit Selects + Swap */}
             <div className="flex items-end gap-3">
               <div className="flex-1">
-                <label htmlFor="from-unit" className="block text-sm font-medium text-text-secondary mb-2">From</label>
+                <label
+                  htmlFor="from-unit"
+                  className="block text-sm font-medium text-text-secondary mb-2"
+                >
+                  From
+                </label>
                 <select
                   id="from-unit"
                   value={fromUnit}
@@ -81,7 +91,9 @@ function Converter(): JSX.Element {
                   className={INPUT_CLASSES}
                 >
                   {UNITS.map((unit) => (
-                    <option key={unit} value={unit}>{unitLabel(unit)}</option>
+                    <option key={unit} value={unit}>
+                      {unitLabel(unit)}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -91,12 +103,28 @@ function Converter(): JSX.Element {
                 aria-label="Swap units"
                 className="p-3 rounded-lg border border-border text-accent hover:border-accent hover:bg-background transition-all duration-300"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"
+                  />
                 </svg>
               </button>
               <div className="flex-1">
-                <label htmlFor="to-unit" className="block text-sm font-medium text-text-secondary mb-2">To</label>
+                <label
+                  htmlFor="to-unit"
+                  className="block text-sm font-medium text-text-secondary mb-2"
+                >
+                  To
+                </label>
                 <select
                   id="to-unit"
                   value={toUnit}
@@ -104,7 +132,9 @@ function Converter(): JSX.Element {
                   className={INPUT_CLASSES}
                 >
                   {UNITS.map((unit) => (
-                    <option key={unit} value={unit}>{unitLabel(unit)}</option>
+                    <option key={unit} value={unit}>
+                      {unitLabel(unit)}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -112,7 +142,12 @@ function Converter(): JSX.Element {
 
             {/* Result */}
             <div>
-              <label htmlFor="result-output" className="block text-sm font-medium text-text-secondary mb-2">Result</label>
+              <label
+                htmlFor="result-output"
+                className="block text-sm font-medium text-text-secondary mb-2"
+              >
+                Result
+              </label>
               <div className="relative">
                 <input
                   id="result-output"
@@ -132,8 +167,19 @@ function Converter(): JSX.Element {
             {error && (
               <div className="p-4 bg-background rounded-lg border border-red-500/50">
                 <div className="flex items-center text-error">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5 mr-2"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
                   </svg>
                   {error}
                 </div>
@@ -145,9 +191,7 @@ function Converter(): JSX.Element {
               <p className="text-sm text-text-secondary">
                 1 {NATIVE_UNIT} = 10^9 Shor = 10^18 Planck
               </p>
-              <p className="text-sm text-text-secondary mt-1">
-                1 Shor = 10^9 Planck
-              </p>
+              <p className="text-sm text-text-secondary mt-1">1 Shor = 10^9 Planck</p>
             </div>
           </div>
         </div>

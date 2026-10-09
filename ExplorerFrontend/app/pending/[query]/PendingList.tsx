@@ -5,7 +5,7 @@ import TimeDisplay from '../../components/TimeDisplay';
 import AddressText from '../../components/AddressText';
 
 import axios from 'axios';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import config from '../../../config';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
@@ -70,17 +70,22 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
   if (isError) {
     return (
       <div className="py-4 sm:py-6 lg:py-8">
-        <h1 className="section-title mb-4"><InterfaceText text="Pending Transactions" /></h1>
+        <h1 className="section-title mb-4">
+          <InterfaceText text="Pending Transactions" />
+        </h1>
         <div className="bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-xl">
           <p className="font-bold">Error:</p>
-          <p className="text-sm">{error instanceof Error ? error.message : 'Failed to load pending transactions'}</p>
+          <p className="text-sm">
+            {error instanceof Error ? error.message : 'Failed to load pending transactions'}
+          </p>
         </div>
       </div>
     );
   }
 
   const transactions = flattenTransactions(data);
-  const totalPages = data?.totalPages ?? Math.max(1, Math.ceil((data?.total ?? 0) / ITEMS_PER_PAGE));
+  const totalPages =
+    data?.totalPages ?? Math.max(1, Math.ceil((data?.total ?? 0) / ITEMS_PER_PAGE));
 
   const statusVariant = (status: string): 'warning' | 'error' | 'success' => {
     if (status === 'dropped') return 'error';
@@ -91,7 +96,9 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
   return (
     <div className="py-4 sm:py-6 lg:py-8">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="section-title"><InterfaceText text="Pending Transactions" /></h1>
+        <h1 className="section-title">
+          <InterfaceText text="Pending Transactions" />
+        </h1>
         <button
           onClick={handleRefresh}
           disabled={isRefreshing || isFetching}
@@ -104,7 +111,12 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
             stroke="currentColor"
             viewBox="0 0 24 24"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
           </svg>
           {isRefreshing || isFetching ? 'Checking...' : 'Refresh'}
         </button>
@@ -121,12 +133,24 @@ export default function PendingList({ initialData, currentPage }: PendingListPro
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider"><InterfaceText text="Hash" /></th>
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell"><InterfaceText text="From" /></th>
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell"><InterfaceText text="To" /></th>
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider"><InterfaceText text="Value" /></th>
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider"><InterfaceText text="Status" /></th>
-                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:table-cell"><InterfaceText text="Time" /></th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">
+                      <InterfaceText text="Hash" />
+                    </th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">
+                      <InterfaceText text="From" />
+                    </th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">
+                      <InterfaceText text="To" />
+                    </th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">
+                      <InterfaceText text="Value" />
+                    </th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">
+                      <InterfaceText text="Status" />
+                    </th>
+                    <th className="text-left px-4 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:table-cell">
+                      <InterfaceText text="Time" />
+                    </th>
                   </tr>
                 </thead>
                 <tbody>

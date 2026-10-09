@@ -38,7 +38,7 @@ export function useDisplayCurrency() {
           ? 'loading'
           : 'unavailable';
   const currency = status === 'ready' ? requestedCurrency : 'USD';
-  const rate = currency === 'USD' ? 1 : rates!.rates[currency];
+  const rate = currency === 'USD' || !rates ? 1 : rates.rates[currency];
   const locale = preferences.locale === 'en' ? 'en-US' : preferences.locale;
   const format = (usd: number | null | undefined, options?: Intl.NumberFormatOptions): string =>
     formatFiat(typeof usd === 'number' ? usd * rate : usd, currency, locale, options);
@@ -47,7 +47,7 @@ export function useDisplayCurrency() {
     requestedCurrency,
     currency,
     status,
-    rateDate: status === 'ready' ? rates!.date : null,
+    rateDate: status === 'ready' && rates ? rates.date : null,
     format,
   };
 }

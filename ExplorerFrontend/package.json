@@ -41,13 +41,15 @@
   },
   "scripts": {
     "dev": "next dev --webpack",
-    "prebuild": "bash scripts/build-dapp-example.sh",
+    "prebuild": "npm run lint && npm run typecheck && bash scripts/build-dapp-example.sh",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint .",
+    "lint": "node scripts/lint.mjs",
     "test": "jest",
     "check:api-drift": "node scripts/check-api-docs-drift.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "lint:ratchet": "node scripts/lint.mjs --update",
+    "typecheck": "tsc --noEmit"
   },
   "overrides": {
     "@theqrl/mldsa87": "2.2.0",
@@ -94,12 +96,14 @@
     "@types/node": "^20.19.27",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
-    "eslint": "^10.4.0",
+    "eslint": "9.39.5",
     "jest": "^30.4.2",
     "postcss": "^8.5.8",
+    "prettier": "3.9.9",
     "tailwindcss": "^4.2.2",
     "ts-node": "^10.9.1",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "typescript-eslint": "8.59.2"
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8",

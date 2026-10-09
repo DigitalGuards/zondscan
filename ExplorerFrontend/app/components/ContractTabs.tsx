@@ -1,5 +1,7 @@
 'use client';
 
+import { isOneOf } from '../lib/guards';
+
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import CopyButton from './CopyButton';
@@ -22,7 +24,7 @@ type TabKey = (typeof TAB_KEYS)[number];
 // ?ctab values outside the known set (hand-edited URLs) fall back to the
 // first tab.
 function parseTab(raw: string): TabKey {
-  return (TAB_KEYS as readonly string[]).includes(raw) ? (raw as TabKey) : 'code';
+  return isOneOf(raw, TAB_KEYS) ? raw : 'code';
 }
 
 /**
@@ -46,7 +48,8 @@ export default function ContractTabs({ contractData }: ContractTabsProps): JSX.E
   const parsedAbi = useMemo(() => {
     if (!contractData.abi) return null;
     try {
-      return JSON.parse(contractData.abi) as unknown;
+      const value: unknown = JSON.parse(contractData.abi);
+      return value;
     } catch {
       return null;
     }
@@ -54,10 +57,20 @@ export default function ContractTabs({ contractData }: ContractTabsProps): JSX.E
 
   return (
     <div>
-      <div role="tablist" aria-label="Contract sections" className="flex gap-1 border-b border-border mb-3 md:mb-4">
-        <TabButton active={tab === 'code'} onClick={() => setTab('code')}>Code</TabButton>
-        <TabButton active={tab === 'read'} onClick={() => setTab('read')}>Read</TabButton>
-        <TabButton active={tab === 'write'} onClick={() => setTab('write')}>Write</TabButton>
+      <div
+        role="tablist"
+        aria-label="Contract sections"
+        className="flex gap-1 border-b border-border mb-3 md:mb-4"
+      >
+        <TabButton active={tab === 'code'} onClick={() => setTab('code')}>
+          Code
+        </TabButton>
+        <TabButton active={tab === 'read'} onClick={() => setTab('read')}>
+          Read
+        </TabButton>
+        <TabButton active={tab === 'write'} onClick={() => setTab('write')}>
+          Write
+        </TabButton>
       </div>
 
       {tab === 'code' && <CodeTab contractData={contractData} parsedAbi={parsedAbi} />}
@@ -67,7 +80,15 @@ export default function ContractTabs({ contractData }: ContractTabsProps): JSX.E
   );
 }
 
-function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
   return (
     <button
       role="tab"
@@ -85,7 +106,13 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   );
 }
 
-function CodeTab({ contractData, parsedAbi }: { contractData: ContractData; parsedAbi: unknown | null }) {
+function CodeTab({
+  contractData,
+  parsedAbi,
+}: {
+  contractData: ContractData;
+  parsedAbi: unknown | null;
+}) {
   if (!contractData.verified) {
     return (
       <div className="space-y-3 md:space-y-4">
@@ -95,7 +122,8 @@ function CodeTab({ contractData, parsedAbi }: { contractData: ContractData; pars
               This contract isn&apos;t verified yet
             </div>
             <div className="text-xs md:text-sm text-text-secondary mt-0.5">
-              Upload the source to publish the contract&apos;s ABI and source code, enabling read / write interaction.
+              Upload the source to publish the contract&apos;s ABI and source code, enabling read /
+              write interaction.
             </div>
           </div>
           <Link
@@ -125,7 +153,12 @@ function CompilerSettings({ contractData }: { contractData: ContractData }) {
   const rows: Array<[string, React.ReactNode]> = [
     ['Contract name', contractData.contractName ?? '…'],
     ['Compiler', contractData.compilerVersion ?? '…'],
-    ['Optimizer', contractData.optimizationEnabled ? `enabled (${contractData.optimizationRuns ?? 0} runs)` : 'disabled'],
+    [
+      'Optimizer',
+      contractData.optimizationEnabled
+        ? `enabled (${contractData.optimizationRuns ?? 0} runs)`
+        : 'disabled',
+    ],
     ['EVM version', contractData.evmVersion ?? '…'],
     ['License', contractData.license ?? '…'],
     ['Verified at', contractData.verifiedAt ?? '…'],
@@ -169,7 +202,7 @@ function AbiPanel({ abi, raw }: { abi: unknown | null; raw: string }) {
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => setExpanded(e => !e)}
+            onClick={() => setExpanded((e) => !e)}
             aria-expanded={expanded}
             className="inline-flex items-center px-3 py-1.5 rounded-lg bg-card-gradient border border-border hover:border-accent text-sm text-text-secondary hover:text-accent transition-colors"
           >

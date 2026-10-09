@@ -1,5 +1,7 @@
 'use client';
 
+import { isOneOf } from '../../lib/guards';
+
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
@@ -51,8 +53,8 @@ const TAB_LABEL: Record<TabKey, string> = {
 };
 
 const parseTabKey = (raw: string | null): TabKey => {
-  if (raw && (TAB_KEYS as readonly string[]).includes(raw)) {
-    return raw as TabKey;
+  if (raw && isOneOf(raw, TAB_KEYS)) {
+    return raw;
   }
   return 'transactions';
 };
@@ -123,7 +125,7 @@ export default function AddressTabs({
     queryFn: async () => {
       const res = await axios.get<AddressAggregateResponse>(
         `${config.handlerUrl}/address/aggregate/${address}`,
-        { params: { page: 1, limit: 10 } },
+        { params: { page: 1, limit: 10 } }
       );
       return res.data ?? {};
     },
@@ -150,7 +152,7 @@ export default function AddressTabs({
         gasUsedStr: tx.gasUsedStr || (tx.gasUsed ? toHexQuantity(tx.gasUsed) : '0x0'),
         gasPriceStr: tx.gasPriceStr || (tx.gasPrice ? toHexQuantity(tx.gasPrice) : '0x0'),
       })),
-    [data?.transactions_by_address],
+    [data?.transactions_by_address]
   );
   const transactionsCount = data?.transactions_count ?? 0;
   const internalt = data?.internal_transactions_by_address ?? [];
@@ -165,9 +167,7 @@ export default function AddressTabs({
   // an effect, so it doesn't trip react-hooks/set-state-in-effect. The
   // parent forces a full remount on address change via key={address}, so
   // we don't need to clear this set ourselves.
-  const [mountedTabs, setMountedTabs] = useState<Set<TabKey>>(
-    () => new Set([activeTab]),
-  );
+  const [mountedTabs, setMountedTabs] = useState<Set<TabKey>>(() => new Set([activeTab]));
 
   const setTab = useCallback((key: TabKey) => {
     setMountedTabs((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
@@ -178,8 +178,7 @@ export default function AddressTabs({
   // (theoretically possible on some external navigation), fall back to
   // mounting the active tab on the fly via this OR-with-activeTab check
   // at each panel guard below.
-  const isPanelMounted = (key: TabKey): boolean =>
-    mountedTabs.has(key) || key === activeTab;
+  const isPanelMounted = (key: TabKey): boolean => mountedTabs.has(key) || key === activeTab;
 
   // Server-reported counts the panels surface back up to the tab bar so
   // the badges show honest totals (not capped array lengths). No reset
@@ -200,9 +199,7 @@ export default function AddressTabs({
           ? internalTransactionsCount.toLocaleString('en-US')
           : null;
       case 'token-transfers':
-        return tokenTransfersTotal === null
-          ? null
-          : tokenTransfersTotal.toLocaleString('en-US');
+        return tokenTransfersTotal === null ? null : tokenTransfersTotal.toLocaleString('en-US');
       case 'tokens':
         return tokensCount === null ? null : String(tokensCount);
       case 'nfts':
@@ -211,10 +208,7 @@ export default function AddressTabs({
   };
 
   return (
-    <section
-      aria-labelledby="address-activity-heading"
-      className="space-y-3 md:space-y-4"
-    >
+    <section aria-labelledby="address-activity-heading" className="space-y-3 md:space-y-4">
       <h2 id="address-activity-heading" className="sr-only">
         Address activity
       </h2>

@@ -17,8 +17,13 @@ function getRelayUrl(): string {
   if (typeof window !== 'undefined') {
     // Allow per-deploy override via a global injected at runtime (none today,
     // but cheap insurance for ops). Defaults to qrlwallet.com.
-    const w = window as unknown as { __QRL_RELAY_URL__?: string };
-    if (w.__QRL_RELAY_URL__) return w.__QRL_RELAY_URL__;
+    if (
+      '__QRL_RELAY_URL__' in window &&
+      typeof window.__QRL_RELAY_URL__ === 'string' &&
+      window.__QRL_RELAY_URL__
+    ) {
+      return window.__QRL_RELAY_URL__;
+    }
   }
   return 'https://qrlwallet.com';
 }

@@ -12,13 +12,8 @@ import {
   getFilteredRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import type { ColumnDef, Row } from '@tanstack/react-table';
-import {
-  formatAddress,
-  formatAmount,
-  hexToNumber,
-  normalizeHexString,
-} from '../../../lib/helpers';
+import type { Row } from '@tanstack/react-table';
+import { formatAddress, formatAmount, hexToNumber, normalizeHexString } from '../../../lib/helpers';
 import CopyButton from '../../../components/CopyButton';
 import DebouncedInput from '../../../components/DebouncedInput';
 import { DownloadBtnInternal } from '../../../components/DownloadBtn';
@@ -31,11 +26,7 @@ import {
   truncateMiddle,
   useIsMobile,
 } from './_table-utils';
-import {
-  PAGE_LIMIT,
-  fetchAllAggregateRows,
-  useAggregatePage,
-} from './use-aggregate-page';
+import { PAGE_LIMIT, fetchAllAggregateRows, useAggregatePage } from './use-aggregate-page';
 import { useUrlIntParam } from '../../../lib/use-url-param';
 
 /**
@@ -50,9 +41,7 @@ import { useUrlIntParam } from '../../../lib/use-url-param';
  * pretending the loaded rows are the whole history.
  */
 
-const columnHelper = createColumnHelper<
-  InternalTransaction & { formattedValue: string }
->();
+const columnHelper = createColumnHelper<InternalTransaction & { formattedValue: string }>();
 
 interface InternalPanelProps {
   address: string;
@@ -78,8 +67,8 @@ export default function InternalPanel({
   const pageQuery = useAggregatePage(address, page);
   const pageRows = pageQuery.data?.internal_transactions_by_address;
   const rows = useMemo(
-    () => (page === 1 ? internalt : pageRows ?? []),
-    [page, internalt, pageRows],
+    () => (page === 1 ? internalt : (pageRows ?? [])),
+    [page, internalt, pageRows]
   );
 
   const knownTotal = typeof total === 'number' && total > 0 ? total : undefined;
@@ -95,7 +84,7 @@ export default function InternalPanel({
         const [value, valueUnit] = formatAmount(tx.Value);
         return { ...tx, formattedValue: `${value} ${valueUnit}` };
       }),
-    [rows],
+    [rows]
   );
 
   const columns = useMemo(
@@ -171,16 +160,19 @@ export default function InternalPanel({
       }),
       columnHelper.accessor('BlockTimestamp', {
         header: 'Timestamp',
-        cell: (info) => <span><TimeDisplay timestamp={info.getValue()} /></span>,
+        cell: (info) => (
+          <span>
+            <TimeDisplay timestamp={info.getValue()} />
+          </span>
+        ),
       }),
     ],
-    [knownTotal, page, rows.length],
+    [knownTotal, page, rows.length]
   );
 
-  const table = useReactTable({
+  const table = useReactTable<InternalTransaction & { formattedValue: string }>({
     data,
-    // @ts-expect-error - ColumnDef types conflict with index signature.
-    columns: columns as ColumnDef<InternalTransaction & { formattedValue: string }>[],
+    columns,
     state: { globalFilter: filter },
     onGlobalFilterChange: setFilter,
     getCoreRowModel: getCoreRowModel(),
@@ -196,9 +188,7 @@ export default function InternalPanel({
     );
   }
 
-  const renderCard = (
-    row: Row<InternalTransaction & { formattedValue: string }>,
-  ): JSX.Element => {
+  const renderCard = (row: Row<InternalTransaction & { formattedValue: string }>): JSX.Element => {
     const r = row.original;
     return (
       <div key={row.id} className="p-4 border-b border-border last:border-b-0">
@@ -261,13 +251,17 @@ export default function InternalPanel({
             </div>
             <div>
               <div className="text-xs text-text-secondary">Gas Used</div>
-              <div className="text-sm text-text-primary">{hexToNumber(String(r.GasUsed))} Units</div>
+              <div className="text-sm text-text-primary">
+                {hexToNumber(String(r.GasUsed))} Units
+              </div>
             </div>
           </div>
 
           <div>
             <div className="text-xs text-text-secondary">Time</div>
-            <div className="text-sm text-text-primary"><TimeDisplay timestamp={r.BlockTimestamp} /></div>
+            <div className="text-sm text-text-primary">
+              <TimeDisplay timestamp={r.BlockTimestamp} />
+            </div>
           </div>
         </div>
       </div>
@@ -307,23 +301,23 @@ export default function InternalPanel({
           <button
             type="button"
             className="underline hover:text-red-300"
-            onClick={() => { void pageQuery.refetch(); }}
+            onClick={() => {
+              void pageQuery.refetch();
+            }}
           >
             Retry
           </button>
         </div>
       )}
 
-      <div
-        className={`overflow-x-auto${
-          pageQuery.isFetching && page > 1 ? ' opacity-60' : ''
-        }`}
-      >
+      <div className={`overflow-x-auto${pageQuery.isFetching && page > 1 ? ' opacity-60' : ''}`}>
         {rows.length === 0 && pageQuery.isFetching ? (
           // First visit to a page > 1 has no previous query data to hold
           // on screen (page 1 lives in the parent poll), so show an
           // explicit loading state instead of an empty table.
-          <div className="p-8 text-center text-text-secondary">Loading internal transactions...</div>
+          <div className="p-8 text-center text-text-secondary">
+            Loading internal transactions...
+          </div>
         ) : isMobile ? (
           <div className="overflow-hidden">
             {table.getRowModel().rows.map((row) => renderCard(row))}

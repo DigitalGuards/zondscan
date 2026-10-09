@@ -1,28 +1,16 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import axios, { AxiosError } from 'axios';
+import axios from 'axios';
 import * as zondAbi from '@theqrl/web3-qrl-abi';
 import type { ContractData } from '../types/address';
 import { qNormaliseAbiValue } from '../lib/helpers';
 import { assertVm64AbiSupport } from '../lib/vm64Abi';
+import { parseAbiFunctions, type AbiFunction, isContractCallResponse } from '../lib/contractAbi';
+import { isRecord, errorMessage, InvalidInputError } from '../lib/guards';
 import config from '../../config';
 import { classifyStoredVerification } from '../lib/storedVerification';
 import ContractInteractionProvenanceNotice from './ContractInteractionProvenanceNotice';
-
-interface AbiInput {
-  name: string;
-  type: string;
-  components?: AbiInput[];
-}
-
-interface AbiFunction {
-  type: 'function';
-  name: string;
-  stateMutability: 'view' | 'pure' | 'nonpayable' | 'payable';
-  inputs: AbiInput[];
-  outputs?: { name: string; type: string }[];
-}
 
 interface ReadContractProps {
   contractData: ContractData;
@@ -41,23 +29,17 @@ interface ReadContractProps {
 export default function ReadContract({ contractData }: ReadContractProps): JSX.Element {
   const verificationStatus = useMemo(
     () => classifyStoredVerification(contractData),
-    [contractData],
+    [contractData]
   );
-  const readFns = useMemo(() => {
-    if (
-      !contractData.verified ||
-      verificationStatus === 'invalid-recorded' ||
-      !contractData.abi
-    ) {
-      return [] as AbiFunction[];
+  const readFns = useMemo<AbiFunction[]>(() => {
+    if (!contractData.verified || verificationStatus === 'invalid-recorded' || !contractData.abi) {
+      return [];
     }
     try {
-      const parsed = JSON.parse(contractData.abi) as AbiFunction[];
-      return parsed.filter(
-        f => f.type === 'function' && (f.stateMutability === 'view' || f.stateMutability === 'pure'),
-      );
+      const parsed = parseAbiFunctions(contractData.abi);
+      return parsed.filter((f) => f.stateMutability === 'view' || f.stateMutability === 'pure');
     } catch {
-      return [] as AbiFunction[];
+      return [];
     }
   }, [contractData.abi, contractData.verified, verificationStatus]);
 
@@ -69,20 +51,12 @@ export default function ReadContract({ contractData }: ReadContractProps): JSX.E
     );
   }
   if (verificationStatus === 'invalid-recorded') {
-    return (
-      <ContractInteractionProvenanceNotice
-        status={verificationStatus}
-        interaction="Read"
-      />
-    );
+    return <ContractInteractionProvenanceNotice status={verificationStatus} interaction="Read" />;
   }
   if (readFns.length === 0) {
     return (
       <div className="space-y-3">
-        <ContractInteractionProvenanceNotice
-          status={verificationStatus}
-          interaction="Read"
-        />
+        <ContractInteractionProvenanceNotice status={verificationStatus} interaction="Read" />
         <div className="rounded-lg border border-border bg-card-gradient p-4 text-sm text-text-secondary">
           This contract has no view/pure functions to read.
         </div>
@@ -91,14 +65,11 @@ export default function ReadContract({ contractData }: ReadContractProps): JSX.E
   }
   return (
     <div className="space-y-3">
-      <ContractInteractionProvenanceNotice
-        status={verificationStatus}
-        interaction="Read"
-      />
+      <ContractInteractionProvenanceNotice status={verificationStatus} interaction="Read" />
       <div className="space-y-2 md:space-y-3">
         {readFns.map((fn, idx) => (
           <ReadFunctionCard
-            key={`${fn.name}-${idx}-${fn.inputs.map(i => i.type).join(',')}`}
+            key={`${fn.name}-${idx}-${fn.inputs.map((i) => i.type).join(',')}`}
             fn={fn}
             address={contractData.address}
           />
@@ -116,8 +87,9 @@ function ReadFunctionCard({ fn, address }: { fn: AbiFunction; address: string })
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
 
-  const setVal = (i: number, v: string) =>
-    setValues(cur => cur.map((x, j) => (j === i ? v : x)));
+  const setVal = (i: number, v: string) => {
+    setValues((cur) => cur.map((x, j) => (j === i ? v : x)));
+  };
 
   const onCall = async () => {
     setLoading(true);
@@ -127,13 +99,15 @@ function ReadFunctionCard({ fn, address }: { fn: AbiFunction; address: string })
     try {
       assertVm64AbiSupport();
       const args = fn.inputs.map((input, i) => parseArg(values[i] ?? '', input.type));
-      const data = zondAbi.encodeFunctionCall(fn as never, args as never[]);
+      const data = zondAbi.encodeFunctionCall(fn, args);
 
-      const resp = await axios.post<{ result?: string; error?: string; reverted?: boolean }>(
-        `${config.handlerUrl}/contract/call`,
-        { to: address, data },
-      );
+      const resp = await axios.post<unknown>(`${config.handlerUrl}/contract/call`, {
+        to: address,
+        data,
+      });
 
+      if (!isContractCallResponse(resp.data))
+        throw new InvalidInputError('Invalid contract call response');
       if (resp.data.error) {
         setError(resp.data.error);
         setReverted(Boolean(resp.data.reverted));
@@ -143,30 +117,32 @@ function ReadFunctionCard({ fn, address }: { fn: AbiFunction; address: string })
         setError('No result returned by node');
         return;
       }
-      const outTypes = (fn.outputs ?? []).map(o => o.type);
+      const outTypes = (fn.outputs ?? []).map((o) => o.type);
       if (outTypes.length === 0) {
         setResult('(void)');
         return;
       }
-      const decoded = zondAbi.decodeParameters(outTypes as never[], resp.data.result);
+      const decoded = zondAbi.decodeParameters(outTypes, resp.data.result);
       setResult(formatDecoded(decoded, fn.outputs ?? []));
     } catch (e) {
-      const ae = e as AxiosError;
-      const msg = (ae.response?.data as { error?: string } | undefined)?.error
-        ?? (e instanceof Error ? e.message : String(e));
-      setError(msg);
+      const payload: unknown = axios.isAxiosError(e) ? e.response?.data : undefined;
+      setError(
+        isRecord(payload) && typeof payload.error === 'string' ? payload.error : errorMessage(e)
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const sig = `${fn.name}(${fn.inputs.map(i => `${i.type}${i.name ? ' ' + i.name : ''}`).join(', ')})`;
+  const sig = `${fn.name}(${fn.inputs.map((i) => `${i.type}${i.name ? ' ' + i.name : ''}`).join(', ')})`;
 
   return (
     <div className="rounded-lg border border-border bg-card-gradient">
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => {
+          setOpen((o) => !o);
+        }}
         aria-expanded={open}
         className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left"
       >
@@ -183,7 +159,9 @@ function ReadFunctionCard({ fn, address }: { fn: AbiFunction; address: string })
               </div>
               <input
                 value={values[i] ?? ''}
-                onChange={e => setVal(i, e.target.value)}
+                onChange={(e) => {
+                  setVal(i, e.target.value);
+                }}
                 placeholder={placeholderFor(input.type)}
                 className="form-input font-mono text-xs"
               />
@@ -191,7 +169,9 @@ function ReadFunctionCard({ fn, address }: { fn: AbiFunction; address: string })
           ))}
           <button
             type="button"
-            onClick={onCall}
+            onClick={() => {
+              void onCall();
+            }}
             disabled={loading}
             className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-accent text-background text-xs font-medium hover:bg-accent-hover transition-colors disabled:opacity-50"
           >
@@ -199,12 +179,15 @@ function ReadFunctionCard({ fn, address }: { fn: AbiFunction; address: string })
           </button>
 
           {error && (
-            <div className={`rounded-md border p-2 text-xs ${
-              reverted
-                ? 'border-orange-500/40 bg-orange-500/10 text-orange-300'
-                : 'border-red-500/40 bg-red-500/10 text-red-300'
-            }`}>
-              {reverted ? 'execution reverted: ' : ''}{error}
+            <div
+              className={`rounded-md border p-2 text-xs ${
+                reverted
+                  ? 'border-orange-500/40 bg-orange-500/10 text-orange-300'
+                  : 'border-red-500/40 bg-red-500/10 text-red-300'
+              }`}
+            >
+              {reverted ? 'execution reverted: ' : ''}
+              {error}
             </div>
           )}
 
@@ -231,7 +214,9 @@ function parseArg(raw: string, type: string): unknown {
   }
   if (type === 'bool') return t.toLowerCase() === 'true' || t === '1';
   if (type.endsWith(']') || type === 'tuple') {
-    try { return JSON.parse(t); } catch {
+    try {
+      return JSON.parse(t);
+    } catch {
       throw new Error(`expected JSON for ${type}: e.g. [1,2,3]`);
     }
   }
@@ -258,9 +243,10 @@ function placeholderFor(type: string): string {
 // and qNormaliseAbiValue (in app/lib/helpers.ts) maps any address-typed
 // value to the canonical Q prefix used by the rest of ZondScan.
 function formatDecoded(decoded: unknown, outputs: { name: string; type: string }[]): string {
+  if (!isRecord(decoded)) throw new InvalidInputError('Invalid decoded contract response');
   const out: Record<string, unknown> = {};
   outputs.forEach((o, i) => {
-    const v = (decoded as Record<string, unknown>)[String(i)];
+    const v = decoded[String(i)];
     out[o.name && o.name !== '' ? o.name : `_${i}`] = qNormaliseAbiValue(v, o.type);
   });
   return JSON.stringify(out, replacer, 2);

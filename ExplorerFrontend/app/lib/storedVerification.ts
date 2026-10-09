@@ -1,24 +1,22 @@
-import { sha256 } from "@noble/hashes/sha256.js";
-import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
+import { sha256 } from '@noble/hashes/sha256.js';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 
-import { classifyCompilerProvenance } from "./compilerProvenance";
+import { classifyCompilerProvenance } from './compilerProvenance';
+import { isStringRecord } from './guards';
 
-const SOURCE_BUNDLE_VERSION = "qrl.verified-source-bundle.v1";
+const SOURCE_BUNDLE_VERSION = 'qrl.verified-source-bundle.v1';
 const SOURCE_BUNDLE_PREFIX = `${SOURCE_BUNDLE_VERSION}:sha256:`;
-export const VERIFICATION_RECORD_SCHEMA_V1 =
-  "qrl.contract-verification-record.v1";
-export const VERIFICATION_RECORD_SCHEMA_V2 =
-  "qrl.contract-verification-record.v2";
+export const VERIFICATION_RECORD_SCHEMA_V1 = 'qrl.contract-verification-record.v1';
+export const VERIFICATION_RECORD_SCHEMA_V2 = 'qrl.contract-verification-record.v2';
 export const VERIFICATION_ARTIFACT_DIGEST_PREFIX_V2 =
-  "qrl.contract-verification-artifact.v2:sha256:";
+  'qrl.contract-verification-artifact.v2:sha256:';
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const Q128_ADDRESS_PATTERN = /^Q[0-9a-f]{128}$/;
 const HASH_PATTERN = /^0x[0-9a-f]{64}$/;
 const HEX_QUANTITY_PATTERN = /^0x(?:0|[1-9a-f][0-9a-f]*)$/;
 
-export type StoredVerificationStatus =
-  "digest-backed" | "legacy-unrecorded" | "invalid-recorded";
+export type StoredVerificationStatus = 'digest-backed' | 'legacy-unrecorded' | 'invalid-recorded';
 
 export type VerifiedImport = readonly [filename: string, source: string];
 
@@ -57,28 +55,22 @@ type HashWriter = { update(data: Uint8Array): HashWriter };
 
 export function classifyVerifiedImports(value: unknown): VerifiedImportsState {
   if (value === undefined) return { valid: true, files: [] };
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!isStringRecord(value)) {
     return { valid: false, files: [] };
   }
-  const prototype = Object.getPrototypeOf(value);
+  const prototype: unknown = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) {
     return { valid: false, files: [] };
   }
 
-  const entries = Object.entries(value);
-  if (entries.some(([, source]) => typeof source !== "string")) {
-    return { valid: false, files: [] };
-  }
-  const files = (entries as Array<[string, string]>).sort(([left], [right]) =>
-    compareUTF8(left, right),
-  );
+  const files = Object.entries(value).sort(([left], [right]) => compareUTF8(left, right));
   return { valid: true, files };
 }
 
 export function sourceBundleDigestV1(
   contractName: string,
   sourceCode: string,
-  imports: Record<string, string>,
+  imports: Record<string, string>
 ): string {
   const writer = sha256.create();
   writer.update(utf8ToBytes(SOURCE_BUNDLE_VERSION));
@@ -88,85 +80,75 @@ export function sourceBundleDigestV1(
   writeUint64(writer, 1 + files.length);
   writeDigestFile(
     writer,
-    "primary",
-    contractName ? `${contractName}.hyp` : "primary.hyp",
-    sourceCode,
+    'primary',
+    contractName ? `${contractName}.hyp` : 'primary.hyp',
+    sourceCode
   );
   for (const [filename, source] of files) {
-    writeDigestFile(writer, "import", filename, source);
+    writeDigestFile(writer, 'import', filename, source);
   }
   return SOURCE_BUNDLE_PREFIX + bytesToHex(writer.digest());
 }
 
 export function classifyStoredVerification(
-  contract: StoredVerificationInput,
+  contract: StoredVerificationInput
 ): StoredVerificationStatus {
   if (contract.verificationRecordSchema === undefined) {
     return contract.compilerProvenance === undefined &&
       contract.sourceBundleDigest === undefined &&
       contract.verificationArtifactDigest === undefined
-      ? "legacy-unrecorded"
-      : "invalid-recorded";
+      ? 'legacy-unrecorded'
+      : 'invalid-recorded';
   }
   if (contract.verificationRecordSchema === VERIFICATION_RECORD_SCHEMA_V1) {
     if (contract.verificationArtifactDigest !== undefined) {
-      return "invalid-recorded";
+      return 'invalid-recorded';
     }
-    return hasValidSourceAndCompilerRecord(contract)
-      ? "legacy-unrecorded"
-      : "invalid-recorded";
+    return hasValidSourceAndCompilerRecord(contract) ? 'legacy-unrecorded' : 'invalid-recorded';
   }
   if (contract.verificationRecordSchema !== VERIFICATION_RECORD_SCHEMA_V2) {
-    return "invalid-recorded";
+    return 'invalid-recorded';
   }
 
   if (!hasValidSourceAndCompilerRecord(contract)) {
-    return "invalid-recorded";
+    return 'invalid-recorded';
   }
   if (
-    typeof contract.verificationArtifactDigest !== "string" ||
-    !contract.verificationArtifactDigest.startsWith(
-      VERIFICATION_ARTIFACT_DIGEST_PREFIX_V2,
-    ) ||
+    typeof contract.verificationArtifactDigest !== 'string' ||
+    !contract.verificationArtifactDigest.startsWith(VERIFICATION_ARTIFACT_DIGEST_PREFIX_V2) ||
     !SHA256_PATTERN.test(
-      contract.verificationArtifactDigest.slice(
-        VERIFICATION_ARTIFACT_DIGEST_PREFIX_V2.length,
-      ),
+      contract.verificationArtifactDigest.slice(VERIFICATION_ARTIFACT_DIGEST_PREFIX_V2.length)
     )
   ) {
-    return "invalid-recorded";
+    return 'invalid-recorded';
   }
 
   const expectedArtifactDigest = verificationArtifactDigestV2(contract);
   return expectedArtifactDigest !== null &&
     contract.verificationArtifactDigest === expectedArtifactDigest
-    ? "digest-backed"
-    : "invalid-recorded";
+    ? 'digest-backed'
+    : 'invalid-recorded';
 }
 
 /** Mirrors backendAPI/models.VerificationArtifactDigestV2. */
-export function verificationArtifactDigestV2(
-  contract: StoredVerificationInput,
-): string | null {
+export function verificationArtifactDigestV2(contract: StoredVerificationInput): string | null {
   if (contract.verificationRecordSchema !== VERIFICATION_RECORD_SCHEMA_V2) {
     return null;
   }
 
   const compilerState = classifyCompilerProvenance(
     contract.compilerProvenance,
-    typeof contract.compilerVersion === "string"
-      ? contract.compilerVersion
-      : undefined,
+    typeof contract.compilerVersion === 'string' ? contract.compilerVersion : undefined
   );
-  if (compilerState.status !== "digest-backed") return null;
+  if (compilerState.status !== 'digest-backed') return null;
 
   const importsState = classifyVerifiedImports(contract.imports);
   if (
-    typeof contract.contractName !== "string" ||
+    typeof contract.contractName !== 'string' ||
     contract.contractName.length === 0 ||
-    typeof contract.sourceCode !== "string" ||
+    typeof contract.sourceCode !== 'string' ||
     contract.sourceCode.length === 0 ||
-    typeof contract.sourceBundleDigest !== "string" ||
+    typeof contract.sourceBundleDigest !== 'string' ||
     !importsState.valid
   ) {
     return null;
@@ -183,17 +165,11 @@ export function verificationArtifactDigestV2(
   const address = requiredMatchingString(contract.address, Q128_ADDRESS_PATTERN);
   const creationBlockNumber = requiredMatchingString(
     contract.creationBlockNumber,
-    HEX_QUANTITY_PATTERN,
+    HEX_QUANTITY_PATTERN
   );
-  const creationBlockHash = requiredMatchingString(
-    contract.creationBlockHash,
-    HASH_PATTERN,
-  );
+  const creationBlockHash = requiredMatchingString(contract.creationBlockHash, HASH_PATTERN);
   const chainId = requiredMatchingString(contract.chainId, HEX_QUANTITY_PATTERN);
-  const deployedCodeSHA256 = requiredMatchingString(
-    contract.contractCodeSha256,
-    SHA256_PATTERN,
-  );
+  const deployedCodeSHA256 = requiredMatchingString(contract.contractCodeSha256, SHA256_PATTERN);
   const genesisContract = optionalBoolean(contract.genesisContract);
   const creationTransaction = optionalString(contract.creationTransaction);
   const abi = requiredString(contract.abi);
@@ -219,10 +195,10 @@ export function verificationArtifactDigestV2(
     evmVersion === null ||
     constructorArguments === null ||
     license === null ||
-    verificationMethod !== "full-source" ||
+    verificationMethod !== 'full-source' ||
     !librariesState.valid ||
     (!genesisContract && !HASH_PATTERN.test(creationTransaction)) ||
-    (genesisContract && creationTransaction !== "")
+    (genesisContract && creationTransaction !== '')
   ) {
     return null;
   }
@@ -276,29 +252,23 @@ export function verificationArtifactDigestV2(
     writeDigestField(writer, value);
   }
 
-  return (
-    VERIFICATION_ARTIFACT_DIGEST_PREFIX_V2 + bytesToHex(writer.digest())
-  );
+  return VERIFICATION_ARTIFACT_DIGEST_PREFIX_V2 + bytesToHex(writer.digest());
 }
 
-function hasValidSourceAndCompilerRecord(
-  contract: StoredVerificationInput,
-): boolean {
+function hasValidSourceAndCompilerRecord(contract: StoredVerificationInput): boolean {
   const compilerState = classifyCompilerProvenance(
     contract.compilerProvenance,
-    typeof contract.compilerVersion === "string"
-      ? contract.compilerVersion
-      : undefined,
+    typeof contract.compilerVersion === 'string' ? contract.compilerVersion : undefined
   );
-  if (compilerState.status !== "digest-backed") return false;
+  if (compilerState.status !== 'digest-backed') return false;
 
   const importsState = classifyVerifiedImports(contract.imports);
   if (
-    typeof contract.contractName !== "string" ||
+    typeof contract.contractName !== 'string' ||
     contract.contractName.length === 0 ||
-    typeof contract.sourceCode !== "string" ||
+    typeof contract.sourceCode !== 'string' ||
     contract.sourceCode.length === 0 ||
-    typeof contract.sourceBundleDigest !== "string" ||
+    typeof contract.sourceBundleDigest !== 'string' ||
     !importsState.valid
   ) {
     return false;
@@ -309,28 +279,25 @@ function hasValidSourceAndCompilerRecord(
     sourceBundleDigestV1(
       contract.contractName,
       contract.sourceCode,
-      Object.fromEntries(importsState.files),
+      Object.fromEntries(importsState.files)
     )
   );
 }
 
 function requiredString(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
+  return typeof value === 'string' ? value : null;
 }
 
 function optionalString(value: unknown): string | null {
-  return value === undefined ? "" : requiredString(value);
+  return value === undefined ? '' : requiredString(value);
 }
 
-function requiredMatchingString(
-  value: unknown,
-  pattern: RegExp,
-): string | null {
-  return typeof value === "string" && pattern.test(value) ? value : null;
+function requiredMatchingString(value: unknown, pattern: RegExp): string | null {
+  return typeof value === 'string' && pattern.test(value) ? value : null;
 }
 
 function requiredBoolean(value: unknown): boolean | null {
-  return typeof value === "boolean" ? value : null;
+  return typeof value === 'boolean' ? value : null;
 }
 
 function optionalBoolean(value: unknown): boolean | null {
@@ -338,9 +305,7 @@ function optionalBoolean(value: unknown): boolean | null {
 }
 
 function requiredSafeInteger(value: unknown): number | null {
-  return typeof value === "number" && Number.isSafeInteger(value)
-    ? value
-    : null;
+  return typeof value === 'number' && Number.isSafeInteger(value) ? value : null;
 }
 
 function compareUTF8(left: string, right: string): number {
@@ -355,12 +320,7 @@ function compareUTF8(left: string, right: string): number {
   return leftBytes.length - rightBytes.length;
 }
 
-function writeDigestFile(
-  writer: HashWriter,
-  role: string,
-  filename: string,
-  source: string,
-): void {
+function writeDigestFile(writer: HashWriter, role: string, filename: string, source: string): void {
   writeDigestField(writer, role);
   writeDigestField(writer, filename);
   writeDigestField(writer, source);

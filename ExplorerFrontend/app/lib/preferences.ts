@@ -1,3 +1,5 @@
+import { isOneOf, isRecord } from './guards';
+
 export const PREFERENCES_KEY = 'zondscan.preferences.v1';
 export const PREFERENCES_EVENT = 'zondscan:preferences';
 
@@ -31,23 +33,21 @@ export const DEFAULT_PREFERENCES: ExplorerPreferences = {
 };
 
 export function parsePreferences(raw: string | null): ExplorerPreferences {
-  let value: Partial<ExplorerPreferences> = {};
+  let value: Record<string, unknown> = {};
   try {
-    const parsed = JSON.parse(raw || '{}');
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) value = parsed;
+    const parsed: unknown = JSON.parse(raw || '{}');
+    if (isRecord(parsed)) value = parsed;
   } catch {
     /* Invalid saved preferences use the defaults. */
   }
   return {
-    theme: ['light', 'dim', 'dark', 'system'].includes(value.theme || '')
-      ? value.theme!
+    theme: isOneOf(value.theme, ['light', 'dim', 'dark', 'system'])
+      ? value.theme
       : DEFAULT_PREFERENCES.theme,
-    currency: ['USD', 'EUR', 'GBP', 'CHF', 'CAD', 'AUD', 'JPY', 'CNY'].includes(
-      value.currency || ''
-    )
-      ? value.currency!
+    currency: isOneOf(value.currency, ['USD', 'EUR', 'GBP', 'CHF', 'CAD', 'AUD', 'JPY', 'CNY'])
+      ? value.currency
       : 'USD',
-    locale: ['en', 'zh', 'es', 'ru'].includes(value.locale || '') ? value.locale! : 'en',
+    locale: isOneOf(value.locale, ['en', 'zh', 'es', 'ru']) ? value.locale : 'en',
     addressDisplay: value.addressDisplay === 'back' ? 'back' : 'middle',
     timeZone: value.timeZone === 'local' ? 'local' : 'utc',
     expandDetails: typeof value.expandDetails === 'boolean' ? value.expandDetails : false,

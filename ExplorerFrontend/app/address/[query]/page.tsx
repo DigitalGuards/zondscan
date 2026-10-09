@@ -33,19 +33,15 @@ export default async function Page({ params }: PageProps): Promise<JSX.Element> 
       <h1 className="sr-only">
         {qnsName ? `${qnsName} resolves to ${address}` : `Address ${address}`}
       </h1>
-      {isTokenContract ? (
+      {isTokenContract && addressData.contract_code ? (
         <TokenContractView
           address={address}
-          contractData={addressData.contract_code!}
+          contractData={addressData.contract_code}
           handlerUrl={handlerUrl}
           qnsName={qnsName}
         />
       ) : (
-        <AddressView
-          addressData={addressData}
-          addressSegment={address}
-          qnsName={qnsName}
-        />
+        <AddressView addressData={addressData} addressSegment={address} qnsName={qnsName} />
       )}
     </main>
   );

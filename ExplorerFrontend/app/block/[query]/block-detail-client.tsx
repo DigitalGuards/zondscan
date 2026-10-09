@@ -1,4 +1,4 @@
-"use client";
+'use client';
 import InterfaceText from '../../components/InterfaceText';
 
 import TimeDisplay from '../../components/TimeDisplay';
@@ -6,12 +6,18 @@ import AddressText from '../../components/AddressText';
 import PreferenceDetails from '../../components/PreferenceDetails';
 
 import axios from 'axios';
-import React, { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import config from '../../../config';
 import Link from 'next/link';
-import { formatAmount, truncateHash, formatPlanckAdaptive, formatNumberWithCommas, hexToNumber } from '../../lib/helpers';
+import {
+  formatAmount,
+  truncateHash,
+  formatPlanckAdaptive,
+  formatNumberWithCommas,
+  hexToNumber,
+} from '../../lib/helpers';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import DetailRow from '../../components/DetailRow';
 import CopyButton from '../../components/CopyButton';
@@ -64,14 +70,13 @@ type Block = {
   miner: string;
   size: string;
   prevRandao: string;
-  withdrawals: any[];
+  withdrawals: unknown[];
   withdrawalsRoot: string;
 };
 
 interface BlockDetailClientProps {
   blockNumber: string;
 }
-
 
 export default function BlockDetailClient({ blockNumber }: BlockDetailClientProps): JSX.Element {
   // Reject obviously-bad inputs before hitting the API: negative numbers,
@@ -89,7 +94,9 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
   // Per-tx activity counts surfaced alongside the block payload by the
   // backend; an empty/absent map means no row had token-transfer or
   // internal-call activity and the columns render dashes.
-  const [txActivity, setTxActivity] = useState<Record<string, { tokenTransfers: number; internalCalls: number }>>({});
+  const [txActivity, setTxActivity] = useState<
+    Record<string, { tokenTransfers: number; internalCalls: number }>
+  >({});
   // Initialise loading/notFound from the validity check so the invalid-id
   // path doesn't need to write state inside a useEffect (set-state-in-effect
   // rule). React's "adjusting state on prop change" pattern below resyncs
@@ -172,7 +179,10 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
         // exist). Treat that as an informational state, not a console
         // error, Next.js dev mode promotes console.error to a red
         // overlay which makes a benign "future block" feel like a bug.
-        if (axios.isAxiosError(err) && (err.response?.status === 404 || err.response?.status === 400)) {
+        if (
+          axios.isAxiosError(err) &&
+          (err.response?.status === 404 || err.response?.status === 400)
+        ) {
           // 404 → block hasn't been synced; 400 → unparseable block id
           // (we'd usually have caught it in `isValidBlockId` above, but
           // the backend's parser may reject some edge cases we don't).
@@ -203,10 +213,15 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
     return (
       <div className="py-4 sm:py-6 lg:py-8">
         <div className="card p-6">
-          <p className="font-semibold text-accent mb-1">Block #{Number.isFinite(blockNum) ? blockNum.toLocaleString() : blockNumber} not found</p>
+          <p className="font-semibold text-accent mb-1">
+            Block #{Number.isFinite(blockNum) ? blockNum.toLocaleString() : blockNumber} not found
+          </p>
           <p className="text-sm text-text-secondary">
-            This block hasn&apos;t been produced (or synced) yet. Check back in a few seconds, or
-            {' '}<Link href="/blocks/1" className="text-accent hover:underline">browse recent blocks</Link>.
+            This block hasn&apos;t been produced (or synced) yet. Check back in a few seconds, or{' '}
+            <Link href="/blocks/1" className="text-accent hover:underline">
+              browse recent blocks
+            </Link>
+            .
           </p>
         </div>
       </div>
@@ -224,16 +239,19 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
     );
   }
 
-  const tsNum = typeof blockData.timestamp === 'string' && blockData.timestamp.startsWith('0x')
-    ? parseInt(blockData.timestamp, 16)
-    : parseInt(blockData.timestamp);
+  const tsNum =
+    typeof blockData.timestamp === 'string' && blockData.timestamp.startsWith('0x')
+      ? parseInt(blockData.timestamp, 16)
+      : parseInt(blockData.timestamp);
 
   return (
     <main className="py-4 sm:py-6 lg:py-8" aria-labelledby="block-heading">
-      <Breadcrumbs items={[
-        { label: 'Blocks', translateLabel: true, href: '/blocks/1' },
-        { label: `Block #${blockNumber}` },
-      ]} />
+      <Breadcrumbs
+        items={[
+          { label: 'Blocks', translateLabel: true, href: '/blocks/1' },
+          { label: `Block #${blockNumber}` },
+        ]}
+      />
 
       <Suspense>
         <BackToBlocksLink />
@@ -244,21 +262,41 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border">
           <div className="flex items-center gap-3">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-6 w-6 text-accent"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"
+              />
             </svg>
-            <h1 id="block-heading" className="section-title">Block #{formatNumberWithCommas(hexToNumber(blockData.number).toString())}</h1>
+            <h1 id="block-heading" className="section-title">
+              Block #{formatNumberWithCommas(hexToNumber(blockData.number).toString())}
+            </h1>
             {/* Block 0 is the chain's genesis block: flag it so the all-zero
                 parent hash below reads as expected rather than broken. */}
-            {blockNum === 0 && (
-              <Badge variant="brand">Genesis</Badge>
-            )}
+            {blockNum === 0 && <Badge variant="brand">Genesis</Badge>}
             {/* Live depth: surfaces how settled this block is. "Latest"
                 when we're looking at the head, otherwise "N
                 confirmations". Hidden until the first /latestblock
                 response arrives so we don't flash a stale value. */}
             {liveConfirmations !== null && (
-              <Badge variant={liveConfirmations === 0 ? 'info' : liveConfirmations >= TERMINAL_CONFIRMATIONS ? 'success' : 'neutral'}>
+              <Badge
+                variant={
+                  liveConfirmations === 0
+                    ? 'info'
+                    : liveConfirmations >= TERMINAL_CONFIRMATIONS
+                      ? 'success'
+                      : 'neutral'
+                }
+              >
                 {liveConfirmations === 0
                   ? 'Latest'
                   : `${liveConfirmations.toLocaleString()} confirmation${liveConfirmations === 1 ? '' : 's'}`}
@@ -307,29 +345,50 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
           </DetailRow>
           <DetailRow label="Timestamp">
             <TimeDisplay timestamp={tsNum} relative />
-            <span className="text-text-muted ml-2">(<TimeDisplay timestamp={blockData.timestamp} />)</span>
+            <span className="text-text-muted ml-2">
+              (<TimeDisplay timestamp={blockData.timestamp} />)
+            </span>
           </DetailRow>
-          <DetailRow label="Transactions">
-            {blockData.transactions?.length ?? 0}
+          <DetailRow label="Transactions">{blockData.transactions?.length ?? 0}</DetailRow>
+          <DetailRow label="Gas Used">
+            {formatNumberWithCommas(hexToNumber(blockData.gasUsed).toString())}
           </DetailRow>
-          <DetailRow label="Gas Used">{formatNumberWithCommas(hexToNumber(blockData.gasUsed).toString())}</DetailRow>
-          <DetailRow label="Gas Limit">{formatNumberWithCommas(hexToNumber(blockData.gasLimit).toString())}</DetailRow>
+          <DetailRow label="Gas Limit">
+            {formatNumberWithCommas(hexToNumber(blockData.gasLimit).toString())}
+          </DetailRow>
           <DetailRow label="Base Fee">
             {(() => {
               const [val, unit] = formatPlanckAdaptive(blockData.baseFeePerGas);
-              return <>{val} {unit}</>;
+              return (
+                <>
+                  {val} {unit}
+                </>
+              );
             })()}
           </DetailRow>
-          <PreferenceDetails key={blockData.hash} className="group mt-3 rounded-lg border border-border p-3">
-            <summary className="cursor-pointer text-sm font-medium text-text-secondary hover:text-accent"><InterfaceText text="Additional block details" /></summary>
-          {blockData.prevRandao && (
-            <DetailRow label="Prev Randao" mono>{blockData.prevRandao}</DetailRow>
-          )}
-          <DetailRow label="State Root" mono>{blockData.stateRoot}</DetailRow>
-          <DetailRow label="Receipts Root" mono>{blockData.receiptsRoot}</DetailRow>
-          {blockData.extraData && blockData.extraData !== '0x' && (
-            <DetailRow label="Extra Data" mono>{blockData.extraData}</DetailRow>
-          )}
+          <PreferenceDetails
+            key={blockData.hash}
+            className="group mt-3 rounded-lg border border-border p-3"
+          >
+            <summary className="cursor-pointer text-sm font-medium text-text-secondary hover:text-accent">
+              <InterfaceText text="Additional block details" />
+            </summary>
+            {blockData.prevRandao && (
+              <DetailRow label="Prev Randao" mono>
+                {blockData.prevRandao}
+              </DetailRow>
+            )}
+            <DetailRow label="State Root" mono>
+              {blockData.stateRoot}
+            </DetailRow>
+            <DetailRow label="Receipts Root" mono>
+              {blockData.receiptsRoot}
+            </DetailRow>
+            {blockData.extraData && blockData.extraData !== '0x' && (
+              <DetailRow label="Extra Data" mono>
+                {blockData.extraData}
+              </DetailRow>
+            )}
           </PreferenceDetails>
         </div>
       </section>
@@ -337,7 +396,10 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
       {/* Transactions Table */}
       <section aria-labelledby="block-txs-heading" className="card overflow-hidden">
         <div className="px-4 sm:px-6 py-4 border-b border-border">
-          <h2 id="block-txs-heading" className="text-[15px] font-display font-semibold text-text-primary">
+          <h2
+            id="block-txs-heading"
+            className="text-[15px] font-display font-semibold text-text-primary"
+          >
             Transactions ({blockData.transactions?.length ?? 0})
           </h2>
         </div>
@@ -347,11 +409,21 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border/50">
-                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider"><InterfaceText text="Hash" /></th>
-                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell"><InterfaceText text="From" /></th>
-                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell"><InterfaceText text="To" /></th>
-                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider"><InterfaceText text="Value" /></th>
-                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:table-cell"><InterfaceText text="Activity" /></th>
+                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">
+                    <InterfaceText text="Hash" />
+                  </th>
+                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">
+                    <InterfaceText text="From" />
+                  </th>
+                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden sm:table-cell">
+                    <InterfaceText text="To" />
+                  </th>
+                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider">
+                    <InterfaceText text="Value" />
+                  </th>
+                  <th className="text-left px-4 sm:px-6 py-3 text-[11px] font-normal text-text-muted uppercase tracking-wider hidden md:table-cell">
+                    <InterfaceText text="Activity" />
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -399,12 +471,14 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
                           <span className="text-xs font-mono text-text-secondary flex items-center gap-2">
                             {activity.tokenTransfers > 0 && (
                               <span className="text-accent" title="Token / NFT transfers emitted">
-                                {activity.tokenTransfers} token{activity.tokenTransfers === 1 ? '' : 's'}
+                                {activity.tokenTransfers} token
+                                {activity.tokenTransfers === 1 ? '' : 's'}
                               </span>
                             )}
                             {activity.internalCalls > 0 && (
                               <span className="text-text-secondary" title="Internal contract calls">
-                                {activity.internalCalls} call{activity.internalCalls === 1 ? '' : 's'}
+                                {activity.internalCalls} call
+                                {activity.internalCalls === 1 ? '' : 's'}
                               </span>
                             )}
                           </span>
@@ -419,7 +493,10 @@ export default function BlockDetailClient({ blockNumber }: BlockDetailClientProp
             </table>
           </div>
         ) : (
-          <EmptyState title="No transactions in this block" description="This block was produced without any transactions." />
+          <EmptyState
+            title="No transactions in this block"
+            description="This block was produced without any transactions."
+          />
         )}
       </section>
     </main>
