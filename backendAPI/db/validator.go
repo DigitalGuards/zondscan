@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	SlotsPerEpoch  = 128
+	SlotsPerEpoch  = 8
 	SecondsPerSlot = 60
 )
 
@@ -341,8 +341,10 @@ func GetEpochDetail(epochId string) (*models.EpochDetailResponse, error) {
 		return nil, fmt.Errorf("invalid epoch number: %v", err)
 	}
 
-	startSlot := epochNum * SlotsPerEpoch
-	endSlot := (epochNum + 1) * SlotsPerEpoch
+	startSlot, endSlot, err := epochSlotBounds(epochNum)
+	if err != nil {
+		return nil, err
+	}
 
 	// Get epoch_info for chain head status
 	var epochInfo models.EpochInfo
@@ -372,66 +374,11 @@ func GetEpochDetail(epochId string) (*models.EpochDetailResponse, error) {
 	var historyRecord models.ValidatorHistoryRecord
 	_ = configs.ValidatorHistoryCollection.FindOne(ctx, bson.M{"epoch": epochId}).Decode(&historyRecord)
 
-	// Get blocks in this epoch's slot range
-	blockFilter := bson.M{
-		"blockNumberInt": bson.M{"$gte": startSlot, "$lt": endSlot},
-		"ingestionState": completedBlockIngestionState,
-	}
-	projection := bson.D{
-		{Key: "blockNumberInt", Value: 1},
-		{Key: "result.number", Value: 1},
-		{Key: "result.timestamp", Value: 1},
-		{Key: "result.miner", Value: 1},
-		{Key: "result.transactions", Value: 1},
-		{Key: "result.gasUsed", Value: 1},
-		{Key: "result.hash", Value: 1},
-	}
-	findOpts := options.Find().
-		SetProjection(projection).
-		SetSort(bson.D{{Key: "blockNumberInt", Value: 1}})
-
-	cursor, err := configs.BlocksCollection.Find(ctx, blockFilter, findOpts)
+	blocks, proposedCount, err := getEpochSlots(ctx, epochNum)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query blocks: %v", err)
+		return nil, err
 	}
-	defer cursor.Close(ctx)
-
-	blockMap := make(map[int64]models.EpochDetailBlock)
-	for cursor.Next(ctx) {
-		var doc struct {
-			BlockNumberInt int64         `bson:"blockNumberInt"`
-			Result         models.Result `bson:"result"`
-		}
-		if err := cursor.Decode(&doc); err != nil {
-			continue
-		}
-		blockMap[doc.BlockNumberInt] = models.EpochDetailBlock{
-			Slot:         doc.BlockNumberInt,
-			Status:       "proposed",
-			Timestamp:    doc.Result.Timestamp,
-			Proposer:     doc.Result.Miner,
-			Transactions: len(doc.Result.Transactions),
-			GasUsed:      doc.Result.GasUsed,
-			BlockHash:    doc.Result.Hash,
-		}
-	}
-
-	// Build full 128-slot list
-	blocks := make([]models.EpochDetailBlock, 0, SlotsPerEpoch)
-	proposedCount := 0
-	missedCount := 0
-	for slot := startSlot; slot < endSlot; slot++ {
-		if b, ok := blockMap[slot]; ok {
-			blocks = append(blocks, b)
-			proposedCount++
-		} else {
-			blocks = append(blocks, models.EpochDetailBlock{
-				Slot:   slot,
-				Status: "missed",
-			})
-			missedCount++
-		}
-	}
+	missedCount := len(blocks) - proposedCount
 
 	return &models.EpochDetailResponse{
 		Epoch:           epochId,

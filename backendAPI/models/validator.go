@@ -109,13 +109,16 @@ type ValidatorStatsResponse struct {
 
 // EpochDetailBlock represents a single slot within an epoch detail view
 type EpochDetailBlock struct {
-	Slot         int64  `json:"slot"`
-	Status       string `json:"status"` // proposed or missed
-	Timestamp    string `json:"timestamp,omitempty"`
-	Proposer     string `json:"proposer,omitempty"`
-	Transactions int    `json:"transactions"`
-	GasUsed      string `json:"gasUsed,omitempty"`
-	BlockHash    string `json:"blockHash,omitempty"`
+	Slot           int64  `json:"slot"`
+	Status         string `json:"status"` // proposed or missed
+	Timestamp      string `json:"timestamp,omitempty"`
+	Proposer       string `json:"proposer,omitempty"`
+	ProposerIndex  string `json:"proposerIndex,omitempty"`
+	ProposerPubkey string `json:"proposerPubkey,omitempty"`
+	Transactions   int    `json:"transactions"`
+	GasUsed        string `json:"gasUsed,omitempty"`
+	BlockHash      string `json:"blockHash,omitempty"`
+	BlockNumber    string `json:"blockNumber,omitempty"`
 }
 
 // EpochDetailResponse represents the full epoch detail API response
