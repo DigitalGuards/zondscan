@@ -15,6 +15,10 @@ export default [
       '.dapp-example-cache/**',
       'public/dapp-example/**',
     ],
+  },
+  // A separate object: `ignores` is global only when it stands alone, so the
+  // build's .dapp-example-cache stays out of lint runs after a build.
+  {
     linterOptions: { noInlineConfig: true, reportUnusedDisableDirectives: 'error' },
   },
   ...coreWebVitals,
