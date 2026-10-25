@@ -1812,7 +1812,7 @@
         "tags": ["Validators & Epochs"],
         "operationId": "getEpoch",
         "summary": "Epoch detail",
-        "description": "Per-slot breakdown of one epoch: proposed and missed slots, proposers, and validator statistics at that epoch.",
+        "description": "Eight slots per epoch, each 60 seconds: proposed and missed slots, proposer duties, and validator statistics. Duties are filled as finalized history is indexed. Slot zero and unavailable duties have unknown proposers. Blocks are matched using the slot timestamp and beacon genesis time.",
         "parameters": [
           { "name": "id", "in": "path", "required": true, "description": "Epoch number as a decimal integer.", "schema": { "type": "string" } }
         ],
@@ -1843,7 +1843,10 @@
                           "slot": { "type": "integer" },
                           "status": { "type": "string", "enum": ["proposed", "missed"] },
                           "timestamp": { "type": "string" },
-                          "proposer": { "type": "string" },
+                          "proposer": { "type": "string", "deprecated": true, "description": "Legacy execution coinbase for proposed slots." },
+                          "proposerIndex": { "type": "string", "pattern": "^[0-9]+$", "description": "Assigned validator index as a decimal string, present for proposed and missed slots when known." },
+                          "proposerPubkey": { "type": "string", "description": "Assigned validator public key as 0x-prefixed hex, present when known." },
+                          "blockNumber": { "type": "string", "pattern": "^[0-9]+$", "description": "Execution block number as a decimal string, present only for proposed slots." },
                           "transactions": { "type": "integer" },
                           "gasUsed": { "type": "string" },
                           "blockHash": { "type": "string" }

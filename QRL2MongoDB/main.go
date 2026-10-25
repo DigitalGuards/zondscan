@@ -152,6 +152,10 @@ func main() {
 		failStartupAfterLease("Token collection readiness gate failed", err)
 		return
 	}
+	if err := synchroniser.InitializeSlotAssignments(); err != nil {
+		failStartupAfterLease("Slot assignment collection readiness gate failed", err)
+		return
+	}
 
 	// stopCh is closed when a termination signal is received. Sync() and other
 	// long-running loops should watch this channel so they can finish their current
@@ -232,6 +236,7 @@ func main() {
 	synchroniser.StartPendingTransactionSync(stopCh)
 	configs.Logger.Info("Starting stale balance reconciliation service...")
 	synchroniser.StartBalanceReconciliationJob(stopCh)
+	synchroniser.StartSlotAssignmentSync(stopCh)
 
 	// Phase 3a: start the off-chain NFT collection metadata fetcher.
 	// Background goroutine that polls contractCode for unfetched

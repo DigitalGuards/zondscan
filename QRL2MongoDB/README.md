@@ -153,7 +153,95 @@ pm2 start ./syncer --name "synchroniser"
 pm2 start ./syncer.exe --name "synchroniser"
 ```
 
+### Syncer lease recovery
+
+The syncer holds the exclusive `chain-indexer` lease in MongoDB's
+`syncer_leases` collection. A new generation requires a release acknowledgement.
+Expiry alone leaves the lease held because a suspended process could resume
+and continue writing.
+
+New owners use the format
+`pid-<pid>-<random>;machine=<sha256-prefix>;boot=<boot-id>`. The machine field
+contains the first 32 hexadecimal characters of the SHA-256 digest of the
+trimmed `/etc/machine-id`; the boot field comes from
+`/proc/sys/kernel/random/boot_id`. Both values must be readable and valid.
+Otherwise, the owner retains the `pid-<pid>-<random>` format and recovery
+requires an operator. Each machine must have a unique machine ID.
+
+After a refused acquisition, the syncer reads the lease once. It automatically
+acknowledges an expired lease when the recorded machine identity matches its
+own and the recorded boot identity differs from the current boot. This proves
+that the old process belonged to a previous boot of the same machine. MongoDB
+server time determines expiry. The acknowledgement matches the exact owner and
+generation and checks expiry again, then the syncer attempts normal acquisition
+once. A log entry records the old owner, generation, and reboot reason. The
+existing acquisition filter keeps concurrent syncers from both taking the lease.
+
+Old-format or unknown owners, a different machine, the same boot, an unexpired
+lease, unavailable local identity, and recovery read or update errors retain
+the existing lease-held error. An unexpired lease can become eligible after
+expiry on a subsequent startup. Other cases require operator recovery after
+proving that the old process cannot execute again. A same-boot process crash
+requires that manual proof.
+
+To acknowledge an expired lease manually, inspect its exact `owner` and
+`generation` in `syncer_leases`, establish the compute fence, and run:
+
+```bash
+go run ./cmd/recover-syncer-lease \
+  --owner '<inspected-owner>' \
+  --generation '<inspected-generation>' \
+  --compute-fenced
+```
+
+The operator command supports every owner format and machine identity. It
+requires an expired lease and an exact owner/generation match; a changed lease
+must be inspected again.
+
 ## Key Components
+
+### Finalized slot proposer assignments
+
+The leased syncer writes `slotAssignments` documents with numeric `epoch` and
+`slot`, decimal-string `validatorIndex`, and `0x`-prefixed hex `pubkey`. The
+`slot_unique` index enforces one assignment per slot. An epoch index supports
+the API lookup. This chain has 8 slots per epoch and 60 seconds per slot.
+
+On first start, the worker fetches beacon genesis time and saves it in
+`sync_state` under `_id: "slot_assignments"`. It starts its `nextEpoch` cursor
+at zero and checks epochs in ascending order. Only explicit unavailable-state
+responses from the historical duty sources advance an unavailable epoch;
+transport failures, rate limits, invalid responses, and incomplete duty sets
+keep the cursor for retry. `firstAvailableEpoch` records the earliest complete
+duty set and `unavailableEpochs` counts skipped unavailable epochs. On the node
+checked for this change, both APIs served historical epochs including epoch
+zero. Slot zero has no proposer duty, so its stored validator fields are empty.
+
+The primary source is `/qrl/v1/validator/duties/proposer/{epoch}`. The fallback
+is `/qrl/v1alpha1/validators/assignments?epoch=N`, with pagination and pubkeys
+resolved through `/qrl/v1/beacon/states/head/validators/{index}`. Validator
+indices retain their pubkeys after exit. Every HTTP request shares a one-request
+per-second limit, a 10-second timeout, and an 8 MiB response cap. Pagination is
+limited to 100 pages of 100 validators. Each pass handles up to 16 epochs.
+
+The worker indexes duties through the finalized checkpoint epoch, inclusive,
+refreshes the checkpoint between batches, and polls every 30 seconds
+when caught up or retrying. It upserts the full validated duty set before saving
+`nextEpoch`. A restart replays an interrupted epoch safely. A node with pruned
+history can leave older slots with unknown proposers.
+
+Index creation, assignment writes, and cursor updates require the active
+`chain-indexer` lease and the existing chain mutation lock. Write deadlines end
+before lease expiry. The worker participates in shutdown cancellation and
+draining before the lease is released.
+
+The backend derives execution block slots from
+`(execution timestamp - beacon genesis time) / 60`, the timestamp relation
+enforced by consensus. Startup creates `slot_timestamp_ingestion_idx` on
+`blocks` for the eight slot timestamp lookups. This reads existing block rows
+without a block reindex. Start the updated syncer before serving the updated
+epoch endpoint so the beacon slot clock is available. Proposer fields appear
+progressively as backfill advances; block mapping works once the clock is saved.
 
 ### Synchroniser
 - Core component that manages the blockchain synchronization process

@@ -2,8 +2,6 @@ package configs
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -12,6 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.uber.org/zap"
 )
 
 const activeSyncerLeaseID = "chain-indexer"
@@ -27,15 +26,11 @@ type SyncerLease struct {
 	ExpiresAt  time.Time `bson:"expiresAt"`
 }
 
-func NewSyncerLeaseOwner() (string, error) {
-	random := make([]byte, 16)
-	if _, err := rand.Read(random); err != nil {
-		return "", fmt.Errorf("generate syncer lease owner: %w", err)
-	}
-	return fmt.Sprintf("pid-%d-%s", os.Getpid(), hex.EncodeToString(random)), nil
+func AcquireSyncerLease(ctx context.Context, owner string, ttl time.Duration) (SyncerLease, error) {
+	return acquireSyncerLease(ctx, owner, ttl, readSyncerLeaseIdentity(os.ReadFile))
 }
 
-func AcquireSyncerLease(ctx context.Context, owner string, ttl time.Duration) (SyncerLease, error) {
+func acquireSyncerLease(ctx context.Context, owner string, ttl time.Duration, current syncerLeaseIdentity) (SyncerLease, error) {
 	var lease SyncerLease
 	if SyncerLeasesCollection == nil || owner == "" || ttl < time.Millisecond {
 		return lease, fmt.Errorf("invalid syncer lease configuration")
@@ -43,6 +38,48 @@ func AcquireSyncerLease(ctx context.Context, owner string, ttl time.Duration) (S
 	if err := ensureSyncerLeaseDocument(ctx); err != nil {
 		return lease, err
 	}
+	lease, err := tryAcquireSyncerLease(ctx, owner, ttl)
+	if !errors.Is(err, ErrSyncerLeaseHeld) {
+		return lease, err
+	}
+
+	// Read one snapshot and evaluate expiry using MongoDB's clock. The exact
+	// owner/generation acknowledgement rechecks expiry if the row changes.
+	var previous struct {
+		SyncerLease `bson:",inline"`
+		Expired     bool `bson:"expired"`
+	}
+	readErr := SyncerLeasesCollection.FindOne(ctx,
+		bson.M{"_id": activeSyncerLeaseID},
+		options.FindOne().SetProjection(bson.M{
+			"owner":      1,
+			"generation": 1,
+			"expiresAt":  1,
+			"expired":    bson.M{"$lte": bson.A{"$expiresAt", "$$NOW"}},
+		}),
+	).Decode(&previous)
+	if readErr != nil || parseSyncerLeaseOwner(owner) != current ||
+		!canRecoverSyncerLeaseAfterReboot(previous.SyncerLease, previous.Expired, current) {
+		return SyncerLease{}, err
+	}
+	if acknowledgeErr := AcknowledgeExpiredSyncerLeaseAfterComputeFence(ctx, previous.SyncerLease); acknowledgeErr != nil {
+		return SyncerLease{}, err
+	}
+	Logger.Info("Acknowledged expired syncer lease after reboot",
+		zap.String("owner", previous.Owner),
+		zap.Int64("generation", previous.Generation),
+		zap.String("reason", "same machine with a different boot identity"))
+	return tryAcquireSyncerLease(ctx, owner, ttl)
+}
+
+func canRecoverSyncerLeaseAfterReboot(previous SyncerLease, expired bool, current syncerLeaseIdentity) bool {
+	old := parseSyncerLeaseOwner(previous.Owner)
+	return expired && previous.Generation > 0 && current.known() && old.known() &&
+		old.machineID == current.machineID && old.bootID != current.bootID
+}
+
+func tryAcquireSyncerLease(ctx context.Context, owner string, ttl time.Duration) (SyncerLease, error) {
+	var lease SyncerLease
 	err := SyncerLeasesCollection.FindOneAndUpdate(
 		ctx,
 		syncerLeaseAcquireFilter(owner),
@@ -174,9 +211,9 @@ func AcknowledgeExpiredSyncerLeaseAfterComputeFence(
 // row or after the prior owner recorded a clean release. Expiry alone is not
 // sufficient: a suspended process can resume after its TTL and continue a
 // Mongo mutation that began while it still owned the lease. Requiring clean
-// release prevents automatic split-brain takeover. Crash recovery therefore
-// requires operators to compute-fence the old process before acknowledging a
-// release explicitly.
+// release prevents automatic split-brain takeover. Recovery requires proof
+// that the old process cannot execute: a different boot on this machine or
+// an explicit operator acknowledgement after compute fencing.
 func syncerLeaseAcquireFilter(_ string) bson.M {
 	return bson.M{
 		"_id": activeSyncerLeaseID,

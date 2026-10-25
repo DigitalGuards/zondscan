@@ -33,6 +33,7 @@ const (
 	SYNCER_LEASES_COLLECTION                   = "syncer_leases"
 	BALANCE_RECONCILIATIONS_COLLECTION         = "balance_reconciliations"
 	TOKEN_EVENT_DEAD_LETTERS_COLLECTION        = "tokenEventDeadLetters"
+	SLOT_ASSIGNMENTS_COLLECTION                = "slotAssignments"
 )
 
 // API and configuration constants
@@ -61,6 +62,7 @@ var (
 	PriceHistoryCollections                 *mongo.Collection
 	SyncerLeasesCollection                  *mongo.Collection
 	TokenEventDeadLettersCollection         *mongo.Collection
+	SlotAssignmentsCollection               *mongo.Collection
 )
 
 // bindCollections populates the package-level collection handles above.
@@ -82,6 +84,7 @@ func bindCollections(client *mongo.Client) {
 	PriceHistoryCollections = GetCollection(client, PRICE_HISTORY_COLLECTION)
 	SyncerLeasesCollection = GetCollection(client, SYNCER_LEASES_COLLECTION)
 	TokenEventDeadLettersCollection = GetCollection(client, TOKEN_EVENT_DEAD_LETTERS_COLLECTION)
+	SlotAssignmentsCollection = GetCollection(client, SLOT_ASSIGNMENTS_COLLECTION)
 }
 
 // Global logger instance - initialized once and used throughout the application

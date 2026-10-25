@@ -3,18 +3,12 @@
 import { isRecord } from '../../lib/guards';
 
 import TimeDisplay from '../../components/TimeDisplay';
-import AddressText from '../../components/AddressText';
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
 import config from '../../../config';
-import {
-  formatNumberWithCommas,
-  truncateHash,
-  formatAddress,
-  formatStaked,
-} from '../../lib/helpers';
+import { formatNumberWithCommas, truncateHash, formatStaked } from '../../lib/helpers';
 import SearchBar from '../../components/SearchBar';
 import StatusBadge from '../../components/StatusBadge';
 
@@ -24,7 +18,9 @@ interface EpochSlot {
   slot: number;
   status: string;
   timestamp?: string;
-  proposer?: string;
+  proposerIndex?: string;
+  proposerPubkey?: string;
+  blockNumber?: string;
   transactions: number;
   gasUsed?: string;
   blockHash?: string;
@@ -63,10 +59,66 @@ function formatGasUsed(hex: string): string {
   return formatNumberWithCommas(val.toString());
 }
 
-// The execution coinbase is always the zero address on this network, so
-// linking it as "proposer" would be misleading. Render a dash for it until
-// proposer-index enrichment lands (the column stays so it can slot in).
-const ZERO_ADDRESS = 'Q' + '0'.repeat(128);
+export function EpochSlotRow({ slot }: { slot: EpochSlot }): JSX.Element {
+  const isProposed = slot.status === 'proposed';
+  const timestamp = isProposed ? parseHex(slot.timestamp || '0') : 0;
+  const blockHref = isProposed && slot.blockNumber ? `/block/${slot.blockNumber}` : null;
+  const proposerIndex = /^\d+$/.test(slot.proposerIndex || '') ? slot.proposerIndex : null;
+
+  return (
+    <tr className="border-b border-border last:border-b-0 hover:bg-surface transition-colors">
+      <td className="px-4 py-2 tabular-nums">
+        {blockHref ? (
+          <Link
+            href={blockHref}
+            className="text-accent hover:text-accent-hover hover:underline font-medium"
+          >
+            {formatNumberWithCommas(slot.slot.toString())}
+          </Link>
+        ) : (
+          <span className="text-text-muted">{formatNumberWithCommas(slot.slot.toString())}</span>
+        )}
+      </td>
+      <td className="px-4 py-2 hidden lg:table-cell">
+        {blockHref && slot.blockHash ? (
+          <Link
+            href={blockHref}
+            className="text-text-secondary hover:text-accent hover:underline font-mono text-xs transition-colors"
+            title={slot.blockHash}
+          >
+            {truncateHash(slot.blockHash, 10, 6)}
+          </Link>
+        ) : (
+          <span className="text-text-muted">…</span>
+        )}
+      </td>
+      <td className="px-4 py-2">
+        <StatusBadge status={slot.status} />
+      </td>
+      <td className="px-4 py-2 text-text-secondary tabular-nums">
+        {isProposed ? <TimeDisplay timestamp={timestamp} relative /> : '…'}
+      </td>
+      <td className="px-4 py-2 hidden sm:table-cell">
+        {proposerIndex ? (
+          <Link
+            href={`/validators/${proposerIndex}`}
+            className="text-text-secondary hover:text-accent hover:underline font-mono text-xs transition-colors"
+          >
+            {formatNumberWithCommas(proposerIndex)}
+          </Link>
+        ) : (
+          <span className="text-text-muted">-</span>
+        )}
+      </td>
+      <td className="px-4 py-2 text-text-secondary tabular-nums">
+        {isProposed ? slot.transactions : '…'}
+      </td>
+      <td className="px-4 py-2 text-text-secondary tabular-nums hidden md:table-cell">
+        {isProposed && slot.gasUsed ? formatGasUsed(slot.gasUsed) : '…'}
+      </td>
+    </tr>
+  );
+}
 
 // ── Summary Row ──────────────────────────────────────────────────────────────
 
@@ -102,7 +154,7 @@ export default function EpochDetailClient({ epochId }: { epochId: string }): JSX
         setError(
           isRecord(errorData) && typeof errorData.error === 'string' && errorData.error
             ? errorData.error
-            : 'Failed to load epoch data'
+            : 'Failed to load epoch data',
         );
       } finally {
         setLoading(false);
@@ -263,72 +315,9 @@ export default function EpochDetailClient({ epochId }: { epochId: string }): JSX
                   </tr>
                 </thead>
                 <tbody>
-                  {data.blocks.map((slot) => {
-                    const isProposed = slot.status === 'proposed';
-                    const timestamp = isProposed ? parseHex(slot.timestamp || '0') : 0;
-                    const proposer = isProposed ? formatAddress(slot.proposer || '') : '';
-
-                    return (
-                      <tr
-                        key={slot.slot}
-                        className="border-b border-border last:border-b-0 hover:bg-surface transition-colors"
-                      >
-                        <td className="px-4 py-2 tabular-nums">
-                          {isProposed ? (
-                            <Link
-                              href={`/block/${slot.slot}`}
-                              className="text-accent hover:text-accent-hover hover:underline font-medium"
-                            >
-                              {formatNumberWithCommas(slot.slot.toString())}
-                            </Link>
-                          ) : (
-                            <span className="text-text-muted">
-                              {formatNumberWithCommas(slot.slot.toString())}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2 hidden lg:table-cell">
-                          {isProposed && slot.blockHash ? (
-                            <Link
-                              href={`/block/${slot.slot}`}
-                              className="text-text-secondary hover:text-accent hover:underline font-mono text-xs transition-colors"
-                              title={slot.blockHash}
-                            >
-                              {truncateHash(slot.blockHash, 10, 6)}
-                            </Link>
-                          ) : (
-                            <span className="text-text-muted">…</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2">
-                          <StatusBadge status={slot.status} />
-                        </td>
-                        <td className="px-4 py-2 text-text-secondary tabular-nums">
-                          {isProposed ? <TimeDisplay timestamp={timestamp} relative /> : '…'}
-                        </td>
-                        <td className="px-4 py-2 hidden sm:table-cell">
-                          {isProposed && proposer && proposer !== ZERO_ADDRESS ? (
-                            <Link
-                              href={`/address/${proposer}`}
-                              className="text-text-secondary hover:text-accent hover:underline font-mono text-xs transition-colors"
-                            >
-                              <AddressText address={proposer} />
-                            </Link>
-                          ) : isProposed ? (
-                            <span className="text-text-muted">-</span>
-                          ) : (
-                            <span className="text-text-muted">…</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2 text-text-secondary tabular-nums">
-                          {isProposed ? slot.transactions : '…'}
-                        </td>
-                        <td className="px-4 py-2 text-text-secondary tabular-nums hidden md:table-cell">
-                          {isProposed && slot.gasUsed ? formatGasUsed(slot.gasUsed) : '…'}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {data.blocks.map((slot) => (
+                    <EpochSlotRow key={slot.slot} slot={slot} />
+                  ))}
                 </tbody>
               </table>
             </div>
