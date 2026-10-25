@@ -52,9 +52,11 @@ func handleValidators(c *gin.Context) {
 }
 
 // handleEpochByID serves GET /epoch/:id, the epoch detail endpoint.
+var getEpochDetail = db.GetEpochDetail
+
 func handleEpochByID(c *gin.Context) {
 	epochId := c.Param("id")
-	epochDetail, err := db.GetEpochDetail(epochId)
+	epochDetail, err := getEpochDetail(epochId)
 	if err != nil {
 		if strings.Contains(err.Error(), "not yet occurred") || strings.Contains(err.Error(), "invalid epoch") {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
