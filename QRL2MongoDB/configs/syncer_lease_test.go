@@ -1,6 +1,7 @@
 package configs
 
 import (
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -74,5 +75,65 @@ func TestNewSyncerLeaseOwnerIsUniqueAndNonEmpty(t *testing.T) {
 	}
 	if first == "" || second == "" || first == second {
 		t.Fatalf("lease owners = %q and %q", first, second)
+	}
+	current := readSyncerLeaseIdentity(os.ReadFile)
+	if parseSyncerLeaseOwner(first) != current || parseSyncerLeaseOwner(second) != current {
+		t.Fatal("generated owners must include the available local identity")
+	}
+}
+
+func TestCanRecoverSyncerLeaseAfterReboot(t *testing.T) {
+	current := syncerLeaseIdentity{machineID: testSyncerMachineID, bootID: testSyncerBootID}
+	previous := SyncerLease{
+		Owner:      testSyncerOldOwner + ";machine=" + testSyncerMachineID + ";boot=" + testSyncerOldBootID,
+		Generation: 7,
+	}
+	tests := []struct {
+		name     string
+		previous SyncerLease
+		expired  bool
+		current  syncerLeaseIdentity
+		want     bool
+	}{
+		{name: "same machine earlier boot expired", previous: previous, expired: true, current: current, want: true},
+		{name: "before expiry", previous: previous, current: current},
+		{name: "unknown current identity", previous: previous, expired: true},
+		{name: "missing current machine", previous: previous, expired: true, current: syncerLeaseIdentity{bootID: testSyncerBootID}},
+		{name: "missing current boot", previous: previous, expired: true, current: syncerLeaseIdentity{machineID: testSyncerMachineID}},
+		{
+			name: "different machine", previous: previous, expired: true,
+			current: syncerLeaseIdentity{machineID: "22222222222222222222222222222222", bootID: testSyncerBootID},
+		},
+		{
+			name: "same boot", previous: previous, expired: true,
+			current: syncerLeaseIdentity{machineID: testSyncerMachineID, bootID: testSyncerOldBootID},
+		},
+		{
+			name: "old format", previous: SyncerLease{Owner: testSyncerOldOwner, Generation: 7},
+			expired: true, current: current,
+		},
+		{
+			name: "unknown owner", previous: SyncerLease{Owner: "unknown", Generation: 7},
+			expired: true, current: current,
+		},
+		{
+			name: "missing old boot", previous: SyncerLease{Owner: testSyncerOldOwner + ";machine=" + testSyncerMachineID, Generation: 7},
+			expired: true, current: current,
+		},
+		{
+			name: "missing old machine", previous: SyncerLease{Owner: testSyncerOldOwner + ";boot=" + testSyncerOldBootID, Generation: 7},
+			expired: true, current: current,
+		},
+		{
+			name: "invalid generation", previous: SyncerLease{Owner: previous.Owner},
+			expired: true, current: current,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := canRecoverSyncerLeaseAfterReboot(test.previous, test.expired, test.current); got != test.want {
+				t.Fatalf("reboot recovery decision = %t, want %t", got, test.want)
+			}
+		})
 	}
 }
