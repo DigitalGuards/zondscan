@@ -58,9 +58,9 @@ export interface EpochItem {
   epoch: string;
   timestamp: number;
   status: string;
-  validatorsCount: number;
-  activeCount: number;
-  totalStaked: string;
+  validatorsCount: number | null;
+  activeCount: number | null;
+  totalStaked: string | null;
 }
 
 export interface EpochsData {
@@ -76,9 +76,9 @@ function isEpochItem(value: unknown): value is EpochItem {
     typeof value.epoch === 'string' &&
     typeof value.timestamp === 'number' &&
     typeof value.status === 'string' &&
-    typeof value.validatorsCount === 'number' &&
-    typeof value.activeCount === 'number' &&
-    typeof value.totalStaked === 'string'
+    (value.validatorsCount === null || typeof value.validatorsCount === 'number') &&
+    (value.activeCount === null || typeof value.activeCount === 'number') &&
+    (value.totalStaked === null || typeof value.totalStaked === 'string')
   );
 }
 

@@ -790,8 +790,8 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "etaSec": { "type": "number", "description": "Estimated seconds until inclusion, at minimum one average block time." },
-                    "avgBlockTimeSec": { "type": "number" },
+                    "etaSec": { "type": "number", "nullable": true, "description": "Estimated seconds until inclusion, at minimum one average block time. Null when block timing is unavailable." },
+                    "avgBlockTimeSec": { "type": "number", "nullable": true, "description": "Mean interval between recent blocks, falling back to the stored seconds per slot. Null when both are unavailable." },
                     "avgGasUsedHex": { "type": "string", "description": "0x-prefixed hex." },
                     "pendingCount": { "type": "integer" },
                     "gasAheadHex": { "type": "string", "description": "0x-prefixed hex sum of gas queued at a higher or equal gas price." },
@@ -1637,6 +1637,7 @@
                         "properties": {
                           "_id": { "type": "string" },
                           "epoch": { "type": "string" },
+                          "source": { "type": "string", "const": "beacon-state", "description": "Only first-slot beacon-state summaries are returned, ordered by numeric epoch newest first." },
                           "timestamp": { "type": "integer" },
                           "validatorsCount": { "type": "integer" },
                           "activeCount": { "type": "integer" },
@@ -1736,7 +1737,7 @@
         "tags": ["Validators & Epochs"],
         "operationId": "getEpochs",
         "summary": "Paginated epoch list",
-        "description": "Beacon chain epochs, newest first, with per-epoch validator counts and finality status.",
+        "description": "Beacon chain epochs with verified first-slot beacon-state summaries, sorted by numeric epoch newest first. Legacy unmarked records are excluded from both results and total. The list grows as finalized history is indexed.",
         "parameters": [
           { "name": "page", "in": "query", "description": "Page number, starting at 1.", "schema": { "type": "integer", "default": 1, "minimum": 1 } },
           { "name": "limit", "in": "query", "description": "Items per page. Capped at 100.", "schema": { "type": "integer", "default": 15, "maximum": 100 } }
@@ -1780,7 +1781,7 @@
         "tags": ["Validators & Epochs"],
         "operationId": "getCurrentEpoch",
         "summary": "Current epoch information",
-        "description": "Head, finalized, and justified epoch state plus slot timing for the beacon chain.",
+        "description": "Head slot and epoch from the beacon, with finality checkpoints and authoritative chain timing from sync_state.chain_timing. The endpoint requires the syncer to have initialized timing.",
         "responses": {
           "200": {
             "description": "Current epoch state.",
@@ -1793,8 +1794,9 @@
                     "headSlot": { "type": "string" },
                     "finalizedEpoch": { "type": "string" },
                     "justifiedEpoch": { "type": "string" },
-                    "slotsPerEpoch": { "type": "integer" },
-                    "secondsPerSlot": { "type": "integer" },
+                    "slotsPerEpoch": { "type": "integer", "minimum": 1 },
+                    "secondsPerSlot": { "type": "integer", "minimum": 1 },
+                    "genesisTime": { "type": "integer", "description": "Beacon genesis Unix timestamp in seconds." },
                     "slotInEpoch": { "type": "integer" },
                     "timeToNextEpoch": { "type": "integer", "description": "Seconds until the next epoch." },
                     "updatedAt": { "type": "integer" }
@@ -1812,7 +1814,7 @@
         "tags": ["Validators & Epochs"],
         "operationId": "getEpoch",
         "summary": "Epoch detail",
-        "description": "Eight slots per epoch, each 60 seconds: proposed and missed slots, proposer duties, and validator statistics. Duties are filled as finalized history is indexed. Slot zero and unavailable duties have unknown proposers. Blocks are matched using the slot timestamp and beacon genesis time.",
+        "description": "Slots and timestamps use the chain timing returned by /api/epoch. Blocks are matched by their consensus timestamp. Validator summaries come from the first slot of each finalized epoch. Missing or legacy unmarked summaries have summaryAvailable=false and null counts and totalStaked; the epoch timestamp is still calculated from the beacon clock. Duties fill independently, with unknown proposers for slot zero and unavailable duties.",
         "parameters": [
           { "name": "id", "in": "path", "required": true, "description": "Epoch number as a decimal integer.", "schema": { "type": "string" } }
         ],
@@ -1827,12 +1829,13 @@
                     "epoch": { "type": "string" },
                     "timestamp": { "type": "integer" },
                     "status": { "type": "string" },
-                    "validatorsCount": { "type": "integer" },
-                    "activeCount": { "type": "integer" },
-                    "pendingCount": { "type": "integer" },
-                    "exitedCount": { "type": "integer" },
-                    "slashedCount": { "type": "integer" },
-                    "totalStaked": { "type": "string" },
+                    "validatorsCount": { "type": ["integer", "null"] },
+                    "activeCount": { "type": ["integer", "null"] },
+                    "pendingCount": { "type": ["integer", "null"] },
+                    "exitedCount": { "type": ["integer", "null"] },
+                    "slashedCount": { "type": ["integer", "null"] },
+                    "totalStaked": { "type": ["string", "null"], "description": "Sum of effective balances in Shor, or null while the summary is unavailable." },
+                    "summaryAvailable": { "type": "boolean" },
                     "startSlot": { "type": "integer" },
                     "endSlot": { "type": "integer" },
                     "blocks": {
@@ -1894,7 +1897,7 @@
                     "qrlUsdPrice": { "type": "number" },
                     "avgGasUsedHex": { "type": "string" },
                     "avgGasLimitHex": { "type": "string" },
-                    "avgBlockTimeSec": { "type": "number" },
+                    "avgBlockTimeSec": { "type": "number", "nullable": true, "description": "Mean interval between recent blocks, falling back to the stored seconds per slot. Null when both are unavailable." },
                     "pendingCount": { "type": "integer" },
                     "lastBlockNumberHex": { "type": "string" },
                     "lastGasUsedHex": { "type": "string" },

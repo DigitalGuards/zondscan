@@ -4,11 +4,12 @@ import { isRecord } from '../../lib/guards';
 
 import TimeDisplay from '../../components/TimeDisplay';
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import axios from 'axios';
 import config from '../../../config';
-import { formatNumberWithCommas, truncateHash, formatStaked } from '../../lib/helpers';
+import { formatNumberWithCommas, truncateHash, formatSummaryCount, formatSummaryStake } from '../../lib/helpers';
 import SearchBar from '../../components/SearchBar';
 import StatusBadge from '../../components/StatusBadge';
 
@@ -30,12 +31,12 @@ interface EpochDetail {
   epoch: string;
   timestamp: number;
   status: string;
-  validatorsCount: number;
-  activeCount: number;
-  pendingCount: number;
-  exitedCount: number;
-  slashedCount: number;
-  totalStaked: string;
+  validatorsCount: number | null;
+  activeCount: number | null;
+  pendingCount: number | null;
+  exitedCount: number | null;
+  slashedCount: number | null;
+  totalStaked: string | null;
   startSlot: number;
   endSlot: number;
   blocks: EpochSlot[];
@@ -133,35 +134,33 @@ function SummaryRow({ label, children }: { label: string; children: React.ReactN
   );
 }
 
+export function EpochValidatorSummary({ data }: { data: Pick<EpochDetail, 'validatorsCount' | 'activeCount' | 'pendingCount' | 'exitedCount' | 'slashedCount' | 'totalStaked'> }): JSX.Element {
+  return <>
+    <SummaryRow label="Validators">{formatSummaryCount(data.validatorsCount)}</SummaryRow>
+    <SummaryRow label="Active">{formatSummaryCount(data.activeCount)}</SummaryRow>
+    <SummaryRow label="Pending">{formatSummaryCount(data.pendingCount)}</SummaryRow>
+    <SummaryRow label="Exited">{formatSummaryCount(data.exitedCount)}</SummaryRow>
+    <SummaryRow label="Slashed">{formatSummaryCount(data.slashedCount)}</SummaryRow>
+    <SummaryRow label="Total Staked">{formatSummaryStake(data.totalStaked)}</SummaryRow>
+  </>;
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function EpochDetailClient({ epochId }: { epochId: string }): JSX.Element {
-  const [data, setData] = useState<EpochDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
+  const { data, isPending: loading, error: queryError } = useQuery({
+    queryKey: ['epoch-detail', epochId],
+    queryFn: async ({ signal }): Promise<EpochDetail> => {
+      const res = await axios.get<EpochDetail>(`${config.handlerUrl}/epoch/${epochId}`, { signal, timeout: 15000 });
+      return res.data;
+    },
+    refetchInterval: 30000,
+    refetchIntervalInBackground: false,
+    retry: 2,
+  });
+  const errorData: unknown = axios.isAxiosError(queryError) ? queryError.response?.data : undefined;
+  const error = queryError ? (isRecord(errorData) && typeof errorData.error === 'string' ? errorData.error : 'Failed to load epoch data') : null;
   const epochNum = parseInt(epochId);
-
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        setLoading(true);
-        setError(null);
-        const res = await axios.get(`${config.handlerUrl}/epoch/${epochId}`);
-        setData(res.data);
-      } catch (err: unknown) {
-        const errorData: unknown = axios.isAxiosError(err) ? err.response?.data : undefined;
-        setError(
-          isRecord(errorData) && typeof errorData.error === 'string' && errorData.error
-            ? errorData.error
-            : 'Failed to load epoch data',
-        );
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchData();
-  }, [epochId]);
 
   const headEpoch = data ? parseInt(data.headEpoch) : 0;
 
@@ -235,7 +234,7 @@ export default function EpochDetailClient({ epochId }: { epochId: string }): JSX
       )}
 
       {/* Content */}
-      {data && !loading && (
+      {data && (
         <>
           {/* Summary Panel */}
           <div className="card-simple overflow-hidden mb-6">
@@ -258,23 +257,10 @@ export default function EpochDetailClient({ epochId }: { epochId: string }): JSX
                     </span>
                   </span>
                 ) : (
-                  '…'
+                  '-'
                 )}
               </SummaryRow>
-              <SummaryRow label="Validators">
-                {formatNumberWithCommas(data.validatorsCount.toString())}
-              </SummaryRow>
-              <SummaryRow label="Active">
-                {formatNumberWithCommas(data.activeCount.toString())}
-              </SummaryRow>
-              {data.pendingCount > 0 && (
-                <SummaryRow label="Pending">{data.pendingCount}</SummaryRow>
-              )}
-              {data.exitedCount > 0 && <SummaryRow label="Exited">{data.exitedCount}</SummaryRow>}
-              {data.slashedCount > 0 && (
-                <SummaryRow label="Slashed">{data.slashedCount}</SummaryRow>
-              )}
-              <SummaryRow label="Total Staked">{formatStaked(data.totalStaked)}</SummaryRow>
+              <EpochValidatorSummary data={data} />
               <SummaryRow label="Slots">
                 {data.proposedCount + data.missedCount} ({data.proposedCount} Proposed
                 {data.missedCount > 0 ? `, ${data.missedCount} Missed` : ''})

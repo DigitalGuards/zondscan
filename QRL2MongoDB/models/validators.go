@@ -3,6 +3,7 @@ package models
 import (
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"strconv"
 )
 
@@ -72,6 +73,8 @@ type BeaconChainHeadResponse struct {
 type ValidatorHistoryRecord struct {
 	ID              string `bson:"_id,omitempty" json:"_id,omitempty"`
 	Epoch           string `bson:"epoch" json:"epoch"`
+	EpochInt        int64  `bson:"epochInt" json:"-"`
+	Source          string `bson:"source" json:"source"`
 	Timestamp       int64  `bson:"timestamp" json:"timestamp"`
 	ValidatorsCount int    `bson:"validatorsCount" json:"validatorsCount"`
 	ActiveCount     int    `bson:"activeCount" json:"activeCount"`
@@ -101,17 +104,67 @@ type ValidatorDocument struct {
 
 // GetValidatorStatus computes the validator status based on current epoch
 func GetValidatorStatus(activationEpoch, exitEpoch string, slashed bool, currentEpoch int64) string {
-	activation, _ := strconv.ParseInt(activationEpoch, 10, 64)
-	exit, _ := strconv.ParseInt(exitEpoch, 10, 64)
+	activation, _ := strconv.ParseUint(activationEpoch, 10, 64)
+	exit, _ := strconv.ParseUint(exitEpoch, 10, 64)
 
 	if slashed {
 		return "slashed"
 	}
-	if activation > currentEpoch {
+	if activation > uint64(currentEpoch) {
 		return "pending"
 	}
-	if exit <= currentEpoch {
+	if exit <= uint64(currentEpoch) {
 		return "exited"
 	}
 	return "active"
+}
+
+const BeaconStateHistorySource = "beacon-state"
+
+// StateValidator follows the v1 beacon state validators response.
+type StateValidator struct {
+	Index     string                `json:"index"`
+	Balance   string                `json:"balance"`
+	Status    string                `json:"status"`
+	Validator StateValidatorDetails `json:"validator"`
+}
+
+type StateValidatorDetails struct {
+	Pubkey                     string `json:"pubkey"`
+	WithdrawalRecipient        string `json:"withdrawal_recipient"`
+	EffectiveBalance           string `json:"effective_balance"`
+	Slashed                    bool   `json:"slashed"`
+	ActivationEligibilityEpoch string `json:"activation_eligibility_epoch"`
+	ActivationEpoch            string `json:"activation_epoch"`
+	ExitEpoch                  string `json:"exit_epoch"`
+	WithdrawableEpoch          string `json:"withdrawable_epoch"`
+}
+
+// SummaryStatus preserves the explorer's four exclusive status buckets.
+// Slashed validators occupy the slashed bucket throughout their lifecycle.
+func (v StateValidator) SummaryStatus() (string, error) {
+	for _, value := range []string{v.Index, v.Balance, v.Validator.EffectiveBalance,
+		v.Validator.ActivationEligibilityEpoch, v.Validator.ActivationEpoch,
+		v.Validator.ExitEpoch, v.Validator.WithdrawableEpoch} {
+		if _, err := strconv.ParseUint(value, 10, 64); err != nil {
+			return "", fmt.Errorf("invalid beacon validator numeric field")
+		}
+	}
+	var status string
+	switch v.Status {
+	case "pending_initialized", "pending_queued":
+		status = "pending"
+	case "active_ongoing", "active_exiting":
+		status = "active"
+	case "active_slashed", "exited_slashed":
+		status = "slashed"
+	case "exited_unslashed", "withdrawal_possible", "withdrawal_done":
+		status = "exited"
+	default:
+		return "", fmt.Errorf("invalid beacon validator status")
+	}
+	if v.Validator.Slashed {
+		status = "slashed"
+	}
+	return status, nil
 }

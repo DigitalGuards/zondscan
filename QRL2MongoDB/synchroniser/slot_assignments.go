@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"QRL2MongoDB/configs"
@@ -14,13 +13,11 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.uber.org/zap"
 )
 
 const slotAssignmentBatchSize = 16
 
 type slotAssignmentSource interface {
-	GenesisTime(context.Context) (int64, error)
 	FinalizedEpoch(context.Context) (int64, error)
 	Assignments(context.Context, int64) ([]models.SlotAssignment, error)
 }
@@ -32,21 +29,21 @@ type slotAssignmentStore interface {
 
 // walkSlotAssignments makes bounded progress and reloads its durable cursor on
 // every pass. A failed epoch is replayed after restart, including partial writes.
-func walkSlotAssignments(ctx context.Context, source slotAssignmentSource, store slotAssignmentStore) (bool, error) {
+func walkSlotAssignments(ctx context.Context, source slotAssignmentSource, store slotAssignmentStore, timing models.ChainTiming) (bool, error) {
+	if err := timing.Validate(); err != nil {
+		return false, err
+	}
 	state, exists, err := store.Load(ctx)
 	if err != nil {
 		return false, err
 	}
 	if !exists {
-		state.GenesisTime, err = source.GenesisTime(ctx)
-		if err != nil {
-			return false, err
-		}
+		state.GenesisTime = timing.GenesisTime
 		if err := store.Save(ctx, state, nil); err != nil {
 			return false, err
 		}
 	}
-	if state.GenesisTime <= 0 || state.NextEpoch < 0 {
+	if state.GenesisTime <= 0 || state.GenesisTime != timing.GenesisTime || state.NextEpoch < 0 {
 		return false, errors.New("invalid slot assignment cursor")
 	}
 	finalized, err := source.FinalizedEpoch(ctx)
@@ -65,7 +62,7 @@ func walkSlotAssignments(ctx context.Context, source slotAssignmentSource, store
 		} else if err != nil {
 			return false, fmt.Errorf("epoch %d: %w", epoch, err)
 		} else {
-			rows, err = rpc.ValidateSlotAssignments(epoch, rows)
+			rows, err = rpc.ValidateSlotAssignments(timing, epoch, rows)
 			if err != nil {
 				return false, fmt.Errorf("epoch %d: %w", epoch, err)
 			}
@@ -89,7 +86,7 @@ func slotAssignmentMutation(ctx context.Context, fn func(context.Context) error)
 	expiry := chainMutationLeaseExpiry.Load()
 	deadline := time.Unix(0, expiry).Add(-time.Second)
 	if expiry == 0 || !time.Now().Before(deadline) {
-		return errors.New("slot assignment writer requires an active chain-indexer lease")
+		return errors.New("beacon writer requires an active chain-indexer lease")
 	}
 	if cap := time.Now().Add(10 * time.Second); cap.Before(deadline) {
 		deadline = cap
@@ -160,32 +157,7 @@ func (mongoSlotAssignmentStore) Save(ctx context.Context, state models.SlotAssig
 // StartSlotAssignmentSync stays registered through cancellation and draining so
 // main can release the chain-indexer lease after this writer has stopped.
 func StartSlotAssignmentSync(stopCh <-chan struct{}) {
-	startBackgroundWorker(func() {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		go func() {
-			select {
-			case <-stopCh:
-				cancel()
-			case <-ctx.Done():
-			}
-		}()
-		client := rpc.NewSlotAssignmentClient(os.Getenv("BEACONCHAIN_API"))
-		for ctx.Err() == nil {
-			more, err := walkSlotAssignments(ctx, client, mongoSlotAssignmentStore{})
-			if err != nil && ctx.Err() == nil {
-				configs.Logger.Warn("Slot assignment sync will retry", zap.Error(err))
-			}
-			if err == nil && more {
-				continue
-			}
-			timer := time.NewTimer(30 * time.Second)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return
-			case <-timer.C:
-			}
-		}
+	chainClock.startWorker(stopCh, "Slot assignments", func(ctx context.Context) (bool, error) {
+		return walkSlotAssignments(ctx, chainClock.beacon, mongoSlotAssignmentStore{}, chainClock.timing)
 	})
 }

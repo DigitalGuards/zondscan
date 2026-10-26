@@ -16,11 +16,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-const (
-	SlotsPerEpoch  = 8
-	SecondsPerSlot = 60
-)
-
 // ReturnValidators returns all validators with computed status and totals.
 // It queries the per-document validators collection directly instead of loading
 // a single mega-document and iterating in Go.
@@ -28,12 +23,11 @@ func ReturnValidators(pageToken string) (*models.ValidatorResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Get current epoch from latest block once; reuse for all validators.
-	latestBlock, err := GetLatestBlockFromSyncState()
+	// Read the beacon head once for validator lifecycle calculations.
+	currentEpoch, err := currentBeaconEpoch(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get latest block: %v", err)
+		return nil, fmt.Errorf("failed to get beacon epoch: %v", err)
 	}
-	currentEpoch := HexToInt(latestBlock) / 128
 
 	findOpts := options.Find().SetSort(bson.D{{Key: "_id", Value: 1}})
 
@@ -102,13 +96,7 @@ func CountValidators() (int64, error) {
 	return count, nil
 }
 
-// HexToInt converts a hex string (with or without 0x prefix) to int64.
-// Parsing delegates to hexutil.ParseInt64 (unsigned-first, so block
-// numbers near 2^63 don't silently zero the epoch math downstream); the
-// sentinel semantics stay here: malformed input yields 0, while values
-// that fit uint64 but overflow int64 (hexutil.ErrRange) are clamped to
-// math.MaxInt64 so the result stays usable for the /128 epoch division
-// callers perform.
+// HexToInt preserves the legacy numeric parser's range and error semantics.
 func HexToInt(hexStr string) int64 {
 	num, err := hexutil.ParseInt64(hexStr)
 	if err != nil && !errors.Is(err, hexutil.ErrRange) {
@@ -153,27 +141,24 @@ func GetEpochInfo() (*models.EpochInfoResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	var epochInfo models.EpochInfo
-	err := configs.EpochInfoCollection.FindOne(ctx, bson.M{"_id": "current"}).Decode(&epochInfo)
+	epochInfo, timing, err := getBeaconEpochInfo(ctx)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("epoch info not found")
-		}
-		return nil, fmt.Errorf("failed to get epoch info: %v", err)
+		return nil, err
 	}
 
 	headSlot := parseEpoch(epochInfo.HeadSlot)
-	slotInEpoch := headSlot % SlotsPerEpoch
-	slotsRemaining := SlotsPerEpoch - slotInEpoch
-	timeToNextEpoch := slotsRemaining * SecondsPerSlot
+	slotInEpoch := headSlot % timing.SlotsPerEpoch
+	slotsRemaining := timing.SlotsPerEpoch - slotInEpoch
+	timeToNextEpoch := slotsRemaining * timing.SecondsPerSlot
 
 	return &models.EpochInfoResponse{
+		GenesisTime:     timing.GenesisTime,
 		HeadEpoch:       epochInfo.HeadEpoch,
 		HeadSlot:        epochInfo.HeadSlot,
 		FinalizedEpoch:  epochInfo.FinalizedEpoch,
 		JustifiedEpoch:  epochInfo.JustifiedEpoch,
-		SlotsPerEpoch:   SlotsPerEpoch,
-		SecondsPerSlot:  SecondsPerSlot,
+		SlotsPerEpoch:   timing.SlotsPerEpoch,
+		SecondsPerSlot:  timing.SecondsPerSlot,
 		SlotInEpoch:     slotInEpoch,
 		TimeToNextEpoch: timeToNextEpoch,
 		UpdatedAt:       epochInfo.UpdatedAt,
@@ -193,16 +178,16 @@ func GetValidatorHistory(limit int) (*models.ValidatorHistoryResponse, error) {
 	}
 
 	findOpts := options.Find().
-		SetSort(bson.D{{Key: "epoch", Value: -1}}).
+		SetSort(bson.D{{Key: "epochInt", Value: -1}}).
 		SetLimit(int64(limit))
 
-	cursor, err := configs.ValidatorHistoryCollection.Find(ctx, bson.M{}, findOpts)
+	cursor, err := configs.ValidatorHistoryCollection.Find(ctx, beaconHistoryFilter(), findOpts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get validator history: %v", err)
 	}
 	defer cursor.Close(ctx)
 
-	var history []models.ValidatorHistoryRecord
+	history := make([]models.ValidatorHistoryRecord, 0)
 	if err := cursor.All(ctx, &history); err != nil {
 		return nil, fmt.Errorf("failed to decode validator history: %v", err)
 	}
@@ -218,11 +203,10 @@ func GetValidatorByID(id string) (*models.ValidatorDetailResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	latestBlock, err := GetLatestBlockFromSyncState()
+	currentEpoch, err := currentBeaconEpoch(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get latest block: %v", err)
+		return nil, fmt.Errorf("failed to get beacon epoch: %v", err)
 	}
-	currentEpoch := HexToInt(latestBlock) / 128
 
 	// Try lookup by _id (index) first, then fall back to publicKeyHex.
 	filter := bson.M{"$or": []bson.M{
@@ -269,16 +253,16 @@ func GetEpochs(page, limit int) (*models.EpochsResponse, error) {
 	defer cancel()
 
 	// Get current epoch state for finalized/justified status
-	var epochInfo models.EpochInfo
-	err := configs.EpochInfoCollection.FindOne(ctx, bson.M{"_id": "current"}).Decode(&epochInfo)
+	epochInfo, _, err := getBeaconEpochInfo(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get epoch info: %v", err)
+		return nil, err
 	}
+
 	finalizedEpoch := parseEpoch(epochInfo.FinalizedEpoch)
 	justifiedEpoch := parseEpoch(epochInfo.JustifiedEpoch)
 
 	// Count total epoch records exactly for "total pages" pagination.
-	total, err := countDocumentsResilient(ctx, configs.ValidatorHistoryCollection)
+	total, err := configs.ValidatorHistoryCollection.CountDocuments(ctx, beaconHistoryFilter())
 	if err != nil {
 		return nil, fmt.Errorf("failed to count epochs: %v", err)
 	}
@@ -290,7 +274,7 @@ func GetEpochs(page, limit int) (*models.EpochsResponse, error) {
 		SetSkip(skip).
 		SetLimit(int64(limit))
 
-	cursor, err := configs.ValidatorHistoryCollection.Find(ctx, bson.M{}, findOpts)
+	cursor, err := configs.ValidatorHistoryCollection.Find(ctx, beaconHistoryFilter(), findOpts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query epochs: %v", err)
 	}
@@ -341,17 +325,15 @@ func GetEpochDetail(epochId string) (*models.EpochDetailResponse, error) {
 		return nil, fmt.Errorf("invalid epoch number: %v", err)
 	}
 
-	startSlot, endSlot, err := epochSlotBounds(epochNum)
+	epochInfo, timing, err := getBeaconEpochInfo(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	// Get epoch_info for chain head status
-	var epochInfo models.EpochInfo
-	err = configs.EpochInfoCollection.FindOne(ctx, bson.M{"_id": "current"}).Decode(&epochInfo)
+	startSlot, endSlot, err := timing.EpochSlots(epochNum)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get epoch info: %v", err)
+		return nil, err
 	}
+	epochId = strconv.FormatInt(epochNum, 10)
 
 	headEpoch := parseEpoch(epochInfo.HeadEpoch)
 	if epochNum > headEpoch {
@@ -372,33 +354,36 @@ func GetEpochDetail(epochId string) (*models.EpochDetailResponse, error) {
 
 	// Get validator_history record (may not exist for very recent epochs)
 	var historyRecord models.ValidatorHistoryRecord
-	_ = configs.ValidatorHistoryCollection.FindOne(ctx, bson.M{"epoch": epochId}).Decode(&historyRecord)
+	filter := beaconHistoryFilter()
+	filter["epoch"] = epochId
+	err = configs.ValidatorHistoryCollection.FindOne(ctx, filter).Decode(&historyRecord)
+	if err != nil && !errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, fmt.Errorf("read epoch history: %w", err)
+	}
 
-	blocks, proposedCount, err := getEpochSlots(ctx, epochNum)
+	blocks, proposedCount, err := getEpochSlots(ctx, epochNum, timing)
 	if err != nil {
 		return nil, err
 	}
 	missedCount := len(blocks) - proposedCount
 
-	return &models.EpochDetailResponse{
-		Epoch:           epochId,
-		Timestamp:       historyRecord.Timestamp,
-		Status:          status,
-		ValidatorsCount: historyRecord.ValidatorsCount,
-		ActiveCount:     historyRecord.ActiveCount,
-		PendingCount:    historyRecord.PendingCount,
-		ExitedCount:     historyRecord.ExitedCount,
-		SlashedCount:    historyRecord.SlashedCount,
-		TotalStaked:     historyRecord.TotalStaked,
-		StartSlot:       startSlot,
-		EndSlot:         endSlot,
-		Blocks:          blocks,
-		FinalizedEpoch:  epochInfo.FinalizedEpoch,
-		JustifiedEpoch:  epochInfo.JustifiedEpoch,
-		HeadEpoch:       epochInfo.HeadEpoch,
-		ProposedCount:   proposedCount,
-		MissedCount:     missedCount,
-	}, nil
+	timestamp, err := timing.EpochTimestamp(epochNum)
+	if err != nil {
+		return nil, err
+	}
+	result := &models.EpochDetailResponse{
+		Epoch: epochId, Timestamp: timestamp, Status: status,
+		StartSlot:      startSlot,
+		EndSlot:        endSlot,
+		Blocks:         blocks,
+		FinalizedEpoch: epochInfo.FinalizedEpoch,
+		JustifiedEpoch: epochInfo.JustifiedEpoch,
+		HeadEpoch:      epochInfo.HeadEpoch,
+		ProposedCount:  proposedCount,
+		MissedCount:    missedCount,
+	}
+	applyEpochSummary(result, historyRecord)
+	return result, nil
 }
 
 // GetValidatorStats returns aggregated validator statistics using a MongoDB aggregation
@@ -407,11 +392,10 @@ func GetValidatorStats() (*models.ValidatorStatsResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	latestBlock, err := GetLatestBlockFromSyncState()
+	currentEpoch, err := currentBeaconEpoch(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get latest block: %v", err)
+		return nil, fmt.Errorf("failed to get beacon epoch: %v", err)
 	}
-	currentEpoch := HexToInt(latestBlock) / 128
 
 	// Check whether the collection has any documents using an exact count;
 	// metadata estimates can be stale for populated collections.
@@ -433,7 +417,6 @@ func GetValidatorStats() (*models.ValidatorStatsResponse, error) {
 	// the whole thing is one cursor over the collection instead of two passes.
 	// $sum needs numeric input and balances are decimal strings, so the sum
 	// branch converts with $toLong inside the pipeline.
-	currentEpochStr := fmt.Sprintf("%d", currentEpoch)
 
 	pipeline := mongo.Pipeline{
 		// Add a computed "status" field using the same rules as getValidatorStatus.
@@ -448,13 +431,13 @@ func GetValidatorStats() (*models.ValidatorStatsResponse, error) {
 						},
 						{
 							// pending: activationEpoch > currentEpoch
-							"case": bson.M{"$gt": []interface{}{"$activationEpoch", currentEpochStr}},
+							"case": bson.M{"$gt": []interface{}{bson.M{"$toDecimal": "$activationEpoch"}, currentEpoch}},
 							"then": "pending",
 						},
 						{
 							// exited: exitEpoch <= currentEpoch AND exitEpoch != FAR_FUTURE_EPOCH
 							"case": bson.M{"$and": []bson.M{
-								{"$lte": []interface{}{"$exitEpoch", currentEpochStr}},
+								{"$lte": []interface{}{bson.M{"$toDecimal": "$exitEpoch"}, currentEpoch}},
 								{"$ne": []interface{}{"$exitEpoch", FAR_FUTURE_EPOCH}},
 							}},
 							"then": "exited",
@@ -532,4 +515,19 @@ func GetValidatorStats() (*models.ValidatorStatsResponse, error) {
 		TotalStaked:     fmt.Sprintf("%d", totalStaked),
 		CurrentEpoch:    fmt.Sprintf("%d", currentEpoch),
 	}, nil
+}
+
+func beaconHistoryFilter() bson.M { return bson.M{"source": models.BeaconStateHistorySource} }
+
+func applyEpochSummary(result *models.EpochDetailResponse, record models.ValidatorHistoryRecord) {
+	if record.Source != models.BeaconStateHistorySource {
+		return
+	}
+	result.SummaryAvailable = true
+	result.ValidatorsCount = &record.ValidatorsCount
+	result.ActiveCount = &record.ActiveCount
+	result.PendingCount = &record.PendingCount
+	result.ExitedCount = &record.ExitedCount
+	result.SlashedCount = &record.SlashedCount
+	result.TotalStaked = &record.TotalStaked
 }

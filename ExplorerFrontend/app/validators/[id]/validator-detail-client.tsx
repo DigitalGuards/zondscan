@@ -1,5 +1,6 @@
 'use client';
 
+import { useChainTiming } from '../../lib/useChainTiming';
 import { isRecord } from '../../lib/guards';
 
 import { useState, useEffect } from 'react';
@@ -41,6 +42,7 @@ const FAR_FUTURE_EPOCH = '18446744073709551615';
 
 export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps) {
   const router = useRouter();
+  const { data: timing } = useChainTiming();
   const [validator, setValidator] = useState<ValidatorDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -182,7 +184,7 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
         <div className="card p-4">
           <h3 className="text-sm font-medium text-text-secondary mb-1">Age</h3>
           <p className="text-xl font-semibold text-text-primary">
-            {epochsToDays(validator.age).toFixed(1)} days
+            {timing ? `${epochsToDays(validator.age, timing)?.toFixed(1)} days` : '-'}
           </p>
           <p className="text-sm text-text-muted">{validator.age.toLocaleString()} epochs</p>
         </div>

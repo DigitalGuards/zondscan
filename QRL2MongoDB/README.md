@@ -200,15 +200,90 @@ must be inspected again.
 
 ## Key Components
 
+### Beacon chain timing and validator history
+
+Startup reads `/qrl/v1/config/spec` (`SLOTS_PER_EPOCH` and `SECONDS_PER_SLOT`)
+and `/qrl/v1/beacon/genesis` (`genesis_time`) from `BEACONCHAIN_API`. String
+numbers are validated, requests have a 10-second timeout and an 8 MiB response
+cap, and startup discovery has a 25-second deadline. The leased writer saves
+numeric `slotsPerEpoch`, `secondsPerSlot` and `genesisTime` in `sync_state` under
+`_id: "chain_timing"`. A beacon outage logs a warning and uses the stored clock.
+Without a stored clock, execution indexing starts while beacon workers wait.
+Discovery retries every 30 seconds, persists timing, and wakes the waiting
+workers as soon as it succeeds. It also verifies a cached clock after recovery.
+An existing clock or slot-assignment genesis that disagrees causes a hard startup
+failure, or orderly shutdown if discovered during retry. Invalid stored timing
+also fails closed. Retry and waiting workers honor shutdown and drain before
+the chain-indexer lease is released.
+
+The backend reads this document for epoch slot ranges and execution timestamp
+mapping. `GET /epoch` (public `/api/epoch`) exposes the same three timing fields
+alongside the beacon head and finality. The frontend uses them for block epochs,
+validator ages, and network examples in Learn. The staking calculator and
+standard-parameter explanations retain qrysm mainnet economics: 128 slots of
+60 seconds per epoch. Execution block heights remain independent of beacon slots
+across missed proposals. Gas and pending transaction ETA responses keep serving
+their available data when timing is missing; timing fields are null when neither
+recent block intervals nor stored timing can supply a value.
+
+A live worker refreshes `/qrl/v1/beacon/headers/head` and
+`/qrl/v1/beacon/states/head/finality_checkpoints` every 30 seconds. The current
+epoch is `headSlot / slotsPerEpoch`. It labels the live validator set fetched
+at that head slot with this epoch. The live set has one document per validator
+and is kept separately from historical summaries.
+
+The history worker fetches `/qrl/v1/beacon/states/{epoch * slotsPerEpoch}/validators`
+for every epoch from zero through the finalized checkpoint, inclusive. Each
+`validator_history` record has `source: "beacon-state"`, a decimal-string `epoch`,
+numeric `epochInt`, and timestamp
+`genesisTime + epoch * slotsPerEpoch * secondsPerSlot`. Counts use the beacon
+statuses in four exclusive buckets: pending, active, exited (including withdrawal
+statuses), and slashed. The slashed flag takes precedence throughout a validator's
+lifecycle. `totalStaked` sums every effective balance exactly in Shor.
+
+The worker starts at the newest finalized epoch and walks backward to zero.
+It handles at most 16 epochs per pass and checks finality between passes. A
+separate descending catch-up range prioritizes new finalized epochs before
+continuing the older backlog. `sync_state` document `_id: "validator_history"`
+stores `backfillNext`, `newestScheduled`, `catchupNext`, and `catchupTarget`;
+`-1` marks a finished descending range. Each summary is upserted by epoch before
+progress is saved, so a crash between writes safely replays that epoch. A unique
+epoch index prevents duplicate records. Unavailable states, malformed responses,
+and transient failures retain the cursor for retry after 30 seconds. Historical
+state access through epoch zero is required for a complete rebuild. Newly
+finalized epochs can still fill while an older state remains unavailable.
+
+All beacon workers share a one-request-per-second limiter. History and cursor
+writes require the chain-indexer lease and use write deadlines ending before
+lease expiry. Shutdown cancels requests and drains registered writers before
+releasing the lease. Once caught up, the history worker polls every 30 seconds.
+
+On the first run, the API immediately excludes old unmarked records from both
+the epoch list and validator history. As the worker reaches each old epoch, its
+upsert replaces the old summary and adds the marker. No collection deletion or
+block reindex is needed. Recent pages fill first, usually within tens of seconds.
+Visitors see a growing list ordered by chain epoch; epoch details show the known
+clock time and dashes for unavailable validator summaries, including recent
+unfinalized epochs. Known zero counts remain zero. Epoch pages refresh every
+30 seconds, and proposer duties fill independently.
+
+For roughly 5,000 epochs, allow about 1.5 to 2 hours when proposer duties are
+already caught up, or about 3 to 4 hours when both walkers have a full backlog.
+These estimates assume healthy sub-second beacon responses. Retries, fallback
+duty lookups, slow storage and missing historical states extend the duration.
+Operators can follow the cursor fields and the count of `source: "beacon-state"`
+records, plus retry logs containing the affected epoch. Start the updated syncer
+before serving the updated API and frontend so chain timing is available.
+
 ### Finalized slot proposer assignments
 
 The leased syncer writes `slotAssignments` documents with numeric `epoch` and
 `slot`, decimal-string `validatorIndex`, and `0x`-prefixed hex `pubkey`. The
 `slot_unique` index enforces one assignment per slot. An epoch index supports
-the API lookup. This chain has 8 slots per epoch and 60 seconds per slot.
+the API lookup. Slot counts and durations come from `chain_timing`.
 
-On first start, the worker fetches beacon genesis time and saves it in
-`sync_state` under `_id: "slot_assignments"`. It starts its `nextEpoch` cursor
+On first start, the worker copies the validated `chain_timing` genesis into
+its `sync_state` cursor under `_id: "slot_assignments"`. It starts its `nextEpoch` cursor
 at zero and checks epochs in ascending order. Only explicit unavailable-state
 responses from the historical duty sources advance an unavailable epoch;
 transport failures, rate limits, invalid responses, and incomplete duty sets
@@ -236,9 +311,9 @@ before lease expiry. The worker participates in shutdown cancellation and
 draining before the lease is released.
 
 The backend derives execution block slots from
-`(execution timestamp - beacon genesis time) / 60`, the timestamp relation
+`(execution timestamp - genesisTime) / secondsPerSlot`, the timestamp relation
 enforced by consensus. Startup creates `slot_timestamp_ingestion_idx` on
-`blocks` for the eight slot timestamp lookups. This reads existing block rows
+`blocks` for epoch slot timestamp lookups. This reads existing block rows
 without a block reindex. Start the updated syncer before serving the updated
 epoch endpoint so the beacon slot clock is available. Proposer fields appear
 progressively as backfill advances; block mapping works once the clock is saved.
@@ -254,7 +329,7 @@ progressively as backfill advances; block mapping works once the clock is saved.
   - Manages deduplication of validator records
   - Provides clean interfaces for validator operations
 - **Data Storage**:
-  - Stores all validators in a single document for efficient retrieval
+  - Stores one document per validator, keyed by its beacon index
   - Maintains validator status, epochs, and balances
   - Supports pagination for large validator sets
 - **Beacon Chain Integration**:

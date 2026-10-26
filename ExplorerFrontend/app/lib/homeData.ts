@@ -1,3 +1,4 @@
+import { isChainTiming } from './chainTiming';
 import type { EpochInfo } from '../types';
 import { isArray, isRecord, InvalidInputError } from './guards';
 
@@ -8,8 +9,7 @@ export function isEpochInfo(value: unknown): value is EpochInfo {
     typeof value.headSlot === 'string' &&
     typeof value.finalizedEpoch === 'string' &&
     typeof value.justifiedEpoch === 'string' &&
-    typeof value.slotsPerEpoch === 'number' &&
-    typeof value.secondsPerSlot === 'number' &&
+    isChainTiming(value) &&
     typeof value.slotInEpoch === 'number' &&
     typeof value.timeToNextEpoch === 'number' &&
     typeof value.updatedAt === 'number'

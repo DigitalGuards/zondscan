@@ -203,8 +203,6 @@
     "@typescript-eslint/no-confusing-void-expression": 3
   },
   "app/epoch/[id]/epoch-detail-client.tsx": {
-    "@typescript-eslint/no-floating-promises": 1,
-    "@typescript-eslint/no-unsafe-argument": 1,
     "no-restricted-syntax": 1
   },
   "app/epochs/[query]/epochs-client.tsx": {
