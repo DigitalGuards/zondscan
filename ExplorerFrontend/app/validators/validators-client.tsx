@@ -291,7 +291,7 @@ export default function ValidatorsWrapper(): JSX.Element {
         <h3 className="font-display text-lg font-semibold text-text-primary mb-4">
           All Validators
         </h3>
-        <ValidatorTable validators={validators} loading={loading} />
+        <ValidatorTable validators={validators} loading={loading} timing={epochInfo} />
       </div>
     </div>
   );

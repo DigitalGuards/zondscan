@@ -25,6 +25,7 @@ const fixtures: Record<string, Record<string, unknown>> = {
     headSlot: '1',
     finalizedEpoch: '40',
     justifiedEpoch: '41',
+    genesisTime: 1790582760,
     slotsPerEpoch: 32,
     secondsPerSlot: 60,
     slotInEpoch: 1,

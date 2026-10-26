@@ -152,6 +152,14 @@ func main() {
 		failStartupAfterLease("Token collection readiness gate failed", err)
 		return
 	}
+	if err := synchroniser.InitializeChainTiming(); err != nil {
+		failStartupAfterLease("Beacon chain timing startup failed", err)
+		return
+	}
+	if err := synchroniser.InitializeValidatorHistory(); err != nil {
+		failStartupAfterLease("Validator history startup failed", err)
+		return
+	}
 	if err := synchroniser.InitializeSlotAssignments(); err != nil {
 		failStartupAfterLease("Slot assignment collection readiness gate failed", err)
 		return
@@ -236,7 +244,10 @@ func main() {
 	synchroniser.StartPendingTransactionSync(stopCh)
 	configs.Logger.Info("Starting stale balance reconciliation service...")
 	synchroniser.StartBalanceReconciliationJob(stopCh)
+	timingErrCh := synchroniser.StartChainTimingSync(stopCh)
 	synchroniser.StartSlotAssignmentSync(stopCh)
+	synchroniser.StartValidatorHistorySync(stopCh)
+	synchroniser.StartValidatorSync(stopCh)
 
 	// Phase 3a: start the off-chain NFT collection metadata fetcher.
 	// Background goroutine that polls contractCode for unfetched
@@ -268,6 +279,8 @@ func main() {
 		} else {
 			configs.Logger.Info("Sync completed, exiting normally")
 		}
+	case syncErr = <-timingErrCh:
+		configs.Logger.Error("Beacon chain timing conflicts with indexed chain; stopping", zap.Error(syncErr))
 	case sig := <-sigCh:
 		configs.Logger.Info("Received shutdown signal, initiating graceful shutdown...",
 			zap.String("signal", sig.String()))
@@ -308,7 +321,9 @@ func main() {
 		}
 	}
 	if drained && !syncFinished {
-		syncErr = <-syncErrCh
+		if drainedSyncErr := <-syncErrCh; syncErr == nil {
+			syncErr = drainedSyncErr
+		}
 		syncFinished = true
 	}
 	drainCancel()

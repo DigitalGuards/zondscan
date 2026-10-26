@@ -73,7 +73,7 @@ func TestSlotWalkerFindsEarliestHistoryAndKeepsUp(t *testing.T) {
 	ctx := context.Background()
 	source := &testSlotSource{finalized: 5, unavailableBefore: 2}
 	store := &testSlotStore{}
-	more, err := walkSlotAssignments(ctx, source, store)
+	more, err := walkSlotAssignments(ctx, source, store, models.ChainTiming{SlotsPerEpoch: 8, SecondsPerSlot: 60, GenesisTime: 1700000000})
 	if err != nil || more {
 		t.Fatalf("walk = %t, %v", more, err)
 	}
@@ -82,7 +82,7 @@ func TestSlotWalkerFindsEarliestHistoryAndKeepsUp(t *testing.T) {
 	}
 	source.finalized = 7
 	source.requested = nil
-	if _, err := walkSlotAssignments(ctx, source, store); err != nil {
+	if _, err := walkSlotAssignments(ctx, source, store, models.ChainTiming{SlotsPerEpoch: 8, SecondsPerSlot: 60, GenesisTime: 1700000000}); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(source.requested, []int64{6, 7}) {
@@ -96,7 +96,7 @@ func TestSlotWalkerFindsEarliestHistoryAndKeepsUp(t *testing.T) {
 func TestSlotWalkerBoundsBatchAndRepresentsGenesis(t *testing.T) {
 	source := &testSlotSource{finalized: 20}
 	store := &testSlotStore{}
-	more, err := walkSlotAssignments(context.Background(), source, store)
+	more, err := walkSlotAssignments(context.Background(), source, store, models.ChainTiming{SlotsPerEpoch: 8, SecondsPerSlot: 60, GenesisTime: 1700000000})
 	if err != nil || !more || store.state.NextEpoch != slotAssignmentBatchSize {
 		t.Fatalf("walk = %t, %v; state = %+v", more, err, store.state)
 	}
@@ -106,7 +106,7 @@ func TestSlotWalkerBoundsBatchAndRepresentsGenesis(t *testing.T) {
 	if len(store.rows) != 8*slotAssignmentBatchSize {
 		t.Fatalf("rows = %d", len(store.rows))
 	}
-	if _, err := walkSlotAssignments(context.Background(), source, store); err != nil {
+	if _, err := walkSlotAssignments(context.Background(), source, store, models.ChainTiming{SlotsPerEpoch: 8, SecondsPerSlot: 60, GenesisTime: 1700000000}); err != nil {
 		t.Fatal(err)
 	}
 	if store.state.NextEpoch != 21 {
@@ -118,7 +118,7 @@ func TestSlotWalkerRetriesTransientAndIncompleteEpochs(t *testing.T) {
 	failed := int64(1)
 	source := &testSlotSource{finalized: 3, failEpoch: &failed}
 	store := &testSlotStore{}
-	if _, err := walkSlotAssignments(context.Background(), source, store); err == nil {
+	if _, err := walkSlotAssignments(context.Background(), source, store, models.ChainTiming{SlotsPerEpoch: 8, SecondsPerSlot: 60, GenesisTime: 1700000000}); err == nil {
 		t.Fatal("expected transient failure")
 	}
 	if store.state.NextEpoch != 1 || len(store.rows) != 8 {
@@ -126,14 +126,14 @@ func TestSlotWalkerRetriesTransientAndIncompleteEpochs(t *testing.T) {
 	}
 	source.failEpoch = nil
 	source.incomplete = true
-	if _, err := walkSlotAssignments(context.Background(), source, store); err == nil {
+	if _, err := walkSlotAssignments(context.Background(), source, store, models.ChainTiming{SlotsPerEpoch: 8, SecondsPerSlot: 60, GenesisTime: 1700000000}); err == nil {
 		t.Fatal("expected incomplete duty failure")
 	}
 	if store.state.NextEpoch != 1 {
 		t.Fatal("incomplete epoch advanced cursor")
 	}
 	source.incomplete = false
-	if _, err := walkSlotAssignments(context.Background(), source, store); err != nil {
+	if _, err := walkSlotAssignments(context.Background(), source, store, models.ChainTiming{SlotsPerEpoch: 8, SecondsPerSlot: 60, GenesisTime: 1700000000}); err != nil {
 		t.Fatal(err)
 	}
 	if store.state.NextEpoch != 4 {
@@ -144,14 +144,14 @@ func TestSlotWalkerRetriesTransientAndIncompleteEpochs(t *testing.T) {
 func TestSlotWalkerReplaysRowsAfterCursorWriteFailure(t *testing.T) {
 	source := &testSlotSource{finalized: 2}
 	store := &testSlotStore{failAfterRows: true}
-	if _, err := walkSlotAssignments(context.Background(), source, store); err == nil {
+	if _, err := walkSlotAssignments(context.Background(), source, store, models.ChainTiming{SlotsPerEpoch: 8, SecondsPerSlot: 60, GenesisTime: 1700000000}); err == nil {
 		t.Fatal("expected cursor failure")
 	}
 	if store.state.NextEpoch != 0 || len(store.rows) != 8 {
 		t.Fatalf("partial state = %+v, rows = %d", store.state, len(store.rows))
 	}
 	store.failAfterRows = false
-	if _, err := walkSlotAssignments(context.Background(), source, store); err != nil {
+	if _, err := walkSlotAssignments(context.Background(), source, store, models.ChainTiming{SlotsPerEpoch: 8, SecondsPerSlot: 60, GenesisTime: 1700000000}); err != nil {
 		t.Fatal(err)
 	}
 	if store.state.NextEpoch != 3 || len(store.rows) != 24 {
@@ -192,10 +192,22 @@ func TestSlotWalkerCancellationLeavesCursor(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	store := &testSlotStore{}
-	if _, err := walkSlotAssignments(ctx, &testSlotSource{finalized: 2}, store); !errors.Is(err, context.Canceled) {
+	if _, err := walkSlotAssignments(ctx, &testSlotSource{finalized: 2}, store, models.ChainTiming{SlotsPerEpoch: 8, SecondsPerSlot: 60, GenesisTime: 1700000000}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v", err)
 	}
 	if store.exists || len(store.rows) != 0 {
 		t.Fatal("canceled walker persisted data")
+	}
+}
+
+func TestSlotWalkerRequiresMatchingGenesis(t *testing.T) {
+	store := &testSlotStore{exists: true, state: models.SlotAssignmentCursor{GenesisTime: 1700000000}}
+	timing := models.ChainTiming{SlotsPerEpoch: 8, SecondsPerSlot: 60, GenesisTime: 1790582760}
+	source := &testSlotSource{finalized: 1}
+	if _, err := walkSlotAssignments(context.Background(), source, store, timing); err == nil {
+		t.Fatal("genesis mismatch accepted")
+	}
+	if len(source.requested) != 0 || len(store.rows) != 0 {
+		t.Fatal("mismatched clock wrote assignments")
 	}
 }

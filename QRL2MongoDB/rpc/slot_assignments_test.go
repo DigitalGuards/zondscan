@@ -18,7 +18,7 @@ func testAssignmentClient(t *testing.T, handler http.HandlerFunc) *SlotAssignmen
 	t.Helper()
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
-	client := NewSlotAssignmentClient(server.URL)
+	client := NewSlotAssignmentClient(server.URL, models.ChainTiming{SlotsPerEpoch: 8, SecondsPerSlot: 60, GenesisTime: 1700000000})
 	client.interval = 0
 	return client
 }
@@ -130,7 +130,7 @@ func TestDutyValidationRejectsIncompleteConflictingAndInvalidData(t *testing.T) 
 		func(r []models.SlotAssignment) []models.SlotAssignment { r[1].ValidatorIndex = ""; return r },
 		func(r []models.SlotAssignment) []models.SlotAssignment { r[1].Pubkey = "xyz"; return r },
 	} {
-		if _, err := ValidateSlotAssignments(1, mutate(append([]models.SlotAssignment{}, valid...))); err == nil {
+		if _, err := ValidateSlotAssignments(models.ChainTiming{SlotsPerEpoch: 8, SecondsPerSlot: 60, GenesisTime: 1700000000}, 1, mutate(append([]models.SlotAssignment{}, valid...))); err == nil {
 			t.Fatal("invalid duties accepted")
 		}
 	}

@@ -108,7 +108,7 @@ type BlockStats struct {
 
 func ComputeBlockStats(samples []BlockGasSample) BlockStats {
 	stats := BlockStats{
-		AvgBlockTimeSec:  60,
+		AvgBlockTimeSec:  0,
 		AvgGasUsed:       big.NewInt(0),
 		AvgGasLimit:      big.NewInt(0),
 		MedianTxGasPrice: big.NewInt(0),
@@ -364,7 +364,7 @@ func MempoolGasPriceHistogram(samples []MempoolSample, bins int) []GasPriceBucke
 //
 // The syncer maintains a `gasHistory` collection (bound as
 // configs.GasHistoryCollection) with one row per block. The API serves it
-// as-is for short ranges (24h ≈ 1440 rows at 60 s slots) and downsamples
+// as-is for short ranges (24h) and downsamples
 // to one row per hour for the 7d view.
 
 type GasHistoryRow struct {

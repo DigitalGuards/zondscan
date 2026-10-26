@@ -46,8 +46,8 @@ interface PendingTransactionViewProps {
 }
 
 interface EtaResponse {
-  etaSec: number;
-  avgBlockTimeSec: number;
+  etaSec: number | null;
+  avgBlockTimeSec: number | null;
   avgGasUsedHex: string;
   pendingCount: number;
   gasAheadHex: string;
@@ -196,11 +196,13 @@ export default function PendingTransactionView({
   // Adjusting-state-on-prop-change: detect a new poll value mid-render and
   // resync without writing state inside an effect (set-state-in-effect).
   const [etaRemaining, setEtaRemaining] = useState<number | null>(null);
-  const [prevEtaSec, setPrevEtaSec] = useState<number | undefined>(undefined);
+  const [prevEtaSec, setPrevEtaSec] = useState<number | null | undefined>(undefined);
   if (etaQuery.data?.etaSec !== prevEtaSec) {
     setPrevEtaSec(etaQuery.data?.etaSec);
     if (typeof etaQuery.data?.etaSec === 'number') {
       setEtaRemaining(Math.max(0, Math.round(etaQuery.data.etaSec)));
+    } else {
+      setEtaRemaining(null);
     }
   }
   const hasEta = etaRemaining !== null;

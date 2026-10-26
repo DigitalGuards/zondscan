@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { EpochSlotRow } from './epoch-detail-client';
+import { EpochSlotRow, EpochValidatorSummary } from './epoch-detail-client';
 
 jest.mock('../../components/TimeDisplay', () => ({
   __esModule: true,
@@ -61,3 +61,22 @@ it.each(['proposed', 'missed'])(
     }
   },
 );
+
+it('renders every unavailable validator summary as a dash', () => {
+  const html = renderToStaticMarkup(<EpochValidatorSummary data={{
+    validatorsCount: null, activeCount: null, pendingCount: null,
+    exitedCount: null, slashedCount: null, totalStaked: null,
+  }} />);
+  expect(html.match(/>-<\/span>/g)).toHaveLength(6);
+  expect(html).not.toContain('>0<');
+});
+
+it('preserves known zero counts and stake', () => {
+  const html = renderToStaticMarkup(<EpochValidatorSummary data={{
+    validatorsCount: 0, activeCount: 0, pendingCount: 0,
+    exitedCount: 0, slashedCount: 0, totalStaked: '0',
+  }} />);
+  expect(html.match(/>0<\/span>/g)).toHaveLength(5);
+  expect(html).toContain('>0 Quanta</span>');
+  expect(html).not.toContain('>-<');
+});

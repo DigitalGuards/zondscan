@@ -25,13 +25,6 @@ type epochExecutionBlock struct {
 	Result         models.Result `bson:"result"`
 }
 
-func epochSlotBounds(epoch int64) (int64, int64, error) {
-	if epoch < 0 || epoch >= math.MaxInt64/SlotsPerEpoch {
-		return 0, 0, fmt.Errorf("invalid epoch number")
-	}
-	return epoch * SlotsPerEpoch, (epoch + 1) * SlotsPerEpoch, nil
-}
-
 func parseSlotTimestamp(raw string) (int64, error) {
 	base := 10
 	if strings.HasPrefix(raw, "0x") {
@@ -41,29 +34,33 @@ func parseSlotTimestamp(raw string) (int64, error) {
 	return strconv.ParseInt(raw, base, 64)
 }
 
-// epochTimestampFilter uses the consensus timestamp = genesis + slot * 60.
+// epochTimestampFilter uses the stored beacon clock for each slot timestamp.
 // Execution heights remain independent of slots across missed proposals.
-func epochTimestampFilter(start, end, genesis int64) (bson.M, error) {
-	if genesis <= 0 || start < 0 || end <= start || end-start != SlotsPerEpoch || end > (math.MaxInt64-genesis)/SecondsPerSlot {
+func epochTimestampFilter(start, end int64, timing models.ChainTiming) (bson.M, error) {
+	genesis := timing.GenesisTime
+	if err := timing.Validate(); err != nil {
+		return nil, err
+	}
+	if genesis <= 0 || start < 0 || end <= start || end-start != timing.SlotsPerEpoch || end > (math.MaxInt64-genesis)/timing.SecondsPerSlot {
 		return nil, fmt.Errorf("invalid epoch slot clock")
 	}
-	timestamps := make([]string, 0, SlotsPerEpoch*2)
+	timestamps := make([]string, 0, timing.SlotsPerEpoch*2)
 	for slot := start; slot < end; slot++ {
-		timestamp := genesis + slot*SecondsPerSlot
+		timestamp := genesis + slot*timing.SecondsPerSlot
 		timestamps = append(timestamps, fmt.Sprintf("0x%x", timestamp), strconv.FormatInt(timestamp, 10))
 	}
 	return bson.M{"result.timestamp": bson.M{"$in": timestamps}, "ingestionState": completedBlockIngestionState}, nil
 }
 
-func mapEpochSlots(epoch, genesis int64, blocks []epochExecutionBlock, assignments []epochSlotAssignment) ([]models.EpochDetailBlock, int, error) {
-	start, end, err := epochSlotBounds(epoch)
+func mapEpochSlots(epoch int64, timing models.ChainTiming, blocks []epochExecutionBlock, assignments []epochSlotAssignment) ([]models.EpochDetailBlock, int, error) {
+	start, end, err := timing.EpochSlots(epoch)
 	if err != nil {
 		return nil, 0, err
 	}
-	if _, err := epochTimestampFilter(start, end, genesis); err != nil {
+	if _, err := epochTimestampFilter(start, end, timing); err != nil {
 		return nil, 0, err
 	}
-	rows := make([]models.EpochDetailBlock, SlotsPerEpoch)
+	rows := make([]models.EpochDetailBlock, timing.SlotsPerEpoch)
 	for i := range rows {
 		rows[i] = models.EpochDetailBlock{Slot: start + int64(i), Status: "missed"}
 	}
@@ -80,10 +77,10 @@ func mapEpochSlots(epoch, genesis int64, blocks []epochExecutionBlock, assignmen
 	proposed := 0
 	for _, block := range blocks {
 		timestamp, err := parseSlotTimestamp(block.Result.Timestamp)
-		if err != nil || timestamp < genesis || (timestamp-genesis)%SecondsPerSlot != 0 {
+		if err != nil || timestamp < timing.GenesisTime || (timestamp-timing.GenesisTime)%timing.SecondsPerSlot != 0 {
 			return nil, 0, fmt.Errorf("invalid slot timestamp in indexed block")
 		}
-		slot := (timestamp - genesis) / SecondsPerSlot
+		slot := (timestamp - timing.GenesisTime) / timing.SecondsPerSlot
 		if slot < start || slot >= end || block.BlockNumberInt < 0 || block.Result.Hash == "" {
 			return nil, 0, fmt.Errorf("invalid block in epoch slot range")
 		}
@@ -103,19 +100,13 @@ func mapEpochSlots(epoch, genesis int64, blocks []epochExecutionBlock, assignmen
 	return rows, proposed, nil
 }
 
-func getEpochSlots(ctx context.Context, epoch int64) ([]models.EpochDetailBlock, int, error) {
-	start, end, err := epochSlotBounds(epoch)
+func getEpochSlots(ctx context.Context, epoch int64, timing models.ChainTiming) ([]models.EpochDetailBlock, int, error) {
+	start, end, err := timing.EpochSlots(epoch)
 	if err != nil {
 		return nil, 0, err
 	}
-	var clock struct {
-		GenesisTime int64 `bson:"genesisTime"`
-	}
-	err = configs.SyncStateCollection.FindOne(ctx, bson.M{"_id": "slot_assignments"}).Decode(&clock)
-	if err != nil {
-		return nil, 0, fmt.Errorf("read beacon slot clock: %w", err)
-	}
-	filter, err := epochTimestampFilter(start, end, clock.GenesisTime)
+
+	filter, err := epochTimestampFilter(start, end, timing)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -140,5 +131,5 @@ func getEpochSlots(ctx context.Context, epoch int64) ([]models.EpochDetailBlock,
 	if err := cursor.All(ctx, &assignments); err != nil {
 		return nil, 0, fmt.Errorf("decode slot assignments: %w", err)
 	}
-	return mapEpochSlots(epoch, clock.GenesisTime, blocks, assignments)
+	return mapEpochSlots(epoch, timing, blocks, assignments)
 }

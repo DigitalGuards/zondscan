@@ -25,8 +25,16 @@ const transaction: PendingTransaction = {
   type: '0x2',
 };
 
-function render(overrides: Partial<PendingTransaction> = {}, targetContract?: ContractMeta) {
+function render(overrides: Partial<PendingTransaction> = {}, targetContract?: ContractMeta, etaSec?: number | null) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  if (etaSec !== undefined) {
+    client.setQueryData(['pending-tx-eta', transaction.hash], {
+      etaSec,
+      avgBlockTimeSec: etaSec,
+      pendingCount: 7,
+      medianGasPriceHex: transaction.gasPrice,
+    });
+  }
   const html = renderToStaticMarkup(
     <QueryClientProvider client={client}>
       <PendingTransactionView
@@ -38,6 +46,19 @@ function render(overrides: Partial<PendingTransaction> = {}, targetContract?: Co
   client.clear();
   return html;
 }
+
+it.each([null, 60])('keeps mempool data available with ETA %s', (etaSec) => {
+  const html = render({}, undefined, etaSec);
+  expect(html).toContain('Mempool: 7');
+  expect(html).toContain('Gas: at median');
+  expect(html).toContain('Awaiting block inclusion');
+  if (etaSec === null) {
+    expect(html).not.toContain('Next inclusion');
+    expect(html).not.toContain('Any moment now');
+  } else {
+    expect(html).toContain('Next inclusion ~1:00');
+  }
+});
 
 it('shares the mined detail card and flow while clearly preserving pending status', () => {
   const html = render();

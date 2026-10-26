@@ -6,6 +6,7 @@ import (
 	"QRL2MongoDB/rpc"
 	"QRL2MongoDB/services"
 	"QRL2MongoDB/utils"
+	"context"
 	"fmt"
 	"strconv"
 	"sync"
@@ -372,17 +373,6 @@ func shouldUseBatchSync(lastProcessedBlockNum, latestBlockNum int64) bool {
 	return latestBlockNum-lastProcessedBlockNum > BatchSyncThreshold
 }
 
-// updateValidatorsPeriodically updates validator data from the beacon chain
-func updateValidatorsPeriodically() {
-	configs.Logger.Info("Updating validators")
-	err := syncValidators()
-	if err != nil {
-		configs.Logger.Error("Failed to update validators", zap.Error(err))
-	} else {
-		configs.Logger.Info("Successfully updated validators")
-	}
-}
-
 // updateDataPeriodically updates market data, wallet counts, and other statistics
 func updateDataPeriodically() {
 	// Update market data
@@ -428,7 +418,7 @@ func singleBlockInsertion(stopCh <-chan struct{}) {
 
 	// Create a wait group to keep the main goroutine alive
 	var wg sync.WaitGroup
-	wg.Add(4) // Block processing, data updates, validator updates, gap detection
+	wg.Add(3) // Block processing, data updates, gap detection
 
 	// Start periodic block processing task (every 30 seconds)
 	go func() {
@@ -478,30 +468,6 @@ func singleBlockInsertion(stopCh <-chan struct{}) {
 		}
 	}()
 
-	// Start periodic validator updates task (every 6 hours)
-	go func() {
-		defer wg.Done()
-		configs.Logger.Info("Starting periodic task",
-			zap.String("task", "validator_updates"),
-			zap.Duration("interval", time.Hour*6))
-
-		ticker := time.NewTicker(time.Hour * 6)
-		defer ticker.Stop()
-
-		// Run immediately on start
-		updateValidatorsPeriodically()
-
-		for {
-			select {
-			case <-ticker.C:
-				updateValidatorsPeriodically()
-			case <-stopCh:
-				configs.Logger.Info("Stopping validator updates on shutdown signal")
-				return
-			}
-		}
-	}()
-
 	// Start periodic gap detection task (every 5 minutes)
 	go func() {
 		defer wg.Done()
@@ -536,46 +502,28 @@ func singleBlockInsertion(stopCh <-chan struct{}) {
 	wg.Wait()
 }
 
-// syncValidators fetches and stores validator data from the beacon chain
-func syncValidators() error {
-	// Get current epoch from latest block
-	latestBlock, err := rpc.GetLatestBlock()
+// syncValidators fetches a live set at the observed beacon head slot.
+func syncValidators(ctx context.Context) error {
+	head, err := chainClock.beacon.ChainHead(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get latest block: %w", err)
+		return fmt.Errorf("read beacon head: %w", err)
 	}
-	currentEpoch := strconv.FormatUint(uint64(utils.HexToInt(latestBlock).Int64()/128), 10)
-
-	// Fetch and store epoch info from beacon chain
-	chainHead, err := rpc.GetBeaconChainHead()
-	if err != nil {
-		configs.Logger.Warn("Failed to get beacon chain head", zap.Error(err))
-		// Don't fail - continue with validator sync
-	} else {
-		if err := services.StoreEpochInfo(chainHead); err != nil {
-			configs.Logger.Warn("Failed to store epoch info", zap.Error(err))
-		}
-	}
-
-	// Get validators from beacon chain and persist each page. Storage lives
-	// here rather than in rpc so the rpc package stays transport-only.
-	pages, err := rpc.GetValidators()
-	if err != nil {
-		configs.Logger.Error("Failed to get validators", zap.Error(err))
+	if err := slotAssignmentMutation(ctx, func(ctx context.Context) error { return services.StoreEpochInfo(ctx, head) }); err != nil {
 		return err
 	}
-	for _, page := range pages {
-		if err := services.StoreValidators(page, currentEpoch); err != nil {
-			configs.Logger.Error("Failed to store validators", zap.Error(err))
-			return err
-		}
+	slot, err := strconv.ParseInt(head.HeadSlot, 10, 64)
+	if err != nil {
+		return err
 	}
-
-	// Backfill any missing epoch history records
-	currentEpochInt, _ := strconv.ParseInt(currentEpoch, 10, 64)
-	if err := services.BackfillValidatorHistory(currentEpochInt); err != nil {
-		configs.Logger.Warn("Failed to backfill validator history", zap.Error(err))
+	validators, err := chainClock.beacon.ValidatorsAtSlot(ctx, slot)
+	if err != nil {
+		return err
 	}
+	return slotAssignmentMutation(ctx, func(ctx context.Context) error { return services.StoreValidators(ctx, validators, head.HeadEpoch) })
+}
 
-	configs.Logger.Info("Successfully synced validators", zap.String("epoch", currentEpoch))
-	return nil
+func StartValidatorSync(stopCh <-chan struct{}) {
+	chainClock.startWorker(stopCh, "Validator snapshot", func(ctx context.Context) (bool, error) {
+		return false, syncValidators(ctx)
+	})
 }

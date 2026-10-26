@@ -106,3 +106,42 @@ for (const theme of ['light', 'dark']) {
     });
   }
 }
+
+for (const width of [390, 1440]) {
+  test(`unknown epoch summary at ${width}px fills on refresh`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 1000 });
+    let available = false;
+    await page.route('**/epoch/2', (route) => {
+      if (route.request().resourceType() === 'document') return route.continue();
+      return route.fulfill({ json: available ? epoch : {
+        ...epoch, summaryAvailable: false,
+        validatorsCount: null, activeCount: null, pendingCount: null,
+        exitedCount: null, slashedCount: null, totalStaked: null,
+      } });
+    });
+    await page.goto('/epoch/2');
+    const summary = page.locator('.card-simple').first();
+    await expect(summary).toContainText('Validators:');
+    for (const label of ['Validators:', 'Active:', 'Pending:', 'Exited:', 'Slashed:', 'Total Staked:']) {
+      await expect(summary.locator('div').filter({ has: page.locator('span', { hasText: new RegExp(`^${label}$`) }) }).last().locator('span').last()).toHaveText('-');
+    }
+    await page.screenshot({ path: testInfo.outputPath(`epoch-unknown-${width}.png`), fullPage: true });
+    available = true;
+    await page.reload();
+    await expect(summary).toContainText('64');
+    await expect(summary).toContainText('64,000 Quanta');
+  });
+}
+
+test('homepage epochs and Learn guide use the network clock', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('region', { name: 'Latest blocks' })).toContainText('epoch 5,000');
+  await page.goto('/learn/validators-and-epochs');
+  await expect(page.getByText('8 consecutive slots', { exact: true })).toBeVisible();
+  const networkTiming = page.locator('p').filter({ hasText: "The explorer's network uses its own values:" });
+  await expect(networkTiming.getByText('60 seconds per slot', { exact: true })).toBeVisible();
+  await expect(page.getByText('128 consecutive slots', { exact: true })).toBeVisible();
+  await page.goto('/epochs/1');
+  await expect(page.locator('tbody')).toContainText('4,998');
+  await expect(page.locator('tbody')).toContainText('2,560,000 Quanta');
+});

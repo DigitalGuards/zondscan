@@ -22,7 +22,10 @@ func handleGasSummary(c *gin.Context) {
 		if err != nil {
 			return nil, err
 		}
-		blockStats := db.ComputeBlockStats(samples)
+		blockStats, timingErr := db.BlockStatsWithTiming(c.Request.Context(), samples)
+		if timingErr != nil {
+			return nil, timingErr
+		}
 
 		mempool, err := db.GetPendingMempoolSnapshot()
 		if err != nil {
@@ -68,7 +71,7 @@ func handleGasSummary(c *gin.Context) {
 			"qrlUsdPrice":        db.GetCurrentPrice(),
 			"avgGasUsedHex":      "0x" + blockStats.AvgGasUsed.Text(16),
 			"avgGasLimitHex":     "0x" + blockStats.AvgGasLimit.Text(16),
-			"avgBlockTimeSec":    blockStats.AvgBlockTimeSec,
+			"avgBlockTimeSec":    blockStats.BlockTimeSeconds(),
 			"pendingCount":       mp.Count,
 			"lastBlockNumberHex": blockStats.LastNumberHex,
 			"lastGasUsedHex":     blockStats.LastGasUsedHex,
