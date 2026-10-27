@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import SlashingsClient from './slashings-client';
+import SlashingsPage from './page';
 import {
   parseSlashings,
   parseValidatorSetChanges,
@@ -66,6 +67,26 @@ it('shows the plain network empty state and both consensus tables', () => {
   expect(NAVIGATION_GROUPS.find((group) => group.name === 'Consensus')?.items).toContainEqual(
     expect.objectContaining({ name: 'Slashings', href: '/slashings' }),
   );
+});
+
+it.each([
+  ['007', '7'],
+  ['000', '0'],
+  ['0', '0'],
+])('canonicalizes validator %s before rendering links', async (validator, canonical) => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const page = await SlashingsPage({
+    searchParams: Promise.resolve({ validator }),
+  });
+  const html = renderToStaticMarkup(
+    <QueryClientProvider client={client}>{page}</QueryClientProvider>,
+  );
+  client.clear();
+  expect(html).toContain(`href="/validators/${canonical}"`);
+  expect(html).toContain(`>#${canonical}</a>`);
+  if (validator !== canonical) expect(html).not.toContain(`/validators/${validator}`);
 });
 
 it('renders evidence, every change kind, validator zero links and network times', () => {

@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -18,6 +19,8 @@ func TestBeaconEjectionBalance(t *testing.T) {
 		{"v3 test network", `{"data":{"EJECTION_BALANCE":"20000000000000","MAX_EFFECTIVE_BALANCE":"40000000000000"}}`, 20000000000000},
 		{"other network", `{"data":{"EJECTION_BALANCE":"1"}}`, 1},
 		{"missing", `{"data":{}}`, 0},
+		{"missing data", `{}`, 0},
+		{"invalid data", `{"data":[]}`, 0},
 		{"empty", `{"data":{"EJECTION_BALANCE":""}}`, 0},
 		{"zero", `{"data":{"EJECTION_BALANCE":"0"}}`, 0},
 		{"negative", `{"data":{"EJECTION_BALANCE":"-1"}}`, 0},
@@ -38,6 +41,9 @@ func TestBeaconEjectionBalance(t *testing.T) {
 			value, err := client.EjectionBalance(context.Background())
 			if value != tc.want || (err == nil) != (tc.want > 0) {
 				t.Fatalf("value=%d err=%v", value, err)
+			}
+			if tc.want == 0 && !errors.Is(err, ErrInvalidEjectionBalance) {
+				t.Fatalf("missing or invalid balance must allow history to continue: %v", err)
 			}
 		})
 	}

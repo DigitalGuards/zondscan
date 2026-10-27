@@ -11,15 +11,13 @@ import (
 )
 
 // ValidatorChanges derives lifecycle milestones from the fetched state.
-// Ejection uses the effective balance observed at the exit epoch.
+// Ejection uses the effective balance observed at the exit epoch. A zero
+// threshold classifies unslashed exits as exited while the spec is incomplete.
 func ValidatorChanges(epoch int64, validators []models.StateValidator, ejectionBalance uint64) ([]models.ValidatorSetChange, models.SlashingSnapshot, error) {
 	changes := make([]models.ValidatorSetChange, 0)
 	snapshot := models.SlashingSnapshot{Epoch: epoch, Validators: make([]models.SlashedValidator, 0)}
 	if epoch < 0 {
 		return nil, snapshot, fmt.Errorf("invalid validator change epoch")
-	}
-	if ejectionBalance == 0 {
-		return nil, snapshot, fmt.Errorf("invalid beacon EJECTION_BALANCE")
 	}
 	seen := make(map[string]bool)
 	for _, v := range validators {
@@ -35,7 +33,7 @@ func ValidatorChanges(epoch int64, validators []models.StateValidator, ejectionB
 		seen[id] = true
 		pubkey := "0x" + hex.EncodeToString(key)
 		exitKind := "exited"
-		if !v.Validator.Slashed {
+		if !v.Validator.Slashed && ejectionBalance > 0 {
 			balance, _ := strconv.ParseUint(v.Validator.EffectiveBalance, 10, 64)
 			if balance <= ejectionBalance {
 				exitKind = "ejected"
@@ -56,7 +54,7 @@ func ValidatorChanges(epoch int64, validators []models.StateValidator, ejectionB
 			if activation > uint64(epoch) {
 				return nil, snapshot, fmt.Errorf("slashed validator has a future activation")
 			}
-			snapshot.Validators = append(snapshot.Validators, models.SlashedValidator{Index: id, Pubkey: pubkey, ActivationEpoch: activation})
+			snapshot.Validators = append(snapshot.Validators, models.SlashedValidator{Index: id, ActivationEpoch: activation})
 		}
 	}
 	return changes, snapshot, nil
@@ -70,23 +68,32 @@ func validatorChange(epoch int64, kind, index, pubkey string) models.ValidatorSe
 }
 
 // SlashingChanges assigns the first observed slashed flag to the newer epoch.
-func SlashingChanges(older, newer models.SlashingSnapshot) ([]models.ValidatorSetChange, error) {
+func SlashingChanges(older, newer models.SlashingSnapshot, validators []models.StateValidator) ([]models.ValidatorSetChange, error) {
 	if older.Epoch+1 != newer.Epoch {
 		return nil, fmt.Errorf("slashing comparison requires adjacent epochs")
 	}
-	previous := make(map[string]string, len(older.Validators))
+	pubkeys := make(map[string]string, len(validators))
+	for _, v := range validators {
+		index, err := strconv.ParseUint(v.Index, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid validator index")
+		}
+		pubkeys[strconv.FormatUint(index, 10)] = strings.ToLower(v.Validator.Pubkey)
+	}
+	previous := make(map[string]bool, len(older.Validators))
 	for _, v := range older.Validators {
-		previous[v.Index] = v.Pubkey
+		previous[v.Index] = true
 	}
 	changes := make([]models.ValidatorSetChange, 0)
 	for _, v := range newer.Validators {
-		if key, exists := previous[v.Index]; exists {
-			if key != v.Pubkey {
-				return nil, fmt.Errorf("validator identity changed between epochs")
-			}
+		if previous[v.Index] {
 			delete(previous, v.Index)
 		} else {
-			changes = append(changes, validatorChange(newer.Epoch, "slashed", v.Index, v.Pubkey))
+			pubkey, exists := pubkeys[v.Index]
+			if !exists {
+				return nil, fmt.Errorf("slashed validator missing from epoch registry")
+			}
+			changes = append(changes, validatorChange(newer.Epoch, "slashed", v.Index, "0x"+strings.TrimPrefix(pubkey, "0x")))
 		}
 	}
 	if len(previous) != 0 {
@@ -123,7 +130,7 @@ func ResolveSlashingEvents(events []models.SlashingEvent, changes []models.Valid
 		}
 	}
 	if len(remaining) != 0 {
-		return result, fmt.Errorf("%w: slashing evidence incomplete for %d changed validators", models.ErrStructuralSlashingEvidence, len(remaining))
+		return result, fmt.Errorf("slashing evidence incomplete for %d changed validators", len(remaining))
 	}
 	return result, nil
 }

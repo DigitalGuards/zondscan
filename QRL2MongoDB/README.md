@@ -298,9 +298,12 @@ the effective balance at the exit epoch, so a validator that regains balance
 while waiting in the exit queue can show as exited.
 
 Before indexing history, the worker reads `data.EJECTION_BALANCE` from
-`/qrl/v1/config/spec` as a positive decimal-string integer. Missing or invalid
-values pause history indexing for retry. This prerequisite leaves stored chain
-timing comparisons and startup failure conditions unchanged. The v3 test-network
+`/qrl/v1/config/spec` as a positive decimal-string integer. Transport failures
+keep retrying. A missing or invalid value produces one warning and history
+continues, classifying every unslashed exit as `exited`. The worker retries the
+spec on later passes until it reads a valid threshold, which applies to subsequent
+epochs. Stored chain timing comparisons and startup failure conditions remain
+unchanged. The v3 test-network
 value is `20000000000000`, with `MAX_EFFECTIVE_BALANCE` of `40000000000000`.
 Epochs are parsed as unsigned 64-bit values, preserving the far-future
 sentinel `18446744073709551615` without creating changes. A `slashed` change
@@ -308,10 +311,12 @@ records the first epoch where the slashed flag is observed compared with the
 preceding epoch. The active-set-changes and slashing-pool APIs are unused.
 
 Each `validator_history` document retains a compact `slashingSnapshot` with
-the slashed validators' indices, pubkeys, activation epochs, and a `resolved`
-comparison marker. Adjacent stored snapshots support the descending backfill,
-restart, and catch-up order. No additional full validator-state request is
-made for an epoch. Genesis uses an empty predecessor.
+the slashed validators' indices and activation epochs, plus a `resolved`
+comparison marker. Snapshots for E-1, E and E+1 are loaded in one query and
+support the descending backfill, restart, and catch-up order. Change rows take
+pubkeys from the fetched validator list for E. The registry retains every entry,
+and a validator slashed in E+1 already exists in E. No additional full
+validator-state request is made for an epoch. Genesis uses an empty predecessor.
 
 When flags turn true between first-slot states E-1 and E, the worker fetches
 `/qrl/v1/beacon/blocks/{slot}` for the interval
@@ -329,16 +334,30 @@ evidence uses the intersection of attesting indices, restricted to validators
 whose flags changed in this interval and whose activation epoch has passed.
 Operations are processed in slot order, with proposer slashings first within a
 block, so each changed validator is attributed once. Explicit missing-block
-404 responses represent missed slots. Context errors, transport failures,
-timeouts, other HTTP errors, and `execution_optimistic: true` retain progress
-for retry. Structural failures, including invalid JSON from a 200 response,
-oversized block responses, invalid blocks or proofs, and incomplete attribution,
-save the authoritative `slashed` changes and every attributed event. The epoch
-is marked `slashingSnapshot.evidenceMissing: true` and resolved, one warning
-identifies the epoch and affected validator indices, and the walker advances.
-Valid evidence elsewhere in the interval is retained. An interval with no
-operations returns an empty evidence list; a known flag change then receives
-the missing-evidence marker.
+404 responses represent missed slots. Every other evidence failure, including
+transport errors, request timeouts, optimistic blocks, malformed responses or
+proofs, size limits, and incomplete attribution, saves the authoritative
+`slashed` changes and every attributed event. The snapshot is resolved and marked
+`evidenceMissing: true` with `evidenceRetryAt` set to Unix seconds 15 minutes
+ahead. One warning includes the epoch, validator indices, and error, and the
+walker advances. Cancellation of the walker's own context aborts the pending
+epoch without activity writes, markers, or cursor advancement.
+
+Once per pass, including passes with no new finalized epochs, a repair step
+selects at most one epoch: the oldest snapshot with `evidenceMissing: true`
+and `evidenceRetryAt` at or before now. A partial history index serves this
+lookup. Repair reads the stored snapshot and `slashed` changes, fetches evidence
+through the shared beacon limiter, and attributes it again. Complete evidence
+is upserted before clearing both missing-evidence fields. An unsuccessful
+repair moves `evidenceRetryAt` one hour ahead without another warning. Repair
+failures leave history progress available. Repairs use the same chain-indexer
+lease and cancellation guards as other history writes.
+
+The invariant checks in `ValidatorChanges` and `SlashingChanges` remain
+fail-closed. Invalid or duplicate validator identities, future activation of
+a slashed validator, nonadjacent comparisons, registry inconsistencies, and
+regressing slashed flags stop the affected epoch for retry. These checks guard
+state that consensus rules say cannot occur.
 
 Operators can find these epochs in mongosh with:
 

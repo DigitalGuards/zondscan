@@ -8,6 +8,7 @@ import (
 
 	"QRL2MongoDB/configs"
 	"QRL2MongoDB/models"
+	"QRL2MongoDB/rpc"
 	"QRL2MongoDB/services"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -39,16 +40,16 @@ type validatorHistorySource interface {
 
 type validatorHistoryStore interface {
 	Load(context.Context) (validatorHistoryCursor, bool, error)
-	Snapshot(context.Context, int64) (*models.SlashingSnapshot, error)
+	Snapshots(context.Context, []int64) (map[int64]*models.SlashingSnapshot, error)
 	Save(context.Context, validatorHistoryCursor, *models.ValidatorHistoryRecord, validatorActivity) error
+	PendingEvidence(context.Context, int64) (*models.SlashingSnapshot, error)
+	SlashedChanges(context.Context, int64) ([]models.ValidatorSetChange, error)
+	SaveEvidenceRepair(context.Context, slashingResolution, []models.SlashingEvent) error
 }
 
 func walkValidatorHistory(ctx context.Context, source validatorHistorySource, store validatorHistoryStore, timing models.ChainTiming, ejectionBalance uint64) (bool, error) {
 	if err := timing.Validate(); err != nil {
 		return false, err
-	}
-	if ejectionBalance == 0 {
-		return false, errors.New("invalid beacon EJECTION_BALANCE")
 	}
 	state, exists, err := store.Load(ctx)
 	if err != nil {
@@ -74,6 +75,9 @@ func walkValidatorHistory(ctx context.Context, source validatorHistorySource, st
 		(state.CatchupNext >= 0 && (state.CatchupNext <= state.NewestScheduled || state.CatchupNext > state.CatchupTarget || state.CatchupTarget > finalized)) {
 		return false, errors.New("invalid validator history cursor or regressed finality")
 	}
+	// Repair failures leave history progress available. Cancellation still stops
+	// the pass before any further writes.
+	_ = repairSlashingEvidence(ctx, source, store)
 	for count := 0; count < validatorHistoryBatchSize; count++ {
 		if err := ctx.Err(); err != nil {
 			return false, err
@@ -120,7 +124,7 @@ func walkValidatorHistory(ctx context.Context, source validatorHistorySource, st
 		}
 		for _, resolution := range activity.Resolutions {
 			if resolution.EvidenceErr != nil {
-				configs.Logger.Warn("Slashing evidence missing; epoch resolved",
+				configs.Logger.Warn("Slashing evidence missing; repair scheduled",
 					zap.Int64("epoch", resolution.Epoch), zap.Strings("validatorIndices", resolution.ValidatorIndices), zap.Error(resolution.EvidenceErr))
 			}
 		}
@@ -133,6 +137,8 @@ func InitializeValidatorHistory() error {
 		_, err := configs.ValidatorHistoryCollections.Indexes().CreateMany(ctx, []mongo.IndexModel{
 			{Keys: bson.D{{Key: "epoch", Value: 1}}, Options: options.Index().SetUnique(true).SetName("history_epoch_unique")},
 			{Keys: bson.D{{Key: "source", Value: 1}, {Key: "epochInt", Value: -1}}, Options: options.Index().SetName("history_source_epoch")},
+			{Keys: bson.D{{Key: "source", Value: 1}, {Key: "epochInt", Value: 1}, {Key: "slashingSnapshot.evidenceRetryAt", Value: 1}},
+				Options: options.Index().SetName("history_evidence_repair").SetPartialFilterExpression(bson.M{"slashingSnapshot.evidenceMissing": true})},
 		})
 		if err != nil {
 			return err
@@ -167,10 +173,7 @@ func (mongoValidatorHistoryStore) Save(ctx context.Context, state validatorHisto
 		// Resolution markers follow every event/change upsert. A saved marker
 		// also avoids repeating block requests after a cursor-write interruption.
 		for _, resolution := range activity.Resolutions {
-			if _, err := configs.ValidatorHistoryCollections.UpdateOne(ctx,
-				bson.M{"epochInt": resolution.Epoch}, bson.M{"$set": bson.M{
-					"slashingSnapshot.resolved": true, "slashingSnapshot.evidenceMissing": resolution.EvidenceErr != nil,
-				}}); err != nil {
+			if err := storeSlashingResolution(ctx, resolution); err != nil {
 				return err
 			}
 		}
@@ -184,17 +187,36 @@ func (mongoValidatorHistoryStore) Save(ctx context.Context, state validatorHisto
 	})
 }
 
-func StartValidatorHistorySync(stopCh <-chan struct{}) {
-	var ejectionBalance uint64
-	chainClock.startWorker(stopCh, "Validator history", func(ctx context.Context) (bool, error) {
-		if ejectionBalance == 0 {
-			value, err := chainClock.beacon.EjectionBalance(ctx)
-			if err != nil {
-				return false, err
-			}
-			ejectionBalance = value
+type validatorHistoryWorker struct {
+	ejectionBalance      uint64
+	warnedInvalidBalance bool
+}
+
+func (w *validatorHistoryWorker) pass(ctx context.Context, source interface {
+	validatorHistorySource
+	EjectionBalance(context.Context) (uint64, error)
+}, store validatorHistoryStore, timing models.ChainTiming) (bool, error) {
+	if w.ejectionBalance == 0 {
+		value, err := source.EjectionBalance(ctx)
+		if err := ctx.Err(); err != nil {
+			return false, err
 		}
-		return walkValidatorHistory(ctx, chainClock.beacon, mongoValidatorHistoryStore{}, chainClock.timing, ejectionBalance)
+		if err != nil && !errors.Is(err, rpc.ErrInvalidEjectionBalance) {
+			return false, err
+		}
+		if err != nil && !w.warnedInvalidBalance {
+			configs.Logger.Warn("EJECTION_BALANCE unavailable; unslashed exits classified as exited until a valid spec is read", zap.Error(err))
+			w.warnedInvalidBalance = true
+		}
+		w.ejectionBalance = value
+	}
+	return walkValidatorHistory(ctx, source, store, timing, w.ejectionBalance)
+}
+
+func StartValidatorHistorySync(stopCh <-chan struct{}) {
+	worker := &validatorHistoryWorker{}
+	chainClock.startWorker(stopCh, "Validator history", func(ctx context.Context) (bool, error) {
+		return worker.pass(ctx, chainClock.beacon, mongoValidatorHistoryStore{}, chainClock.timing)
 	})
 }
 

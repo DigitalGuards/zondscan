@@ -21,7 +21,6 @@ import (
 var ErrEpochUnavailable = errors.New("beacon historical state unavailable")
 
 const maxBeaconResponse = 8 << 20
-const maxBeaconBlockResponse = 64 << 20
 
 // SlotAssignmentClient shares rate and timeout caps across beacon workers.
 type SlotAssignmentClient struct {
@@ -73,6 +72,10 @@ func missingHistoricalState(body string) bool {
 }
 
 func (c *SlotAssignmentClient) get(ctx context.Context, path string, result any) error {
+	return c.getWithLimit(ctx, path, result, maxBeaconResponse)
+}
+
+func (c *SlotAssignmentClient) getWithLimit(ctx context.Context, path string, result any, responseLimit int) error {
 	c.requestMu.Lock()
 	defer c.requestMu.Unlock()
 	if c.baseURL == "" {
@@ -104,11 +107,6 @@ func (c *SlotAssignmentClient) get(ctx context.Context, path string, result any)
 		return errors.New("beacon request failed or timed out")
 	}
 	defer resp.Body.Close()
-	blockRequest := strings.HasPrefix(path, "/qrl/v1/beacon/blocks/")
-	responseLimit := maxBeaconResponse
-	if blockRequest {
-		responseLimit = maxBeaconBlockResponse
-	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, int64(responseLimit)+1))
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -121,17 +119,11 @@ func (c *SlotAssignmentClient) get(ctx context.Context, path string, result any)
 			missingBlock: resp.StatusCode == http.StatusNotFound && len(body) <= responseLimit && missingBeaconBlock(string(body)),
 			unavailable:  (resp.StatusCode == 400 || resp.StatusCode == 404 || resp.StatusCode == 500) && missingHistoricalState(string(body))}
 	}
-	responseError := func(message string) error {
-		if blockRequest {
-			return fmt.Errorf("%w: %s", models.ErrStructuralSlashingEvidence, message)
-		}
-		return errors.New(message)
-	}
 	if len(body) > responseLimit {
-		return responseError("beacon response exceeds size limit")
+		return errors.New("beacon response exceeds size limit")
 	}
 	if err := json.Unmarshal(body, result); err != nil {
-		return responseError("invalid beacon JSON response")
+		return errors.New("invalid beacon JSON response")
 	}
 	return nil
 }

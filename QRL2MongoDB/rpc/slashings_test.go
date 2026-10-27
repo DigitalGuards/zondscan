@@ -84,23 +84,22 @@ func TestSlashingEvidenceEmptyEpochAndFailures(t *testing.T) {
 		name, body string
 		status     int
 		fail       bool
-		structural bool
 	}{
-		{"empty", evidenceBlock(0, "[]", "[]"), 200, false, false},
-		{"missed", `{"message":"block not found"}`, 404, false, false},
-		{"generic 404", `{"message":"unknown route"}`, 404, true, false},
-		{"unavailable", `{"message":"database unavailable"}`, 503, true, false},
-		{"non-200 malformed body", `{`, 502, true, false},
-		{"bad json", `{`, 200, true, true},
-		{"wrong slot", evidenceBlock(1, "[]", "[]"), 200, true, true},
-		{"non-zond version", strings.Replace(evidenceBlock(0, "[]", "[]"), `"zond"`, `"other"`, 1), 200, true, true},
-		{"missing arrays", evidenceBlock(0, "null", "[]"), 200, true, true},
-		{"optimistic", strings.Replace(evidenceBlock(0, "[]", "[]"), `"version":"zond"`, `"execution_optimistic":true,"version":"zond"`, 1), 200, true, false},
-		{"optimistic invalid block", strings.Replace(evidenceBlock(1, "null", "[]"), `"version":"zond"`, `"execution_optimistic":true,"version":"other"`, 1), 200, true, false},
-		{"invalid root", strings.Replace(evidenceBlock(0, headerProof(), "[]"), testRoot("3"), "0x12", 1), 200, true, true},
-		{"inconsistent headers", evidenceBlock(0, strings.Replace(headerProof(), `"proposer_index":"2"`, `"proposer_index":"3"`, 1), "[]"), 200, true, true},
-		{"invalid conflict", evidenceBlock(0, strings.ReplaceAll(headerProof(), testRoot("4"), testRoot("3")), "[]"), 200, true, true},
-		{"invalid attesting indices", evidenceBlock(0, "[]", strings.Replace(attesterProof(), `["2","3","4"]`, `["2","2","4"]`, 1)), 200, true, true},
+		{"empty", evidenceBlock(0, "[]", "[]"), 200, false},
+		{"missed", `{"message":"block not found"}`, 404, false},
+		{"generic 404", `{"message":"unknown route"}`, 404, true},
+		{"unavailable", `{"message":"database unavailable"}`, 503, true},
+		{"non-200 malformed body", `{`, 502, true},
+		{"bad json", `{`, 200, true},
+		{"wrong slot", evidenceBlock(1, "[]", "[]"), 200, true},
+		{"non-zond version", strings.Replace(evidenceBlock(0, "[]", "[]"), `"zond"`, `"other"`, 1), 200, false},
+		{"missing arrays", evidenceBlock(0, "null", "[]"), 200, true},
+		{"optimistic", strings.Replace(evidenceBlock(0, "[]", "[]"), `"version":"zond"`, `"execution_optimistic":true,"version":"zond"`, 1), 200, true},
+		{"optimistic invalid block", strings.Replace(evidenceBlock(1, "null", "[]"), `"version":"zond"`, `"execution_optimistic":true,"version":"other"`, 1), 200, true},
+		{"invalid root", strings.Replace(evidenceBlock(0, headerProof(), "[]"), testRoot("3"), "0x12", 1), 200, true},
+		{"inconsistent headers", evidenceBlock(0, strings.Replace(headerProof(), `"proposer_index":"2"`, `"proposer_index":"3"`, 1), "[]"), 200, true},
+		{"invalid conflict", evidenceBlock(0, strings.ReplaceAll(headerProof(), testRoot("4"), testRoot("3")), "[]"), 200, true},
+		{"invalid attesting indices", evidenceBlock(0, "[]", strings.Replace(attesterProof(), `["2","3","4"]`, `["2","2","4"]`, 1)), 200, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(tc.status); fmt.Fprint(w, tc.body) }))
@@ -110,9 +109,6 @@ func TestSlashingEvidenceEmptyEpochAndFailures(t *testing.T) {
 			events, err := client.SlashingEvidence(context.Background(), 0)
 			if (err != nil) != tc.fail || (!tc.fail && len(events) != 0) {
 				t.Fatalf("events=%v err=%v", events, err)
-			}
-			if errors.Is(err, models.ErrStructuralSlashingEvidence) != tc.structural {
-				t.Fatalf("structural=%t err=%v", tc.structural, err)
 			}
 		})
 	}
@@ -126,7 +122,7 @@ func TestSlashingEvidenceUsesSharedLimiterAndCancellation(t *testing.T) {
 	client.nextRequest = time.Now().Add(time.Second)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	if _, err := client.SlashingEvidence(ctx, 0); !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, models.ErrStructuralSlashingEvidence) || calls != 0 {
+	if _, err := client.SlashingEvidence(ctx, 0); !errors.Is(err, context.DeadlineExceeded) || calls != 0 {
 		t.Fatalf("calls=%d err=%v", calls, err)
 	}
 }
@@ -147,7 +143,7 @@ func TestSlashingEvidenceIntervalWithoutOperations(t *testing.T) {
 	}
 }
 
-func TestSlashingEvidenceRetainsValidEventsAcrossStructuralFailures(t *testing.T) {
+func TestSlashingEvidenceRetainsValidEventsAcrossFailures(t *testing.T) {
 	var slots []int64
 	client := testAssignmentClient(t, func(w http.ResponseWriter, r *http.Request) {
 		slot, _ := strconv.ParseInt(strings.TrimPrefix(r.URL.Path, "/qrl/v1/beacon/blocks/"), 10, 64)
@@ -157,6 +153,8 @@ func TestSlashingEvidenceRetainsValidEventsAcrossStructuralFailures(t *testing.T
 			fmt.Fprint(w, evidenceBlock(slot, headerProof(), "[]"))
 		case 10:
 			fmt.Fprint(w, "{")
+		case 12:
+			http.Error(w, "unavailable", http.StatusServiceUnavailable)
 		case 11:
 			// Valid operations on either side of a malformed proof survive.
 			proof := strings.TrimSuffix(strings.TrimPrefix(headerProof(), "["), "]")
@@ -167,7 +165,7 @@ func TestSlashingEvidenceRetainsValidEventsAcrossStructuralFailures(t *testing.T
 		}
 	})
 	events, err := client.SlashingEvidence(context.Background(), 2)
-	if !errors.Is(err, models.ErrStructuralSlashingEvidence) || !reflect.DeepEqual(slots, []int64{9, 10, 11, 12, 13, 14, 15, 16}) {
+	if err == nil || !reflect.DeepEqual(slots, []int64{9, 10, 11, 12, 13, 14, 15, 16}) {
 		t.Fatalf("slots=%v err=%v", slots, err)
 	}
 	ids := make([]string, 0, len(events))
@@ -187,8 +185,8 @@ func TestSlashingEvidenceTransientFailureAfterStructuralFailure(t *testing.T) {
 		}
 		http.Error(w, "unavailable", http.StatusServiceUnavailable)
 	})
-	if _, err := client.SlashingEvidence(context.Background(), 2); err == nil || errors.Is(err, models.ErrStructuralSlashingEvidence) {
-		t.Fatalf("transient failure must retry: %v", err)
+	if _, err := client.SlashingEvidence(context.Background(), 2); err == nil {
+		t.Fatalf("expected evidence failure: %v", err)
 	}
 }
 
@@ -196,8 +194,8 @@ func TestSlashingEvidenceTransportFailureIsTransient(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	server.Close()
 	client := NewSlotAssignmentClient(server.URL, models.ChainTiming{SlotsPerEpoch: 8, SecondsPerSlot: 60, GenesisTime: 1000})
-	if _, err := client.SlashingEvidence(context.Background(), 0); err == nil || errors.Is(err, models.ErrStructuralSlashingEvidence) {
-		t.Fatalf("transport failure must retry: %v", err)
+	if _, err := client.SlashingEvidence(context.Background(), 0); err == nil {
+		t.Fatalf("expected transport failure: %v", err)
 	}
 }
 

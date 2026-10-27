@@ -31,9 +31,10 @@ export default async function SlashingsPage({
       BigInt(validator) > BigInt('18446744073709551615'))
   )
     notFound();
+  const validatorIndex = validator === undefined ? undefined : BigInt(validator).toString();
   return (
     <main>
-      <SlashingsClient key={validator ?? 'network'} validatorIndex={validator} />
+      <SlashingsClient key={validatorIndex ?? 'network'} validatorIndex={validatorIndex} />
     </main>
   );
 }

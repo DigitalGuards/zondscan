@@ -1,10 +1,5 @@
 package models
 
-import "errors"
-
-// Structural evidence failures resolve the comparison with a missing marker.
-var ErrStructuralSlashingEvidence = errors.New("structural slashing evidence error")
-
 type ValidatorSetChange struct {
 	ID             string `bson:"_id" json:"id"`
 	Epoch          int64  `bson:"epoch" json:"epoch"`
@@ -26,7 +21,6 @@ type SlashingEvent struct {
 // Only slashed records are needed to compare adjacent first-slot states.
 type SlashedValidator struct {
 	Index           string `bson:"index"`
-	Pubkey          string `bson:"pubkey"`
 	ActivationEpoch uint64 `bson:"activationEpoch"`
 }
 
@@ -35,4 +29,5 @@ type SlashingSnapshot struct {
 	Validators      []SlashedValidator `bson:"validators"`
 	Resolved        bool               `bson:"resolved"`
 	EvidenceMissing bool               `bson:"evidenceMissing,omitempty"`
+	EvidenceRetryAt int64              `bson:"evidenceRetryAt,omitempty"`
 }

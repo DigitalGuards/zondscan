@@ -45,19 +45,21 @@ func TestBeaconResponseSizeCaps(t *testing.T) {
 				}
 			})
 			var response slashingBlockResponse
-			err := client.get(context.Background(), tc.path, &response)
+			var err error
+			if tc.path == blockPath {
+				_, err = client.slashingsAtSlot(context.Background(), 0)
+			} else {
+				err = client.get(context.Background(), tc.path, &response)
+			}
 			if tc.status != http.StatusOK {
 				var status *beaconStatusError
-				if !errors.As(err, &status) || status.status != tc.status || errors.Is(err, models.ErrStructuralSlashingEvidence) {
+				if !errors.As(err, &status) || status.status != tc.status {
 					t.Fatalf("HTTP failure must retry: %v", err)
 				}
 				return
 			}
 			if (err != nil) != tc.tooLarge || (err != nil && !strings.Contains(err.Error(), "exceeds size limit")) {
 				t.Fatalf("size=%d error=%v", tc.size, err)
-			}
-			if errors.Is(err, models.ErrStructuralSlashingEvidence) != (tc.tooLarge && tc.path == blockPath) {
-				t.Fatalf("size error classification: %v", err)
 			}
 		})
 	}

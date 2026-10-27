@@ -14,6 +14,8 @@ import (
 	"QRL2MongoDB/models"
 )
 
+const maxBeaconBlockResponse = 64 << 20
+
 type slashingHeader struct {
 	Slot          string `json:"slot"`
 	ProposerIndex string `json:"proposer_index"`
@@ -90,13 +92,16 @@ func (c *SlotAssignmentClient) SlashingEvidence(ctx context.Context, observedEpo
 	events := make([]models.SlashingEvent, 0)
 	var evidenceErr error
 	for slot := start; slot <= end; slot++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		rows, err := c.slashingsAtSlot(ctx, slot)
 		events = append(events, rows...)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if err != nil {
 			err = fmt.Errorf("slashing evidence slot %d: %w", slot, err)
-			if !errors.Is(err, models.ErrStructuralSlashingEvidence) {
-				return nil, err
-			}
 			evidenceErr = errors.Join(evidenceErr, err)
 		}
 	}
@@ -105,7 +110,7 @@ func (c *SlotAssignmentClient) SlashingEvidence(ctx context.Context, observedEpo
 
 func (c *SlotAssignmentClient) slashingsAtSlot(ctx context.Context, slot int64) ([]models.SlashingEvent, error) {
 	var response slashingBlockResponse
-	if err := c.get(ctx, "/qrl/v1/beacon/blocks/"+strconv.FormatInt(slot, 10), &response); err != nil {
+	if err := c.getWithLimit(ctx, "/qrl/v1/beacon/blocks/"+strconv.FormatInt(slot, 10), &response, maxBeaconBlockResponse); err != nil {
 		var status *beaconStatusError
 		if errors.As(err, &status) && status.missingBlock {
 			return nil, nil
@@ -115,17 +120,13 @@ func (c *SlotAssignmentClient) slashingsAtSlot(ctx context.Context, slot int64) 
 	if response.Optimistic {
 		return nil, errors.New("optimistic slashing block")
 	}
-	events, err := c.parseSlashingBlock(response, slot)
-	if err != nil {
-		return events, fmt.Errorf("%w: %v", models.ErrStructuralSlashingEvidence, err)
-	}
-	return events, nil
+	return c.parseSlashingBlock(response, slot)
 }
 
 func (c *SlotAssignmentClient) parseSlashingBlock(response slashingBlockResponse, slot int64) ([]models.SlashingEvent, error) {
 	block := response.Data.Message
 	n, err := strconv.ParseInt(block.Slot, 10, 64)
-	if err != nil || n != slot || response.Version != "zond" ||
+	if err != nil || n != slot ||
 		block.Body.ProposerSlashings == nil || block.Body.AttesterSlashings == nil {
 		return nil, errors.New("invalid slashing block")
 	}

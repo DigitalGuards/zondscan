@@ -15,8 +15,8 @@ export default function ValidatorActivity({
 }: {
   index: string;
   slashed: boolean;
-  events: SlashingEvent[];
-  changes: ValidatorSetChange[];
+  events?: SlashingEvent[];
+  changes?: ValidatorSetChange[];
   timing?: ChainTiming;
 }) {
   return (
@@ -30,21 +30,29 @@ export default function ValidatorActivity({
         </h2>
         <Badge variant={slashed ? 'error' : 'success'}>{slashed ? 'Slashed' : 'Not slashed'}</Badge>
       </div>
-      <SlashingEventsTable
-        events={events}
-        emptyMessage={
-          slashed
-            ? 'Slashing evidence for this validator has not been indexed.'
-            : 'This validator has no slashing events.'
-        }
-        timing={timing}
-      />
-      <h3 className="font-display font-semibold text-text-primary">Validator set changes</h3>
-      <ValidatorSetChangesTable
-        changes={changes}
-        timing={timing}
-        emptyMessage="No set changes have been indexed for this validator yet."
-      />
+      {events && changes ? (
+        <>
+          <SlashingEventsTable
+            events={events}
+            emptyMessage={
+              slashed
+                ? 'Slashing evidence for this validator has not been indexed.'
+                : 'This validator has no slashing events.'
+            }
+            timing={timing}
+          />
+          <h3 className="font-display font-semibold text-text-primary">Validator set changes</h3>
+          <ValidatorSetChangesTable
+            changes={changes}
+            timing={timing}
+            emptyMessage="No set changes have been indexed for this validator yet."
+          />
+        </>
+      ) : (
+        <p role="alert" className="text-error">
+          Slashing activity could not be loaded.
+        </p>
+      )}
       <Link
         href={`/slashings?validator=${index}`}
         className="inline-block text-sm text-accent hover:underline"

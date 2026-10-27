@@ -16,15 +16,23 @@ const historyTestEjectionBalance uint64 = 20000000000000
 var historyTestTiming = models.ChainTiming{SlotsPerEpoch: 8, SecondsPerSlot: 60, GenesisTime: 1790582760}
 
 type historyTestSource struct {
-	finalized      int64
-	slots          []int64
-	failSlot       *int64
-	afterFetch     func()
-	validators     map[int64][]models.StateValidator
-	evidence       map[int64][]models.SlashingEvent
-	evidenceEpochs []int64
-	evidenceErr    error
-	afterEvidence  func()
+	finalized       int64
+	slots           []int64
+	failSlot        *int64
+	afterFetch      func()
+	validators      map[int64][]models.StateValidator
+	evidence        map[int64][]models.SlashingEvent
+	evidenceEpochs  []int64
+	evidenceErr     error
+	afterEvidence   func()
+	ejectionBalance uint64
+	specErr         error
+	specReads       int
+}
+
+func (s *historyTestSource) EjectionBalance(context.Context) (uint64, error) {
+	s.specReads++
+	return s.ejectionBalance, s.specErr
 }
 
 func (s *historyTestSource) FinalizedEpoch(context.Context) (int64, error) { return s.finalized, nil }
@@ -57,25 +65,86 @@ func (s *historyTestSource) SlashingEvidence(ctx context.Context, epoch int64) (
 }
 
 type historyTestStore struct {
-	state      validatorHistoryCursor
-	exists     bool
-	records    map[string]models.ValidatorHistoryRecord
-	failCursor bool
-	leased     bool
-	changes    map[string]models.ValidatorSetChange
-	events     map[string]models.SlashingEvent
+	state         validatorHistoryCursor
+	exists        bool
+	records       map[string]models.ValidatorHistoryRecord
+	failCursor    bool
+	leased        bool
+	changes       map[string]models.ValidatorSetChange
+	events        map[string]models.SlashingEvent
+	snapshotReads [][]int64
+	repairReads   int
+	repairWrites  int
+	pendingErr    error
+	changesErr    error
+	repairErr     error
 }
 
 func (s *historyTestStore) Load(context.Context) (validatorHistoryCursor, bool, error) {
 	return s.state, s.exists, nil
 }
-func (s *historyTestStore) Snapshot(_ context.Context, epoch int64) (*models.SlashingSnapshot, error) {
-	row := s.records[strconv.FormatInt(epoch, 10)]
-	if row.SlashingSnapshot == nil {
-		return nil, nil
+func (s *historyTestStore) Snapshots(_ context.Context, epochs []int64) (map[int64]*models.SlashingSnapshot, error) {
+	s.snapshotReads = append(s.snapshotReads, epochs)
+	snapshots := make(map[int64]*models.SlashingSnapshot)
+	for _, epoch := range epochs {
+		row := s.records[strconv.FormatInt(epoch, 10)]
+		if row.SlashingSnapshot != nil {
+			copy := *row.SlashingSnapshot
+			snapshots[epoch] = &copy
+		}
 	}
-	copy := *row.SlashingSnapshot
-	return &copy, nil
+	return snapshots, nil
+}
+
+func (s *historyTestStore) PendingEvidence(_ context.Context, now int64) (*models.SlashingSnapshot, error) {
+	s.repairReads++
+	var oldest *models.SlashingSnapshot
+	for _, row := range s.records {
+		snapshot := row.SlashingSnapshot
+		if snapshot != nil && snapshot.EvidenceMissing && snapshot.EvidenceRetryAt <= now && (oldest == nil || snapshot.Epoch < oldest.Epoch) {
+			copy := *snapshot
+			oldest = &copy
+		}
+	}
+	return oldest, s.pendingErr
+}
+
+func (s *historyTestStore) SlashedChanges(_ context.Context, epoch int64) ([]models.ValidatorSetChange, error) {
+	var changes []models.ValidatorSetChange
+	for _, row := range s.changes {
+		if row.Epoch == epoch && row.Kind == "slashed" {
+			changes = append(changes, row)
+		}
+	}
+	return changes, s.changesErr
+}
+
+func (s *historyTestStore) resolve(resolution slashingResolution) {
+	snapshot := s.records[strconv.FormatInt(resolution.Epoch, 10)].SlashingSnapshot
+	snapshot.Resolved = true
+	snapshot.EvidenceMissing = resolution.EvidenceErr != nil
+	snapshot.EvidenceRetryAt = resolution.EvidenceRetryAt
+}
+
+func (s *historyTestStore) SaveEvidenceRepair(ctx context.Context, resolution slashingResolution, events []models.SlashingEvent) error {
+	write := func(ctx context.Context) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if s.repairErr != nil {
+			return s.repairErr
+		}
+		s.repairWrites++
+		for _, event := range events {
+			s.events[event.ID] = event
+		}
+		s.resolve(resolution)
+		return nil
+	}
+	if s.leased {
+		return slotAssignmentMutation(ctx, write)
+	}
+	return write(ctx)
 }
 
 func (s *historyTestStore) Save(ctx context.Context, state validatorHistoryCursor, record *models.ValidatorHistoryRecord, activity validatorActivity) error {
@@ -101,9 +170,7 @@ func (s *historyTestStore) Save(ctx context.Context, state validatorHistoryCurso
 			}
 			s.records[record.Epoch] = *record
 			for _, resolution := range activity.Resolutions {
-				snapshot := s.records[strconv.FormatInt(resolution.Epoch, 10)].SlashingSnapshot
-				snapshot.Resolved = true
-				snapshot.EvidenceMissing = resolution.EvidenceErr != nil
+				s.resolve(resolution)
 			}
 			if s.failCursor {
 				return errors.New("cursor write interrupted")

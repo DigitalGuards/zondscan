@@ -1,6 +1,7 @@
 'use client';
 
 import { useChainTiming } from '../../lib/useChainTiming';
+import type { ChainTiming } from '../../lib/chainTiming';
 import { isArray, isRecord } from '../../lib/guards';
 
 import { useState, useEffect } from 'react';
@@ -27,8 +28,6 @@ import {
 } from '../../lib/validatorActivity';
 
 interface ValidatorDetail {
-  slashingEvents: SlashingEvent[];
-  validatorSetChanges: ValidatorSetChange[];
   index: string;
   publicKeyHex: string;
   withdrawalCredentialsHex: string;
@@ -43,16 +42,59 @@ interface ValidatorDetail {
   currentEpoch: string;
 }
 
+interface ValidatorActivityData {
+  events: SlashingEvent[];
+  changes: ValidatorSetChange[];
+}
+
 interface ValidatorDetailClientProps {
   id: string;
 }
 
 const FAR_FUTURE_EPOCH = '18446744073709551615';
 
+function isValidatorDetail(data: unknown): data is ValidatorDetail {
+  return (
+    isRecord(data) &&
+    typeof data.slashed === 'boolean' &&
+    typeof data.age === 'number' &&
+    Number.isFinite(data.age) &&
+    [
+      'index',
+      'publicKeyHex',
+      'withdrawalCredentialsHex',
+      'effectiveBalance',
+      'activationEligibilityEpoch',
+      'activationEpoch',
+      'exitEpoch',
+      'withdrawableEpoch',
+      'status',
+      'currentEpoch',
+    ].every((key) => typeof data[key] === 'string')
+  );
+}
+
+export function parseValidatorDetail(data: unknown): {
+  validator: ValidatorDetail;
+  activity: ValidatorActivityData | null;
+} {
+  if (!isValidatorDetail(data)) throw new Error('Invalid validator response');
+  const activity =
+    isRecord(data) &&
+    isArray(data.slashingEvents) &&
+    data.slashingEvents.every(isSlashingEvent) &&
+    isArray(data.validatorSetChanges) &&
+    data.validatorSetChanges.every(isValidatorSetChange)
+      ? { events: data.slashingEvents, changes: data.validatorSetChanges }
+      : null;
+  return { validator: data, activity };
+}
+
 export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps) {
   const router = useRouter();
   const { data: timing } = useChainTiming();
   const [validator, setValidator] = useState<ValidatorDetail | null>(null);
+  const [activity, setActivity] = useState<ValidatorActivityData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,15 +103,9 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
       try {
         setLoading(true);
         const response = await axios.get(`${config.handlerUrl}/validator/${id}`);
-        const data: unknown = response.data;
-        if (
-          !isRecord(data) || typeof data.slashed !== 'boolean' ||
-          !isArray(data.slashingEvents) || !data.slashingEvents.every(isSlashingEvent) ||
-          !isArray(data.validatorSetChanges) || !data.validatorSetChanges.every(isValidatorSetChange)
-        ) {
-          throw new Error('Invalid validator activity response');
-        }
-        setValidator(response.data);
+        const parsed = parseValidatorDetail(response.data);
+        setValidator(parsed.validator);
+        setActivity(parsed.activity);
         setError(null);
       } catch (err: unknown) {
         console.error('Error fetching validator:', err);
@@ -86,25 +122,6 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
 
     fetchValidator();
   }, [id]);
-
-  const getStatusBadge = (status: string) => {
-    const variantMap: Record<string, 'success' | 'warning' | 'neutral' | 'error'> = {
-      active: 'success',
-      pending: 'warning',
-      exited: 'neutral',
-      slashed: 'error',
-    };
-    return (
-      <Badge variant={variantMap[status] || 'warning'} size="md" dot>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
-      </Badge>
-    );
-  };
-
-  const formatEpoch = (epoch: string): string => {
-    if (epoch === FAR_FUTURE_EPOCH) return 'N/A';
-    return parseInt(epoch).toLocaleString();
-  };
 
   if (loading) {
     return (
@@ -148,6 +165,37 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
       />
     );
   }
+
+  return <ValidatorDetailContent validator={validator} activity={activity} timing={timing} />;
+}
+
+export function ValidatorDetailContent({
+  validator,
+  activity,
+  timing,
+}: {
+  validator: ValidatorDetail;
+  activity: ValidatorActivityData | null;
+  timing?: ChainTiming;
+}) {
+  const getStatusBadge = (status: string) => {
+    const variantMap: Record<string, 'success' | 'warning' | 'neutral' | 'error'> = {
+      active: 'success',
+      pending: 'warning',
+      exited: 'neutral',
+      slashed: 'error',
+    };
+    return (
+      <Badge variant={variantMap[status] || 'warning'} size="md" dot>
+        {status.charAt(0).toUpperCase() + status.slice(1)}
+      </Badge>
+    );
+  };
+
+  const formatEpoch = (epoch: string): string => {
+    if (epoch === FAR_FUTURE_EPOCH) return 'N/A';
+    return parseInt(epoch).toLocaleString();
+  };
 
   const [amount, unit] = formatValidatorBalance(validator.effectiveBalance);
   // Decoded execution-layer withdrawal address; null for non-standard
@@ -302,8 +350,8 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
       <ValidatorActivity
         index={validator.index}
         slashed={validator.slashed}
-        events={validator.slashingEvents}
-        changes={validator.validatorSetChanges}
+        events={activity?.events}
+        changes={activity?.changes}
         timing={timing}
       />
     </div>
