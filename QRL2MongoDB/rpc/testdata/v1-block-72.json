@@ -1,0 +1,81 @@
+{
+ "version": "zond",
+ "execution_optimistic": false,
+ "finalized": false,
+ "data": {
+  "message": {
+   "slot": "72",
+   "proposer_index": "9",
+   "parent_root": "0xa45cd932ae34e6eae8c845bffcb4655dd8cc8637976771bb8c7e15cf5a1b88d4",
+   "state_root": "0xeddf688411c99cc79777a1787902b466c30704b4eabc6a3665c36794a468bb1c",
+   "body": {
+    "proposer_slashings": [
+     {
+      "signed_header_1": {
+       "message": {
+        "slot": "69",
+        "proposer_index": "14",
+        "parent_root": "0x7468726f776177617920706172656e7400000000000000000000000000000000",
+        "state_root": "0x7468726f77617761792073746174650000000000000000000000000000000000",
+        "body_root": "0xd29c7ef72aaa4beae62f4f511b2f0f8f57c82ad5f058b47fcaa1d0d2d86d2b60"
+       },
+       "signature": "0x38d02951b5c5258d1875e7..."
+      },
+      "signed_header_2": null
+     }
+    ],
+    "attester_slashings": [
+     {
+      "attestation_1": {
+       "attesting_indices": [
+        "1",
+        "12"
+       ],
+       "data": {
+        "slot": "69",
+        "index": "0",
+        "beacon_block_root": "0xb656df3a30ee1f215ec90c7323fd7a63fc586cc808af7a951ec98559f9ab3392",
+        "source": {
+         "epoch": "7",
+         "root": "0xd1bc5d9874ae94f205bc8f443e933e87cdbfe089c84c35822ef9213d82497703"
+        },
+        "target": {
+         "epoch": "8",
+         "root": "0x02b2fe7fc3670ac8e9917dae04b0f55dca769aa983320794f7b46f4788e6c89e"
+        }
+       },
+       "signatures": [
+        "0x0a6c33901bd93164a39fab...",
+        "0xc565ec9a9b0cc66de73ec4..."
+       ]
+      },
+      "attestation_2": {
+       "attesting_indices": [
+        "1",
+        "12"
+       ],
+       "data": {
+        "slot": "69",
+        "index": "0",
+        "beacon_block_root": "0x513abc9bef710f697e95868b9dae09ad688fdd497933b315f0a3845d7b7293d7",
+        "source": {
+         "epoch": "7",
+         "root": "0xd1bc5d9874ae94f205bc8f443e933e87cdbfe089c84c35822ef9213d82497703"
+        },
+        "target": {
+         "epoch": "8",
+         "root": "0x02b2fe7fc3670ac8e9917dae04b0f55dca769aa983320794f7b46f4788e6c89e"
+        }
+       },
+       "signatures": [
+        "0x886de8478e394e8feaa2f1...",
+        "0xf6a5c30fad6e91141618f9..."
+       ]
+      }
+     }
+    ]
+   }
+  },
+  "signature": "0xcd815354b4c6f3d586aac3..."
+ }
+}

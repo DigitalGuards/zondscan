@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -145,6 +148,79 @@ func TestActivityWalkerRepairsTransientBlockFetch(t *testing.T) {
 				t.Fatalf("logs=%v reads=%d writes=%d", logs.All(), store.repairReads, store.repairWrites)
 			}
 		})
+	}
+}
+
+func TestActivityWalkerRepairsCorruptedProposerSlashing(t *testing.T) {
+	logs := observeActivityWarnings(t)
+	primary, err := os.ReadFile("../rpc/testdata/v1-block-72.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fallback, err := os.ReadFile("../rpc/testdata/v1alpha2-blocks-slot-72.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fallbackCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/qrl/v1/beacon/blocks/72":
+			w.Write(primary)
+		case "/qrl/v1alpha2/beacon/blocks":
+			if r.URL.RawQuery != "slot=72" {
+				t.Errorf("fallback query=%s", r.URL.RawQuery)
+			}
+			if fallbackCalls.Add(1) == 1 {
+				http.Error(w, "unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			w.Write(fallback)
+		default:
+			slot, err := strconv.ParseInt(strings.TrimPrefix(r.URL.Path, "/qrl/v1/beacon/blocks/"), 10, 64)
+			if err != nil || slot < 65 || slot > 71 {
+				t.Errorf("unexpected request: %s", r.URL.Path)
+			}
+			http.Error(w, `{"message":"block not found"}`, http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	source := historyBeaconSource{&historyTestSource{finalized: 8, validators: make(map[int64][]models.StateValidator)}, rpc.NewSlotAssignmentClient(server.URL, historyTestTiming)}
+	for epoch := int64(0); epoch <= 9; epoch++ {
+		for _, index := range []string{"1", "12", "14"} {
+			v := historyActivityValidator(epoch == 9)
+			v.Index, v.Validator.Pubkey = index, fmt.Sprintf("0x%04s", index)
+			source.validators[epoch*8] = append(source.validators[epoch*8], v)
+		}
+	}
+	store := &historyTestStore{}
+	if _, err := walkValidatorHistory(context.Background(), source, store, historyTestTiming, historyTestEjectionBalance); err != nil {
+		t.Fatal(err)
+	}
+	source.finalized = 9
+	if _, err := walkValidatorHistory(context.Background(), source, store, historyTestTiming, historyTestEjectionBalance); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := store.records["9"].SlashingSnapshot
+	attester := store.events["72:attester:0"]
+	if !snapshot.Resolved || !snapshot.EvidenceMissing || snapshot.EvidenceRetryAt == 0 || len(store.events) != 1 ||
+		!reflect.DeepEqual(attester.ValidatorIndices, []string{"1", "12"}) || fallbackCalls.Load() != 1 {
+		t.Fatalf("snapshot=%+v events=%v fallback calls=%d", snapshot, store.events, fallbackCalls.Load())
+	}
+	for _, index := range []string{"1", "12", "14"} {
+		if store.changes["9:slashed:"+index].Kind != "slashed" {
+			t.Fatalf("missing slashed change for %s", index)
+		}
+	}
+	snapshot.EvidenceRetryAt = time.Now().Unix()
+	if _, err := walkValidatorHistory(context.Background(), source, store, historyTestTiming, historyTestEjectionBalance); err != nil {
+		t.Fatal(err)
+	}
+	proposer := store.events["72:proposer:0"]
+	if snapshot.EvidenceMissing || snapshot.EvidenceRetryAt != 0 || !snapshot.Resolved || len(store.events) != 2 ||
+		!reflect.DeepEqual(proposer.ValidatorIndices, []string{"14"}) || proposer.Whistleblower != "9" ||
+		!reflect.DeepEqual(proposer.ConflictingRoots, []string{"0x64733d0e885a3b9f8dcbdced0c31b8343a0690da771919cdf4085595a4b7fa56", "0x9f1e53e98fdb425a2d0af8bd3226335502c5b003432bd4fe248c219d1b03c186"}) ||
+		!reflect.DeepEqual(store.events[attester.ID], attester) || fallbackCalls.Load() != 2 || store.repairWrites != 1 || logs.Len() != 1 {
+		t.Fatalf("snapshot=%+v events=%v fallback calls=%d repairs=%d logs=%v", snapshot, store.events, fallbackCalls.Load(), store.repairWrites, logs.All())
 	}
 }
 

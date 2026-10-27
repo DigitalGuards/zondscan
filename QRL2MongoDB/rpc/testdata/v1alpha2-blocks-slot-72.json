@@ -1,0 +1,95 @@
+{
+ "blockContainers": [
+  {
+   "blockRoot": "QtEp+XfBgY6aQjAY2GuYO5kNICaH5z9l+5BsFOXGvS8=",
+   "canonical": true,
+   "blindedCapellaBlock": {
+    "block": {
+     "slot": "72",
+     "proposerIndex": "9",
+     "parentRoot": "pFzZMq405uroyEW//LRlXdjMhjeXZ3G7jH4Vz1obiNQ=",
+     "stateRoot": "7d9ohBHJnMeXd6F4eQK0ZsMHBLTqvGo2ZcNnlKRouxw=",
+     "body": {
+      "proposerSlashings": [
+       {
+        "header1": {
+         "header": {
+          "slot": "69",
+          "proposerIndex": "14",
+          "parentRoot": "dGhyb3dhd2F5IHBhcmVudAAAAAAAAAAAAAAAAAAAAAA=",
+          "stateRoot": "dGhyb3dhd2F5IHN0YXRlAAAAAAAAAAAAAAAAAAAAAAA=",
+          "bodyRoot": "9cKNmmc2l6C7+L3TAxwEONjlrcjxTV/8ZTJg8m63L5M="
+         },
+         "signature": "HGdrKX8J/vQrs5wGEhyrb0yX..."
+        },
+        "header2": {
+         "header": {
+          "slot": "69",
+          "proposerIndex": "14",
+          "parentRoot": "dGhyb3dhd2F5IHBhcmVudAAAAAAAAAAAAAAAAAAAAAA=",
+          "stateRoot": "dGhyb3dhd2F5IHN0YXRlAAAAAAAAAAAAAAAAAAAAAAA=",
+          "bodyRoot": "0px+9yqqS+rmL09RGy8Pj1fIKtXwWLR/yqHQ0thtK2A="
+         },
+         "signature": "ONApUbXFJY0Ydecrd65F9y4g..."
+        }
+       }
+      ],
+      "attesterSlashings": [
+       {
+        "attestation1": {
+         "attestingIndices": [
+          "1",
+          "12"
+         ],
+         "data": {
+          "slot": "69",
+          "committeeIndex": "0",
+          "beaconBlockRoot": "tlbfOjDuHyFeyQxzI/16Y/xYbMgIr3qVHsmFWfmrM5I=",
+          "source": {
+           "epoch": "7",
+           "root": "0bxdmHSulPIFvI9EPpM+h82/4InITDWCLvkhPYJJdwM="
+          },
+          "target": {
+           "epoch": "8",
+           "root": "ArL+f8NnCsjpkX2uBLD1Xcp2mqmDMgeU97RvR4jmyJ4="
+          }
+         },
+         "signatures": [
+          "CmwzkBvZMWSjn6tFPDMD23cV...",
+          "xWXsmpsMxm3nPsQcJZvE7XZG..."
+         ]
+        },
+        "attestation2": {
+         "attestingIndices": [
+          "1",
+          "12"
+         ],
+         "data": {
+          "slot": "69",
+          "committeeIndex": "0",
+          "beaconBlockRoot": "UTq8m+9xD2l+lYaLna4JrWiP3Ul5M7MV8KOEXXtyk9c=",
+          "source": {
+           "epoch": "7",
+           "root": "0bxdmHSulPIFvI9EPpM+h82/4InITDWCLvkhPYJJdwM="
+          },
+          "target": {
+           "epoch": "8",
+           "root": "ArL+f8NnCsjpkX2uBLD1Xcp2mqmDMgeU97RvR4jmyJ4="
+          }
+         },
+         "signatures": [
+          "iG3oR445To/qovGqNP6JmU9v...",
+          "9qXDD61ukRQWGPm47dYvAiYG..."
+         ]
+        }
+       }
+      ]
+     }
+    },
+    "signature": "zYFTVLTG89WGqsOOAFsG/Ch8..."
+   }
+  }
+ ],
+ "nextPageToken": "",
+ "totalSize": 1
+}
