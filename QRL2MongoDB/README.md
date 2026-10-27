@@ -329,6 +329,16 @@ No block evidence requests are made for unchanged slashed flags. Every fetched
 slot is at or below the finalized checkpoint. Event epochs identify the actual
 including block, so an event can precede its flag-observation change by one epoch.
 
+Qrysm builds before commit 141182805 (28 September 2026), such as the one on the
+v3 private test network, can drop a proposer slashing header in the v1 block
+conversion because the protobuf field numbers differ between API versions. When
+either header is missing, the syncer reads
+`/qrl/v1alpha2/beacon/blocks?slot={slot}` and requires one canonical block
+matching the slot and v1 proposer. Its base64 header roots pass through the
+existing validation and SSZ hashing; attester evidence comes from v1. Fallback
+failures retain the missing-evidence retry marker. The fallback switches off
+automatically whenever the v1 proposer headers are intact.
+
 Proposer evidence identifies the conflicting headers' proposer. Attester
 evidence uses the intersection of attesting indices, restricted to validators
 whose flags changed in this interval and whose activation epoch has passed.

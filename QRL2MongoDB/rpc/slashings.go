@@ -3,8 +3,10 @@ package rpc
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -22,6 +24,33 @@ type slashingHeader struct {
 	ParentRoot    string `json:"parent_root"`
 	StateRoot     string `json:"state_root"`
 	BodyRoot      string `json:"body_root"`
+}
+
+type signedSlashingHeader struct {
+	Message slashingHeader `json:"message"`
+}
+
+type proposerSlashing struct {
+	Header1 *signedSlashingHeader `json:"signed_header_1"`
+	Header2 *signedSlashingHeader `json:"signed_header_2"`
+}
+
+type legacySignedSlashingHeader struct {
+	Header struct {
+		Slot          string `json:"slot"`
+		ProposerIndex string `json:"proposerIndex"`
+		ParentRoot    string `json:"parentRoot"`
+		StateRoot     string `json:"stateRoot"`
+		BodyRoot      string `json:"bodyRoot"`
+	} `json:"header"`
+}
+
+type legacySlashingBlock struct {
+	Slot          string `json:"slot"`
+	ProposerIndex string `json:"proposerIndex"`
+	Body          *struct {
+		ProposerSlashings json.RawMessage `json:"proposerSlashings"`
+	} `json:"body"`
 }
 
 type slashingCheckpoint struct {
@@ -50,14 +79,7 @@ type slashingBlockResponse struct {
 			Slot          string `json:"slot"`
 			ProposerIndex string `json:"proposer_index"`
 			Body          struct {
-				ProposerSlashings []struct {
-					Header1 struct {
-						Message slashingHeader `json:"message"`
-					} `json:"signed_header_1"`
-					Header2 struct {
-						Message slashingHeader `json:"message"`
-					} `json:"signed_header_2"`
-				} `json:"proposer_slashings"`
+				ProposerSlashings []proposerSlashing `json:"proposer_slashings"`
 				AttesterSlashings []struct {
 					Attestation1 slashingAttestation `json:"attestation_1"`
 					Attestation2 slashingAttestation `json:"attestation_2"`
@@ -120,7 +142,121 @@ func (c *SlotAssignmentClient) slashingsAtSlot(ctx context.Context, slot int64) 
 	if response.Optimistic {
 		return nil, errors.New("optimistic slashing block")
 	}
-	return c.parseSlashingBlock(response, slot)
+	var fallbackErr error
+	for _, proof := range response.Data.Message.Body.ProposerSlashings {
+		if proof.Header1 == nil || proof.Header2 == nil {
+			var proofs []proposerSlashing
+			proofs, fallbackErr = c.legacyProposerSlashings(ctx, slot, response.Data.Message.ProposerIndex)
+			if fallbackErr == nil && len(proofs) != len(response.Data.Message.Body.ProposerSlashings) {
+				fallbackErr = errors.New("proposer slashing count mismatch")
+			}
+			if fallbackErr == nil {
+				response.Data.Message.Body.ProposerSlashings = proofs
+			} else {
+				fallbackErr = fmt.Errorf("proposer slashing fallback: %w", fallbackErr)
+			}
+			break
+		}
+	}
+	events, err := c.parseSlashingBlock(response, slot)
+	return events, errors.Join(fallbackErr, err)
+}
+
+// Qrysm's v1 conversion can drop a proposer header. The legacy route retains
+// both headers; its fork-specific wrapper is identified by block.body.
+func (c *SlotAssignmentClient) legacyProposerSlashings(ctx context.Context, slot int64, proposer string) ([]proposerSlashing, error) {
+	proposer, err := canonicalValidatorIndex(proposer)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		BlockContainers []map[string]json.RawMessage `json:"blockContainers"`
+		NextPageToken   string                       `json:"nextPageToken"`
+	}
+	if err := c.getWithLimit(ctx, "/qrl/v1alpha2/beacon/blocks?slot="+strconv.FormatInt(slot, 10), &response, maxBeaconBlockResponse); err != nil {
+		return nil, err
+	}
+	if response.NextPageToken != "" {
+		return nil, errors.New("incomplete fallback block page")
+	}
+	var selected *legacySlashingBlock
+	for _, container := range response.BlockContainers {
+		var canonical bool
+		if err := json.Unmarshal(container["canonical"], &canonical); err != nil {
+			return nil, errors.New("invalid fallback block canonical flag")
+		}
+		if !canonical {
+			continue
+		}
+		wrappers := 0
+		for _, value := range container {
+			var wrapper struct {
+				Block *legacySlashingBlock `json:"block"`
+			}
+			if err := json.Unmarshal(value, &wrapper); err != nil || wrapper.Block == nil || wrapper.Block.Body == nil {
+				continue
+			}
+			wrappers++
+			if wrappers > 1 {
+				return nil, errors.New("ambiguous fallback block wrapper")
+			}
+			block := wrapper.Block
+			n, slotErr := strconv.ParseInt(block.Slot, 10, 64)
+			index, indexErr := canonicalValidatorIndex(block.ProposerIndex)
+			if slotErr != nil || n != slot || indexErr != nil || index != proposer {
+				continue
+			}
+			if selected != nil {
+				return nil, errors.New("multiple canonical fallback blocks")
+			}
+			selected = block
+		}
+	}
+	if selected == nil {
+		return nil, errors.New("missing canonical fallback slashing block")
+	}
+	var legacyProofs []struct {
+		Header1 *legacySignedSlashingHeader `json:"header1"`
+		Header2 *legacySignedSlashingHeader `json:"header2"`
+	}
+	if err := json.Unmarshal(selected.Body.ProposerSlashings, &legacyProofs); err != nil || legacyProofs == nil {
+		return nil, errors.New("invalid fallback proposer slashings")
+	}
+	proofs := make([]proposerSlashing, 0, len(legacyProofs))
+	for _, proof := range legacyProofs {
+		a, err := proof.Header1.toSlashingHeader()
+		if err != nil {
+			return nil, err
+		}
+		b, err := proof.Header2.toSlashingHeader()
+		if err != nil {
+			return nil, err
+		}
+		proofs = append(proofs, proposerSlashing{Header1: a, Header2: b})
+	}
+	return proofs, nil
+}
+
+func (h *legacySignedSlashingHeader) toSlashingHeader() (*signedSlashingHeader, error) {
+	if h == nil {
+		return nil, errors.New("missing fallback proposer slashing header")
+	}
+	header := slashingHeader{Slot: h.Header.Slot, ProposerIndex: h.Header.ProposerIndex}
+	for _, field := range []struct {
+		value string
+		hex   *string
+	}{
+		{h.Header.ParentRoot, &header.ParentRoot},
+		{h.Header.StateRoot, &header.StateRoot},
+		{h.Header.BodyRoot, &header.BodyRoot},
+	} {
+		root, err := base64.StdEncoding.DecodeString(field.value)
+		if err != nil || len(root) != 32 {
+			return nil, errors.New("invalid fallback slashing root")
+		}
+		*field.hex = "0x" + hex.EncodeToString(root)
+	}
+	return &signedSlashingHeader{Message: header}, nil
 }
 
 func (c *SlotAssignmentClient) parseSlashingBlock(response slashingBlockResponse, slot int64) ([]models.SlashingEvent, error) {
@@ -153,6 +289,9 @@ func (c *SlotAssignmentClient) parseSlashingBlock(response slashingBlockResponse
 	var evidenceErr error
 	for i, proof := range block.Body.ProposerSlashings {
 		err := func() error {
+			if proof.Header1 == nil || proof.Header2 == nil {
+				return errors.New("missing proposer slashing header")
+			}
 			a, b := proof.Header1.Message, proof.Header2.Message
 			index, err := canonicalValidatorIndex(a.ProposerIndex)
 			if err != nil || a.ProposerIndex != b.ProposerIndex || a.Slot != b.Slot {
