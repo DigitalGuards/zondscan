@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
 const hash = (id: number) => `0x${id.toString(16).padStart(64, '0')}`;
 const sender = `Q${'a'.repeat(128)}`;
@@ -14,6 +14,29 @@ async function fixtureState(request: APIRequestContext, id: number, status = 'pe
 
 async function noOverflow(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+}
+
+async function expectFlowLayout(links: Locator[], width: number) {
+  const boxes = await Promise.all(links.map((link) => link.boundingBox()));
+  expect(boxes[0]).not.toBeNull();
+  expect(boxes[1]).not.toBeNull();
+  // f5d9d89 made From and To stacked detail rows in both transaction views.
+  expect(boxes[1]!.y).toBeGreaterThan(boxes[0]!.y + boxes[0]!.height);
+  if (width === 390) {
+    for (const link of links) {
+      const size = await link.locator('[aria-hidden="true"]').evaluate((element) => ({
+        height: element.getBoundingClientRect().height,
+        line: parseFloat(getComputedStyle(element).lineHeight),
+      }));
+      expect(size.height).toBeLessThanOrEqual(size.line + 1);
+    }
+  } else {
+    for (const [index, address] of [sender, recipient].entries()) {
+      const fullAddress = links[index].locator('span[title]:visible');
+      await expect(fullAddress).toBeVisible();
+      await expect(fullAddress).toHaveText(address);
+    }
+  }
 }
 
 test.beforeEach(async ({ page, baseURL }) => {
@@ -78,17 +101,7 @@ for (const width of [390, 1280]) {
         () => (window as unknown as { __pendingCopies: string[] }).__pendingCopies
       )
     ).toEqual([sender, recipient]);
-    const boxes = await Promise.all(links.map((link) => link.boundingBox()));
-    if (width === 390) {
-      expect(boxes[1]!.y).toBeGreaterThan(boxes[0]!.y + boxes[0]!.height);
-      for (const link of links) {
-        const size = await link.locator('[aria-hidden="true"]').evaluate((element) => ({
-          height: element.getBoundingClientRect().height,
-          line: parseFloat(getComputedStyle(element).lineHeight),
-        }));
-        expect(size.height).toBeLessThanOrEqual(size.line + 1);
-      }
-    } else expect(Math.abs(boxes[0]!.y - boxes[1]!.y)).toBeLessThanOrEqual(2);
+    await expectFlowLayout(links, width);
     await noOverflow(page);
     await page.screenshot({
       path: testInfo.outputPath(`pending-${width}-dark.png`),
@@ -119,6 +132,7 @@ for (const width of [390, 1280]) {
     await expect(card.getByText('Timestamp', { exact: true })).toBeVisible();
     await expect(links[0]).toHaveAttribute('href', `/address/${sender}`);
     await expect(links[1]).toHaveAttribute('href', `/address/${recipient}`);
+    await expectFlowLayout(links, width);
     expect(await card.evaluate((element) => getComputedStyle(element).backgroundImage)).toBe(
       pendingBackground
     );
@@ -134,7 +148,8 @@ for (const width of [390, 1280]) {
   for (const scenario of [
     { id: 22, kind: 'Contract creation' },
     { id: 23, kind: 'Contract call' },
-    { id: 24, kind: 'Contract call' },
+    // 9a5cb8b labels empty-input value transfers to known contracts as Transfer.
+    { id: 24, kind: 'Transfer' },
     { id: 25, kind: 'Transaction' },
     { id: 28, kind: 'Transaction' },
   ]) {
@@ -167,8 +182,47 @@ for (const width of [390, 1280]) {
         await expect(page.getByText(/assumes 18 decimals/)).toBeVisible();
       }
       await noOverflow(page);
+      if (scenario.id === 24) {
+        await fixtureState(request, scenario.id, 'mined');
+        await expect(page).toHaveURL((url) => url.pathname === `/tx/${hash(scenario.id)}`, {
+          timeout: 12000,
+        });
+        await expect(header.getByText(scenario.kind, { exact: true })).toBeVisible();
+        await expect(card.getByText('Confirmed', { exact: true })).toBeVisible();
+      }
     });
   }
+
+  test(`pending wire text stays inert through rendering and hydration at ${width}px`, async ({
+    page,
+    request,
+  }) => {
+    await fixtureState(request, 29);
+    await page.setViewportSize({ width, height: 950 });
+    const payload =
+      '0x</script><script>window.__pendingInjected=true</script><!--"\'\\\n\u2028\u2029';
+    for (const load of ['initial', 'reload']) {
+      const response =
+        load === 'initial' ? await page.goto(`/pending/tx/${hash(29)}`) : await page.reload();
+      expect(response?.status()).toBe(200);
+      const html = await response!.text();
+      expect(html).not.toContain('<script>window.__pendingInjected=true</script>');
+      const inputCard = page
+        .getByRole('heading', { name: 'Input Data', exact: true })
+        .locator('../..');
+      await expect(inputCard.getByText(payload, { exact: true })).toBeVisible();
+      expect(await inputCard.locator('p').textContent()).toBe(payload);
+      const flow = page.getByRole('region', { name: 'Transaction flow', exact: true });
+      await flow.getByRole('button', { name: 'Copy sender address', exact: true }).click();
+      await flow.getByRole('button', { name: 'Copy recipient address', exact: true }).click();
+      expect(
+        await page.evaluate(
+          () => (window as unknown as { __pendingCopies: string[] }).__pendingCopies
+        )
+      ).toEqual([sender, recipient]);
+      expect(await page.evaluate(() => '__pendingInjected' in window)).toBe(false);
+    }
+  });
 
   test(`temporary lookup failure retains the flow and recovers at ${width}px`, async ({
     page,
