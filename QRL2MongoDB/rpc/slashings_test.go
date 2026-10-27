@@ -2,15 +2,19 @@ package rpc
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -196,6 +200,315 @@ func TestSlashingEvidenceTransportFailureIsTransient(t *testing.T) {
 	client := NewSlotAssignmentClient(server.URL, models.ChainTiming{SlotsPerEpoch: 8, SecondsPerSlot: 60, GenesisTime: 1000})
 	if _, err := client.SlashingEvidence(context.Background(), 0); err == nil {
 		t.Fatalf("expected transport failure: %v", err)
+	}
+}
+
+func slashingFixture(t *testing.T, name string) []byte {
+	t.Helper()
+	body, err := os.ReadFile("testdata/" + name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return body
+}
+
+func changeSlashingFixture(t *testing.T, body []byte, change func(map[string]any)) []byte {
+	t.Helper()
+	var response map[string]any
+	if err := json.Unmarshal(body, &response); err != nil {
+		t.Fatal(err)
+	}
+	change(response)
+	body, err := json.Marshal(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return body
+}
+
+func legacyFixtureContainer(response map[string]any) map[string]any {
+	return response["blockContainers"].([]any)[0].(map[string]any)
+}
+
+func legacyFixtureBlock(response map[string]any) map[string]any {
+	return legacyFixtureContainer(response)["blindedCapellaBlock"].(map[string]any)["block"].(map[string]any)
+}
+
+func slot72SlashingEvents() []models.SlashingEvent {
+	return []models.SlashingEvent{
+		{ID: "72:proposer:0", Slot: 72, Epoch: 9, Type: "proposer", ValidatorIndices: []string{"14"}, Whistleblower: "9",
+			ConflictingRoots: []string{"0x64733d0e885a3b9f8dcbdced0c31b8343a0690da771919cdf4085595a4b7fa56", "0x9f1e53e98fdb425a2d0af8bd3226335502c5b003432bd4fe248c219d1b03c186"}},
+		{ID: "72:attester:0", Slot: 72, Epoch: 9, Type: "attester", ValidatorIndices: []string{"1", "12"}, Whistleblower: "9",
+			ConflictingRoots: []string{"0xade38db7c2d1e1b65389fd704c6812d2e61371f585dc0c9463fbab08c09469b7", "0xd486b4fc968f2e6f2df8b179de4278245ecfcabe0a75f3d352544c1172af05f9"}},
+	}
+}
+
+func slot72SlashingClient(t *testing.T, primary, fallback []byte, fallbackStatus int) (*SlotAssignmentClient, *atomic.Int32) {
+	t.Helper()
+	var fallbackCalls atomic.Int32
+	client := testAssignmentClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/qrl/v1alpha2/beacon/blocks" {
+			fallbackCalls.Add(1)
+			if r.URL.RawQuery != "slot=72" {
+				t.Errorf("fallback query=%s", r.URL.RawQuery)
+			}
+			w.WriteHeader(fallbackStatus)
+			w.Write(fallback)
+			return
+		}
+		slot, err := strconv.ParseInt(strings.TrimPrefix(r.URL.Path, "/qrl/v1/beacon/blocks/"), 10, 64)
+		if err != nil {
+			t.Errorf("unexpected request: %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		if slot == 72 {
+			w.Write(primary)
+		} else {
+			fmt.Fprint(w, evidenceBlock(slot, "[]", "[]"))
+		}
+	})
+	return client, &fallbackCalls
+}
+
+func TestSlashingEvidenceProposerFallback(t *testing.T) {
+	primary := slashingFixture(t, "v1-block-72.json")
+	fallback := slashingFixture(t, "v1alpha2-blocks-slot-72.json")
+	var intact slashingBlockResponse
+	if err := json.Unmarshal(primary, &intact); err != nil {
+		t.Fatal(err)
+	}
+	proof := &intact.Data.Message.Body.ProposerSlashings[0]
+	proof.Header2 = proof.Header1
+	first := *proof.Header1
+	bodyRoot := sha256.Sum256([]byte("throwaway block body one"))
+	first.Message.BodyRoot = "0x" + hex.EncodeToString(bodyRoot[:])
+	proof.Header1 = &first
+	intactBody, err := json.Marshal(intact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name              string
+		primary, fallback []byte
+		wantCalls         int32
+	}{
+		{"corrupted v1", primary, fallback, 1},
+		{"intact v1", intactBody, fallback, 0},
+		{"absent second header", changeSlashingFixture(t, primary, func(response map[string]any) {
+			proof := response["data"].(map[string]any)["message"].(map[string]any)["body"].(map[string]any)["proposer_slashings"].([]any)[0].(map[string]any)
+			delete(proof, "signed_header_2")
+		}), fallback, 1},
+		{"null first header", changeSlashingFixture(t, intactBody, func(response map[string]any) {
+			proof := response["data"].(map[string]any)["message"].(map[string]any)["body"].(map[string]any)["proposer_slashings"].([]any)[0].(map[string]any)
+			proof["signed_header_1"] = nil
+		}), fallback, 1},
+		{"absent first header", changeSlashingFixture(t, intactBody, func(response map[string]any) {
+			proof := response["data"].(map[string]any)["message"].(map[string]any)["body"].(map[string]any)["proposer_slashings"].([]any)[0].(map[string]any)
+			delete(proof, "signed_header_1")
+		}), fallback, 1},
+		{"future wrapper", primary, changeSlashingFixture(t, fallback, func(response map[string]any) {
+			container := legacyFixtureContainer(response)
+			container["futureSignedBlock"] = container["blindedCapellaBlock"]
+			delete(container, "blindedCapellaBlock")
+		}), 1},
+		{"noncanonical sibling", primary, changeSlashingFixture(t, fallback, func(response map[string]any) {
+			container := legacyFixtureContainer(response)
+			response["blockContainers"] = append(response["blockContainers"].([]any), map[string]any{
+				"canonical": false, "blindedCapellaBlock": container["blindedCapellaBlock"],
+			})
+		}), 1},
+		{"unrelated canonical blocks", primary, changeSlashingFixture(t, fallback, func(response map[string]any) {
+			for _, metadata := range [][2]string{{"71", "9"}, {"72", "8"}} {
+				response["blockContainers"] = append(response["blockContainers"].([]any), map[string]any{
+					"canonical": true, "otherBlock": map[string]any{"block": map[string]any{
+						"slot": metadata[0], "proposerIndex": metadata[1], "body": map[string]any{},
+					}},
+				})
+			}
+		}), 1},
+		{"legacy attesters unused", primary, changeSlashingFixture(t, fallback, func(response map[string]any) {
+			legacyFixtureBlock(response)["body"].(map[string]any)["attesterSlashings"] = "unused"
+		}), 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client, calls := slot72SlashingClient(t, tc.primary, tc.fallback, http.StatusOK)
+			events, err := client.SlashingEvidence(context.Background(), 9)
+			if err != nil || calls.Load() != tc.wantCalls || !reflect.DeepEqual(events, slot72SlashingEvents()) {
+				t.Fatalf("fallback calls=%d events=%+v err=%v", calls.Load(), events, err)
+			}
+		})
+	}
+}
+
+func TestSlashingEvidenceProposerFallbackFailuresKeepAttesters(t *testing.T) {
+	primary := slashingFixture(t, "v1-block-72.json")
+	fallback := slashingFixture(t, "v1alpha2-blocks-slot-72.json")
+	legacyProof := func(response map[string]any) map[string]any {
+		return legacyFixtureBlock(response)["body"].(map[string]any)["proposerSlashings"].([]any)[0].(map[string]any)
+	}
+	for _, tc := range []struct {
+		name   string
+		status int
+		change func(map[string]any)
+	}{
+		{name: "HTTP error", status: http.StatusServiceUnavailable},
+		{name: "missing block HTTP error", status: http.StatusNotFound},
+		{name: "invalid JSON"},
+		{name: "two canonical containers", change: func(response map[string]any) {
+			response["blockContainers"] = append(response["blockContainers"].([]any), legacyFixtureContainer(response))
+		}},
+		{name: "malformed duplicate canonical container", change: func(response map[string]any) {
+			response["blockContainers"] = append(response["blockContainers"].([]any), map[string]any{
+				"canonical": true, "otherBlock": map[string]any{"block": map[string]any{
+					"slot": "72", "proposerIndex": "9", "body": map[string]any{"proposerSlashings": "invalid"},
+				}},
+			})
+		}},
+		{name: "no containers", change: func(response map[string]any) { response["blockContainers"] = []any{} }},
+		{name: "noncanonical", change: func(response map[string]any) { legacyFixtureContainer(response)["canonical"] = false }},
+		{name: "wrong proposer", change: func(response map[string]any) { legacyFixtureBlock(response)["proposerIndex"] = "8" }},
+		{name: "wrong slot", change: func(response map[string]any) { legacyFixtureBlock(response)["slot"] = "71" }},
+		{name: "bad base64", change: func(response map[string]any) {
+			legacyProof(response)["header1"].(map[string]any)["header"].(map[string]any)["bodyRoot"] = "invalid!"
+		}},
+		{name: "short root", change: func(response map[string]any) {
+			legacyProof(response)["header2"].(map[string]any)["header"].(map[string]any)["parentRoot"] = "AA=="
+		}},
+		{name: "invalid header number", change: func(response map[string]any) {
+			legacyProof(response)["header1"].(map[string]any)["header"].(map[string]any)["slot"] = "invalid"
+		}},
+		{name: "inconsistent headers", change: func(response map[string]any) {
+			legacyProof(response)["header2"].(map[string]any)["header"].(map[string]any)["proposerIndex"] = "13"
+		}},
+		{name: "identical headers", change: func(response map[string]any) {
+			proof := legacyProof(response)
+			proof["header2"] = proof["header1"]
+		}},
+		{name: "missing header", change: func(response map[string]any) { delete(legacyProof(response), "header2") }},
+		{name: "missing proposer slashings", change: func(response map[string]any) {
+			delete(legacyFixtureBlock(response)["body"].(map[string]any), "proposerSlashings")
+		}},
+		{name: "empty proposer slashings", change: func(response map[string]any) {
+			legacyFixtureBlock(response)["body"].(map[string]any)["proposerSlashings"] = []any{}
+		}},
+		{name: "changed operation count", change: func(response map[string]any) {
+			proof := legacyProof(response)
+			legacyFixtureBlock(response)["body"].(map[string]any)["proposerSlashings"] = []any{proof, proof}
+		}},
+		{name: "ambiguous wrapper", change: func(response map[string]any) {
+			container := legacyFixtureContainer(response)
+			container["otherBlock"] = container["blindedCapellaBlock"]
+		}},
+		{name: "incomplete page", change: func(response map[string]any) { response["nextPageToken"] = "next" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body, status := fallback, tc.status
+			if status == 0 {
+				status = http.StatusOK
+			}
+			if tc.change != nil {
+				body = changeSlashingFixture(t, fallback, tc.change)
+			} else if tc.status == http.StatusNotFound {
+				body = []byte(`{"message":"block not found"}`)
+			} else if tc.name == "invalid JSON" {
+				body = []byte("{")
+			}
+			client, calls := slot72SlashingClient(t, primary, body, status)
+			events, err := client.SlashingEvidence(context.Background(), 9)
+			if err == nil || calls.Load() != 1 || !reflect.DeepEqual(events, slot72SlashingEvents()[1:]) {
+				t.Fatalf("fallback calls=%d events=%+v err=%v", calls.Load(), events, err)
+			}
+		})
+	}
+}
+
+func TestSlashingFallbackUsesSharedLimiter(t *testing.T) {
+	client, calls := slot72SlashingClient(t, slashingFixture(t, "v1-block-72.json"), nil, http.StatusOK)
+	client.interval = time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	events, err := client.slashingsAtSlot(ctx, 72)
+	if !errors.Is(err, context.DeadlineExceeded) || calls.Load() != 0 || !reflect.DeepEqual(events, slot72SlashingEvents()[1:]) {
+		t.Fatalf("fallback calls=%d events=%+v err=%v", calls.Load(), events, err)
+	}
+}
+
+func TestSlashingFallbackUsesSharedTimeout(t *testing.T) {
+	primary := slashingFixture(t, "v1-block-72.json")
+	client := testAssignmentClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/qrl/v1/beacon/blocks/72" {
+			w.Write(primary)
+			return
+		}
+		<-r.Context().Done()
+	})
+	client.client.Timeout = 20 * time.Millisecond
+	events, err := client.slashingsAtSlot(context.Background(), 72)
+	if err == nil || !strings.Contains(err.Error(), "beacon request failed or timed out") || !reflect.DeepEqual(events, slot72SlashingEvents()[1:]) {
+		t.Fatalf("events=%+v err=%v", events, err)
+	}
+}
+
+func TestSlashingFallbackPreservesOperationOrdinals(t *testing.T) {
+	primary := changeSlashingFixture(t, slashingFixture(t, "v1-block-72.json"), func(response map[string]any) {
+		body := response["data"].(map[string]any)["message"].(map[string]any)["body"].(map[string]any)
+		proofs := body["proposer_slashings"].([]any)
+		body["proposer_slashings"] = append(proofs, proofs[0])
+	})
+	fallback := changeSlashingFixture(t, slashingFixture(t, "v1alpha2-blocks-slot-72.json"), func(response map[string]any) {
+		body := legacyFixtureBlock(response)["body"].(map[string]any)
+		proofs := body["proposerSlashings"].([]any)
+		body["proposerSlashings"] = append(proofs, proofs[0])
+	})
+	client, calls := slot72SlashingClient(t, primary, fallback, http.StatusOK)
+	events, err := client.SlashingEvidence(context.Background(), 9)
+	want := slot72SlashingEvents()
+	second := want[0]
+	second.ID = "72:proposer:1"
+	want = []models.SlashingEvent{want[0], second, want[1]}
+	if err != nil || calls.Load() != 1 || !reflect.DeepEqual(events, want) {
+		t.Fatalf("fallback calls=%d events=%+v err=%v", calls.Load(), events, err)
+	}
+}
+
+func TestSlashingFallbackBlockResponseSizeCap(t *testing.T) {
+	primary := slashingFixture(t, "v1-block-72.json")
+	fallback := slashingFixture(t, "v1alpha2-blocks-slot-72.json")
+	for _, tc := range []struct {
+		name     string
+		size     int
+		tooLarge bool
+	}{
+		{"over 8 MiB", (8 << 20) + 1, false},
+		{"at 64 MiB", 64 << 20, false},
+		{"over 64 MiB", (64 << 20) + 1, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := testAssignmentClient(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/qrl/v1/beacon/blocks/72" {
+					w.Write(primary)
+					return
+				}
+				w.Write(fallback)
+				padding := strings.Repeat(" ", 32<<10)
+				for remaining := tc.size - len(fallback); remaining > 0; {
+					n := min(remaining, len(padding))
+					if _, err := io.WriteString(w, padding[:n]); err != nil {
+						return
+					}
+					remaining -= n
+				}
+			})
+			events, err := client.slashingsAtSlot(context.Background(), 72)
+			want := slot72SlashingEvents()
+			if tc.tooLarge {
+				want = want[1:]
+			}
+			if (err != nil) != tc.tooLarge || (err != nil && !strings.Contains(err.Error(), "exceeds size limit")) || !reflect.DeepEqual(events, want) {
+				t.Fatalf("size=%d events=%+v err=%v", tc.size, events, err)
+			}
+		})
 	}
 }
 
