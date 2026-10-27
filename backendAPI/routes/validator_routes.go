@@ -3,7 +3,7 @@ package routes
 import (
 	"backendAPI/db"
 	"backendAPI/models"
-	"fmt"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -106,18 +106,29 @@ func handleValidatorsStats(c *gin.Context) {
 }
 
 // handleValidator serves GET /validator/:id, individual validator details.
+var getValidatorByID = db.GetValidatorByID
+
 func handleValidator(c *gin.Context) {
 	id := c.Param("id")
 	if !isValidValidatorID(id) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid validator id; expected a decimal index or hex public key"})
 		return
 	}
-	validator, err := db.GetValidatorByID(id)
+	validator, err := getValidatorByID(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": fmt.Sprintf("Validator not found: %v", err),
-		})
+		if errors.Is(err, db.ErrValidatorNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Validator not found"})
+		} else {
+			log.Printf("error fetching validator detail: %v", err)
+			respondInternal(c)
+		}
 		return
+	}
+	if validator.SlashingEvents == nil {
+		validator.SlashingEvents = make([]models.SlashingEvent, 0)
+	}
+	if validator.ValidatorSetChanges == nil {
+		validator.ValidatorSetChanges = make([]models.ValidatorSetChange, 0)
 	}
 	c.JSON(http.StatusOK, validator)
 }

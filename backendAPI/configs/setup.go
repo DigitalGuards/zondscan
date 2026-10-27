@@ -100,6 +100,8 @@ func bindCollections(client *mongo.Client) {
 	EpochInfoCollection = db.Collection(epochInfoCollName)
 	ValidatorHistoryCollection = db.Collection(validatorHistoryCollName)
 	SlotAssignmentsCollection = db.Collection(slotAssignmentsCollName)
+	SlashingEventsCollection = db.Collection(slashingEventsCollName)
+	ValidatorSetChangesCollection = db.Collection(validatorSetChangesCollName)
 	PriceHistoryCollection = db.Collection(priceHistoryCollName)
 	TokenTransfersCollection = db.Collection(tokenTransfersCollName)
 	TokenBalancesCollection = db.Collection(tokenBalancesCollName)

@@ -108,6 +108,8 @@ func HexToInt(hexStr string) int64 {
 // FAR_FUTURE_EPOCH represents a validator that hasn't exited.
 const FAR_FUTURE_EPOCH = "18446744073709551615"
 
+var ErrValidatorNotFound = errors.New("validator not found")
+
 // parseEpoch parses an epoch string (handles decimal format and FAR_FUTURE_EPOCH).
 func parseEpoch(epochStr string) int64 {
 	if epochStr == FAR_FUTURE_EPOCH {
@@ -218,7 +220,7 @@ func GetValidatorByID(id string) (*models.ValidatorDetailResponse, error) {
 	err = configs.ValidatorsCollections.FindOne(ctx, filter).Decode(&doc)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("validator not found")
+			return nil, ErrValidatorNotFound
 		}
 		return nil, fmt.Errorf("failed to get validator: %v", err)
 	}
@@ -230,7 +232,18 @@ func GetValidatorByID(id string) (*models.ValidatorDetailResponse, error) {
 		age = currentEpoch - activationEpoch
 	}
 
+	query := models.ValidatorActivityQuery{Page: 1, Limit: 20, ValidatorIndex: doc.ID}
+	events, eventTotal, err := activityPage[models.SlashingEvent](ctx, configs.SlashingEventsCollection, query, true)
+	if err != nil {
+		return nil, fmt.Errorf("read validator slashings: %w", err)
+	}
+	changes, changeTotal, err := activityPage[models.ValidatorSetChange](ctx, configs.ValidatorSetChangesCollection, query, false)
+	if err != nil {
+		return nil, fmt.Errorf("read validator changes: %w", err)
+	}
 	return &models.ValidatorDetailResponse{
+		SlashingEvents: events, SlashingEventsTotal: eventTotal,
+		ValidatorSetChanges: changes, ValidatorSetChangesTotal: changeTotal,
 		Index:                      doc.ID,
 		PublicKeyHex:               doc.PublicKeyHex,
 		WithdrawalCredentialsHex:   doc.WithdrawalCredentialsHex,

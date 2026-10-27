@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -9,6 +10,44 @@ import (
 
 	"QRL2MongoDB/models"
 )
+
+func TestBeaconEjectionBalance(t *testing.T) {
+	for _, tc := range []struct {
+		name, spec string
+		want       uint64
+	}{
+		{"v3 test network", `{"data":{"EJECTION_BALANCE":"20000000000000","MAX_EFFECTIVE_BALANCE":"40000000000000"}}`, 20000000000000},
+		{"other network", `{"data":{"EJECTION_BALANCE":"1"}}`, 1},
+		{"missing", `{"data":{}}`, 0},
+		{"missing data", `{}`, 0},
+		{"invalid data", `{"data":[]}`, 0},
+		{"empty", `{"data":{"EJECTION_BALANCE":""}}`, 0},
+		{"zero", `{"data":{"EJECTION_BALANCE":"0"}}`, 0},
+		{"negative", `{"data":{"EJECTION_BALANCE":"-1"}}`, 0},
+		{"fractional", `{"data":{"EJECTION_BALANCE":"1.5"}}`, 0},
+		{"number", `{"data":{"EJECTION_BALANCE":20000000000000}}`, 0},
+		{"overflow", `{"data":{"EJECTION_BALANCE":"18446744073709551616"}}`, 0},
+		{"hex", `{"data":{"EJECTION_BALANCE":"0x20"}}`, 0},
+		{"whitespace", `{"data":{"EJECTION_BALANCE":" 20"}}`, 0},
+		{"plus", `{"data":{"EJECTION_BALANCE":"+20"}}`, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := testAssignmentClient(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/qrl/v1/config/spec" {
+					t.Error(r.URL.Path)
+				}
+				fmt.Fprint(w, tc.spec)
+			})
+			value, err := client.EjectionBalance(context.Background())
+			if value != tc.want || (err == nil) != (tc.want > 0) {
+				t.Fatalf("value=%d err=%v", value, err)
+			}
+			if tc.want == 0 && !errors.Is(err, ErrInvalidEjectionBalance) {
+				t.Fatalf("missing or invalid balance must allow history to continue: %v", err)
+			}
+		})
+	}
+}
 
 func TestBeaconSpecAndGenesisParsing(t *testing.T) {
 	for _, tc := range []struct {

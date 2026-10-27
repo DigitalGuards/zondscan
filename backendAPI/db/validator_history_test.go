@@ -121,6 +121,12 @@ func TestHistoryQueriesHideLegacyRecords(t *testing.T) {
 	oldValidators := configs.ValidatorsCollections
 	configs.ValidatorsCollections = database.Collection("validators")
 	defer func() { configs.ValidatorsCollections = oldValidators }()
+	oldEvents, oldChanges := configs.SlashingEventsCollection, configs.ValidatorSetChangesCollection
+	configs.SlashingEventsCollection = database.Collection("slashingEvents")
+	configs.ValidatorSetChangesCollection = database.Collection("validatorSetChanges")
+	defer func() {
+		configs.SlashingEventsCollection, configs.ValidatorSetChangesCollection = oldEvents, oldChanges
+	}()
 	for i, epochs := range [][2]string{{"0", FAR_FUTURE_EPOCH}, {"10000", FAR_FUTURE_EPOCH}, {"0", "900"}} {
 		_, err := configs.ValidatorsCollections.InsertOne(ctx, bson.M{"_id": strconv.Itoa(i), "activationEpoch": epochs[0], "exitEpoch": epochs[1], "effectiveBalance": "40000000000000", "slashed": false})
 		if err != nil {

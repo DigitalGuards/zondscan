@@ -35,6 +35,7 @@ export const NAVIGATION_GROUPS: NavigationGroup[] = [
     items: [
       { name: 'Epochs', href: '/epochs/1', description: 'Slots, proposals, and participation' },
       { name: 'Validators', href: '/validators', description: 'The validators securing QRL 2.0' },
+      { name: 'Slashings', href: '/slashings', description: 'Slashing events and validator set changes' },
     ],
   },
   {

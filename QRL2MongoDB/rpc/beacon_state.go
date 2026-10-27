@@ -2,12 +2,36 @@ package rpc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 
 	"QRL2MongoDB/models"
 )
+
+var ErrInvalidEjectionBalance = errors.New("invalid beacon EJECTION_BALANCE")
+
+// EjectionBalance is loaded by the history worker independently of chain timing.
+func (c *SlotAssignmentClient) EjectionBalance(ctx context.Context) (uint64, error) {
+	var response struct {
+		Data json.RawMessage `json:"data"`
+	}
+	if err := c.get(ctx, "/qrl/v1/config/spec", &response); err != nil {
+		return 0, fmt.Errorf("read beacon ejection balance: %w", err)
+	}
+	var spec struct {
+		EjectionBalance string `json:"EJECTION_BALANCE"`
+	}
+	if err := json.Unmarshal(response.Data, &spec); err != nil {
+		return 0, ErrInvalidEjectionBalance
+	}
+	n, err := strconv.ParseUint(spec.EjectionBalance, 10, 64)
+	if err != nil || n == 0 {
+		return 0, ErrInvalidEjectionBalance
+	}
+	return n, nil
+}
 
 // ChainTiming reads both startup prerequisites with the client's timeout caps.
 func (c *SlotAssignmentClient) ChainTiming(ctx context.Context) (models.ChainTiming, error) {

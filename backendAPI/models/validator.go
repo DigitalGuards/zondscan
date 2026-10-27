@@ -86,18 +86,22 @@ type ValidatorHistoryResponse struct {
 
 // ValidatorDetailResponse represents detailed information about a single validator
 type ValidatorDetailResponse struct {
-	Index                      string `json:"index"`
-	PublicKeyHex               string `json:"publicKeyHex"`
-	WithdrawalCredentialsHex   string `json:"withdrawalCredentialsHex"`
-	EffectiveBalance           string `json:"effectiveBalance"`
-	Slashed                    bool   `json:"slashed"`
-	ActivationEligibilityEpoch string `json:"activationEligibilityEpoch"`
-	ActivationEpoch            string `json:"activationEpoch"`
-	ExitEpoch                  string `json:"exitEpoch"`
-	WithdrawableEpoch          string `json:"withdrawableEpoch"`
-	Status                     string `json:"status"`
-	Age                        int64  `json:"age"`
-	CurrentEpoch               string `json:"currentEpoch"`
+	SlashingEvents             []SlashingEvent      `json:"slashingEvents"`
+	SlashingEventsTotal        int64                `json:"slashingEventsTotal"`
+	ValidatorSetChanges        []ValidatorSetChange `json:"validatorSetChanges"`
+	ValidatorSetChangesTotal   int64                `json:"validatorSetChangesTotal"`
+	Index                      string               `json:"index"`
+	PublicKeyHex               string               `json:"publicKeyHex"`
+	WithdrawalCredentialsHex   string               `json:"withdrawalCredentialsHex"`
+	EffectiveBalance           string               `json:"effectiveBalance"`
+	Slashed                    bool                 `json:"slashed"`
+	ActivationEligibilityEpoch string               `json:"activationEligibilityEpoch"`
+	ActivationEpoch            string               `json:"activationEpoch"`
+	ExitEpoch                  string               `json:"exitEpoch"`
+	WithdrawableEpoch          string               `json:"withdrawableEpoch"`
+	Status                     string               `json:"status"`
+	Age                        int64                `json:"age"`
+	CurrentEpoch               string               `json:"currentEpoch"`
 }
 
 // ValidatorStatsResponse represents aggregated validator statistics

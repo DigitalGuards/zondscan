@@ -44,8 +44,9 @@ func NewSlotAssignmentClient(baseURL string, timing models.ChainTiming) *SlotAss
 }
 
 type beaconStatusError struct {
-	status      int
-	unavailable bool
+	status       int
+	unavailable  bool
+	missingBlock bool
 }
 
 func (e *beaconStatusError) Error() string {
@@ -71,6 +72,10 @@ func missingHistoricalState(body string) bool {
 }
 
 func (c *SlotAssignmentClient) get(ctx context.Context, path string, result any) error {
+	return c.getWithLimit(ctx, path, result, maxBeaconResponse)
+}
+
+func (c *SlotAssignmentClient) getWithLimit(ctx context.Context, path string, result any, responseLimit int) error {
 	c.requestMu.Lock()
 	defer c.requestMu.Unlock()
 	if c.baseURL == "" {
@@ -102,16 +107,20 @@ func (c *SlotAssignmentClient) get(ctx context.Context, path string, result any)
 		return errors.New("beacon request failed or timed out")
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBeaconResponse+1))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, int64(responseLimit)+1))
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if err != nil {
 		return errors.New("read beacon response failed")
 	}
-	if len(body) > maxBeaconResponse {
-		return errors.New("beacon response exceeds size limit")
-	}
 	if resp.StatusCode != http.StatusOK {
 		return &beaconStatusError{status: resp.StatusCode,
-			unavailable: (resp.StatusCode == 400 || resp.StatusCode == 404 || resp.StatusCode == 500) && missingHistoricalState(string(body))}
+			missingBlock: resp.StatusCode == http.StatusNotFound && len(body) <= responseLimit && missingBeaconBlock(string(body)),
+			unavailable:  (resp.StatusCode == 400 || resp.StatusCode == 404 || resp.StatusCode == 500) && missingHistoricalState(string(body))}
+	}
+	if len(body) > responseLimit {
+		return errors.New("beacon response exceeds size limit")
 	}
 	if err := json.Unmarshal(body, result); err != nil {
 		return errors.New("invalid beacon JSON response")
