@@ -15,7 +15,7 @@ interface GasSummary {
   avgGasPriceHex: string;
   avgGasUsedHex: string;
   avgGasLimitHex: string;
-  avgBlockTimeSec: number;
+  avgBlockTimeSec: number | null;
   pendingCount: number;
   lastBlockNumberHex: string;
   lastGasUsedHex: string;
@@ -267,7 +267,7 @@ export default function GasClient(): JSX.Element {
         />
         <StatCard
           label="Avg Block Time"
-          value={summary ? `${summary.avgBlockTimeSec.toFixed(1)}s` : '…'}
+          value={summary ? (summary.avgBlockTimeSec == null ? '-' : `${summary.avgBlockTimeSec.toFixed(1)}s`) : '…'}
           sub="last 30 blocks"
         />
         <StatCard

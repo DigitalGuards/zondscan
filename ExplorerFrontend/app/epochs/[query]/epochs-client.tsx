@@ -9,7 +9,7 @@ import axios from 'axios';
 import config from '../../../config';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { formatNumberWithCommas, formatStaked } from '../../lib/helpers';
+import { formatNumberWithCommas, formatSummaryCount, formatSummaryStake } from '../../lib/helpers';
 import SearchBar from '../../components/SearchBar';
 import StatusBadge from '../../components/StatusBadge';
 import Pagination from '../../components/Pagination';
@@ -35,7 +35,9 @@ export default function EpochsClient({ initialData, initialPage }: EpochsClientP
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['epochs', initialPage],
     queryFn: () => fetchEpochs(initialPage),
-    staleTime: 60000,
+    staleTime: 30000,
+    refetchInterval: 30000,
+    refetchIntervalInBackground: false,
     gcTime: 5 * 60 * 1000,
     retry: 2,
     initialData,
@@ -149,13 +151,13 @@ export default function EpochsClient({ initialData, initialPage }: EpochsClientP
                       <StatusBadge status={epoch.status} />
                     </td>
                     <td className="px-4 py-3 text-text-secondary tabular-nums hidden sm:table-cell">
-                      {formatNumberWithCommas(epoch.validatorsCount.toString())}
+                      {formatSummaryCount(epoch.validatorsCount)}
                     </td>
                     <td className="px-4 py-3 text-text-secondary tabular-nums hidden sm:table-cell">
-                      {formatNumberWithCommas(epoch.activeCount.toString())}
+                      {formatSummaryCount(epoch.activeCount)}
                     </td>
                     <td className="px-4 py-3 text-text-secondary tabular-nums hidden md:table-cell">
-                      {formatStaked(epoch.totalStaked)}
+                      {formatSummaryStake(epoch.totalStaked)}
                     </td>
                   </tr>
                 ))

@@ -200,15 +200,211 @@ must be inspected again.
 
 ## Key Components
 
+### Beacon chain timing and validator history
+
+Startup reads `/qrl/v1/config/spec` (`SLOTS_PER_EPOCH` and `SECONDS_PER_SLOT`)
+and `/qrl/v1/beacon/genesis` (`genesis_time`) from `BEACONCHAIN_API`. String
+numbers are validated, requests have a 10-second timeout and an 8 MiB response
+cap, and startup discovery has a 25-second deadline. The leased writer saves
+numeric `slotsPerEpoch`, `secondsPerSlot` and `genesisTime` in `sync_state` under
+`_id: "chain_timing"`. A beacon outage logs a warning and uses the stored clock.
+Without a stored clock, execution indexing starts while beacon workers wait.
+Discovery retries every 30 seconds, persists timing, and wakes the waiting
+workers as soon as it succeeds. It also verifies a cached clock after recovery.
+An existing clock or slot-assignment genesis that disagrees causes a hard startup
+failure, or orderly shutdown if discovered during retry. Invalid stored timing
+also fails closed. Retry and waiting workers honor shutdown and drain before
+the chain-indexer lease is released.
+
+The backend reads this document for epoch slot ranges and execution timestamp
+mapping. `GET /epoch` (public `/api/epoch`) exposes the same three timing fields
+alongside the beacon head and finality. The frontend uses them for block epochs,
+validator ages, and network examples in Learn. The staking calculator and
+standard-parameter explanations retain qrysm mainnet economics: 128 slots of
+60 seconds per epoch. Execution block heights remain independent of beacon slots
+across missed proposals. Gas and pending transaction ETA responses keep serving
+their available data when timing is missing; timing fields are null when neither
+recent block intervals nor stored timing can supply a value.
+
+A live worker refreshes `/qrl/v1/beacon/headers/head` and
+`/qrl/v1/beacon/states/head/finality_checkpoints` every 30 seconds. The current
+epoch is `headSlot / slotsPerEpoch`. It labels the live validator set fetched
+at that head slot with this epoch. The live set has one document per validator
+and is kept separately from historical summaries.
+
+The history worker fetches `/qrl/v1/beacon/states/{epoch * slotsPerEpoch}/validators`
+for every epoch from zero through the finalized checkpoint, inclusive. Each
+`validator_history` record has `source: "beacon-state"`, a decimal-string `epoch`,
+numeric `epochInt`, and timestamp
+`genesisTime + epoch * slotsPerEpoch * secondsPerSlot`. Counts use the beacon
+statuses in four exclusive buckets: pending, active, exited (including withdrawal
+statuses), and slashed. The slashed flag takes precedence throughout a validator's
+lifecycle. `totalStaked` sums every effective balance exactly in Shor.
+
+The worker starts at the newest finalized epoch and walks backward to zero.
+It handles at most 16 epochs per pass and checks finality between passes. A
+separate descending catch-up range prioritizes new finalized epochs before
+continuing the older backlog. `sync_state` document `_id: "validator_history"`
+stores `backfillNext`, `newestScheduled`, `catchupNext`, and `catchupTarget`;
+`-1` marks a finished descending range. Each summary is upserted by epoch before
+progress is saved, so a crash between writes safely replays that epoch. A unique
+epoch index prevents duplicate records. Unavailable states, malformed responses,
+and transient failures retain the cursor for retry after 30 seconds. Historical
+state access through epoch zero is required for a complete rebuild. Newly
+finalized epochs can still fill while an older state remains unavailable.
+
+All beacon workers share a one-request-per-second limiter. History and cursor
+writes require the chain-indexer lease and use write deadlines ending before
+lease expiry. Shutdown cancels requests and drains registered writers before
+releasing the lease. Once caught up, the history worker polls every 30 seconds.
+
+On the first run, the API immediately excludes old unmarked records from both
+the epoch list and validator history. As the worker reaches each old epoch, its
+upsert replaces the old summary and adds the marker. No collection deletion or
+block reindex is needed. Recent pages fill first, usually within tens of seconds.
+Visitors see a growing list ordered by chain epoch; epoch details show the known
+clock time and dashes for unavailable validator summaries, including recent
+unfinalized epochs. Known zero counts remain zero. Epoch pages refresh every
+30 seconds, and proposer duties fill independently.
+
+For roughly 5,000 epochs, allow about 1.5 to 2 hours when proposer duties are
+already caught up, or about 3 to 4 hours when both walkers have a full backlog.
+These estimates assume healthy sub-second beacon responses. Retries, fallback
+duty lookups, slow storage and missing historical states extend the duration.
+Operators can follow the cursor fields and the count of `source: "beacon-state"`
+records, plus retry logs containing the affected epoch. Start the updated syncer
+before serving the updated API and frontend so chain timing is available.
+
+### Slashings and validator set changes
+
+The same finalized history walker fills two additional collections using the
+validator state already fetched at each epoch's first slot:
+
+- `validatorSetChanges`: numeric `epoch`, `kind` (`activated`, `exited`,
+  `slashed`, `ejected`), decimal-string `validatorIndex`, and `0x`-prefixed
+  `pubkey`. The deterministic `_id` is `epoch:kind:validatorIndex`.
+- `slashingEvents`: numeric `slot` and `epoch`, `type` (`proposer` or `attester`),
+  decimal-string `validatorIndices`, `whistleblower` (the including block's
+  proposer index), and two `conflictingRoots`. The deterministic `_id` is
+  `slot:type:operationIndex`. Roots are SSZ roots of the unsigned conflicting
+  headers or the two `AttestationData` containers, including their checkpoints.
+
+Activations match `activation_epoch`. At `exit_epoch`, each validator gets one
+exit row: `ejected` if it is unslashed and its first-slot `effective_balance`
+is at or below `EJECTION_BALANCE`, or `exited` otherwise. Slashed validators
+always receive `exited` at their exit epoch and retain their separate `slashed`
+change. Withdrawability creates no set-change row. Ejection classification uses
+the effective balance at the exit epoch, so a validator that regains balance
+while waiting in the exit queue can show as exited.
+
+Before indexing history, the worker reads `data.EJECTION_BALANCE` from
+`/qrl/v1/config/spec` as a positive decimal-string integer. Transport failures
+keep retrying. A missing or invalid value produces one warning and history
+continues, classifying every unslashed exit as `exited`. The worker retries the
+spec on later passes until it reads a valid threshold, which applies to subsequent
+epochs. Stored chain timing comparisons and startup failure conditions remain
+unchanged. The v3 test-network
+value is `20000000000000`, with `MAX_EFFECTIVE_BALANCE` of `40000000000000`.
+Epochs are parsed as unsigned 64-bit values, preserving the far-future
+sentinel `18446744073709551615` without creating changes. A `slashed` change
+records the first epoch where the slashed flag is observed compared with the
+preceding epoch. The active-set-changes and slashing-pool APIs are unused.
+
+Each `validator_history` document retains a compact `slashingSnapshot` with
+the slashed validators' indices and activation epochs, plus a `resolved`
+comparison marker. Snapshots for E-1, E and E+1 are loaded in one query and
+support the descending backfill, restart, and catch-up order. Change rows take
+pubkeys from the fetched validator list for E. The registry retains every entry,
+and a validator slashed in E+1 already exists in E. No additional full
+validator-state request is made for an epoch. Genesis uses an empty predecessor.
+
+When flags turn true between first-slot states E-1 and E, the worker fetches
+`/qrl/v1/beacon/blocks/{slot}` for the interval
+`((E-1) * slotsPerEpoch, E * slotsPerEpoch]`. This covers the preceding epoch
+and the boundary block at E. The disjoint intervals ensure each slot is fetched
+once for all changed validators in that interval during successful processing.
+Every request uses the existing shared limiter and timeout. Block responses
+have a 64 MiB cap; all other beacon responses retain the 8 MiB cap.
+No block evidence requests are made for unchanged slashed flags. Every fetched
+slot is at or below the finalized checkpoint. Event epochs identify the actual
+including block, so an event can precede its flag-observation change by one epoch.
+
+Proposer evidence identifies the conflicting headers' proposer. Attester
+evidence uses the intersection of attesting indices, restricted to validators
+whose flags changed in this interval and whose activation epoch has passed.
+Operations are processed in slot order, with proposer slashings first within a
+block, so each changed validator is attributed once. Explicit missing-block
+404 responses represent missed slots. Every other evidence failure, including
+transport errors, request timeouts, optimistic blocks, malformed responses or
+proofs, size limits, and incomplete attribution, saves the authoritative
+`slashed` changes and every attributed event. The snapshot is resolved and marked
+`evidenceMissing: true` with `evidenceRetryAt` set to Unix seconds 15 minutes
+ahead. One warning includes the epoch, validator indices, and error, and the
+walker advances. Cancellation of the walker's own context aborts the pending
+epoch without activity writes, markers, or cursor advancement.
+
+Once per pass, including passes with no new finalized epochs, a repair step
+selects at most one epoch: the oldest snapshot with `evidenceMissing: true`
+and `evidenceRetryAt` at or before now. A partial history index serves this
+lookup. Repair reads the stored snapshot and `slashed` changes, fetches evidence
+through the shared beacon limiter, and attributes it again. Complete evidence
+is upserted before clearing both missing-evidence fields. An unsuccessful
+repair moves `evidenceRetryAt` one hour ahead without another warning. Repair
+failures leave history progress available. Repairs use the same chain-indexer
+lease and cancellation guards as other history writes.
+
+The invariant checks in `ValidatorChanges` and `SlashingChanges` remain
+fail-closed. Invalid or duplicate validator identities, future activation of
+a slashed validator, nonadjacent comparisons, registry inconsistencies, and
+regressing slashed flags stop the affected epoch for retry. These checks guard
+state that consensus rules say cannot occur.
+
+Operators can find these epochs in mongosh with:
+
+```javascript
+db.validator_history.find({"slashingSnapshot.evidenceMissing": true}, {_id: 0, epoch: 1}).sort({epochInt: -1})
+```
+
+All activity upserts, snapshot markers, indexes, and cursor writes use the
+chain-indexer lease and its write deadline. Changes and evidence are persisted
+before resolution markers and cursor progress. An interrupted write safely
+replays deterministic IDs. A saved resolution marker avoids repeated block
+requests after a later cursor-write failure.
+
+On the first run after this upgrade, `sync_state` document `validator_history`
+advances to `version: 2` and schedules a fresh finalized-state walk, newest
+first, down to epoch zero. Existing summaries remain available while the new
+collections fill. This also upgrades an already completed #234 cursor. The
+walker continues prioritizing newly finalized epochs between batches of 16.
+The live validator collection keeps updating independently. A complete backfill
+requires historical state access through epoch zero. On a network with no
+slashings, this replay makes zero slashing block requests; genesis activations
+appear when the walker reaches epoch zero. No collection deletion or execution
+block reindex is required.
+
+The backend exposes `GET /slashings` and `GET /validator-set-changes`, each with
+`page` (1 to 1000000, default 1), `limit` (1 to 100, default 20), and an optional
+decimal `validator` index. Changes also accept inclusive `fromEpoch`, `toEpoch`,
+and `kind` filters. Results are newest first with a deterministic ID tie-breaker.
+Both responses expose `backfillComplete`; slashings also include the network's
+current `slashedValidatorCount` so an empty filtered page or missing evidence
+can be described accurately. Validator detail responses include the newest 20
+slashing events and set changes plus their totals. The frontend links to all
+events, shows the current slashed status, and obtains time conversions from
+the chain timing API. Start the syncer first to create the collections and
+indexes, then serve the updated API and frontend. The Slashings page displays
+"No validator has been slashed on this network yet." when the network's slashed
+count and indexed event count are zero.
+
 ### Finalized slot proposer assignments
 
 The leased syncer writes `slotAssignments` documents with numeric `epoch` and
 `slot`, decimal-string `validatorIndex`, and `0x`-prefixed hex `pubkey`. The
 `slot_unique` index enforces one assignment per slot. An epoch index supports
-the API lookup. This chain has 8 slots per epoch and 60 seconds per slot.
+the API lookup. Slot counts and durations come from `chain_timing`.
 
-On first start, the worker fetches beacon genesis time and saves it in
-`sync_state` under `_id: "slot_assignments"`. It starts its `nextEpoch` cursor
+On first start, the worker copies the validated `chain_timing` genesis into
+its `sync_state` cursor under `_id: "slot_assignments"`. It starts its `nextEpoch` cursor
 at zero and checks epochs in ascending order. Only explicit unavailable-state
 responses from the historical duty sources advance an unavailable epoch;
 transport failures, rate limits, invalid responses, and incomplete duty sets
@@ -221,7 +417,8 @@ The primary source is `/qrl/v1/validator/duties/proposer/{epoch}`. The fallback
 is `/qrl/v1alpha1/validators/assignments?epoch=N`, with pagination and pubkeys
 resolved through `/qrl/v1/beacon/states/head/validators/{index}`. Validator
 indices retain their pubkeys after exit. Every HTTP request shares a one-request
-per-second limit, a 10-second timeout, and an 8 MiB response cap. Pagination is
+per-second limit and a 10-second timeout. Duty and state responses have an 8 MiB
+cap; slashing block responses have a 64 MiB cap. Pagination is
 limited to 100 pages of 100 validators. Each pass handles up to 16 epochs.
 
 The worker indexes duties through the finalized checkpoint epoch, inclusive,
@@ -236,9 +433,9 @@ before lease expiry. The worker participates in shutdown cancellation and
 draining before the lease is released.
 
 The backend derives execution block slots from
-`(execution timestamp - beacon genesis time) / 60`, the timestamp relation
+`(execution timestamp - genesisTime) / secondsPerSlot`, the timestamp relation
 enforced by consensus. Startup creates `slot_timestamp_ingestion_idx` on
-`blocks` for the eight slot timestamp lookups. This reads existing block rows
+`blocks` for epoch slot timestamp lookups. This reads existing block rows
 without a block reindex. Start the updated syncer before serving the updated
 epoch endpoint so the beacon slot clock is available. Proposer fields appear
 progressively as backfill advances; block mapping works once the clock is saved.
@@ -254,7 +451,7 @@ progressively as backfill advances; block mapping works once the clock is saved.
   - Manages deduplication of validator records
   - Provides clean interfaces for validator operations
 - **Data Storage**:
-  - Stores all validators in a single document for efficient retrieval
+  - Stores one document per validator, keyed by its beacon index
   - Maintains validator status, epochs, and balances
   - Supports pagination for large validator sets
 - **Beacon Chain Integration**:

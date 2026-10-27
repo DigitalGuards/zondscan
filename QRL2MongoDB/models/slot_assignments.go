@@ -1,8 +1,6 @@
 package models
 
 const (
-	SlotsPerEpoch          = int64(8)
-	SecondsPerSlot         = int64(60)
 	SlotAssignmentCursorID = "slot_assignments"
 )
 

@@ -7,12 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"QRL2MongoDB/models"
@@ -22,9 +22,10 @@ var ErrEpochUnavailable = errors.New("beacon historical state unavailable")
 
 const maxBeaconResponse = 8 << 20
 
-// SlotAssignmentClient is used by one sequential walker. Every HTTP request,
-// including pagination and fallback lookups, shares the rate and timeout caps.
+// SlotAssignmentClient shares rate and timeout caps across beacon workers.
 type SlotAssignmentClient struct {
+	requestMu   sync.Mutex
+	timing      models.ChainTiming
 	baseURL     string
 	client      *http.Client
 	interval    time.Duration
@@ -32,8 +33,9 @@ type SlotAssignmentClient struct {
 	pubkeys     map[string]string
 }
 
-func NewSlotAssignmentClient(baseURL string) *SlotAssignmentClient {
+func NewSlotAssignmentClient(baseURL string, timing models.ChainTiming) *SlotAssignmentClient {
 	return &SlotAssignmentClient{
+		timing:   timing,
 		baseURL:  strings.TrimRight(baseURL, "/"),
 		client:   &http.Client{Timeout: 10 * time.Second},
 		interval: time.Second,
@@ -42,8 +44,9 @@ func NewSlotAssignmentClient(baseURL string) *SlotAssignmentClient {
 }
 
 type beaconStatusError struct {
-	status      int
-	unavailable bool
+	status       int
+	unavailable  bool
+	missingBlock bool
 }
 
 func (e *beaconStatusError) Error() string {
@@ -69,8 +72,14 @@ func missingHistoricalState(body string) bool {
 }
 
 func (c *SlotAssignmentClient) get(ctx context.Context, path string, result any) error {
+	return c.getWithLimit(ctx, path, result, maxBeaconResponse)
+}
+
+func (c *SlotAssignmentClient) getWithLimit(ctx context.Context, path string, result any, responseLimit int) error {
+	c.requestMu.Lock()
+	defer c.requestMu.Unlock()
 	if c.baseURL == "" {
-		return errors.New("BEACONCHAIN_API is required for slot assignments")
+		return errors.New("BEACONCHAIN_API is required")
 	}
 	if wait := time.Until(c.nextRequest); wait > 0 {
 		timer := time.NewTimer(wait)
@@ -98,16 +107,20 @@ func (c *SlotAssignmentClient) get(ctx context.Context, path string, result any)
 		return errors.New("beacon request failed or timed out")
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBeaconResponse+1))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, int64(responseLimit)+1))
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if err != nil {
 		return errors.New("read beacon response failed")
 	}
-	if len(body) > maxBeaconResponse {
-		return errors.New("beacon response exceeds size limit")
-	}
 	if resp.StatusCode != http.StatusOK {
 		return &beaconStatusError{status: resp.StatusCode,
-			unavailable: (resp.StatusCode == 400 || resp.StatusCode == 404 || resp.StatusCode == 500) && missingHistoricalState(string(body))}
+			missingBlock: resp.StatusCode == http.StatusNotFound && len(body) <= responseLimit && missingBeaconBlock(string(body)),
+			unavailable:  (resp.StatusCode == 400 || resp.StatusCode == 404 || resp.StatusCode == 500) && missingHistoricalState(string(body))}
+	}
+	if len(body) > responseLimit {
+		return errors.New("beacon response exceeds size limit")
 	}
 	if err := json.Unmarshal(body, result); err != nil {
 		return errors.New("invalid beacon JSON response")
@@ -131,22 +144,6 @@ func (c *SlotAssignmentClient) GenesisTime(ctx context.Context) (int64, error) {
 	return n, nil
 }
 
-// FinalizedEpoch is the latest finalized checkpoint epoch for duty indexing.
-func (c *SlotAssignmentClient) FinalizedEpoch(ctx context.Context) (int64, error) {
-	var response models.BeaconChainHeadResponse
-	if err := c.get(ctx, "/qrl/v1alpha1/beacon/chainhead", &response); err != nil {
-		return 0, err
-	}
-	n, err := strconv.ParseInt(response.FinalizedEpoch, 10, 64)
-	if err != nil || n < 0 || n >= math.MaxInt64/models.SlotsPerEpoch {
-		return 0, errors.New("invalid finalized epoch")
-	}
-	if response.OptimisticStatus {
-		return 0, errors.New("beacon head is optimistic")
-	}
-	return n, nil
-}
-
 func normalizeDutyKey(key string) (string, error) {
 	key = strings.TrimPrefix(key, "0x")
 	decoded, err := hex.DecodeString(key)
@@ -158,15 +155,15 @@ func normalizeDutyKey(key string) (string, error) {
 
 // ValidateSlotAssignments requires a complete, unique duty set for the epoch.
 // Genesis slot zero is represented explicitly with an unknown proposer.
-func ValidateSlotAssignments(epoch int64, rows []models.SlotAssignment) ([]models.SlotAssignment, error) {
-	if epoch < 0 || epoch >= math.MaxInt64/models.SlotsPerEpoch {
-		return nil, errors.New("invalid duty epoch")
+func ValidateSlotAssignments(timing models.ChainTiming, epoch int64, rows []models.SlotAssignment) ([]models.SlotAssignment, error) {
+	if _, _, err := timing.EpochSlots(epoch); err != nil {
+		return nil, err
 	}
-	start := epoch * models.SlotsPerEpoch
+	start := epoch * timing.SlotsPerEpoch
 	seen := make(map[int64]bool)
-	result := make([]models.SlotAssignment, 0, models.SlotsPerEpoch)
+	result := make([]models.SlotAssignment, 0, timing.SlotsPerEpoch)
 	for _, row := range rows {
-		if row.Epoch != epoch || row.Slot < start || row.Slot >= start+models.SlotsPerEpoch || seen[row.Slot] {
+		if row.Epoch != epoch || row.Slot < start || row.Slot >= start+timing.SlotsPerEpoch || seen[row.Slot] {
 			return nil, errors.New("duplicate or out-of-range proposer slot")
 		}
 		seen[row.Slot] = true
@@ -188,7 +185,7 @@ func ValidateSlotAssignments(epoch int64, rows []models.SlotAssignment) ([]model
 	if epoch == 0 && !seen[0] {
 		result = append(result, models.SlotAssignment{Epoch: 0, Slot: 0})
 	}
-	if len(result) != int(models.SlotsPerEpoch) {
+	if len(result) != int(timing.SlotsPerEpoch) {
 		return nil, errors.New("incomplete proposer duties")
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].Slot < result[j].Slot })
@@ -196,8 +193,8 @@ func ValidateSlotAssignments(epoch int64, rows []models.SlotAssignment) ([]model
 }
 
 func (c *SlotAssignmentClient) Assignments(ctx context.Context, epoch int64) ([]models.SlotAssignment, error) {
-	if epoch < 0 || epoch >= math.MaxInt64/models.SlotsPerEpoch {
-		return nil, errors.New("invalid duty epoch")
+	if _, _, err := c.timing.EpochSlots(epoch); err != nil {
+		return nil, err
 	}
 	rows, primaryErr := c.proposerDuties(ctx, epoch)
 	if primaryErr == nil {
@@ -245,7 +242,7 @@ func (c *SlotAssignmentClient) proposerDuties(ctx context.Context, epoch int64) 
 		}
 		rows = append(rows, models.SlotAssignment{Epoch: epoch, Slot: slot, ValidatorIndex: duty.ValidatorIndex, Pubkey: duty.Pubkey})
 	}
-	return ValidateSlotAssignments(epoch, rows)
+	return ValidateSlotAssignments(c.timing, epoch, rows)
 }
 
 func (c *SlotAssignmentClient) legacyAssignments(ctx context.Context, epoch int64) ([]models.SlotAssignment, error) {
@@ -282,7 +279,7 @@ func (c *SlotAssignmentClient) legacyAssignments(ctx context.Context, epoch int6
 					return nil, errors.New("invalid assignment slot")
 				}
 				rows = append(rows, models.SlotAssignment{Epoch: epoch, Slot: slot, ValidatorIndex: assignment.ValidatorIndex})
-				if len(rows) > int(models.SlotsPerEpoch) {
+				if len(rows) > int(c.timing.SlotsPerEpoch) {
 					return nil, errors.New("too many proposer assignments")
 				}
 			}
@@ -330,5 +327,5 @@ func (c *SlotAssignmentClient) legacyAssignments(ctx context.Context, epoch int6
 		}
 		rows[i].Pubkey = key
 	}
-	return ValidateSlotAssignments(epoch, rows)
+	return ValidateSlotAssignments(c.timing, epoch, rows)
 }

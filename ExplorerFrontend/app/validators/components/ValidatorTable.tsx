@@ -1,4 +1,5 @@
 'use client';
+import type { ChainTiming } from '../../lib/chainTiming';
 import AddressText from '../../components/AddressText';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -20,6 +21,7 @@ interface Validator {
 interface ValidatorTableProps {
   validators: Validator[];
   loading: boolean;
+  timing?: ChainTiming | null;
 }
 
 type SortField = 'index' | 'age' | 'stakedAmount' | 'status';
@@ -61,7 +63,7 @@ function SortIcon({ field, sortField, sortDirection }: { field: SortField; sortF
   );
 }
 
-export default function ValidatorTable({ validators, loading }: ValidatorTableProps) {
+export default function ValidatorTable({ validators, loading, timing = null }: ValidatorTableProps) {
   // Table state lives in the URL (?q, ?sort, ?dir, ?page) so Back/Forward
   // and shared links restore the same view. Defaults are removed from the
   // URL to keep canonical links clean.
@@ -341,7 +343,7 @@ export default function ValidatorTable({ validators, loading }: ValidatorTablePr
                   {getStatusBadge(validator.status)}
                 </td>
                 <td className="hidden sm:table-cell px-4 py-3 whitespace-nowrap text-sm text-text-secondary">
-                  {epochsToDays(validator.age).toFixed(1)} days
+                  {timing ? `${epochsToDays(validator.age, timing)?.toFixed(1)} days` : '-'}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-text-secondary font-mono">
                   {stakeValue} {stakeUnit}

@@ -1,3 +1,4 @@
+import type { ChainTiming } from './chainTiming';
 import { isArray, isRecord } from './guards';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
@@ -344,12 +345,16 @@ export function formatNumberWithCommas(x: number | string | undefined | null): s
   return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
-export function epochsToDays(epochs: number): number {
-  // Each epoch is 128 slots
-  // Each slot takes 60 seconds
-  // So each epoch is 128 * 60 seconds
-  // Convert to days
-  return (epochs * 128 * 60) / (24 * 60 * 60);
+export function epochsToDays(epochs: number, timing: ChainTiming | null): number | null {
+  return timing ? (epochs * timing.slotsPerEpoch * timing.secondsPerSlot) / 86400 : null;
+}
+
+export function formatSummaryCount(value: number | null | undefined): string {
+  return value == null ? '-' : formatNumberWithCommas(value);
+}
+
+export function formatSummaryStake(value: string | null | undefined): string {
+  return value == null || value === '' ? '-' : formatStaked(value);
 }
 
 export function truncateHash(

@@ -138,6 +138,8 @@ func UserRoute(router *gin.Engine) {
 	router.GET("/validators/history", handleValidatorsHistory)
 	router.GET("/validators/stats", handleValidatorsStats)
 	router.GET("/validator/:id", handleValidator)
+	router.GET("/slashings", handleSlashings)
+	router.GET("/validator-set-changes", handleValidatorSetChanges)
 	router.GET("/transactions", handleTransactions)
 	router.GET("/contracts/counts", handleContractsCounts)
 	router.GET("/contracts", handleContracts)

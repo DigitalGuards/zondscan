@@ -1,3 +1,4 @@
+import { fetchChainTiming } from '../../lib/chainTiming';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { learnMetadata } from '../components/learn-metadata';
@@ -11,7 +12,13 @@ import LearnArticle, {
 
 export const metadata: Metadata = learnMetadata('validators-and-epochs');
 
-export default function Page(): JSX.Element {
+export const dynamic = 'force-dynamic';
+
+export default async function Page(): Promise<JSX.Element> {
+  const timing = await fetchChainTiming().catch(() => null);
+  const slots = timing?.slotsPerEpoch ?? '-';
+  const seconds = timing?.secondsPerSlot ?? '-';
+  const minutes = timing ? (timing.slotsPerEpoch * timing.secondsPerSlot / 60).toLocaleString('en-US') : '-';
   return (
     <LearnArticle slug="validators-and-epochs">
       <p>
@@ -32,8 +39,8 @@ export default function Page(): JSX.Element {
       <p>
         If you are new to the chain itself, read{' '}
         <a href="/learn/what-is-qrl-2">What is QRL 2.0?</a> first. Everything
-        below applies to the current public testnet, where coins have no
-        monetary value.
+        below explains the standard QRL 2.0 design, with network examples
+        from the explorer&apos;s testnet, where coins have no monetary value.
       </p>
 
       <LearnSection id="what-a-validator-does" title="What a validator does">
@@ -66,11 +73,18 @@ export default function Page(): JSX.Element {
       <LearnSection id="slots-and-epochs" title="Slots and epochs">
         <p>
           A <strong>slot</strong> is the smallest unit of time on the beacon
-          chain: one opportunity for one proposer to publish one block. On QRL
-          2.0 a slot lasts 60 seconds. An <strong>epoch</strong> groups 128
-          consecutive slots, so one epoch takes 128 minutes, a little over two
-          hours. Validator duties are shuffled and assigned per epoch, and the
+          chain: one opportunity for one proposer to publish one block. The
+          standard QRL 2.0 parameters in the{' '}
+          <a href="https://github.com/theQRL/qrysm/blob/main/config/params/mainnet_config.go">qrysm mainnet config</a>{' '}
+          set <strong>60 seconds per slot</strong>. An <strong>epoch</strong> groups{' '}
+          <strong>128 consecutive slots</strong>, taking 128 minutes. Validator
+          duties are shuffled and assigned per epoch, and the
           validator set itself only changes at epoch boundaries.
+        </p>
+        <p>
+          The explorer&apos;s network uses its own values: <strong>{seconds} seconds per slot</strong>{' '}
+          and <strong>{slots} consecutive slots</strong> per epoch, taking {minutes} minutes.
+          These values come from the network API.
         </p>
         <p>
           Epochs are also the unit of finality. Through accumulated
@@ -81,11 +95,11 @@ export default function Page(): JSX.Element {
           current head epoch, the justified epoch, and the finalized epoch at
           the top of the <Link href="/validators">validators page</Link>, along with
           a live progress bar counting slots toward the next epoch. The{' '}
-          <Link href="/epochs/1">epoch list</Link> labels each epoch as finalized,
-          justified, or pending.
+          <Link href="/epochs/1">epoch list</Link> fills with finalized history;
+          individual epoch pages show their current checkpoint status.
         </p>
         <p>
-          Open any single epoch and you get its full 128-slot table: which
+          Open any single epoch and you get its full {slots}-slot table: which
           slots got a block, which were missed, and for each proposed block
           the transaction count and gas used. A missed slot is ordinary
           network life; a validator that misses many of its assignments will
@@ -210,7 +224,9 @@ export default function Page(): JSX.Element {
           <Step title="Browse epochs">
             <p>
               Open the <Link href="/epochs/1">epoch list</Link> to see recent epochs
-              with their finality status, validator counts, and total stake.
+              with their finality status, validator counts, and total stake. Historical
+              summaries fill in from finalized beacon states; a dash marks a
+              summary that is still unavailable.
             </p>
           </Step>
           <Step title="Drill into one epoch">
@@ -235,9 +251,10 @@ export default function Page(): JSX.Element {
         </Callout>
         <Callout type="info" title="Testnet numbers">
           <p>
-            Slot timing, epoch length, and balance thresholds on this page
-            reflect the current public testnet configuration and may change
-            before mainnet. Testnet Quanta has no monetary value.
+            Network examples on this page use timing from the API.
+            A dash means that timing is currently unavailable. Testnet parameters
+            and balance thresholds may change before mainnet. Testnet Quanta has no
+            monetary value.
           </p>
         </Callout>
       </LearnSection>
@@ -248,8 +265,9 @@ export default function Page(): JSX.Element {
             q: 'How long is an epoch on QRL 2.0?',
             a: (
               <p>
-                One epoch is 128 slots of 60 seconds each, which works out to
-                128 minutes, or 2 hours and 8 minutes. The{' '}
+                The standard QRL 2.0 epoch is 128 slots of 60 seconds each,
+                or 128 minutes. This explorer&apos;s network uses {slots} slots of{' '}
+                {seconds} seconds each, taking {minutes} minutes. The{' '}
                 <Link href="/validators">validators page</Link> shows a live
                 countdown to the next epoch boundary.
               </p>

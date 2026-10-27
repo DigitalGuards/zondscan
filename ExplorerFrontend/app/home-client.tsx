@@ -1,5 +1,6 @@
 'use client';
 
+import { epochAtTimestamp, type ChainTiming } from './lib/chainTiming';
 import TimeDisplay from './components/TimeDisplay';
 import AddressText from './components/AddressText';
 
@@ -48,8 +49,6 @@ const Charts = dynamic(() => import('./components/Charts'), {
 });
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-const SLOTS_PER_EPOCH = 128;
 
 function parseHex(hex: string): number {
   if (!hex) return 0;
@@ -407,13 +406,9 @@ function SkeletonRow() {
   );
 }
 
-function getEpochFromBlock(blockNumber: number): number {
-  return Math.floor(blockNumber / SLOTS_PER_EPOCH);
-}
-
 // ── Block Table ──────────────────────────────────────────────────────────────
 
-function BlockTable({ blocks, status }: { blocks: BlockResult[] | null; status: HomeStatus }) {
+export function BlockTable({ blocks, status, timing }: { blocks: BlockResult[] | null; status: HomeStatus; timing: ChainTiming | null }) {
   return (
     <section aria-label="Latest blocks" className="card flex flex-col overflow-hidden">
       <TableHeader icon={icons.block} title="Latest Blocks" tone="accent" />
@@ -429,8 +424,8 @@ function BlockTable({ blocks, status }: { blocks: BlockResult[] | null; status: 
         ) : (
           blocks.slice(0, TABLE_ROWS).map((block, idx) => {
             const blockNum = parseHex(block.number);
-            const epoch = getEpochFromBlock(blockNum);
             const timestamp = parseHex(block.timestamp);
+            const epoch = epochAtTimestamp(timestamp, timing);
             const txCount = block.transactions?.length || 0;
             const miner = block.miner ? formatAddress(block.miner) : '';
 
@@ -471,7 +466,7 @@ function BlockTable({ blocks, status }: { blocks: BlockResult[] | null; status: 
                     </Link>
                     <span className="text-text-muted/70">
                       {' '}
-                      · epoch {formatNumberWithCommas(epoch.toString())}
+                      · epoch {epoch === null ? '-' : formatNumberWithCommas(epoch)}
                     </span>
                   </div>
                 </div>
@@ -672,7 +667,7 @@ export default function HomeClient(): JSX.Element {
 
           {/* Side-by-Side Tables */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5 mb-6">
-            <BlockTable blocks={data.blocks} status={data.status.blocks} />
+            <BlockTable blocks={data.blocks} status={data.status.blocks} timing={data.epochInfo} />
             <TransactionTable txs={data.txs} status={data.status.txs} />
           </div>
 

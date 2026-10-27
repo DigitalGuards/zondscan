@@ -530,7 +530,10 @@ func handlePendingTxETA(c *gin.Context) {
 		if err != nil {
 			return nil, err
 		}
-		blockStats := db.ComputeBlockStats(samples)
+		blockStats, timingErr := db.BlockStatsWithTiming(c.Request.Context(), samples)
+		if timingErr != nil {
+			return nil, timingErr
+		}
 
 		mempool, err := db.GetPendingMempoolSnapshot()
 		if err != nil {
@@ -552,10 +555,14 @@ func handlePendingTxETA(c *gin.Context) {
 		if etaSec < blockStats.AvgBlockTimeSec {
 			etaSec = blockStats.AvgBlockTimeSec
 		}
+		var knownETA *float64
+		if blockStats.AvgBlockTimeSec > 0 {
+			knownETA = &etaSec
+		}
 
 		return gin.H{
-			"etaSec":            etaSec,
-			"avgBlockTimeSec":   blockStats.AvgBlockTimeSec,
+			"etaSec":            knownETA,
+			"avgBlockTimeSec":   blockStats.BlockTimeSeconds(),
 			"avgGasUsedHex":     "0x" + blockStats.AvgGasUsed.Text(16),
 			"pendingCount":      mp.Count,
 			"gasAheadHex":       "0x" + mp.GasAhead.Text(16),

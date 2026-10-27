@@ -19,7 +19,7 @@ func TestEpochSlotsMapExecutionTimestampsAcrossMissedSlots(t *testing.T) {
 		{Epoch: 2, Slot: 16, ValidatorIndex: "0", Pubkey: "0xaabb"},
 		{Epoch: 2, Slot: 17, ValidatorIndex: "42", Pubkey: "0xccdd"},
 	}
-	rows, proposed, err := mapEpochSlots(2, genesis, blocks, assignments)
+	rows, proposed, err := mapEpochSlots(2, slotTestTiming(genesis), blocks, assignments)
 	if err != nil || len(rows) != 8 || proposed != 2 {
 		t.Fatalf("rows=%v proposed=%d error=%v", rows, proposed, err)
 	}
@@ -38,7 +38,7 @@ func TestEpochSlotsMapExecutionTimestampsAcrossMissedSlots(t *testing.T) {
 }
 
 func TestEpochQueryUsesSlotTimestampsAndCompleteBlocks(t *testing.T) {
-	filter, err := epochTimestampFilter(16, 24, 1700000000)
+	filter, err := epochTimestampFilter(16, 24, slotTestTiming(1700000000))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,31 +57,35 @@ func TestEpochQueryUsesSlotTimestampsAndCompleteBlocks(t *testing.T) {
 func TestEpochMappingRejectsDuplicateAndUnalignedBlocks(t *testing.T) {
 	const genesis = int64(1700000000)
 	valid := epochExecutionBlock{BlockNumberInt: 1, Result: models.Result{Timestamp: fmt.Sprint(genesis + 8*60), Hash: "0xabc"}}
-	if _, _, err := mapEpochSlots(1, genesis, []epochExecutionBlock{valid, valid}, nil); err == nil {
+	if _, _, err := mapEpochSlots(1, slotTestTiming(genesis), []epochExecutionBlock{valid, valid}, nil); err == nil {
 		t.Fatal("duplicate slot accepted")
 	}
 	for _, timestamp := range []string{"invalid", fmt.Sprint(genesis - 1), fmt.Sprint(genesis + 8*60 + 1), fmt.Sprint(genesis + 16*60)} {
 		block := valid
 		block.Result.Timestamp = timestamp
-		if _, _, err := mapEpochSlots(1, genesis, []epochExecutionBlock{block}, nil); err == nil {
+		if _, _, err := mapEpochSlots(1, slotTestTiming(genesis), []epochExecutionBlock{block}, nil); err == nil {
 			t.Fatalf("timestamp %s accepted", timestamp)
 		}
 	}
-	if _, _, err := mapEpochSlots(1, genesis, nil, []epochSlotAssignment{{Epoch: 1, Slot: 16}}); err == nil {
+	if _, _, err := mapEpochSlots(1, slotTestTiming(genesis), nil, []epochSlotAssignment{{Epoch: 1, Slot: 16}}); err == nil {
 		t.Fatal("out-of-range assignment accepted")
 	}
 }
 
 func TestEpochSlotBoundsAndMissingClock(t *testing.T) {
 	for _, epoch := range []int64{-1, math.MaxInt64, math.MaxInt64 / 8} {
-		if _, _, err := epochSlotBounds(epoch); err == nil {
+		if _, _, err := slotTestTiming(1700000000).EpochSlots(epoch); err == nil {
 			t.Fatalf("epoch %d accepted", epoch)
 		}
 	}
-	if _, _, err := mapEpochSlots(1, 0, nil, nil); err == nil {
+	if _, _, err := mapEpochSlots(1, slotTestTiming(0), nil, nil); err == nil {
 		t.Fatal("missing beacon genesis accepted")
 	}
-	if _, err := epochTimestampFilter(8, 16, math.MaxInt64-1); err == nil {
+	if _, err := epochTimestampFilter(8, 16, slotTestTiming(math.MaxInt64-1)); err == nil {
 		t.Fatal("timestamp overflow accepted")
 	}
+}
+
+func slotTestTiming(genesis int64) models.ChainTiming {
+	return models.ChainTiming{SlotsPerEpoch: 8, SecondsPerSlot: 60, GenesisTime: genesis}
 }

@@ -23,11 +23,8 @@ const GasHistoryCollection = "gasHistory"
 // rehydrated from `blocks` if needed.
 const GasHistoryRetention = 7 * 24 * time.Hour
 
-// gasHistoryScanLimit caps how many blocks one run pulls. It is sized to
-// cover GasHistoryRetention at the network's current 60 s slot time
-// (7 d ≈ 10 080 blocks) so a cold start fills the whole 7-day view in one
-// pass. If slot time drops, a cold start covers proportionally less history
-// and the rest fills in over subsequent runs.
+// gasHistoryScanLimit bounds work to the newest blocks per pass. Retention
+// is timestamp-based; the initial time span covered depends on block cadence.
 const gasHistoryScanLimit = 12000
 
 // gasHistoryRow is the bson shape written to the collection. `_id` is the

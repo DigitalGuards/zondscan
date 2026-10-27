@@ -99,8 +99,11 @@ const gas = {
 };
 
 // Pending lifecycle state is isolated to synthetic hashes and this loopback server.
-const pendingHashes = new Map([21, 22, 23, 24, 25, 26, 27, 28].map((id) => [hash(id), id]));
+const pendingHashes = new Map([21, 22, 23, 24, 25, 26, 27, 28, 29].map((id) => [hash(id), id]));
 const pendingStates = new Map();
+// Malformed wire text exercises HTML and inline hydration payload escaping.
+const scriptLikeInput =
+  '0x</script><script>window.__pendingInjected=true</script><!--"\'\\\n\u2028\u2029';
 const pendingFixture = (id) => ({
   hash: hash(id),
   from: sender,
@@ -112,7 +115,9 @@ const pendingFixture = (id) => ({
         ? '0xa9059cbb' + 'c'.repeat(128) + 'a'.padStart(128, '0')
         : id === 25
           ? '0x12345678'
-          : '0x',
+          : id === 29
+            ? scriptLikeInput
+            : '0x',
   value: '0x2386f26fc10000',
   gas: '0x5208',
   gasPrice: '0x3b9aca00',
@@ -154,28 +159,31 @@ createServer((request, response) => {
     '/latestblock': { blockNumber: 233700, qrlUsdPrice: overview.currentPrice },
     '/blocks': { blocks, total: 233700 },
     '/epoch': {
-      headEpoch: '1825',
-      headSlot: '233635',
-      finalizedEpoch: '1823',
-      justifiedEpoch: '1824',
-      slotsPerEpoch: 128,
+      headEpoch: '5000',
+      headSlot: '40007',
+      finalizedEpoch: '4998',
+      justifiedEpoch: '4999',
+      genesisTime: timestamp - 40007 * 60,
+      slotsPerEpoch: 8,
       secondsPerSlot: 60,
-      slotInEpoch: 35,
-      timeToNextEpoch: 5580,
+      slotInEpoch: 7,
+      timeToNextEpoch: 60,
       updatedAt: timestamp,
     },
     '/epochs': {
       epochs: [
         {
-          epoch: 1825,
-          timestamp,
-          totalStaked: '8000000000000000000000000',
-          proposedBlocks: 120,
-          missedBlocks: 8,
-          participationRate: 96.7,
+          epoch: '4998',
+          timestamp: timestamp - 23 * 60,
+          status: 'finalized',
+          validatorsCount: 64,
+          activeCount: 64,
+          totalStaked: '2560000000000000',
         },
       ],
-      total: 1826,
+      total: 1,
+      finalizedEpoch: '4998',
+      justifiedEpoch: '4999',
     },
     '/gas/history': {
       range: '24h',

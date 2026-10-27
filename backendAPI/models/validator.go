@@ -51,19 +51,23 @@ type EpochInfo struct {
 
 // EpochInfoResponse represents the API response for epoch information
 type EpochInfoResponse struct {
+	GenesisTime     int64  `json:"genesisTime"`
 	HeadEpoch       string `json:"headEpoch"`
 	HeadSlot        string `json:"headSlot"`
 	FinalizedEpoch  string `json:"finalizedEpoch"`
 	JustifiedEpoch  string `json:"justifiedEpoch"`
-	SlotsPerEpoch   int    `json:"slotsPerEpoch"`
-	SecondsPerSlot  int    `json:"secondsPerSlot"`
+	SlotsPerEpoch   int64  `json:"slotsPerEpoch"`
+	SecondsPerSlot  int64  `json:"secondsPerSlot"`
 	SlotInEpoch     int64  `json:"slotInEpoch"`
 	TimeToNextEpoch int64  `json:"timeToNextEpoch"` // Seconds until next epoch
 	UpdatedAt       int64  `json:"updatedAt"`
 }
 
 // ValidatorHistoryRecord represents historical validator statistics
+const BeaconStateHistorySource = "beacon-state"
+
 type ValidatorHistoryRecord struct {
+	Source          string `bson:"source" json:"source"`
 	ID              string `bson:"_id,omitempty" json:"_id,omitempty"`
 	Epoch           string `bson:"epoch" json:"epoch"`
 	Timestamp       int64  `bson:"timestamp" json:"timestamp"`
@@ -82,18 +86,22 @@ type ValidatorHistoryResponse struct {
 
 // ValidatorDetailResponse represents detailed information about a single validator
 type ValidatorDetailResponse struct {
-	Index                      string `json:"index"`
-	PublicKeyHex               string `json:"publicKeyHex"`
-	WithdrawalCredentialsHex   string `json:"withdrawalCredentialsHex"`
-	EffectiveBalance           string `json:"effectiveBalance"`
-	Slashed                    bool   `json:"slashed"`
-	ActivationEligibilityEpoch string `json:"activationEligibilityEpoch"`
-	ActivationEpoch            string `json:"activationEpoch"`
-	ExitEpoch                  string `json:"exitEpoch"`
-	WithdrawableEpoch          string `json:"withdrawableEpoch"`
-	Status                     string `json:"status"`
-	Age                        int64  `json:"age"`
-	CurrentEpoch               string `json:"currentEpoch"`
+	SlashingEvents             []SlashingEvent      `json:"slashingEvents"`
+	SlashingEventsTotal        int64                `json:"slashingEventsTotal"`
+	ValidatorSetChanges        []ValidatorSetChange `json:"validatorSetChanges"`
+	ValidatorSetChangesTotal   int64                `json:"validatorSetChangesTotal"`
+	Index                      string               `json:"index"`
+	PublicKeyHex               string               `json:"publicKeyHex"`
+	WithdrawalCredentialsHex   string               `json:"withdrawalCredentialsHex"`
+	EffectiveBalance           string               `json:"effectiveBalance"`
+	Slashed                    bool                 `json:"slashed"`
+	ActivationEligibilityEpoch string               `json:"activationEligibilityEpoch"`
+	ActivationEpoch            string               `json:"activationEpoch"`
+	ExitEpoch                  string               `json:"exitEpoch"`
+	WithdrawableEpoch          string               `json:"withdrawableEpoch"`
+	Status                     string               `json:"status"`
+	Age                        int64                `json:"age"`
+	CurrentEpoch               string               `json:"currentEpoch"`
 }
 
 // ValidatorStatsResponse represents aggregated validator statistics
@@ -123,23 +131,24 @@ type EpochDetailBlock struct {
 
 // EpochDetailResponse represents the full epoch detail API response
 type EpochDetailResponse struct {
-	Epoch           string             `json:"epoch"`
-	Timestamp       int64              `json:"timestamp"`
-	Status          string             `json:"status"`
-	ValidatorsCount int                `json:"validatorsCount"`
-	ActiveCount     int                `json:"activeCount"`
-	PendingCount    int                `json:"pendingCount"`
-	ExitedCount     int                `json:"exitedCount"`
-	SlashedCount    int                `json:"slashedCount"`
-	TotalStaked     string             `json:"totalStaked"`
-	StartSlot       int64              `json:"startSlot"`
-	EndSlot         int64              `json:"endSlot"`
-	Blocks          []EpochDetailBlock `json:"blocks"`
-	FinalizedEpoch  string             `json:"finalizedEpoch"`
-	JustifiedEpoch  string             `json:"justifiedEpoch"`
-	HeadEpoch       string             `json:"headEpoch"`
-	ProposedCount   int                `json:"proposedCount"`
-	MissedCount     int                `json:"missedCount"`
+	SummaryAvailable bool               `json:"summaryAvailable"`
+	Epoch            string             `json:"epoch"`
+	Timestamp        int64              `json:"timestamp"`
+	Status           string             `json:"status"`
+	ValidatorsCount  *int               `json:"validatorsCount"`
+	ActiveCount      *int               `json:"activeCount"`
+	PendingCount     *int               `json:"pendingCount"`
+	ExitedCount      *int               `json:"exitedCount"`
+	SlashedCount     *int               `json:"slashedCount"`
+	TotalStaked      *string            `json:"totalStaked"`
+	StartSlot        int64              `json:"startSlot"`
+	EndSlot          int64              `json:"endSlot"`
+	Blocks           []EpochDetailBlock `json:"blocks"`
+	FinalizedEpoch   string             `json:"finalizedEpoch"`
+	JustifiedEpoch   string             `json:"justifiedEpoch"`
+	HeadEpoch        string             `json:"headEpoch"`
+	ProposedCount    int                `json:"proposedCount"`
+	MissedCount      int                `json:"missedCount"`
 }
 
 // EpochListItem represents a single epoch in the paginated listing
