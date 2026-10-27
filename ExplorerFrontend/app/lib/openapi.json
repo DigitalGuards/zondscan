@@ -20,6 +20,170 @@
     { "name": "Faucet & Site", "description": "Endpoints served by the explorer web app itself: search redirect and the testnet faucet." }
   ],
   "paths": {
+    "/api/slashings": {
+      "get": {
+        "tags": [
+          "Validators & Epochs"
+        ],
+        "operationId": "getSlashings",
+        "summary": "Slashings",
+        "description": "Finalized slashing evidence, ordered by slot descending with a stable ID tie-breaker.",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "minimum": 1,
+              "maximum": 1000000
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "validator",
+            "in": "query",
+            "description": "Optional validator index, including zero.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated records. Empty lists are arrays.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SlashingsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid pagination, validator index, epoch range, or kind.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/validator-set-changes": {
+      "get": {
+        "tags": [
+          "Validators & Epochs"
+        ],
+        "operationId": "getValidatorSetChanges",
+        "summary": "Validator set changes",
+        "description": "Validator set milestones, ordered by epoch descending with a stable ID tie-breaker. Epoch bounds are inclusive.",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "minimum": 1,
+              "maximum": 1000000
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "validator",
+            "in": "query",
+            "description": "Optional validator index, including zero.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            }
+          },
+          {
+            "name": "fromEpoch",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "format": "int64"
+            }
+          },
+          {
+            "name": "toEpoch",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "format": "int64"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "description": "Ejected selects unslashed validators whose effective balance at exit is at or below the beacon EJECTION_BALANCE. Exited includes all other exits.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "activated",
+                "exited",
+                "slashed",
+                "ejected"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated records. Empty lists are arrays.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidatorSetChangesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid pagination, validator index, epoch range, or kind.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "tags": ["Status"],
@@ -1689,12 +1853,22 @@
     },
     "/api/validator/{id}": {
       "get": {
-        "tags": ["Validators & Epochs"],
+        "tags": [
+          "Validators & Epochs"
+        ],
         "operationId": "getValidator",
         "summary": "Validator detail",
         "description": "Detail for one validator, addressed by decimal index.",
         "parameters": [
-          { "name": "id", "in": "path", "required": true, "description": "Validator index as a decimal integer.", "schema": { "type": "string" } }
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Validator index as a decimal integer.",
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
           "200": {
@@ -1704,18 +1878,68 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "index": { "type": "string" },
-                    "publicKeyHex": { "type": "string" },
-                    "withdrawalCredentialsHex": { "type": "string" },
-                    "effectiveBalance": { "type": "string" },
-                    "slashed": { "type": "boolean" },
-                    "activationEligibilityEpoch": { "type": "string" },
-                    "activationEpoch": { "type": "string" },
-                    "exitEpoch": { "type": "string" },
-                    "withdrawableEpoch": { "type": "string" },
-                    "status": { "type": "string" },
-                    "age": { "type": "integer" },
-                    "currentEpoch": { "type": "string" }
+                    "index": {
+                      "type": "string"
+                    },
+                    "publicKeyHex": {
+                      "type": "string"
+                    },
+                    "withdrawalCredentialsHex": {
+                      "type": "string"
+                    },
+                    "effectiveBalance": {
+                      "type": "string"
+                    },
+                    "slashed": {
+                      "type": "boolean"
+                    },
+                    "activationEligibilityEpoch": {
+                      "type": "string"
+                    },
+                    "activationEpoch": {
+                      "type": "string"
+                    },
+                    "exitEpoch": {
+                      "type": "string"
+                    },
+                    "withdrawableEpoch": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "age": {
+                      "type": "integer"
+                    },
+                    "currentEpoch": {
+                      "type": "string"
+                    },
+                    "slashingEvents": {
+                      "type": "array",
+                      "maxItems": 20,
+                      "items": {
+                        "$ref": "#/components/schemas/SlashingEvent"
+                      },
+                      "description": "Newest 20 records for this validator. Use the corresponding list endpoint with validator=<index> for further pages."
+                    },
+                    "slashingEventsTotal": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "format": "int64"
+                    },
+                    "validatorSetChanges": {
+                      "type": "array",
+                      "maxItems": 20,
+                      "items": {
+                        "$ref": "#/components/schemas/ValidatorSetChange"
+                      },
+                      "description": "Newest 20 records for this validator. Use the corresponding list endpoint with validator=<index> for further pages."
+                    },
+                    "validatorSetChangesTotal": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "format": "int64"
+                    }
                   }
                 }
               }
@@ -1723,11 +1947,26 @@
           },
           "400": {
             "description": "Invalid validator id format.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "404": {
             "description": "Validator not found.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         }
       }
@@ -2513,6 +2752,173 @@
       }
     },
     "schemas": {
+      "SlashingEvent": {
+        "type": "object",
+        "required": [
+          "id",
+          "slot",
+          "epoch",
+          "type",
+          "validatorIndices",
+          "whistleblower",
+          "conflictingRoots"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "slot": {
+            "type": "integer",
+            "minimum": 0,
+            "format": "int64"
+          },
+          "epoch": {
+            "type": "integer",
+            "minimum": 0,
+            "format": "int64"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "proposer",
+              "attester"
+            ]
+          },
+          "validatorIndices": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            }
+          },
+          "whistleblower": {
+            "type": "string",
+            "pattern": "^[0-9]+$",
+            "description": "Validator index of the including beacon block proposer."
+          },
+          "conflictingRoots": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "string",
+              "pattern": "^0x[0-9a-f]{64}$"
+            },
+            "description": "SSZ roots of the two unsigned headers or AttestationData containers."
+          }
+        }
+      },
+      "ValidatorSetChange": {
+        "type": "object",
+        "required": [
+          "id",
+          "epoch",
+          "kind",
+          "validatorIndex",
+          "pubkey"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "epoch": {
+            "type": "integer",
+            "minimum": 0,
+            "format": "int64"
+          },
+          "kind": {
+            "type": "string",
+            "description": "At exit_epoch, an unslashed validator at or below EJECTION_BALANCE is ejected; every other exiting validator is exited. Slashed validators retain their separate slashed change.",
+            "enum": [
+              "activated",
+              "exited",
+              "slashed",
+              "ejected"
+            ]
+          },
+          "validatorIndex": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          },
+          "pubkey": {
+            "type": "string"
+          }
+        },
+        "description": "Milestones derived from finalized first-slot validator records. Slashed uses the first observed epoch. Ejected classifies unslashed exits at or below the beacon EJECTION_BALANCE using effective balance at the exit epoch; balance regained in the exit queue can produce an exited row. Withdrawability creates no change. Slashing event epochs identify actual block inclusion."
+      },
+      "SlashingsResponse": {
+        "type": "object",
+        "required": [
+          "events",
+          "total",
+          "page",
+          "limit",
+          "backfillComplete",
+          "slashedValidatorCount"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SlashingEvent"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "format": "int64"
+          },
+          "page": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "backfillComplete": {
+            "type": "boolean",
+            "description": "True after the version 2 history walker has reached epoch zero."
+          },
+          "slashedValidatorCount": {
+            "type": "integer",
+            "minimum": 0,
+            "format": "int64",
+            "description": "Network-wide slashed count from the current validator records, independent of page and filters."
+          }
+        }
+      },
+      "ValidatorSetChangesResponse": {
+        "type": "object",
+        "required": [
+          "changes",
+          "total",
+          "page",
+          "limit",
+          "backfillComplete"
+        ],
+        "properties": {
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ValidatorSetChange"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "format": "int64"
+          },
+          "page": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "backfillComplete": {
+            "type": "boolean",
+            "description": "True after the version 2 history walker has reached epoch zero."
+          }
+        }
+      },
       "Error": {
         "type": "object",
         "properties": { "error": { "type": "string" } },

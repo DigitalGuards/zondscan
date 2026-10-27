@@ -1,7 +1,7 @@
 'use client';
 
 import { useChainTiming } from '../../lib/useChainTiming';
-import { isRecord } from '../../lib/guards';
+import { isArray, isRecord } from '../../lib/guards';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -18,8 +18,17 @@ import CollapsibleHex from '../../components/CollapsibleHex';
 import CopyButton from '../../components/CopyButton';
 import AddressFingerprint from '../../components/AddressFingerprint';
 import EmptyState from '../../components/EmptyState';
+import ValidatorActivity from './validator-activity';
+import {
+  isSlashingEvent,
+  isValidatorSetChange,
+  type SlashingEvent,
+  type ValidatorSetChange,
+} from '../../lib/validatorActivity';
 
 interface ValidatorDetail {
+  slashingEvents: SlashingEvent[];
+  validatorSetChanges: ValidatorSetChange[];
   index: string;
   publicKeyHex: string;
   withdrawalCredentialsHex: string;
@@ -52,6 +61,14 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
       try {
         setLoading(true);
         const response = await axios.get(`${config.handlerUrl}/validator/${id}`);
+        const data: unknown = response.data;
+        if (
+          !isRecord(data) || typeof data.slashed !== 'boolean' ||
+          !isArray(data.slashingEvents) || !data.slashingEvents.every(isSlashingEvent) ||
+          !isArray(data.validatorSetChanges) || !data.validatorSetChanges.every(isValidatorSetChange)
+        ) {
+          throw new Error('Invalid validator activity response');
+        }
         setValidator(response.data);
         setError(null);
       } catch (err: unknown) {
@@ -282,6 +299,13 @@ export default function ValidatorDetailClient({ id }: ValidatorDetailClientProps
           </div>
         </div>
       </div>
+      <ValidatorActivity
+        index={validator.index}
+        slashed={validator.slashed}
+        events={validator.slashingEvents}
+        changes={validator.validatorSetChanges}
+        timing={timing}
+      />
     </div>
   );
 }

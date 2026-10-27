@@ -9,6 +9,23 @@ import (
 	"QRL2MongoDB/models"
 )
 
+// EjectionBalance is loaded by the history worker independently of chain timing.
+func (c *SlotAssignmentClient) EjectionBalance(ctx context.Context) (uint64, error) {
+	var response struct {
+		Data struct {
+			EjectionBalance string `json:"EJECTION_BALANCE"`
+		} `json:"data"`
+	}
+	if err := c.get(ctx, "/qrl/v1/config/spec", &response); err != nil {
+		return 0, fmt.Errorf("read beacon ejection balance: %w", err)
+	}
+	n, err := strconv.ParseUint(response.Data.EjectionBalance, 10, 64)
+	if err != nil || n == 0 {
+		return 0, errors.New("invalid beacon EJECTION_BALANCE")
+	}
+	return n, nil
+}
+
 // ChainTiming reads both startup prerequisites with the client's timeout caps.
 func (c *SlotAssignmentClient) ChainTiming(ctx context.Context) (models.ChainTiming, error) {
 	var response struct {

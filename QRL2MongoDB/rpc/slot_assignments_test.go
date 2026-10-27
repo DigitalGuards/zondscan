@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +14,54 @@ import (
 
 	"QRL2MongoDB/models"
 )
+
+func TestBeaconResponseSizeCaps(t *testing.T) {
+	const blockPath = "/qrl/v1/beacon/blocks/0"
+	const statePath = "/qrl/v1/beacon/states/0/validators"
+	for _, tc := range []struct {
+		name, path   string
+		size, status int
+		tooLarge     bool
+	}{
+		{"state at 8 MiB", statePath, 8 << 20, 200, false},
+		{"state over 8 MiB", statePath, (8 << 20) + 1, 200, true},
+		{"block over 8 MiB", blockPath, (8 << 20) + 1, 200, false},
+		{"block at 64 MiB", blockPath, 64 << 20, 200, false},
+		{"block over 64 MiB", blockPath, (64 << 20) + 1, 200, true},
+		{"oversized non-200 block", blockPath, (64 << 20) + 1, 503, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := testAssignmentClient(t, func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.status)
+				body := evidenceBlock(0, "[]", "[]")
+				fmt.Fprint(w, body)
+				padding := strings.Repeat(" ", 32<<10)
+				for remaining := tc.size - len(body); remaining > 0; {
+					n := min(remaining, len(padding))
+					if _, err := io.WriteString(w, padding[:n]); err != nil {
+						return
+					}
+					remaining -= n
+				}
+			})
+			var response slashingBlockResponse
+			err := client.get(context.Background(), tc.path, &response)
+			if tc.status != http.StatusOK {
+				var status *beaconStatusError
+				if !errors.As(err, &status) || status.status != tc.status || errors.Is(err, models.ErrStructuralSlashingEvidence) {
+					t.Fatalf("HTTP failure must retry: %v", err)
+				}
+				return
+			}
+			if (err != nil) != tc.tooLarge || (err != nil && !strings.Contains(err.Error(), "exceeds size limit")) {
+				t.Fatalf("size=%d error=%v", tc.size, err)
+			}
+			if errors.Is(err, models.ErrStructuralSlashingEvidence) != (tc.tooLarge && tc.path == blockPath) {
+				t.Fatalf("size error classification: %v", err)
+			}
+		})
+	}
+}
 
 func testAssignmentClient(t *testing.T, handler http.HandlerFunc) *SlotAssignmentClient {
 	t.Helper()

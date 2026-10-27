@@ -18,11 +18,13 @@ import (
 
 const validatorHistoryCursorID = "validator_history"
 const validatorHistoryBatchSize = 16
+const validatorHistoryVersion = 2
 
 // Two descending ranges keep recent finalized epochs ahead of the old backlog.
 // -1 marks a finished range. NewestScheduled covers the original backlog and
 // each completed catch-up range; BackfillNext retains unfinished older work.
 type validatorHistoryCursor struct {
+	Version         int   `bson:"version"`
 	BackfillNext    int64 `bson:"backfillNext"`
 	NewestScheduled int64 `bson:"newestScheduled"`
 	CatchupNext     int64 `bson:"catchupNext"`
@@ -32,16 +34,21 @@ type validatorHistoryCursor struct {
 type validatorHistorySource interface {
 	FinalizedEpoch(context.Context) (int64, error)
 	ValidatorsAtSlot(context.Context, int64) ([]models.StateValidator, error)
+	SlashingEvidence(context.Context, int64) ([]models.SlashingEvent, error)
 }
 
 type validatorHistoryStore interface {
 	Load(context.Context) (validatorHistoryCursor, bool, error)
-	Save(context.Context, validatorHistoryCursor, *models.ValidatorHistoryRecord) error
+	Snapshot(context.Context, int64) (*models.SlashingSnapshot, error)
+	Save(context.Context, validatorHistoryCursor, *models.ValidatorHistoryRecord, validatorActivity) error
 }
 
-func walkValidatorHistory(ctx context.Context, source validatorHistorySource, store validatorHistoryStore, timing models.ChainTiming) (bool, error) {
+func walkValidatorHistory(ctx context.Context, source validatorHistorySource, store validatorHistoryStore, timing models.ChainTiming, ejectionBalance uint64) (bool, error) {
 	if err := timing.Validate(); err != nil {
 		return false, err
+	}
+	if ejectionBalance == 0 {
+		return false, errors.New("invalid beacon EJECTION_BALANCE")
 	}
 	state, exists, err := store.Load(ctx)
 	if err != nil {
@@ -54,9 +61,12 @@ func walkValidatorHistory(ctx context.Context, source validatorHistorySource, st
 	if _, _, err := timing.EpochSlots(finalized); err != nil {
 		return false, err
 	}
-	if !exists {
-		state = validatorHistoryCursor{BackfillNext: finalized, NewestScheduled: finalized, CatchupNext: -1, CatchupTarget: -1}
-		if err := store.Save(ctx, state, nil); err != nil {
+	if state.Version > validatorHistoryVersion {
+		return false, errors.New("unsupported validator history cursor version")
+	}
+	if !exists || state.Version < validatorHistoryVersion {
+		state = validatorHistoryCursor{Version: validatorHistoryVersion, BackfillNext: finalized, NewestScheduled: finalized, CatchupNext: -1, CatchupTarget: -1}
+		if err := store.Save(ctx, state, nil, validatorActivity{}); err != nil {
 			return false, err
 		}
 	}
@@ -91,6 +101,11 @@ func walkValidatorHistory(ctx context.Context, source validatorHistorySource, st
 		if err != nil {
 			return false, fmt.Errorf("validator history epoch %d: %w", epoch, err)
 		}
+		activity, snapshot, err := prepareValidatorActivity(ctx, source, store, epoch, validators, ejectionBalance)
+		if err != nil {
+			return false, fmt.Errorf("validator activity epoch %d: %w", epoch, err)
+		}
+		record.SlashingSnapshot = snapshot
 		if catchingUp {
 			state.CatchupNext--
 			if state.CatchupNext == state.NewestScheduled {
@@ -100,8 +115,14 @@ func walkValidatorHistory(ctx context.Context, source validatorHistorySource, st
 		} else {
 			state.BackfillNext--
 		}
-		if err := store.Save(ctx, state, &record); err != nil {
+		if err := store.Save(ctx, state, &record, activity); err != nil {
 			return false, err
+		}
+		for _, resolution := range activity.Resolutions {
+			if resolution.EvidenceErr != nil {
+				configs.Logger.Warn("Slashing evidence missing; epoch resolved",
+					zap.Int64("epoch", resolution.Epoch), zap.Strings("validatorIndices", resolution.ValidatorIndices), zap.Error(resolution.EvidenceErr))
+			}
 		}
 	}
 	return state.BackfillNext >= 0 || state.CatchupNext >= 0 || finalized > state.NewestScheduled, nil
@@ -113,7 +134,10 @@ func InitializeValidatorHistory() error {
 			{Keys: bson.D{{Key: "epoch", Value: 1}}, Options: options.Index().SetUnique(true).SetName("history_epoch_unique")},
 			{Keys: bson.D{{Key: "source", Value: 1}, {Key: "epochInt", Value: -1}}, Options: options.Index().SetName("history_source_epoch")},
 		})
-		return err
+		if err != nil {
+			return err
+		}
+		return initializeValidatorActivity(ctx)
 	})
 }
 
@@ -130,10 +154,23 @@ func (mongoValidatorHistoryStore) Load(ctx context.Context) (validatorHistoryCur
 	return state, err == nil, err
 }
 
-func (mongoValidatorHistoryStore) Save(ctx context.Context, state validatorHistoryCursor, record *models.ValidatorHistoryRecord) error {
+func (mongoValidatorHistoryStore) Save(ctx context.Context, state validatorHistoryCursor, record *models.ValidatorHistoryRecord, activity validatorActivity) error {
 	return slotAssignmentMutation(ctx, func(ctx context.Context) error {
+		if err := storeValidatorActivity(ctx, activity); err != nil {
+			return err
+		}
 		if record != nil {
 			if err := services.StoreValidatorHistory(ctx, configs.ValidatorHistoryCollections, *record); err != nil {
+				return err
+			}
+		}
+		// Resolution markers follow every event/change upsert. A saved marker
+		// also avoids repeating block requests after a cursor-write interruption.
+		for _, resolution := range activity.Resolutions {
+			if _, err := configs.ValidatorHistoryCollections.UpdateOne(ctx,
+				bson.M{"epochInt": resolution.Epoch}, bson.M{"$set": bson.M{
+					"slashingSnapshot.resolved": true, "slashingSnapshot.evidenceMissing": resolution.EvidenceErr != nil,
+				}}); err != nil {
 				return err
 			}
 		}
@@ -148,8 +185,16 @@ func (mongoValidatorHistoryStore) Save(ctx context.Context, state validatorHisto
 }
 
 func StartValidatorHistorySync(stopCh <-chan struct{}) {
+	var ejectionBalance uint64
 	chainClock.startWorker(stopCh, "Validator history", func(ctx context.Context) (bool, error) {
-		return walkValidatorHistory(ctx, chainClock.beacon, mongoValidatorHistoryStore{}, chainClock.timing)
+		if ejectionBalance == 0 {
+			value, err := chainClock.beacon.EjectionBalance(ctx)
+			if err != nil {
+				return false, err
+			}
+			ejectionBalance = value
+		}
+		return walkValidatorHistory(ctx, chainClock.beacon, mongoValidatorHistoryStore{}, chainClock.timing, ejectionBalance)
 	})
 }
 

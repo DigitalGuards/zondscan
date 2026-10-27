@@ -27,6 +27,8 @@ const (
 	epochInfoCollName                    = "epoch_info"
 	validatorHistoryCollName             = "validator_history"
 	slotAssignmentsCollName              = "slotAssignments"
+	slashingEventsCollName               = "slashingEvents"
+	validatorSetChangesCollName          = "validatorSetChanges"
 	priceHistoryCollName                 = "priceHistory"
 	tokenTransfersCollName               = "tokenTransfers"
 	tokenBalancesCollName                = "tokenBalances"
@@ -65,6 +67,8 @@ var (
 	EpochInfoCollection                    *mongo.Collection
 	ValidatorHistoryCollection             *mongo.Collection
 	SlotAssignmentsCollection              *mongo.Collection
+	SlashingEventsCollection               *mongo.Collection
+	ValidatorSetChangesCollection          *mongo.Collection
 	PriceHistoryCollection                 *mongo.Collection
 	TokenTransfersCollection               *mongo.Collection
 	TokenBalancesCollection                *mongo.Collection

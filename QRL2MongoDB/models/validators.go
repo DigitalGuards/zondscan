@@ -71,17 +71,18 @@ type BeaconChainHeadResponse struct {
 
 // ValidatorHistoryRecord represents historical validator statistics per epoch
 type ValidatorHistoryRecord struct {
-	ID              string `bson:"_id,omitempty" json:"_id,omitempty"`
-	Epoch           string `bson:"epoch" json:"epoch"`
-	EpochInt        int64  `bson:"epochInt" json:"-"`
-	Source          string `bson:"source" json:"source"`
-	Timestamp       int64  `bson:"timestamp" json:"timestamp"`
-	ValidatorsCount int    `bson:"validatorsCount" json:"validatorsCount"`
-	ActiveCount     int    `bson:"activeCount" json:"activeCount"`
-	PendingCount    int    `bson:"pendingCount" json:"pendingCount"`
-	ExitedCount     int    `bson:"exitedCount" json:"exitedCount"`
-	SlashedCount    int    `bson:"slashedCount" json:"slashedCount"`
-	TotalStaked     string `bson:"totalStaked" json:"totalStaked"` // Sum of effective balances
+	SlashingSnapshot *SlashingSnapshot `bson:"slashingSnapshot,omitempty" json:"-"`
+	ID               string            `bson:"_id,omitempty" json:"_id,omitempty"`
+	Epoch            string            `bson:"epoch" json:"epoch"`
+	EpochInt         int64             `bson:"epochInt" json:"-"`
+	Source           string            `bson:"source" json:"source"`
+	Timestamp        int64             `bson:"timestamp" json:"timestamp"`
+	ValidatorsCount  int               `bson:"validatorsCount" json:"validatorsCount"`
+	ActiveCount      int               `bson:"activeCount" json:"activeCount"`
+	PendingCount     int               `bson:"pendingCount" json:"pendingCount"`
+	ExitedCount      int               `bson:"exitedCount" json:"exitedCount"`
+	SlashedCount     int               `bson:"slashedCount" json:"slashedCount"`
+	TotalStaked      string            `bson:"totalStaked" json:"totalStaked"` // Sum of effective balances
 }
 
 // ValidatorDocument is the per-validator MongoDB document.
