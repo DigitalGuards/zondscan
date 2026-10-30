@@ -4,6 +4,7 @@ import (
 	"backendAPI/qrladdress"
 	"context"
 	"encoding/hex"
+	"errors"
 	"math/big"
 	"strings"
 )
@@ -27,11 +28,24 @@ func reverseNodeFor(canonicalAddress string) [32]byte {
 // ReverseName returns a normalized primary name only after its forward record
 // resolves to the same canonical address. Missing or invalid names stay empty.
 func (c *Client) ReverseName(ctx context.Context, deployment Deployment, address string) (Resolution, error) {
+	return c.ReverseNameWithLookup(ctx, deployment, address, func(ctx context.Context, name string) (Resolution, error) {
+		return c.ResolveName(ctx, deployment, name)
+	})
+}
+
+// ReverseNameWithLookup allows the route to share cached forward records.
+// Registry failures remain errors; resolver record failures are negative results.
+func (c *Client) ReverseNameWithLookup(
+	ctx context.Context,
+	deployment Deployment,
+	address string,
+	lookup func(context.Context, string) (Resolution, error),
+) (Resolution, error) {
 	canonical, ok := qrladdress.Canonicalize(address)
 	if !ok {
 		return Resolution{}, ErrInvalidAddress
 	}
-	if c == nil || c.call == nil || deployment.registryAddress == "" || deployment.expectedChainID == "" {
+	if c == nil || c.call == nil || lookup == nil || deployment.registryAddress == "" || deployment.expectedChainID == "" {
 		return Resolution{}, ErrNotConfigured
 	}
 	node := reverseNodeFor(canonical)
@@ -47,22 +61,26 @@ func (c *Client) ReverseName(ctx context.Context, deployment Deployment, address
 		return Resolution{Address: canonical, Missing: MissingResolver}, nil
 	}
 
+	missing := Resolution{Address: canonical, Missing: MissingName}
 	nameResult, err := c.qrlCall(ctx, resolver, nameCallData(node))
 	if err != nil {
-		return Resolution{}, err
+		return missing, nil
 	}
 	name, err := decodeName(nameResult)
 	if err != nil {
-		return Resolution{}, err
+		return missing, nil
 	}
-	missing := Resolution{Address: canonical, Missing: MissingName}
 	normalized, err := NormalizeName(name)
 	if err != nil {
 		return missing, nil
 	}
-	forward, err := c.ResolveName(ctx, deployment, normalized)
+	forward, err := lookup(ctx, normalized)
 	if err != nil {
-		return Resolution{}, err
+		if errors.Is(err, ErrRegistryLookup) || errors.Is(err, ErrNotConfigured) ||
+			errors.Is(err, ErrChainMismatch) || errors.Is(err, ErrRegistryUnavailable) {
+			return Resolution{}, err
+		}
+		return missing, nil
 	}
 	if forward.Missing != MissingNone || forward.Address != canonical {
 		return missing, nil

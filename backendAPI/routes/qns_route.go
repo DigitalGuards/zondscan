@@ -24,15 +24,14 @@ const (
 // The per-IP limit and short shared cache bound the amount of node work a
 // public caller can trigger.
 func RegisterQNSRoutes(router *gin.Engine) {
-	limiter := middleware.PerIPRateLimit(30, 30, time.Minute)
 	router.GET(
 		"/qns/resolve/:name",
-		limiter,
+		middleware.PerIPRateLimit(30, 30, time.Minute),
 		newQNSResolveHandler(db.NodeRPC, routeCache),
 	)
 	router.GET(
 		"/qns/reverse/:address",
-		limiter,
+		middleware.PerIPRateLimit(60, 60, time.Minute),
 		newQNSReverseHandler(db.NodeRPC, routeCache),
 	)
 }
@@ -100,6 +99,28 @@ func newQNSHandler(call qns.RPCFunc, responseCache *cache.TTLCache, reverse bool
 			return
 		}
 
+		resolveForward := func(ctx context.Context, name string) (qns.Resolution, error) {
+			value, err := responseCache.GetOrComputeContext(
+				ctx,
+				"qns:resolve:"+config.CacheKey()+":"+name,
+				qnsCacheTTL,
+				func() (interface{}, error) {
+					fillCtx, fillCancel := context.WithTimeout(context.Background(), qnsFillTimeout)
+					defer fillCancel()
+					return client.ResolveName(fillCtx, deployment, name)
+				},
+			)
+			if err != nil {
+				return qns.Resolution{}, err
+			}
+			resolution, ok := value.(qns.Resolution)
+			if !ok {
+				return qns.Resolution{}, errors.New("invalid cached QNS resolution")
+			}
+			return resolution, nil
+		}
+
+		// Reverse verification shares the forward route's cache key and fill.
 		resolutionValue, err := responseCache.GetOrComputeContext(
 			requestCtx,
 			"qns:"+operation+":"+config.CacheKey()+":"+normalized,
@@ -108,7 +129,7 @@ func newQNSHandler(call qns.RPCFunc, responseCache *cache.TTLCache, reverse bool
 				fillCtx, fillCancel := context.WithTimeout(context.Background(), qnsFillTimeout)
 				defer fillCancel()
 				if reverse {
-					return client.ReverseName(fillCtx, deployment, normalized)
+					return client.ReverseNameWithLookup(fillCtx, deployment, normalized, resolveForward)
 				}
 				return client.ResolveName(fillCtx, deployment, normalized)
 			},

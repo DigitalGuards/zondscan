@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@jest/globals';
+import { afterEach, describe, expect, it, jest } from '@jest/globals';
 
 import type { ExplorerFetch } from './address-page-data';
 import { loadAddressPageData, resolveQnsName } from './address-page-data';
@@ -27,6 +27,119 @@ function aggregatePayload() {
 }
 
 describe('QNS address page loading', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it.each([
+    ['x-forwarded-for', 'forwarded-chain', 'forwarded-chain'],
+    ['x-real-ip', 'fallback-address', 'fallback-address'],
+    ['both', 'forwarded-chain', 'forwarded-chain'],
+    ['none', '', undefined],
+  ])('forwards the visitor header to both QNS routes: %s', async (header, value, expected) => {
+    const requestHeaders = new Headers();
+    if (header === 'both') {
+      requestHeaders.set('x-forwarded-for', value);
+      requestHeaders.set('x-real-ip', 'fallback-address');
+    } else if (header !== 'none') {
+      requestHeaders.set(header, value);
+    }
+    const calls: Array<{ input: string; init: Parameters<ExplorerFetch>[1] }> = [];
+    const fetcher: ExplorerFetch = (input, init) => {
+      calls.push({ input, init });
+      return Promise.resolve(
+        jsonResponse(
+          200,
+          input.includes('/qns/')
+            ? { address: CHECKSUMMED_ADDRESS, name: 'alice.qrl' }
+            : aggregatePayload()
+        )
+      );
+    };
+
+    await loadAddressPageData('alice.qrl', '/handler', fetcher, requestHeaders);
+    await loadAddressPageData(CHECKSUMMED_ADDRESS, '/handler', fetcher, requestHeaders);
+
+    const qnsCalls = calls.filter(({ input }) => input.includes('/qns/'));
+    expect(qnsCalls).toHaveLength(2);
+    for (const { init } of qnsCalls) {
+      expect(init?.headers).toEqual(expected ? { 'X-Forwarded-For': expected } : undefined);
+    }
+    for (const { init } of calls.filter(({ input }) => input.includes('/address/aggregate/'))) {
+      expect(init).toEqual({ next: { revalidate: 10 } });
+    }
+  });
+
+  it.each(['response', 'body'])(
+    'bounds a hanging reverse %s to 1500 ms alongside the aggregate',
+    async (phase) => {
+      jest.useFakeTimers();
+      let releaseAggregate!: (value: ReturnType<typeof jsonResponse>) => void;
+      const aggregate = new Promise<ReturnType<typeof jsonResponse>>((resolve) => {
+        releaseAggregate = resolve;
+      });
+      let reverseSignal: AbortSignal | null | undefined;
+      const fetcher = jest.fn<ExplorerFetch>((input, init) => {
+        if (input.includes('/qns/reverse/')) {
+          reverseSignal = init?.signal;
+          return phase === 'response'
+            ? new Promise(() => {})
+            : Promise.resolve({ ok: true, status: 200, json: () => new Promise(() => {}) });
+        }
+        return aggregate;
+      });
+      let settled = false;
+      const loading = loadAddressPageData(CHECKSUMMED_ADDRESS, '/handler', fetcher).then(
+        (result) => {
+          settled = true;
+          return result;
+        }
+      );
+
+      expect(fetcher.mock.calls.map(([input]) => input)).toEqual([
+        `/handler/address/aggregate/${CHECKSUMMED_ADDRESS}`,
+        `/handler/qns/reverse/${CHECKSUMMED_ADDRESS}`,
+      ]);
+      await jest.advanceTimersByTimeAsync(1000);
+      releaseAggregate(jsonResponse(200, aggregatePayload()));
+      await jest.advanceTimersByTimeAsync(499);
+      expect(settled).toBe(false);
+      expect(reverseSignal?.aborted).toBe(false);
+      await jest.advanceTimersByTimeAsync(1);
+
+      await expect(loading).resolves.toEqual({
+        ok: true,
+        address: CHECKSUMMED_ADDRESS,
+        qnsName: undefined,
+        addressData: aggregatePayload(),
+      });
+      expect(reverseSignal?.aborted).toBe(true);
+      expect(jest.getTimerCount()).toBe(0);
+    }
+  );
+
+  it.each([true, false])(
+    'retains the requested address after an aggregate failure with primary name=%s',
+    async (hasName) => {
+      const fetcher: ExplorerFetch = (input) =>
+        Promise.resolve(
+          input.includes('/qns/reverse/')
+            ? jsonResponse(hasName ? 200 : 404, { address: CHECKSUMMED_ADDRESS, name: 'alice.qrl' })
+            : jsonResponse(502, {})
+        );
+
+      const result = await loadAddressPageData(CHECKSUMMED_ADDRESS, '/handler', fetcher);
+
+      expect(result).toEqual({
+        ok: false,
+        kind: 'address-data',
+        address: CHECKSUMMED_ADDRESS,
+        name: hasName ? 'alice.qrl' : undefined,
+        detail: 'Failed to load address data.',
+      });
+    }
+  );
+
   it('normalizes the name, resolves first, and aggregates only the returned canonical address', async () => {
     const calls: Array<{ input: string; init: Parameters<ExplorerFetch>[1] }> = [];
     const fetcher: ExplorerFetch = async (input, init) => {
@@ -40,15 +153,11 @@ describe('QNS address page loading', () => {
       return jsonResponse(200, aggregatePayload());
     };
 
-    const result = await loadAddressPageData(
-      'MoscowChill.QRL',
-      'https://handler.example/',
-      fetcher,
-    );
+    const result = await loadAddressPageData('MoscowChill.QRL', '/handler/', fetcher);
 
     expect(calls.map((call) => call.input)).toEqual([
-      'https://handler.example/qns/resolve/moscowchill.qrl',
-      `https://handler.example/address/aggregate/${CHECKSUMMED_ADDRESS}`,
+      '/handler/qns/resolve/moscowchill.qrl',
+      `/handler/address/aggregate/${CHECKSUMMED_ADDRESS}`,
     ]);
     expect(calls[0]?.init).toEqual({ cache: 'no-store' });
     expect(calls[1]?.init).toEqual({ next: { revalidate: 10 } });
@@ -68,11 +177,11 @@ describe('QNS address page loading', () => {
         return jsonResponse(500, {});
       };
 
-      const result = await loadAddressPageData(input, 'https://handler.example', fetcher);
+      const result = await loadAddressPageData(input, '/handler', fetcher);
 
       expect(result).toMatchObject({ ok: false, kind: 'qns-invalid' });
       expect(requests).toBe(0);
-    },
+    }
   );
 
   it('does not issue a request when the QNS backend URL is unconfigured', async () => {
@@ -113,25 +222,18 @@ describe('QNS address page loading', () => {
       'QNS name has no address record',
     ],
     [502, { error: 'QNS resolution failed' }, 'qns-upstream', 'QNS resolution failed upstream.'],
-  ] as const)(
-    'stops after a %i resolver response',
-    async (status, payload, kind, detail) => {
-      const calls: string[] = [];
-      const fetcher: ExplorerFetch = async (input) => {
-        calls.push(input);
-        return jsonResponse(status, payload);
-      };
+  ] as const)('stops after a %i resolver response', async (status, payload, kind, detail) => {
+    const calls: string[] = [];
+    const fetcher: ExplorerFetch = async (input) => {
+      calls.push(input);
+      return jsonResponse(status, payload);
+    };
 
-      const result = await loadAddressPageData(
-        'moscowchill.qrl',
-        'https://handler.example',
-        fetcher,
-      );
+    const result = await loadAddressPageData('moscowchill.qrl', '/handler', fetcher);
 
-      expect(result).toMatchObject({ ok: false, kind, detail });
-      expect(calls).toEqual(['https://handler.example/qns/resolve/moscowchill.qrl']);
-    },
-  );
+    expect(result).toMatchObject({ ok: false, kind, detail });
+    expect(calls).toEqual(['/handler/qns/resolve/moscowchill.qrl']);
+  });
 
   it.each([
     {
@@ -153,11 +255,7 @@ describe('QNS address page loading', () => {
       return jsonResponse(200, payload);
     };
 
-    const result = await loadAddressPageData(
-      'moscowchill.qrl',
-      'https://handler.example',
-      fetcher,
-    );
+    const result = await loadAddressPageData('moscowchill.qrl', '/handler', fetcher);
 
     expect(result).toMatchObject({ ok: false, kind: 'qns-upstream' });
     expect(calls).toHaveLength(1);
@@ -173,11 +271,7 @@ describe('QNS address page loading', () => {
       return jsonResponse(200, aggregatePayload());
     };
 
-    const result = await loadAddressPageData(
-      `0X${'A'.repeat(128)}`,
-      '/handler/',
-      fetcher,
-    );
+    const result = await loadAddressPageData(`0X${'A'.repeat(128)}`, '/handler/', fetcher);
 
     expect(result).toEqual({
       ok: true,
@@ -186,25 +280,37 @@ describe('QNS address page loading', () => {
       addressData: aggregatePayload(),
     });
     expect(calls).toEqual([
-      { input: `/handler/address/aggregate/${CHECKSUMMED_ADDRESS}`, init: { next: { revalidate: 10 } } },
-      { input: `/handler/qns/reverse/${CHECKSUMMED_ADDRESS}`, init: { cache: 'no-store' } },
+      {
+        input: `/handler/address/aggregate/${CHECKSUMMED_ADDRESS}`,
+        init: { next: { revalidate: 10 } },
+      },
+      {
+        input: `/handler/qns/reverse/${CHECKSUMMED_ADDRESS}`,
+        init: { next: { revalidate: 60 }, signal: expect.any(AbortSignal) },
+      },
     ]);
   });
 
-  it.each([404, 429, 502, 503, 504])('keeps the address page unchanged after reverse status %i', async (status) => {
-    const fetcher: ExplorerFetch = (input) => Promise.resolve(input.includes('/qns/reverse/')
-      ? jsonResponse(status, { error: 'QNS lookup unavailable' })
-      : jsonResponse(200, aggregatePayload()));
+  it.each([404, 429, 502, 503, 504])(
+    'keeps the address page unchanged after reverse status %i',
+    async (status) => {
+      const fetcher: ExplorerFetch = (input) =>
+        Promise.resolve(
+          input.includes('/qns/reverse/')
+            ? jsonResponse(status, { error: 'QNS lookup unavailable' })
+            : jsonResponse(200, aggregatePayload())
+        );
 
-    const result = await loadAddressPageData(CHECKSUMMED_ADDRESS, '/handler', fetcher);
+      const result = await loadAddressPageData(CHECKSUMMED_ADDRESS, '/handler', fetcher);
 
-    expect(result).toEqual({
-      ok: true,
-      address: CHECKSUMMED_ADDRESS,
-      qnsName: undefined,
-      addressData: aggregatePayload(),
-    });
-  });
+      expect(result).toEqual({
+        ok: true,
+        address: CHECKSUMMED_ADDRESS,
+        qnsName: undefined,
+        addressData: aggregatePayload(),
+      });
+    }
+  );
 
   it.each(['transport', 'json'])('silently ignores a reverse %s failure', async (failure) => {
     const fetcher: ExplorerFetch = (input) => {
@@ -238,9 +344,12 @@ describe('QNS address page loading', () => {
     { address: `Q${'1'.repeat(128)}`, name: 'alice.qrl' },
     { address: `Q${'a'.repeat(128)}`, name: 'alice.qrl' },
   ])('ignores a malformed successful reverse response: %j', async (payload) => {
-    const fetcher: ExplorerFetch = (input) => Promise.resolve(input.includes('/qns/reverse/')
-      ? jsonResponse(200, payload)
-      : jsonResponse(200, aggregatePayload()));
+    const fetcher: ExplorerFetch = (input) =>
+      Promise.resolve(
+        input.includes('/qns/reverse/')
+          ? jsonResponse(200, payload)
+          : jsonResponse(200, aggregatePayload())
+      );
 
     const result = await loadAddressPageData(CHECKSUMMED_ADDRESS, '/handler', fetcher);
 
@@ -264,10 +373,8 @@ describe('QNS address page loading', () => {
         sourceBundleDigest: null,
       },
     };
-    const result = await loadAddressPageData(
-      CHECKSUMMED_ADDRESS,
-      'https://handler.example',
-      async () => jsonResponse(200, payload),
+    const result = await loadAddressPageData(CHECKSUMMED_ADDRESS, '/handler', async () =>
+      jsonResponse(200, payload)
     );
 
     expect(result.ok).toBe(true);
@@ -277,23 +384,19 @@ describe('QNS address page loading', () => {
       compilerProvenance: null,
       sourceBundleDigest: null,
     });
-    expect(
-      classifyStoredVerification(result.addressData.contract_code ?? {}),
-    ).toBe('invalid-recorded');
+    expect(classifyStoredVerification(result.addressData.contract_code ?? {})).toBe(
+      'invalid-recorded'
+    );
   });
 });
 
 describe('resolveQnsName error boundaries', () => {
   it('maps timeout and rate-limit responses to temporary upstream errors', async () => {
-    const timeout = await resolveQnsName(
-      'alice.qrl',
-      'https://handler.example',
-      async () => jsonResponse(504, { error: 'QNS resolution timed out' }),
+    const timeout = await resolveQnsName('alice.qrl', '/handler', async () =>
+      jsonResponse(504, { error: 'QNS resolution timed out' })
     );
-    const rateLimited = await resolveQnsName(
-      'alice.qrl',
-      'https://handler.example',
-      async () => jsonResponse(429, { error: 'rate limit exceeded' }),
+    const rateLimited = await resolveQnsName('alice.qrl', '/handler', async () =>
+      jsonResponse(429, { error: 'rate limit exceeded' })
     );
 
     expect(timeout).toMatchObject({ kind: 'qns-upstream', detail: 'QNS resolution timed out.' });

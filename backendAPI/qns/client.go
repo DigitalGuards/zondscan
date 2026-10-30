@@ -23,6 +23,7 @@ var (
 	ErrInvalidConfig       = errors.New("invalid QNS configuration")
 	ErrChainMismatch       = errors.New("QNS chain ID mismatch")
 	ErrRegistryUnavailable = errors.New("QNS registry code is unavailable")
+	ErrRegistryLookup      = errors.New("QNS registry lookup failed")
 	ErrRPC                 = errors.New("QNS RPC failure")
 	ErrMalformedResponse   = errors.New("malformed QNS RPC response")
 	ErrInvalidAddress      = errors.New("invalid QNS address response")
@@ -172,11 +173,11 @@ func (c *Client) ResolveName(
 		resolverCallData(node),
 	)
 	if err != nil {
-		return Resolution{}, err
+		return Resolution{}, fmt.Errorf("%w: %w", ErrRegistryLookup, err)
 	}
 	resolver, zero, err := decodeAddressWord(resolverResult)
 	if err != nil {
-		return Resolution{}, err
+		return Resolution{}, fmt.Errorf("%w: %w", ErrRegistryLookup, err)
 	}
 	if zero {
 		return Resolution{Name: normalized, Missing: MissingResolver}, nil

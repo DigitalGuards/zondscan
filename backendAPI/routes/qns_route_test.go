@@ -56,6 +56,182 @@ func TestQNSReverseRouteRegistered(t *testing.T) {
 	t.Fatal("reverse route is missing")
 }
 
+func TestQNSRoutesHaveIndependentRateLimits(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, reverseFirst := range []bool{true, false} {
+		t.Run(fmt.Sprintf("reverseFirst=%t", reverseFirst), func(t *testing.T) {
+			router := gin.New()
+			RegisterQNSRoutes(router)
+			paths := []string{"/qns/reverse/invalid", "/qns/resolve/invalid"}
+			limits := []int{60, 30}
+			if !reverseFirst {
+				paths[0], paths[1] = paths[1], paths[0]
+				limits[0], limits[1] = limits[1], limits[0]
+			}
+			for i, path := range paths {
+				for request := 0; request <= limits[i]; request++ {
+					w := httptest.NewRecorder()
+					router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+					want := http.StatusBadRequest
+					if request == limits[i] {
+						want = http.StatusTooManyRequests
+					}
+					if w.Code != want {
+						t.Fatalf("%s request %d: status = %d, want %d", path, request+1, w.Code, want)
+					}
+				}
+			}
+		})
+	}
+}
+
+func qnsEncodedName(name string) string {
+	padding := (64 - len(name)%64) % 64
+	return fmt.Sprintf("0x%0128x%0128x", 64, len(name)) +
+		hex.EncodeToString([]byte(name)) + strings.Repeat("00", padding)
+}
+
+func TestQNSReverseRouteCachesRecordFailures(t *testing.T) {
+	for _, failure := range []string{"transport", "node", "revert", "malformed"} {
+		for failAt := 0; failAt < 4; failAt++ {
+			t.Run(fmt.Sprintf("%s/call%d", failure, failAt), func(t *testing.T) {
+				configureQNSRoute(t)
+				var mu sync.Mutex
+				calls := 0
+				qrlCalls := 0
+				responses := []string{
+					"0x" + strings.Repeat("2", 128),
+					qnsEncodedName("alice.qrl"),
+					"0x" + strings.Repeat("3", 128),
+				}
+				router := newQNSTestRouter(func(ctx context.Context, method string, params []interface{}) (json.RawMessage, *db.RPCError, error) {
+					mu.Lock()
+					defer mu.Unlock()
+					calls++
+					switch method {
+					case "qrl_chainId":
+						return qnsRawString("0x539"), nil, nil
+					case "qrl_getCode":
+						return qnsRawString("0x6000"), nil, nil
+					}
+					step := qrlCalls % (failAt + 1)
+					qrlCalls++
+					if step == failAt {
+						switch failure {
+						case "transport":
+							return nil, nil, errors.New("offline")
+						case "node":
+							return nil, &db.RPCError{Code: -32000}, nil
+						case "revert":
+							return nil, &db.RPCError{Code: 3}, nil
+						default:
+							return qnsRawString("0x12"), nil, nil
+						}
+					}
+					return qnsRawString(responses[step]), nil, nil
+				})
+				wantStatus := http.StatusBadGateway
+				wantCalls := 2 + 2*(failAt+1)
+				if failAt == 1 || failAt == 3 {
+					wantStatus = http.StatusNotFound
+					wantCalls = 2 + failAt + 1
+				}
+				for request := 0; request < 2; request++ {
+					w := serveQNSReverse(router, qip55ChecksumA)
+					if w.Code != wantStatus {
+						t.Fatalf("status = %d, body = %s, want %d", w.Code, w.Body.String(), wantStatus)
+					}
+					if wantStatus == http.StatusNotFound && w.Body.String() != fmt.Sprintf(
+						`{"address":%q,"error":"QNS address has no verified primary name"}`, qip55ChecksumA,
+					) {
+						t.Errorf("unexpected negative result: %s", w.Body.String())
+					}
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				if calls != wantCalls {
+					t.Errorf("RPC calls = %d, want %d", calls, wantCalls)
+				}
+			})
+		}
+	}
+}
+
+func TestQNSReverseRouteSharesForwardCache(t *testing.T) {
+	for _, reverseFirst := range []bool{false, true} {
+		for _, record := range []string{"verified", "mismatch", "missing resolver", "missing address"} {
+			t.Run(fmt.Sprintf("%s/reverseFirst=%t", record, reverseFirst), func(t *testing.T) {
+				configureQNSRoute(t)
+				var mu sync.Mutex
+				forwardCalls, reverseCalls := 0, 0
+				forwardNode := qns.Namehash("alice.qrl")
+				forwardResolverData := "0x0178b8bf" + hex.EncodeToString(forwardNode[:]) + strings.Repeat("0", 64)
+				router := newQNSTestRouter(func(ctx context.Context, method string, params []interface{}) (json.RawMessage, *db.RPCError, error) {
+					mu.Lock()
+					defer mu.Unlock()
+					switch method {
+					case "qrl_chainId":
+						return qnsRawString("0x539"), nil, nil
+					case "qrl_getCode":
+						return qnsRawString("0x6000"), nil, nil
+					}
+					data := params[0].(map[string]interface{})["data"].(string)
+					switch {
+					case data == forwardResolverData:
+						forwardCalls++
+						if record == "missing resolver" {
+							return qnsRawString("0x"), nil, nil
+						}
+					case strings.HasPrefix(data, "0x3b3b57de"):
+						forwardCalls++
+						address := "0x" + strings.Repeat("a", 128)
+						if record == "mismatch" {
+							address = "0x" + strings.Repeat("b", 128)
+						} else if record == "missing address" {
+							address = "0x"
+						}
+						return qnsRawString(address), nil, nil
+					case strings.HasPrefix(data, "0x691f3431"):
+						reverseCalls++
+						return qnsRawString(qnsEncodedName("ALICE.QRL")), nil, nil
+					default:
+						reverseCalls++
+					}
+					return qnsRawString("0x" + strings.Repeat("2", 128)), nil, nil
+				})
+				forwardStatus, reverseStatus := http.StatusOK, http.StatusNotFound
+				if strings.HasPrefix(record, "missing") {
+					forwardStatus = http.StatusNotFound
+				} else if record == "verified" {
+					reverseStatus = http.StatusOK
+				}
+				for _, reverse := range []bool{reverseFirst, !reverseFirst} {
+					var w *httptest.ResponseRecorder
+					want := forwardStatus
+					if reverse {
+						w = serveQNSReverse(router, qip55ChecksumA)
+						want = reverseStatus
+					} else {
+						w = serveQNS(router, "alice.qrl")
+					}
+					if w.Code != want {
+						t.Fatalf("reverse=%t: status = %d, body = %s, want %d", reverse, w.Code, w.Body.String(), want)
+					}
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				wantForwardCalls := 2
+				if record == "missing resolver" {
+					wantForwardCalls = 1
+				}
+				if forwardCalls != wantForwardCalls || reverseCalls != 2 {
+					t.Errorf("forward calls = %d, reverse calls = %d, want %d and 2", forwardCalls, reverseCalls, wantForwardCalls)
+				}
+			})
+		}
+	}
+}
+
 func TestQNSReverseRouteCanonicalizesAndCaches(t *testing.T) {
 	for _, found := range []bool{true, false} {
 		t.Run(fmt.Sprintf("found=%t", found), func(t *testing.T) {

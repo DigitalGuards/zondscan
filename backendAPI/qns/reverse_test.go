@@ -131,10 +131,10 @@ func TestReverseNameOmitsUnverifiedNames(t *testing.T) {
 	}
 }
 
-func TestReverseNamePropagatesRPCFailures(t *testing.T) {
+func TestReverseNameSeparatesRegistryAndRecordFailures(t *testing.T) {
 	deployment := Deployment{registryAddress: "Q" + strings.Repeat("1", 128), expectedChainID: "1337"}
 	responses := []string{"0x" + strings.Repeat("2", 128), encodedName("alice.qrl"), "0x" + strings.Repeat("3", 128)}
-	for _, failure := range []string{"transport", "node", "malformed", "canceled"} {
+	for _, failure := range []string{"transport", "node", "revert", "malformed", "canceled"} {
 		for failAt := 0; failAt < 4; failAt++ {
 			t.Run(fmt.Sprintf("%s/call%d", failure, failAt), func(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
@@ -149,6 +149,8 @@ func TestReverseNamePropagatesRPCFailures(t *testing.T) {
 							return nil, nil, errors.New("offline")
 						case "node":
 							return nil, &db.RPCError{Code: -32000}, nil
+						case "revert":
+							return nil, &db.RPCError{Code: 3}, nil
 						case "malformed":
 							return rawString("0x12"), nil, nil
 						default:
@@ -165,7 +167,11 @@ func TestReverseNamePropagatesRPCFailures(t *testing.T) {
 				} else if failure == "canceled" {
 					wantError = context.Canceled
 				}
-				if !errors.Is(err, wantError) || resolution.Name != "" {
+				if failAt == 1 || failAt == 3 {
+					if want := (Resolution{Address: checksumA, Missing: MissingName}); err != nil || resolution != want {
+						t.Errorf("ReverseName = %#v, %v, want %#v and no error", resolution, err, want)
+					}
+				} else if !errors.Is(err, wantError) || resolution.Name != "" {
 					t.Errorf("ReverseName = %#v, %v, want empty name and %v", resolution, err, wantError)
 				}
 				if calls != failAt+1 {
