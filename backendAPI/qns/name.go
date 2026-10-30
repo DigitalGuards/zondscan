@@ -1,4 +1,4 @@
-// Package qns implements the fail-closed QNS forward-resolution protocol
+// Package qns implements the fail-closed QNS resolution protocol
 // used by the Zondscan backend.
 package qns
 
@@ -20,6 +20,7 @@ const (
 
 	resolverSelector = "0178b8bf"
 	addrSelector     = "3b3b57de"
+	nameSelector     = "691f3431"
 )
 
 var ErrInvalidName = errors.New("invalid QNS name")
@@ -95,6 +96,10 @@ func resolverCallData(node [32]byte) string {
 
 func addrCallData(node [32]byte) string {
 	return encodeBytes32Call(addrSelector, node)
+}
+
+func nameCallData(node [32]byte) string {
+	return encodeBytes32Call(nameSelector, node)
 }
 
 // QRVM64 ABI words are 64 bytes. A bytes32 argument occupies the high half

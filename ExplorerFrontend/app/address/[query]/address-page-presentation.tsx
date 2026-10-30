@@ -4,18 +4,21 @@ import { sharedMetadata } from '../../lib/seo/metaData';
 import { canonicalizeQrlAddress, compactQrlAddress } from '../../lib/qrlAddress';
 import { normalizeQnsName } from '../../lib/qns';
 
-export function generateAddressPageMetadata(query: string): Metadata {
-  const qnsName = normalizeQnsName(query);
+export function generateAddressPageMetadata(query: string, verifiedName?: string): Metadata {
+  const routeName = normalizeQnsName(query);
+  const qnsName = routeName ?? normalizeQnsName(verifiedName ?? '');
   const address = canonicalizeQrlAddress(query);
-  const identity = qnsName ?? address ?? query;
+  const identity = routeName ?? address ?? query;
   const displayIdentity = address ? compactQrlAddress(address) : identity;
   const canonicalUrl = `https://zondscan.com/address/${encodeURIComponent(identity)}`;
-  const title = qnsName
-    ? `${qnsName} QNS Address | ZondScan`
-    : `Address ${displayIdentity} | ZondScan`;
-  const description = qnsName
-    ? `View the QRL address resolved by QNS name ${qnsName}, including balance, transactions, and other blockchain data.`
-    : `View details for QRL address ${displayIdentity}. See balance, transactions, and other blockchain data.`;
+  const title = routeName
+    ? `${routeName} QNS Address | ZondScan`
+    : `Address ${displayIdentity}${address && qnsName ? ` (${qnsName})` : ''} | ZondScan`;
+  const description = routeName
+    ? `View the QRL address resolved by QNS name ${routeName}, including balance, transactions, and other blockchain data.`
+    : address && qnsName
+      ? `QRL address with the verified QNS primary name ${qnsName}. View balance, transactions, and other blockchain data for ${displayIdentity}.`
+      : `View details for QRL address ${displayIdentity}. See balance, transactions, and other blockchain data.`;
 
   return {
     ...sharedMetadata,
@@ -67,8 +70,15 @@ export function AddressPageFailureView({ failure }: { failure: AddressPageFailur
         <h1 id="address-error-heading" className="text-xl font-semibold text-error">
           {addressPageFailureHeading(failure.kind)}
         </h1>
-        {failure.name && (
-          <p className="mt-3 font-mono text-sm text-text-primary break-all">{failure.name}</p>
+        {(failure.address || failure.name) && (
+          <p className="mt-3 font-mono text-sm text-text-primary break-all">
+            {failure.address || failure.name}
+          </p>
+        )}
+        {failure.address && failure.name && (
+          <p className="mt-3 text-sm text-text-secondary break-all">
+            Verified QNS primary name: {failure.name}
+          </p>
         )}
         <p className="mt-3 text-sm text-text-secondary">{failure.detail}</p>
       </section>

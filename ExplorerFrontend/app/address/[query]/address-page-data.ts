@@ -1,3 +1,5 @@
+import 'server-only';
+import { cache } from 'react';
 import { isRecord, isArray } from '../../lib/guards';
 import type { AddressData } from '@/app/types';
 import { decodeToHex, formatAddress } from '../../lib/helpers';
@@ -41,6 +43,7 @@ export type AddressPageLoadResult =
   | {
       ok: false;
       kind: QnsResolutionErrorKind | 'invalid-query' | 'address-data';
+      address?: string;
       name?: string;
       detail: string;
     };
@@ -58,6 +61,11 @@ function defaultFetch(input: string, init?: ExplorerRequestInit): Promise<Explor
 function handlerBase(handlerUrl: string | undefined): string | null {
   const base = handlerUrl?.trim().replace(/\/+$/, '');
   return base || null;
+}
+
+function qnsRequestHeaders(): Pick<RequestInit, 'headers'> {
+  const token = process.env.QNS_INTERNAL_TOKEN;
+  return token ? { headers: { 'X-QNS-Internal-Token': token } } : {};
 }
 
 async function readJson(response: ExplorerFetchResponse): Promise<unknown> {
@@ -106,6 +114,7 @@ export async function resolveQnsName(
   try {
     response = await fetcher(`${base}/qns/resolve/${encodeURIComponent(name)}`, {
       cache: 'no-store',
+      ...qnsRequestHeaders(),
     });
   } catch {
     return {
@@ -192,6 +201,74 @@ export async function resolveQnsName(
   }
   return { ok: false, kind: 'qns-upstream', name, detail };
 }
+
+export function reverseQnsAddress(
+  address: string,
+  handlerUrl: string | undefined,
+  fetcher: ExplorerFetch = defaultFetch
+): Promise<string | undefined> {
+  return fetchReverseQnsAddress(address, handlerUrl, fetcher);
+}
+
+// Normalize default arguments before React memoization so metadata and the page
+// share this lookup within a request.
+const fetchReverseQnsAddress = cache(
+  async (
+    address: string,
+    handlerUrl: string | undefined,
+    fetcher: ExplorerFetch
+  ): Promise<string | undefined> => {
+    const base = handlerBase(handlerUrl);
+    if (!base) return undefined;
+
+    const controller = new AbortController();
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<undefined>((resolve) => {
+      timeout = setTimeout(() => {
+        resolve(undefined);
+        controller.abort();
+      }, 1500);
+    });
+
+    try {
+      // Bound the entire lookup, including JSON reads and cache waits.
+      return await Promise.race([
+        deadline,
+        (async () => {
+          const response = await fetcher(`${base}/qns/reverse/${encodeURIComponent(address)}`, {
+            next: { revalidate: 60 },
+            signal: controller.signal,
+            ...qnsRequestHeaders(),
+          });
+          if (!response.ok || response.status !== 200) return undefined;
+
+          const payload = await readJson(response);
+          if (
+            !isRecord(payload) ||
+            typeof payload.name !== 'string' ||
+            typeof payload.address !== 'string'
+          ) {
+            return undefined;
+          }
+          const name = normalizeQnsName(payload.name);
+          if (
+            !name ||
+            payload.name !== name ||
+            canonicalizeQrlAddress(payload.address) !== address ||
+            payload.address !== address
+          ) {
+            return undefined;
+          }
+          return name;
+        })(),
+      ]);
+    } catch {
+      return undefined;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+);
 
 async function fetchAddressData(
   address: string,
@@ -299,11 +376,16 @@ export async function loadAddressPageData(
     address = canonicalAddress;
   }
 
-  const addressData = await fetchAddressData(address, handlerUrl, fetcher);
+  const [addressData, reverseName] = await Promise.all([
+    fetchAddressData(address, handlerUrl, fetcher),
+    normalizedName ? undefined : reverseQnsAddress(address, handlerUrl, fetcher),
+  ]);
+  qnsName ??= reverseName;
   if (!addressData) {
     return {
       ok: false,
       kind: 'address-data',
+      address: normalizedName ? undefined : address,
       name: qnsName,
       detail: 'Failed to load address data.',
     };
