@@ -5,6 +5,7 @@ const hex = (value) => `0x${BigInt(value).toString(16)}`;
 const hash = (value) => `0x${value.toString(16).padStart(64, '0')}`;
 const sender = `Q${'a'.repeat(128)}`;
 const recipient = `Q${'b'.repeat(128)}`;
+const qnsPrimaryAddress = `Q${'4'.repeat(128)}`;
 const timestamp = 1789043400;
 const amounts = [
   '0.01',
@@ -152,6 +153,7 @@ createServer((request, response) => {
   let statusCode;
   let data = {
     '/health': { ok: true },
+    '/qns/resolve/alice.qrl': { address: qnsPrimaryAddress, name: 'alice.qrl' },
     '/overview': overview,
     '/gas/summary': gas,
     '/txs': { txs, total: txs.length },
@@ -249,6 +251,19 @@ createServer((request, response) => {
     };
   }
   if (path.startsWith('/block/')) data = { block: { result: blocks[0] } };
+  if (path.startsWith('/qns/reverse/')) {
+    const address = path.slice('/qns/reverse/'.length);
+    // Leave this synthetic lookup pending until the frontend aborts it.
+    if (address === `Q${'7'.repeat(128)}`) return;
+    if (address === qnsPrimaryAddress) {
+      data = { address, name: 'alice.qrl' };
+    } else if (address === `Q${'8'.repeat(128)}`) {
+      data = { address, name: 'bob.qrl' };
+    } else {
+      statusCode = address === `Q${'6'.repeat(128)}` ? 503 : 404;
+      data = { address, error: 'QNS primary name unavailable' };
+    }
+  }
   if (path.startsWith('/address/aggregate/'))
     data = {
       address: { balance: 123.45 },
@@ -260,6 +275,10 @@ createServer((request, response) => {
       internal_transactions_by_address: [],
       contract_code: null,
     };
+  if (path === `/address/aggregate/Q${'8'.repeat(128)}`) {
+    statusCode = 502;
+    data = { error: 'Synthetic address aggregate unavailable' };
+  }
   if (/^\/address\/[^/]+\/token-transfers$/.test(path))
     data = { transfers, total: transfers.length };
   if (/^\/address\/[^/]+\/transactions$/.test(path))
