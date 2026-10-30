@@ -82,7 +82,7 @@ func NewClient(call RPCFunc) *Client {
 }
 
 // Deployment is returned only after chain ID and registry bytecode checks
-// pass. ResolveName rejects its zero value, keeping the two-step cached route
+// pass. Both resolution methods reject its zero value, keeping the cached route
 // flow fail closed.
 type Deployment struct {
 	registryAddress string
@@ -95,6 +95,7 @@ const (
 	MissingNone     MissingRecord = ""
 	MissingResolver MissingRecord = "resolver"
 	MissingAddress  MissingRecord = "address"
+	MissingName     MissingRecord = "name"
 )
 
 type Resolution struct {

@@ -5,6 +5,7 @@ import (
 	"backendAPI/db"
 	"backendAPI/middleware"
 	"backendAPI/qns"
+	"backendAPI/qrladdress"
 	"context"
 	"errors"
 	"net/http"
@@ -19,7 +20,7 @@ const (
 	qnsFillTimeout    = 5 * time.Second
 )
 
-// RegisterQNSRoutes wires the configurable, read-only QNS forward resolver.
+// RegisterQNSRoutes wires the configurable, read-only QNS resolvers.
 // The per-IP limit and short shared cache bound the amount of node work a
 // public caller can trigger.
 func RegisterQNSRoutes(router *gin.Engine) {
@@ -29,14 +30,40 @@ func RegisterQNSRoutes(router *gin.Engine) {
 		limiter,
 		newQNSResolveHandler(db.NodeRPC, routeCache),
 	)
+	router.GET(
+		"/qns/reverse/:address",
+		limiter,
+		newQNSReverseHandler(db.NodeRPC, routeCache),
+	)
 }
 
 func newQNSResolveHandler(call qns.RPCFunc, responseCache *cache.TTLCache) gin.HandlerFunc {
+	return newQNSHandler(call, responseCache, false)
+}
+
+func newQNSReverseHandler(call qns.RPCFunc, responseCache *cache.TTLCache) gin.HandlerFunc {
+	return newQNSHandler(call, responseCache, true)
+}
+
+func newQNSHandler(call qns.RPCFunc, responseCache *cache.TTLCache, reverse bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		normalized, err := qns.NormalizeName(c.Param("name"))
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid QNS name"})
-			return
+		var normalized string
+		operation := "resolve"
+		if reverse {
+			operation = "reverse"
+			var ok bool
+			normalized, ok = qrladdress.Canonicalize(c.Param("address"))
+			if !ok {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid QNS address"})
+				return
+			}
+		} else {
+			var err error
+			normalized, err = qns.NormalizeName(c.Param("name"))
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid QNS name"})
+				return
+			}
 		}
 
 		config, err := qns.ConfigFromEnv()
@@ -75,11 +102,14 @@ func newQNSResolveHandler(call qns.RPCFunc, responseCache *cache.TTLCache) gin.H
 
 		resolutionValue, err := responseCache.GetOrComputeContext(
 			requestCtx,
-			"qns:resolve:"+config.CacheKey()+":"+normalized,
+			"qns:"+operation+":"+config.CacheKey()+":"+normalized,
 			qnsCacheTTL,
 			func() (interface{}, error) {
 				fillCtx, fillCancel := context.WithTimeout(context.Background(), qnsFillTimeout)
 				defer fillCancel()
+				if reverse {
+					return client.ReverseName(fillCtx, deployment, normalized)
+				}
 				return client.ResolveName(fillCtx, deployment, normalized)
 			},
 		)
@@ -93,6 +123,13 @@ func newQNSResolveHandler(call qns.RPCFunc, responseCache *cache.TTLCache) gin.H
 			return
 		}
 
+		if reverse && resolution.Name == "" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "QNS address has no verified primary name",
+				"address": resolution.Address,
+			})
+			return
+		}
 		switch resolution.Missing {
 		case qns.MissingResolver:
 			c.JSON(http.StatusNotFound, gin.H{

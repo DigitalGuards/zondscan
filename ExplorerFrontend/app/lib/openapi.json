@@ -1171,6 +1171,77 @@
         }
       }
     },
+    "/api/qns/reverse/{address}": {
+      "get": {
+        "tags": ["Addresses"],
+        "operationId": "reverseQnsAddress",
+        "summary": "Look up a verified QNS primary name",
+        "description": "Reads the address's addr.reverse resolver and name record, normalizes the name, and verifies that its forward address record resolves to the same canonical QIP-55 address. A name is returned only after this verification succeeds. Uses the forward resolver's configured registry, chain and bytecode checks, bounded timeouts, and shared per-IP rate limit of 30 requests, refilling 30 per minute. Successful deployment checks and lookup results, including missing names, are cached server side for 15 seconds.",
+        "parameters": [
+          {
+            "name": "address",
+            "in": "path",
+            "required": true,
+            "description": "Address alias: Q/q or 0x/0X followed by 128 hex characters. Mixed-case bodies require a valid QIP-55 checksum.",
+            "schema": { "type": "string", "pattern": "^([Qq]|0x|0X)[0-9a-fA-F]{128}$" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The canonical QIP-55 address and its normalized, forward-verified primary name.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "address": { "type": "string", "description": "Canonical uppercase-Q, SHAKE256-checksummed QIP-55 address." },
+                    "name": { "type": "string", "description": "Normalized lowercase QNS name verified by forward resolution." }
+                  },
+                  "required": ["address", "name"]
+                },
+                "example": {
+                  "address": "QaaaAAaaaAAaAaaAaAAAAaAAAaAaAaAAaAaaAaaaaAAAAAAAAaAAAAaAaAAaaAAaaaaAaAAAAaaAaAAaaaaaaAaAAaaaaAaAaaaaAaaaAAAAaAAAAaAaAaaAAAaAaaaAA",
+                  "name": "alice.qrl"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or unsupported address.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "error": "invalid QNS address" } } }
+          },
+          "404": {
+            "description": "The reverse resolver or name is missing, the stored name is invalid, or forward resolution is missing or resolves to a different address.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string", "enum": ["QNS address has no verified primary name"] },
+                    "address": { "type": "string", "description": "Canonical QIP-55 address." }
+                  },
+                  "required": ["error", "address"]
+                }
+              }
+            }
+          },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "502": {
+            "description": "The node RPC failed or returned a malformed QNS response.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "error": "QNS resolution failed" } } }
+          },
+          "503": {
+            "description": "QNS is unconfigured, the configured chain does not match, or registry bytecode is unavailable.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "504": {
+            "description": "The bounded QNS lookup timed out.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "error": "QNS resolution timed out" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
     "/api/address/{address}/transactions": {
       "get": {
         "tags": ["Addresses"],

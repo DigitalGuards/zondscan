@@ -4,10 +4,11 @@ import { sharedMetadata } from '../../lib/seo/metaData';
 import { canonicalizeQrlAddress, compactQrlAddress } from '../../lib/qrlAddress';
 import { normalizeQnsName } from '../../lib/qns';
 
-export function generateAddressPageMetadata(query: string): Metadata {
-  const qnsName = normalizeQnsName(query);
+export function generateAddressPageMetadata(query: string, verifiedName?: string): Metadata {
+  const routeName = normalizeQnsName(query);
+  const qnsName = routeName ?? normalizeQnsName(verifiedName ?? '');
   const address = canonicalizeQrlAddress(query);
-  const identity = qnsName ?? address ?? query;
+  const identity = routeName ?? address ?? query;
   const displayIdentity = address ? compactQrlAddress(address) : identity;
   const canonicalUrl = `https://zondscan.com/address/${encodeURIComponent(identity)}`;
   const title = qnsName

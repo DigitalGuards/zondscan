@@ -32,6 +32,17 @@ describe('QNS address route presentation', () => {
     );
   });
 
+  it('uses the verified primary name in address metadata and preserves the address URL', () => {
+    const original = generateAddressPageMetadata(address);
+    const metadata = generateAddressPageMetadata(address, 'moscowchill.qrl');
+
+    expect(metadata.title).toBe('moscowchill.qrl QNS Address | ZondScan');
+    expect(metadata.description).toContain('moscowchill.qrl');
+    expect(metadata.openGraph?.title).toBe(metadata.title);
+    expect(metadata.twitter?.title).toBe(metadata.title);
+    expect(metadata.alternates?.canonical).toBe(original.alternates?.canonical);
+  });
+
   it.each([
     [
       'qns-unconfigured',

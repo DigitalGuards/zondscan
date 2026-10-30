@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { cache } from 'react';
 import AddressView from './address-view';
 import TokenContractView from './token-contract-view';
 import { loadAddressPageData } from './address-page-data';
@@ -10,18 +11,21 @@ interface PageProps {
   searchParams?: Promise<Record<string, string | string[]>>;
 }
 
+const loadPageData = cache((query: string) => loadAddressPageData(query, config.handlerUrl));
+
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ query: string }>;
 }): Promise<Metadata> {
   const resolvedParams = await params;
-  return generateAddressPageMetadata(resolvedParams.query);
+  const result = await loadPageData(resolvedParams.query);
+  return generateAddressPageMetadata(resolvedParams.query, result.ok ? result.qnsName : undefined);
 }
 
 export default async function Page({ params }: PageProps): Promise<JSX.Element> {
   const resolvedParams = await params;
-  const result = await loadAddressPageData(resolvedParams.query, config.handlerUrl);
+  const result = await loadPageData(resolvedParams.query);
   if (!result.ok) return <AddressPageFailureView failure={result} />;
 
   const { address, addressData, qnsName } = result;

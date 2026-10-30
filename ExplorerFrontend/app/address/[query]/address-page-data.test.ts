@@ -163,23 +163,93 @@ describe('QNS address page loading', () => {
     expect(calls).toHaveLength(1);
   });
 
-  it('keeps direct address lookups on the aggregate endpoint without invoking QNS', async () => {
-    const calls: string[] = [];
-    const fetcher: ExplorerFetch = async (input) => {
-      calls.push(input);
+  it('loads a direct address with its verified primary name using the same handler and fetcher', async () => {
+    const calls: Array<{ input: string; init: Parameters<ExplorerFetch>[1] }> = [];
+    const fetcher: ExplorerFetch = async (input, init) => {
+      calls.push({ input, init });
+      if (input.includes('/qns/reverse/')) {
+        return jsonResponse(200, { address: CHECKSUMMED_ADDRESS, name: 'moscowchill.qrl' });
+      }
       return jsonResponse(200, aggregatePayload());
     };
 
     const result = await loadAddressPageData(
       `0X${'A'.repeat(128)}`,
-      'https://handler.example',
+      '/handler/',
       fetcher,
     );
 
-    expect(result).toMatchObject({ ok: true, address: CHECKSUMMED_ADDRESS });
+    expect(result).toEqual({
+      ok: true,
+      address: CHECKSUMMED_ADDRESS,
+      qnsName: 'moscowchill.qrl',
+      addressData: aggregatePayload(),
+    });
     expect(calls).toEqual([
-      `https://handler.example/address/aggregate/${CHECKSUMMED_ADDRESS}`,
+      { input: `/handler/address/aggregate/${CHECKSUMMED_ADDRESS}`, init: { next: { revalidate: 10 } } },
+      { input: `/handler/qns/reverse/${CHECKSUMMED_ADDRESS}`, init: { cache: 'no-store' } },
     ]);
+  });
+
+  it.each([404, 429, 502, 503, 504])('keeps the address page unchanged after reverse status %i', async (status) => {
+    const fetcher: ExplorerFetch = (input) => Promise.resolve(input.includes('/qns/reverse/')
+      ? jsonResponse(status, { error: 'QNS lookup unavailable' })
+      : jsonResponse(200, aggregatePayload()));
+
+    const result = await loadAddressPageData(CHECKSUMMED_ADDRESS, '/handler', fetcher);
+
+    expect(result).toEqual({
+      ok: true,
+      address: CHECKSUMMED_ADDRESS,
+      qnsName: undefined,
+      addressData: aggregatePayload(),
+    });
+  });
+
+  it.each(['transport', 'json'])('silently ignores a reverse %s failure', async (failure) => {
+    const fetcher: ExplorerFetch = (input) => {
+      if (input.includes('/qns/reverse/')) {
+        if (failure === 'transport') return Promise.reject(new Error('offline'));
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.reject(new Error('invalid JSON')),
+        });
+      }
+      return Promise.resolve(jsonResponse(200, aggregatePayload()));
+    };
+
+    const result = await loadAddressPageData(CHECKSUMMED_ADDRESS, '/handler', fetcher);
+
+    expect(result).toEqual({
+      ok: true,
+      address: CHECKSUMMED_ADDRESS,
+      qnsName: undefined,
+      addressData: aggregatePayload(),
+    });
+  });
+
+  it.each([
+    {},
+    { address: CHECKSUMMED_ADDRESS, name: '' },
+    { address: CHECKSUMMED_ADDRESS, name: 'alice.eth' },
+    { address: CHECKSUMMED_ADDRESS, name: 'café.qrl' },
+    { address: CHECKSUMMED_ADDRESS, name: 'ALICE.QRL' },
+    { address: `Q${'1'.repeat(128)}`, name: 'alice.qrl' },
+    { address: `Q${'a'.repeat(128)}`, name: 'alice.qrl' },
+  ])('ignores a malformed successful reverse response: %j', async (payload) => {
+    const fetcher: ExplorerFetch = (input) => Promise.resolve(input.includes('/qns/reverse/')
+      ? jsonResponse(200, payload)
+      : jsonResponse(200, aggregatePayload()));
+
+    const result = await loadAddressPageData(CHECKSUMMED_ADDRESS, '/handler', fetcher);
+
+    expect(result).toEqual({
+      ok: true,
+      address: CHECKSUMMED_ADDRESS,
+      qnsName: undefined,
+      addressData: aggregatePayload(),
+    });
   });
 
   it('preserves explicit null verification fields as an invalid record', async () => {

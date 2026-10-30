@@ -5,8 +5,10 @@ import (
 	"backendAPI/db"
 	"backendAPI/qns"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -30,8 +32,158 @@ func configureQNSRoute(t *testing.T) {
 func newQNSTestRouter(call qns.RPCFunc) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.GET("/qns/resolve/:name", newQNSResolveHandler(call, cache.New()))
+	responseCache := cache.New()
+	router.GET("/qns/resolve/:name", newQNSResolveHandler(call, responseCache))
+	router.GET("/qns/reverse/:address", newQNSReverseHandler(call, responseCache))
 	return router
+}
+
+func serveQNSReverse(router *gin.Engine, address string) *httptest.ResponseRecorder {
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/qns/reverse/"+address, nil))
+	return w
+}
+
+func TestQNSReverseRouteRegistered(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	RegisterQNSRoutes(router)
+	for _, route := range router.Routes() {
+		if route.Method == http.MethodGet && route.Path == "/qns/reverse/:address" {
+			return
+		}
+	}
+	t.Fatal("reverse route is missing")
+}
+
+func TestQNSReverseRouteCanonicalizesAndCaches(t *testing.T) {
+	for _, found := range []bool{true, false} {
+		t.Run(fmt.Sprintf("found=%t", found), func(t *testing.T) {
+			configureQNSRoute(t)
+			var mu sync.Mutex
+			calls := 0
+			qrlCalls := 0
+			name := "ALICE.QRL"
+			encoded := fmt.Sprintf("0x%0128x%0128x", 64, len(name)) +
+				hex.EncodeToString([]byte(name)) + strings.Repeat("00", 64-len(name))
+			responses := []string{"0x" + strings.Repeat("2", 128), encoded, "0x" + strings.Repeat("3", 128), "0x" + strings.Repeat("a", 128)}
+			if !found {
+				responses = []string{"0x"}
+			}
+			router := newQNSTestRouter(func(ctx context.Context, method string, params []interface{}) (json.RawMessage, *db.RPCError, error) {
+				mu.Lock()
+				defer mu.Unlock()
+				calls++
+				switch method {
+				case "qrl_chainId":
+					return qnsRawString("0x539"), nil, nil
+				case "qrl_getCode":
+					return qnsRawString("0x6000"), nil, nil
+				case "qrl_call":
+					if qrlCalls >= len(responses) {
+						return nil, nil, errors.New("unexpected extra lookup")
+					}
+					result := responses[qrlCalls]
+					qrlCalls++
+					return qnsRawString(result), nil, nil
+				default:
+					return nil, nil, errors.New("unexpected method")
+				}
+			})
+			for _, address := range []string{"0X" + strings.Repeat("A", 128), qip55ChecksumA} {
+				w := serveQNSReverse(router, address)
+				wantStatus := http.StatusOK
+				if !found {
+					wantStatus = http.StatusNotFound
+				}
+				if w.Code != wantStatus {
+					t.Fatalf("status = %d, body = %s, want %d", w.Code, w.Body.String(), wantStatus)
+				}
+				var response map[string]string
+				if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+					t.Fatal(err)
+				}
+				if response["address"] != qip55ChecksumA {
+					t.Errorf("address = %q, want canonical address", response["address"])
+				}
+				if found && (response["name"] != "alice.qrl" || response["error"] != "") {
+					t.Errorf("response = %#v", response)
+				}
+				if !found && (response["name"] != "" || response["error"] != "QNS address has no verified primary name") {
+					t.Errorf("response = %#v", response)
+				}
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if calls != 2+len(responses) {
+				t.Errorf("RPC calls = %d, want %d with cached alias lookup", calls, 2+len(responses))
+			}
+		})
+	}
+}
+
+func TestQNSReverseRouteErrorsMatchForwardRoute(t *testing.T) {
+	cases := []struct {
+		name    string
+		status  int
+		message string
+		chain   string
+		code    string
+		failure error
+	}{
+		{"unconfigured", http.StatusServiceUnavailable, "QNS resolution is not configured", "", "", nil},
+		{"chain mismatch", http.StatusServiceUnavailable, "QNS deployment does not match the connected chain", "0x1", "0x6000", nil},
+		{"no registry code", http.StatusServiceUnavailable, "QNS registry is unavailable on the connected chain", "0x539", "0x", nil},
+		{"RPC failure", http.StatusBadGateway, "QNS resolution failed", "0x539", "0x6000", errors.New("offline")},
+		{"timeout", http.StatusGatewayTimeout, "QNS resolution timed out", "0x539", "0x6000", context.DeadlineExceeded},
+		{"malformed resolver", http.StatusBadGateway, "QNS resolution failed", "0x539", "0x6000", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			configureQNSRoute(t)
+			if tc.name == "unconfigured" {
+				t.Setenv("QNS_REGISTRY_ADDRESS", "")
+			}
+			router := newQNSTestRouter(func(ctx context.Context, method string, params []interface{}) (json.RawMessage, *db.RPCError, error) {
+				switch method {
+				case "qrl_chainId":
+					return qnsRawString(tc.chain), nil, nil
+				case "qrl_getCode":
+					return qnsRawString(tc.code), nil, nil
+				default:
+					if tc.failure == context.DeadlineExceeded {
+						<-ctx.Done()
+						return nil, nil, ctx.Err()
+					}
+					return qnsRawString("0x12"), nil, tc.failure
+				}
+			})
+			w := serveQNSReverse(router, qip55ChecksumA)
+			if w.Code != tc.status {
+				t.Errorf("status = %d, want %d", w.Code, tc.status)
+			}
+			var response map[string]string
+			if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			if response["error"] != tc.message || response["name"] != "" {
+				t.Errorf("response = %#v, want error %q", response, tc.message)
+			}
+		})
+	}
+}
+
+func TestQNSReverseRouteRejectsInvalidAddressBeforeRPC(t *testing.T) {
+	router := newQNSTestRouter(func(context.Context, string, []interface{}) (json.RawMessage, *db.RPCError, error) {
+		t.Error("unexpected RPC call")
+		return nil, nil, errors.New("invalid input reached RPC")
+	})
+	for _, address := range []string{"alice.qrl", "Q1234", "Q" + strings.Repeat("Ab", 64)} {
+		w := serveQNSReverse(router, address)
+		if w.Code != http.StatusBadRequest || w.Body.String() != `{"error":"invalid QNS address"}` {
+			t.Errorf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+	}
 }
 
 func serveQNS(router *gin.Engine, name string) *httptest.ResponseRecorder {

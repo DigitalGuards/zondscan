@@ -193,6 +193,43 @@ export async function resolveQnsName(
   return { ok: false, kind: 'qns-upstream', name, detail };
 }
 
+async function reverseQnsAddress(
+  address: string,
+  handlerUrl: string | undefined,
+  fetcher: ExplorerFetch
+): Promise<string | undefined> {
+  const base = handlerBase(handlerUrl);
+  if (!base) return undefined;
+
+  try {
+    const response = await fetcher(`${base}/qns/reverse/${encodeURIComponent(address)}`, {
+      cache: 'no-store',
+    });
+    if (!response.ok || response.status !== 200) return undefined;
+
+    const payload = await readJson(response);
+    if (
+      !isRecord(payload) ||
+      typeof payload.name !== 'string' ||
+      typeof payload.address !== 'string'
+    ) {
+      return undefined;
+    }
+    const name = normalizeQnsName(payload.name);
+    if (
+      !name ||
+      payload.name !== name ||
+      canonicalizeQrlAddress(payload.address) !== address ||
+      payload.address !== address
+    ) {
+      return undefined;
+    }
+    return name;
+  } catch {
+    return undefined;
+  }
+}
+
 async function fetchAddressData(
   address: string,
   handlerUrl: string | undefined,
@@ -299,7 +336,11 @@ export async function loadAddressPageData(
     address = canonicalAddress;
   }
 
-  const addressData = await fetchAddressData(address, handlerUrl, fetcher);
+  const [addressData, reverseName] = await Promise.all([
+    fetchAddressData(address, handlerUrl, fetcher),
+    normalizedName ? undefined : reverseQnsAddress(address, handlerUrl, fetcher),
+  ]);
+  qnsName ??= reverseName;
   if (!addressData) {
     return {
       ok: false,
