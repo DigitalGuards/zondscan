@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import Page, { generateMetadata } from './page';
 
+jest.mock('server-only', () => ({}));
 jest.mock('next/headers', () => ({ headers: jest.fn() }));
 jest.mock('../../../config', () => ({ __esModule: true, default: { handlerUrl: '/handler' } }));
 jest.mock('./address-view', () => ({ __esModule: true, default: () => null }));
@@ -20,7 +21,10 @@ function response(payload: unknown, status = 200): Response {
 describe('address page server requests', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.mocked(headers).mockResolvedValue(new Headers({ 'x-forwarded-for': 'visitor-chain' }));
+    jest.replaceProperty(process, 'env', { ...process.env, QNS_INTERNAL_TOKEN: '' });
+    jest.mocked(headers).mockImplementation(() => {
+      throw new Error('Address routes must preserve rendering without request headers');
+    });
   });
 
   afterEach(() => {
@@ -29,7 +33,7 @@ describe('address page server requests', () => {
   });
 
   it.each([address, primaryName])(
-    'forwards incoming visitor headers and preserves route copy for %s',
+    'preserves route copy and caching without reading visitor headers for %s',
     async (query) => {
       const fetcher = jest
         .spyOn(globalThis, 'fetch')
@@ -46,7 +50,9 @@ describe('address page server requests', () => {
       const qnsCall = fetcher.mock.calls.find(
         ([input]) => typeof input === 'string' && input.includes('/qns/')
       );
-      expect(qnsCall?.[1]?.headers).toEqual({ 'X-Forwarded-For': 'visitor-chain' });
+      expect(qnsCall).toBeDefined();
+      expect(qnsCall?.[1]?.headers).toBeUndefined();
+      expect(headers).not.toHaveBeenCalled();
       expect(html).toContain(
         query === address
           ? `Address ${address} with the verified QNS primary name ${primaryName}`
@@ -71,8 +77,8 @@ describe('address page server requests', () => {
     expect(fetcher).toHaveBeenCalledWith(`/handler/qns/reverse/${address}`, {
       next: { revalidate: 60 },
       signal: expect.any(AbortSignal),
-      headers: { 'X-Forwarded-For': 'visitor-chain' },
     });
+    expect(headers).not.toHaveBeenCalled();
   });
 
   it('bounds metadata to 1500 ms when reverse lookup hangs', async () => {

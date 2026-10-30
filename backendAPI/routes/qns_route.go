@@ -7,8 +7,11 @@ import (
 	"backendAPI/qns"
 	"backendAPI/qrladdress"
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"errors"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -26,14 +29,31 @@ const (
 func RegisterQNSRoutes(router *gin.Engine) {
 	router.GET(
 		"/qns/resolve/:name",
-		middleware.PerIPRateLimit(30, 30, time.Minute),
+		qnsRateLimit(30),
 		newQNSResolveHandler(db.NodeRPC, routeCache),
 	)
 	router.GET(
 		"/qns/reverse/:address",
-		middleware.PerIPRateLimit(60, 60, time.Minute),
+		qnsRateLimit(60),
 		newQNSReverseHandler(db.NodeRPC, routeCache),
 	)
+}
+
+func qnsRateLimit(limit float64) gin.HandlerFunc {
+	limiter := middleware.PerIPRateLimit(limit, limit, time.Minute)
+	token := os.Getenv("QNS_INTERNAL_TOKEN")
+	expected := sha256.Sum256([]byte(token))
+	return func(c *gin.Context) {
+		// Equal-length digests keep the secret comparison constant-time.
+		if token != "" {
+			provided := sha256.Sum256([]byte(c.GetHeader("X-QNS-Internal-Token")))
+			if subtle.ConstantTimeCompare(provided[:], expected[:]) == 1 {
+				c.Next()
+				return
+			}
+		}
+		limiter(c)
+	}
 }
 
 func newQNSResolveHandler(call qns.RPCFunc, responseCache *cache.TTLCache) gin.HandlerFunc {
@@ -67,7 +87,7 @@ func newQNSHandler(call qns.RPCFunc, responseCache *cache.TTLCache, reverse bool
 
 		config, err := qns.ConfigFromEnv()
 		if err != nil {
-			respondQNSError(c, err)
+			respondQNSError(c, err, reverse)
 			return
 		}
 		if responseCache == nil {
@@ -90,7 +110,7 @@ func newQNSHandler(call qns.RPCFunc, responseCache *cache.TTLCache, reverse bool
 			},
 		)
 		if err != nil {
-			respondQNSError(c, err)
+			respondQNSError(c, err, reverse)
 			return
 		}
 		deployment, ok := deploymentValue.(qns.Deployment)
@@ -135,7 +155,7 @@ func newQNSHandler(call qns.RPCFunc, responseCache *cache.TTLCache, reverse bool
 			},
 		)
 		if err != nil {
-			respondQNSError(c, err)
+			respondQNSError(c, err, reverse)
 			return
 		}
 		resolution, ok := resolutionValue.(qns.Resolution)
@@ -173,7 +193,7 @@ func newQNSHandler(call qns.RPCFunc, responseCache *cache.TTLCache, reverse bool
 	}
 }
 
-func respondQNSError(c *gin.Context, err error) {
+func respondQNSError(c *gin.Context, err error, reverse bool) {
 	switch {
 	case errors.Is(err, qns.ErrInvalidName):
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid QNS name"})
@@ -184,6 +204,10 @@ func respondQNSError(c *gin.Context, err error) {
 	case errors.Is(err, qns.ErrRegistryUnavailable):
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "QNS registry is unavailable on the connected chain"})
 	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
+		if reverse {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "QNS resolution failed"})
+			return
+		}
 		c.JSON(http.StatusGatewayTimeout, gin.H{"error": "QNS resolution timed out"})
 	case errors.Is(err, qns.ErrRPC),
 		errors.Is(err, qns.ErrMalformedResponse),

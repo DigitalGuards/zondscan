@@ -1,4 +1,7 @@
-import { afterEach, describe, expect, it, jest } from '@jest/globals';
+import { randomBytes } from 'node:crypto';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+
+jest.mock('server-only', () => ({}));
 
 import type { ExplorerFetch } from './address-page-data';
 import { loadAddressPageData, resolveQnsName } from './address-page-data';
@@ -27,48 +30,58 @@ function aggregatePayload() {
 }
 
 describe('QNS address page loading', () => {
+  beforeEach(() => {
+    jest.replaceProperty(process, 'env', { ...process.env, QNS_INTERNAL_TOKEN: '' });
+  });
+
   afterEach(() => {
+    jest.restoreAllMocks();
     jest.useRealTimers();
   });
 
-  it.each([
-    ['x-forwarded-for', 'forwarded-chain', 'forwarded-chain'],
-    ['x-real-ip', 'fallback-address', 'fallback-address'],
-    ['both', 'forwarded-chain', 'forwarded-chain'],
-    ['none', '', undefined],
-  ])('forwards the visitor header to both QNS routes: %s', async (header, value, expected) => {
-    const requestHeaders = new Headers();
-    if (header === 'both') {
-      requestHeaders.set('x-forwarded-for', value);
-      requestHeaders.set('x-real-ip', 'fallback-address');
-    } else if (header !== 'none') {
-      requestHeaders.set(header, value);
-    }
-    const calls: Array<{ input: string; init: Parameters<ExplorerFetch>[1] }> = [];
-    const fetcher: ExplorerFetch = (input, init) => {
-      calls.push({ input, init });
-      return Promise.resolve(
-        jsonResponse(
-          200,
-          input.includes('/qns/')
-            ? { address: CHECKSUMMED_ADDRESS, name: 'alice.qrl' }
-            : aggregatePayload()
-        )
-      );
-    };
+  it.each(['set', 'empty', 'unset'])(
+    'uses only the configured server token for both QNS routes: %s',
+    async (setting) => {
+      const token = randomBytes(32).toString('hex');
+      if (setting === 'set') {
+        process.env.QNS_INTERNAL_TOKEN = token;
+      } else if (setting === 'unset') {
+        delete process.env.QNS_INTERNAL_TOKEN;
+      }
+      const calls: Array<{ input: string; init: Parameters<ExplorerFetch>[1] }> = [];
+      const fetcher: ExplorerFetch = (input, init) => {
+        calls.push({ input, init });
+        return Promise.resolve(
+          jsonResponse(
+            200,
+            input.includes('/qns/')
+              ? { address: CHECKSUMMED_ADDRESS, name: 'alice.qrl' }
+              : aggregatePayload()
+          )
+        );
+      };
 
-    await loadAddressPageData('alice.qrl', '/handler', fetcher, requestHeaders);
-    await loadAddressPageData(CHECKSUMMED_ADDRESS, '/handler', fetcher, requestHeaders);
+      await loadAddressPageData('alice.qrl', '/handler', fetcher);
+      await loadAddressPageData(CHECKSUMMED_ADDRESS, '/handler', fetcher);
+      await loadAddressPageData(CHECKSUMMED_ADDRESS, '/handler', fetcher);
 
-    const qnsCalls = calls.filter(({ input }) => input.includes('/qns/'));
-    expect(qnsCalls).toHaveLength(2);
-    for (const { init } of qnsCalls) {
-      expect(init?.headers).toEqual(expected ? { 'X-Forwarded-For': expected } : undefined);
+      const qnsCalls = calls.filter(({ input }) => input.includes('/qns/'));
+      expect(qnsCalls).toHaveLength(3);
+      for (const { init } of qnsCalls) {
+        expect(init?.headers).toEqual(
+          setting === 'set' ? { 'X-QNS-Internal-Token': token } : undefined
+        );
+      }
+      expect(qnsCalls[0]?.init?.cache).toBe('no-store');
+      expect(qnsCalls[1]?.init?.next).toEqual({ revalidate: 60 });
+      expect(qnsCalls[2]?.init?.next).toEqual({ revalidate: 60 });
+      expect(qnsCalls[1]?.input).toBe(qnsCalls[2]?.input);
+      expect(qnsCalls[1]?.init?.headers).toEqual(qnsCalls[2]?.init?.headers);
+      for (const { init } of calls.filter(({ input }) => input.includes('/address/aggregate/'))) {
+        expect(init).toEqual({ next: { revalidate: 10 } });
+      }
     }
-    for (const { init } of calls.filter(({ input }) => input.includes('/address/aggregate/'))) {
-      expect(init).toEqual({ next: { revalidate: 10 } });
-    }
-  });
+  );
 
   it.each(['response', 'body'])(
     'bounds a hanging reverse %s to 1500 ms alongside the aggregate',

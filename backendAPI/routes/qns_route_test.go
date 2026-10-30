@@ -5,12 +5,14 @@ import (
 	"backendAPI/db"
 	"backendAPI/qns"
 	"context"
+	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -57,6 +59,7 @@ func TestQNSReverseRouteRegistered(t *testing.T) {
 }
 
 func TestQNSRoutesHaveIndependentRateLimits(t *testing.T) {
+	t.Setenv("QNS_INTERNAL_TOKEN", "")
 	gin.SetMode(gin.TestMode)
 	for _, reverseFirst := range []bool{true, false} {
 		t.Run(fmt.Sprintf("reverseFirst=%t", reverseFirst), func(t *testing.T) {
@@ -85,14 +88,86 @@ func TestQNSRoutesHaveIndependentRateLimits(t *testing.T) {
 	}
 }
 
+func TestQNSInternalTokenRateLimitBypass(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	var secret [32]byte
+	if _, err := rand.Read(secret[:]); err != nil {
+		t.Fatal("generate test secret")
+	}
+	token := hex.EncodeToString(secret[:])
+	wrong := strings.Repeat("z", len(token))
+	for _, route := range []struct {
+		path  string
+		limit int
+	}{
+		{"/qns/reverse/invalid", 60},
+		{"/qns/resolve/invalid", 30},
+	} {
+		for _, setting := range []string{"matching", "wrong", "missing", "empty config", "empty both", "unset config"} {
+			t.Run(route.path+"/"+setting, func(t *testing.T) {
+				t.Setenv("QNS_INTERNAL_TOKEN", token)
+				provided := token
+				switch setting {
+				case "wrong":
+					provided = wrong
+				case "missing":
+					provided = ""
+				case "empty config", "empty both":
+					t.Setenv("QNS_INTERNAL_TOKEN", "")
+					if setting == "empty both" {
+						provided = ""
+					}
+				case "unset config":
+					if err := os.Unsetenv("QNS_INTERNAL_TOKEN"); err != nil {
+						t.Fatal(err)
+					}
+				}
+				router := gin.New()
+				RegisterQNSRoutes(router)
+				request := func(header string, want int) {
+					t.Helper()
+					req := httptest.NewRequest(http.MethodGet, route.path, nil)
+					if header != "" {
+						req.Header.Set("X-QNS-Internal-Token", header)
+					}
+					w := httptest.NewRecorder()
+					router.ServeHTTP(w, req)
+					if w.Code != want {
+						t.Fatalf("status = %d, want %d", w.Code, want)
+					}
+				}
+				for i := 0; i <= route.limit; i++ {
+					want := http.StatusBadRequest
+					if i == route.limit && setting != "matching" {
+						want = http.StatusTooManyRequests
+					}
+					request(provided, want)
+				}
+				if setting == "matching" {
+					// Authenticated calls leave the entire public allowance available.
+					for i := 0; i < route.limit; i++ {
+						request("", http.StatusBadRequest)
+					}
+					request("", http.StatusTooManyRequests)
+					request(token, http.StatusBadRequest)
+					request(wrong, http.StatusTooManyRequests)
+				}
+			})
+		}
+	}
+}
+
 func qnsEncodedName(name string) string {
 	padding := (64 - len(name)%64) % 64
 	return fmt.Sprintf("0x%0128x%0128x", 64, len(name)) +
 		hex.EncodeToString([]byte(name)) + strings.Repeat("00", padding)
 }
 
-func TestQNSReverseRouteCachesRecordFailures(t *testing.T) {
-	for _, failure := range []string{"transport", "node", "revert", "malformed"} {
+func TestQNSReverseRouteCachesOnlyRecordNegatives(t *testing.T) {
+	for _, failure := range []string{
+		"transport", "timeout", "deadline", "canceled", "node", "unrelated message", "unrelated code",
+		"revert code", "revert message", "revert reason", "malformed", "empty", "null", "non-string", "invalid JSON",
+	} {
 		for failAt := 0; failAt < 4; failAt++ {
 			t.Run(fmt.Sprintf("%s/call%d", failure, failAt), func(t *testing.T) {
 				configureQNSRoute(t)
@@ -119,20 +194,42 @@ func TestQNSReverseRouteCachesRecordFailures(t *testing.T) {
 					if step == failAt {
 						switch failure {
 						case "transport":
-							return nil, nil, errors.New("offline")
+							return nil, nil, errors.New("network failure mentioning execution reverted")
+						case "timeout":
+							return nil, nil, os.ErrDeadlineExceeded
+						case "deadline":
+							return nil, nil, fmt.Errorf("call interrupted: %w", context.DeadlineExceeded)
+						case "canceled":
+							return nil, nil, fmt.Errorf("call interrupted: %w", context.Canceled)
 						case "node":
-							return nil, &db.RPCError{Code: -32000}, nil
-						case "revert":
+							return nil, &db.RPCError{Code: -32000, Message: "state unavailable"}, nil
+						case "unrelated message":
+							return nil, &db.RPCError{Code: -32000, Message: "upstream failed before execution reverted"}, nil
+						case "unrelated code":
+							return nil, &db.RPCError{Code: -32603, Message: "execution reverted"}, nil
+						case "revert code":
 							return nil, &db.RPCError{Code: 3}, nil
-						default:
+						case "revert message":
+							return nil, &db.RPCError{Code: -32000, Message: "execution reverted"}, nil
+						case "revert reason":
+							return nil, &db.RPCError{Code: -32000, Message: "execution reverted: missing record"}, nil
+						case "malformed":
 							return qnsRawString("0x12"), nil, nil
+						case "empty":
+							return qnsRawString("0x"), nil, nil
+						case "null":
+							return json.RawMessage(`null`), nil, nil
+						case "non-string":
+							return json.RawMessage(`{}`), nil, nil
+						default:
+							return json.RawMessage(`{`), nil, nil
 						}
 					}
 					return qnsRawString(responses[step]), nil, nil
 				})
 				wantStatus := http.StatusBadGateway
 				wantCalls := 2 + 2*(failAt+1)
-				if failAt == 1 || failAt == 3 {
+				if failure == "empty" || (failAt > 0 && (strings.HasPrefix(failure, "revert") || failure == "malformed")) {
 					wantStatus = http.StatusNotFound
 					wantCalls = 2 + failAt + 1
 				}
@@ -154,6 +251,55 @@ func TestQNSReverseRouteCachesRecordFailures(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestQNSReverseRouteRecoversAfterTransientRecordFailure(t *testing.T) {
+	for _, failAt := range []int{1, 3} {
+		t.Run(fmt.Sprintf("call%d", failAt), func(t *testing.T) {
+			configureQNSRoute(t)
+			var mu sync.Mutex
+			calls := 0
+			responses := []string{
+				"0x" + strings.Repeat("2", 128),
+				qnsEncodedName("alice.qrl"),
+				"0x" + strings.Repeat("3", 128),
+				"0x" + strings.Repeat("a", 128),
+			}
+			router := newQNSTestRouter(func(ctx context.Context, method string, params []interface{}) (json.RawMessage, *db.RPCError, error) {
+				mu.Lock()
+				defer mu.Unlock()
+				switch method {
+				case "qrl_chainId":
+					return qnsRawString("0x539"), nil, nil
+				case "qrl_getCode":
+					return qnsRawString("0x6000"), nil, nil
+				}
+				index := calls
+				calls++
+				if index == failAt {
+					return nil, &db.RPCError{Code: -32000, Message: "temporarily unavailable"}, nil
+				}
+				if index > failAt {
+					index -= failAt + 1
+				}
+				return qnsRawString(responses[index]), nil, nil
+			})
+			for _, want := range []int{http.StatusBadGateway, http.StatusOK, http.StatusOK} {
+				w := serveQNSReverse(router, qip55ChecksumA)
+				if w.Code != want {
+					t.Fatalf("status = %d, want %d", w.Code, want)
+				}
+				if want == http.StatusOK && !strings.Contains(w.Body.String(), `"name":"alice.qrl"`) {
+					t.Fatal("recovered response lacks the verified name")
+				}
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if calls != failAt+1+len(responses) {
+				t.Errorf("record calls = %d, want %d", calls, failAt+1+len(responses))
+			}
+		})
 	}
 }
 
@@ -298,7 +444,7 @@ func TestQNSReverseRouteCanonicalizesAndCaches(t *testing.T) {
 	}
 }
 
-func TestQNSReverseRouteErrorsMatchForwardRoute(t *testing.T) {
+func TestQNSReverseRouteErrors(t *testing.T) {
 	cases := []struct {
 		name    string
 		status  int
@@ -311,7 +457,7 @@ func TestQNSReverseRouteErrorsMatchForwardRoute(t *testing.T) {
 		{"chain mismatch", http.StatusServiceUnavailable, "QNS deployment does not match the connected chain", "0x1", "0x6000", nil},
 		{"no registry code", http.StatusServiceUnavailable, "QNS registry is unavailable on the connected chain", "0x539", "0x", nil},
 		{"RPC failure", http.StatusBadGateway, "QNS resolution failed", "0x539", "0x6000", errors.New("offline")},
-		{"timeout", http.StatusGatewayTimeout, "QNS resolution timed out", "0x539", "0x6000", context.DeadlineExceeded},
+		{"timeout", http.StatusBadGateway, "QNS resolution failed", "0x539", "0x6000", context.DeadlineExceeded},
 		{"malformed resolver", http.StatusBadGateway, "QNS resolution failed", "0x539", "0x6000", nil},
 	}
 	for _, tc := range cases {

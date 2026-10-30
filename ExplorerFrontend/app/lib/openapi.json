@@ -1094,7 +1094,7 @@
         "tags": ["Addresses"],
         "operationId": "resolveQnsName",
         "summary": "Resolve a QNS name",
-        "description": "Resolves a conservatively normalized ASCII name below .qrl to its canonical checksummed QIP-55 address. Resolution is enabled only when the backend has a registry address and expected chain ID configured, and it verifies both the connected chain and registry bytecode before reading records. Successful deployment checks and name resolutions are cached server side for 15 seconds. Rate limited per IP: bucket of 30 requests, refilling 30 per minute.",
+        "description": "Resolves a conservatively normalized ASCII name below .qrl to its canonical checksummed QIP-55 address. Resolution is enabled only when the backend has a registry address and expected chain ID configured, and it verifies both the connected chain and registry bytecode before reading records. Successful deployment checks and name resolutions are cached server side for 15 seconds. Rate limited per IP: bucket of 30 requests, refilling 30 per minute, independent of reverse lookups. Server callers with a matching nonempty QNS_INTERNAL_TOKEN in X-QNS-Internal-Token bypass this limit without consuming its allowance.",
         "parameters": [
           {
             "name": "name",
@@ -1176,7 +1176,7 @@
         "tags": ["Addresses"],
         "operationId": "reverseQnsAddress",
         "summary": "Look up a verified QNS primary name",
-        "description": "Reads the address's addr.reverse resolver and name record, normalizes the name, and verifies that its forward address record resolves to the same canonical QIP-55 address. A name is returned only after this verification succeeds. Uses the forward resolver's configured registry, chain and bytecode checks, bounded timeouts, and shared per-IP rate limit of 30 requests, refilling 30 per minute. Successful deployment checks and lookup results, including missing names, are cached server side for 15 seconds.",
+        "description": "Reads the address's addr.reverse resolver and name record, normalizes the name, and verifies that its forward address record resolves to the same canonical QIP-55 address. A name is returned only after this verification succeeds. Uses the forward resolver's configured registry, chain and bytecode checks and bounded timeouts. Its independent per-IP bucket holds 60 requests and refills 60 per minute. Server callers with a matching nonempty QNS_INTERNAL_TOKEN in X-QNS-Internal-Token bypass this limit without consuming its allowance. Successful deployment checks, verified names, and real negative records are cached server side for 15 seconds. Transport failures return 502 and remain uncached.",
         "parameters": [
           {
             "name": "address",
@@ -1211,7 +1211,7 @@
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "error": "invalid QNS address" } } }
           },
           "404": {
-            "description": "The reverse resolver or name is missing, the stored name is invalid, or forward resolution is missing or resolves to a different address.",
+            "description": "The reverse resolver or name is missing, the name call or forward verification reverts or returns an empty or malformed record, or forward resolution resolves to a different address. Cached for the normal 15-second TTL.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1227,16 +1227,12 @@
           },
           "429": { "$ref": "#/components/responses/RateLimited" },
           "502": {
-            "description": "The node RPC failed or returned a malformed QNS response.",
+            "description": "The node RPC failed, timed out, was canceled, returned a non-revert RPC error or malformed RPC envelope, or the reverse registry lookup failed. Uncached so the next request retries.",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "error": "QNS resolution failed" } } }
           },
           "503": {
             "description": "QNS is unconfigured, the configured chain does not match, or registry bytecode is unavailable.",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
-          },
-          "504": {
-            "description": "The bounded QNS lookup timed out.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "error": "QNS resolution timed out" } } }
           },
           "500": { "$ref": "#/components/responses/InternalError" }
         }

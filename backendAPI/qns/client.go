@@ -25,6 +25,8 @@ var (
 	ErrRegistryUnavailable = errors.New("QNS registry code is unavailable")
 	ErrRegistryLookup      = errors.New("QNS registry lookup failed")
 	ErrRPC                 = errors.New("QNS RPC failure")
+	ErrExecutionReverted   = errors.New("QNS execution reverted")
+	ErrMalformedRecord     = errors.New("malformed QNS record")
 	ErrMalformedResponse   = errors.New("malformed QNS RPC response")
 	ErrInvalidAddress      = errors.New("invalid QNS address response")
 )
@@ -177,7 +179,7 @@ func (c *Client) ResolveName(
 	}
 	resolver, zero, err := decodeAddressWord(resolverResult)
 	if err != nil {
-		return Resolution{}, fmt.Errorf("%w: %w", ErrRegistryLookup, err)
+		return Resolution{}, fmt.Errorf("%w: %w: %w", ErrRegistryLookup, ErrMalformedRecord, err)
 	}
 	if zero {
 		return Resolution{Name: normalized, Missing: MissingResolver}, nil
@@ -189,7 +191,7 @@ func (c *Client) ResolveName(
 	}
 	address, zero, err := decodeAddressWord(addressResult)
 	if err != nil {
-		return Resolution{}, err
+		return Resolution{}, fmt.Errorf("%w: %w", ErrMalformedRecord, err)
 	}
 	if zero {
 		return Resolution{Name: normalized, Missing: MissingAddress}, nil
@@ -214,16 +216,29 @@ func (c *Client) rpcString(
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return "", ctxErr
 		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return "", context.DeadlineExceeded
+		}
+		if errors.Is(err, context.Canceled) {
+			return "", context.Canceled
+		}
 		return "", fmt.Errorf("%w: %s transport", ErrRPC, method)
 	}
 	if rpcErr != nil {
+		// Code 3 identifies an execution revert. Some RPC servers use
+		// -32000 with the explicit execution-reverted message.
+		message := strings.ToLower(strings.TrimSpace(rpcErr.Message))
+		if method == "qrl_call" && (rpcErr.Code == 3 ||
+			(rpcErr.Code == -32000 && (message == "execution reverted" || strings.HasPrefix(message, "execution reverted:")))) {
+			return "", fmt.Errorf("%w: %w", ErrRPC, ErrExecutionReverted)
+		}
 		return "", fmt.Errorf("%w: %s returned code %d", ErrRPC, method, rpcErr.Code)
 	}
-	var result string
-	if err := json.Unmarshal(raw, &result); err != nil {
+	var result *string
+	if err := json.Unmarshal(raw, &result); err != nil || result == nil {
 		return "", fmt.Errorf("%w: %s result", ErrMalformedResponse, method)
 	}
-	return result, nil
+	return *result, nil
 }
 
 func normalizeChainID(value string) (string, error) {

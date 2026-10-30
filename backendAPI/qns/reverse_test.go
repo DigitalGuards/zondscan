@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -131,10 +132,13 @@ func TestReverseNameOmitsUnverifiedNames(t *testing.T) {
 	}
 }
 
-func TestReverseNameSeparatesRegistryAndRecordFailures(t *testing.T) {
+func TestReverseNameClassifiesFailures(t *testing.T) {
 	deployment := Deployment{registryAddress: "Q" + strings.Repeat("1", 128), expectedChainID: "1337"}
 	responses := []string{"0x" + strings.Repeat("2", 128), encodedName("alice.qrl"), "0x" + strings.Repeat("3", 128)}
-	for _, failure := range []string{"transport", "node", "revert", "malformed", "canceled"} {
+	for _, failure := range []string{
+		"transport", "timeout", "deadline", "canceled", "node", "unrelated message", "unrelated code",
+		"revert code", "revert message", "revert reason", "malformed", "empty", "null", "non-string", "invalid JSON",
+	} {
 		for failAt := 0; failAt < 4; failAt++ {
 			t.Run(fmt.Sprintf("%s/call%d", failure, failAt), func(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
@@ -146,29 +150,56 @@ func TestReverseNameSeparatesRegistryAndRecordFailures(t *testing.T) {
 					if index == failAt {
 						switch failure {
 						case "transport":
-							return nil, nil, errors.New("offline")
-						case "node":
-							return nil, &db.RPCError{Code: -32000}, nil
-						case "revert":
-							return nil, &db.RPCError{Code: 3}, nil
-						case "malformed":
-							return rawString("0x12"), nil, nil
-						default:
+							return nil, nil, errors.New("network failure mentioning execution reverted")
+						case "timeout":
+							return nil, nil, os.ErrDeadlineExceeded
+						case "deadline":
+							return nil, nil, fmt.Errorf("call interrupted: %w", context.DeadlineExceeded)
+						case "canceled":
 							cancel()
 							return nil, nil, ctx.Err()
+						case "node":
+							return nil, &db.RPCError{Code: -32000, Message: "state unavailable"}, nil
+						case "unrelated message":
+							return nil, &db.RPCError{Code: -32000, Message: "upstream failed before execution reverted"}, nil
+						case "unrelated code":
+							return nil, &db.RPCError{Code: -32603, Message: "execution reverted"}, nil
+						case "revert code":
+							return nil, &db.RPCError{Code: 3}, nil
+						case "revert message":
+							return nil, &db.RPCError{Code: -32000, Message: "execution reverted"}, nil
+						case "revert reason":
+							return nil, &db.RPCError{Code: -32000, Message: "execution reverted: missing record"}, nil
+						case "malformed":
+							return rawString("0x12"), nil, nil
+						case "empty":
+							return rawString("0x"), nil, nil
+						case "null":
+							return json.RawMessage(`null`), nil, nil
+						case "non-string":
+							return json.RawMessage(`{}`), nil, nil
+						default:
+							return json.RawMessage(`{`), nil, nil
 						}
 					}
 					return rawString(responses[index]), nil, nil
 				})
 				resolution, err := client.ReverseName(ctx, deployment, checksumA)
 				wantError := ErrRPC
-				if failure == "malformed" {
+				if failure == "malformed" || failure == "null" || failure == "non-string" || failure == "invalid JSON" {
 					wantError = ErrMalformedResponse
 				} else if failure == "canceled" {
 					wantError = context.Canceled
+				} else if failure == "deadline" {
+					wantError = context.DeadlineExceeded
 				}
-				if failAt == 1 || failAt == 3 {
-					if want := (Resolution{Address: checksumA, Missing: MissingName}); err != nil || resolution != want {
+				negative := failure == "empty" || (failAt > 0 && (strings.HasPrefix(failure, "revert") || failure == "malformed"))
+				if negative {
+					missing := MissingName
+					if failAt == 0 {
+						missing = MissingResolver
+					}
+					if want := (Resolution{Address: checksumA, Missing: missing}); err != nil || resolution != want {
 						t.Errorf("ReverseName = %#v, %v, want %#v and no error", resolution, err, want)
 					}
 				} else if !errors.Is(err, wantError) || resolution.Name != "" {

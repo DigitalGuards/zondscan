@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import { headers } from 'next/headers';
 import { cache } from 'react';
 import AddressView from './address-view';
 import TokenContractView from './token-contract-view';
@@ -14,9 +13,7 @@ interface PageProps {
   searchParams?: Promise<Record<string, string | string[]>>;
 }
 
-const loadPageData = cache(async (query: string) =>
-  loadAddressPageData(query, config.handlerUrl, undefined, await headers())
-);
+const loadPageData = cache((query: string) => loadAddressPageData(query, config.handlerUrl));
 
 export async function generateMetadata({
   params,
@@ -25,9 +22,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const resolvedParams = await params;
   const address = canonicalizeQrlAddress(resolvedParams.query);
-  const name = address
-    ? await reverseQnsAddress(address, config.handlerUrl, undefined, await headers())
-    : undefined;
+  const name = address ? await reverseQnsAddress(address, config.handlerUrl) : undefined;
   return generateAddressPageMetadata(resolvedParams.query, name);
 }
 

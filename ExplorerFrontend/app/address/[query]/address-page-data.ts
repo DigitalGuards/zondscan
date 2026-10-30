@@ -1,3 +1,5 @@
+import 'server-only';
+import { cache } from 'react';
 import { isRecord, isArray } from '../../lib/guards';
 import type { AddressData } from '@/app/types';
 import { decodeToHex, formatAddress } from '../../lib/helpers';
@@ -13,8 +15,6 @@ interface ExplorerFetchResponse {
 type ExplorerRequestInit = RequestInit & {
   next?: { revalidate?: number };
 };
-
-type IncomingHeaders = Pick<Headers, 'get'>;
 
 export type ExplorerFetch = (
   input: string,
@@ -63,12 +63,9 @@ function handlerBase(handlerUrl: string | undefined): string | null {
   return base || null;
 }
 
-function forwardedClientAddress(requestHeaders?: IncomingHeaders): string | undefined {
-  return requestHeaders?.get('x-forwarded-for') || requestHeaders?.get('x-real-ip') || undefined;
-}
-
-function qnsRequestHeaders(clientAddress?: string): Pick<RequestInit, 'headers'> {
-  return clientAddress ? { headers: { 'X-Forwarded-For': clientAddress } } : {};
+function qnsRequestHeaders(): Pick<RequestInit, 'headers'> {
+  const token = process.env.QNS_INTERNAL_TOKEN;
+  return token ? { headers: { 'X-QNS-Internal-Token': token } } : {};
 }
 
 async function readJson(response: ExplorerFetchResponse): Promise<unknown> {
@@ -92,8 +89,7 @@ function payloadError(payload: unknown): string | null {
 export async function resolveQnsName(
   input: string,
   handlerUrl: string | undefined,
-  fetcher: ExplorerFetch = defaultFetch,
-  requestHeaders?: IncomingHeaders
+  fetcher: ExplorerFetch = defaultFetch
 ): Promise<QnsResolutionResult> {
   const name = normalizeQnsName(input);
   if (!name) {
@@ -118,7 +114,7 @@ export async function resolveQnsName(
   try {
     response = await fetcher(`${base}/qns/resolve/${encodeURIComponent(name)}`, {
       cache: 'no-store',
-      ...qnsRequestHeaders(forwardedClientAddress(requestHeaders)),
+      ...qnsRequestHeaders(),
     });
   } catch {
     return {
@@ -209,24 +205,18 @@ export async function resolveQnsName(
 export function reverseQnsAddress(
   address: string,
   handlerUrl: string | undefined,
-  fetcher: ExplorerFetch = defaultFetch,
-  requestHeaders?: IncomingHeaders
+  fetcher: ExplorerFetch = defaultFetch
 ): Promise<string | undefined> {
-  return fetchReverseQnsAddress(
-    address,
-    handlerUrl,
-    fetcher,
-    forwardedClientAddress(requestHeaders)
-  );
+  return fetchReverseQnsAddress(address, handlerUrl, fetcher);
 }
 
-// React shares this lookup between metadata and page rendering within a request.
+// Normalize default arguments before React memoization so metadata and the page
+// share this lookup within a request.
 const fetchReverseQnsAddress = cache(
   async (
     address: string,
     handlerUrl: string | undefined,
-    fetcher: ExplorerFetch,
-    clientAddress?: string
+    fetcher: ExplorerFetch
   ): Promise<string | undefined> => {
     const base = handlerBase(handlerUrl);
     if (!base) return undefined;
@@ -248,7 +238,7 @@ const fetchReverseQnsAddress = cache(
           const response = await fetcher(`${base}/qns/reverse/${encodeURIComponent(address)}`, {
             next: { revalidate: 60 },
             signal: controller.signal,
-            ...qnsRequestHeaders(clientAddress),
+            ...qnsRequestHeaders(),
           });
           if (!response.ok || response.status !== 200) return undefined;
 
@@ -356,15 +346,14 @@ async function fetchAddressData(
 export async function loadAddressPageData(
   query: string,
   handlerUrl: string | undefined,
-  fetcher: ExplorerFetch = defaultFetch,
-  requestHeaders?: IncomingHeaders
+  fetcher: ExplorerFetch = defaultFetch
 ): Promise<AddressPageLoadResult> {
   const normalizedName = normalizeQnsName(query);
   let address: string;
   let qnsName: string | undefined;
 
   if (normalizedName) {
-    const resolution = await resolveQnsName(normalizedName, handlerUrl, fetcher, requestHeaders);
+    const resolution = await resolveQnsName(normalizedName, handlerUrl, fetcher);
     if (!resolution.ok) return resolution;
     address = resolution.address;
     qnsName = resolution.name;
@@ -389,7 +378,7 @@ export async function loadAddressPageData(
 
   const [addressData, reverseName] = await Promise.all([
     fetchAddressData(address, handlerUrl, fetcher),
-    normalizedName ? undefined : reverseQnsAddress(address, handlerUrl, fetcher, requestHeaders),
+    normalizedName ? undefined : reverseQnsAddress(address, handlerUrl, fetcher),
   ]);
   qnsName ??= reverseName;
   if (!addressData) {
@@ -404,4 +393,3 @@ export async function loadAddressPageData(
 
   return { ok: true, address, qnsName, addressData };
 }
-import { cache } from 'react';
