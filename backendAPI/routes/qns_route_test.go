@@ -167,14 +167,14 @@ func qnsEncodedName(name string) string {
 
 func TestQNSReverseRouteCachesOnlyRecordNegatives(t *testing.T) {
 	executionErrors := []string{
-		"invalid opcode", "invalid opcode: INVALID", "out of gas",
+		"invalid opcode: INVALID", "out of gas",
 		"contract creation code storage out of gas", "max call depth exceeded",
 		"insufficient balance for transfer", "contract address collision",
 		"max initcode size exceeded", "max code size exceeded", "invalid jump destination",
 		"write protection", "return data out of bounds", "gas uint64 overflow",
 		"invalid code: must not begin with 0xef", "nonce uint64 overflow",
-		"stack underflow", "stack underflow (0 <=> 1)", "stack overflow",
-		"stack overflow (1025 > 1024)", "stack limit reached 1024 (1023)",
+		"stack underflow (0 <=> 1)", "stack limit reached 1024 (1023)",
+		"execution reverted: missing record",
 	}
 	failures := append([]string{
 		"transport", "timeout", "HTTP timeout", "deadline", "canceled", "node", "unrelated message", "unrelated code",
@@ -786,6 +786,54 @@ func TestQNSResolveRouteFailsClosedOnDeploymentAndRecords(t *testing.T) {
 			}
 			if response.Error != tc.wantError || response.Name != tc.wantName {
 				t.Errorf("response = %#v, want error %q and name %q", response, tc.wantError, tc.wantName)
+			}
+		})
+	}
+}
+
+func TestQNSResolveRouteCachesResolverExecutionFailures(t *testing.T) {
+	for _, failAt := range []int{2, 3} {
+		t.Run(fmt.Sprintf("call%d", failAt), func(t *testing.T) {
+			configureQNSRoute(t)
+			var mu sync.Mutex
+			attempts := 0
+			router := newQNSTestRouter(func(ctx context.Context, method string, params []interface{}) (json.RawMessage, *db.RPCError, error) {
+				mu.Lock()
+				defer mu.Unlock()
+				step := 0
+				result := "0x539"
+				switch method {
+				case "qrl_getCode":
+					step, result = 1, "0x6000"
+				case "qrl_call":
+					step, result = 2, "0x"+strings.Repeat("2", 128)
+					data := params[0].(map[string]interface{})["data"].(string)
+					if strings.HasPrefix(data, "0x3b3b57de") {
+						step = 3
+					}
+				}
+				if step == failAt {
+					attempts++
+					return nil, &db.RPCError{Code: 3}, nil
+				}
+				return qnsRawString(result), nil, nil
+			})
+			// A registry revert stays a retryable 502; a resolver revert is a
+			// cached "no address record".
+			wantStatus, wantBody, wantAttempts := http.StatusBadGateway, `{"error":"QNS resolution failed"}`, 2
+			if failAt == 3 {
+				wantStatus, wantBody, wantAttempts = http.StatusNotFound, `{"error":"QNS name has no address record","name":"alice.qrl"}`, 1
+			}
+			for request := 0; request < 2; request++ {
+				w := serveQNS(router, "alice.qrl")
+				if w.Code != wantStatus || w.Body.String() != wantBody {
+					t.Fatalf("status = %d, body = %s, want %d %s", w.Code, w.Body.String(), wantStatus, wantBody)
+				}
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if attempts != wantAttempts {
+				t.Errorf("upstream attempts = %d, want %d", attempts, wantAttempts)
 			}
 		})
 	}

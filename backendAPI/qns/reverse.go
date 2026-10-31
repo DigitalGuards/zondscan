@@ -81,6 +81,8 @@ func (c *Client) ReverseNameWithLookup(
 	}
 	forward, err := lookup(ctx, normalized)
 	if err != nil {
+		// Check the registry first: a registry failure can wrap
+		// ErrExecutionFailed and must stay a retryable error.
 		if errors.Is(err, ErrRegistryLookup) {
 			return Resolution{}, err
 		}

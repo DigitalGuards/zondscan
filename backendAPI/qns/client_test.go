@@ -264,3 +264,57 @@ func TestResolveNameFailsClosedOnMissingAndMalformedRecords(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveNameClassifiesExecutionFailuresByCall(t *testing.T) {
+	deployment := Deployment{
+		registryAddress: "Q" + strings.Repeat("1", 128),
+		expectedChainID: "1337",
+	}
+	cases := []struct {
+		name      string
+		failure   db.RPCError
+		execution bool
+	}{
+		{"revert code", db.RPCError{Code: 3}, true},
+		{"revert message", db.RPCError{Code: -32000, Message: "execution reverted"}, true},
+		{"invalid opcode", db.RPCError{Code: -32000, Message: "invalid opcode: INVALID"}, true},
+		{"out of gas", db.RPCError{Code: -32000, Message: "out of gas"}, true},
+		{"node call timeout", db.RPCError{Code: -32000, Message: "execution aborted (timeout = 5s)"}, false},
+		{"node error", db.RPCError{Code: -32000, Message: "state unavailable"}, false},
+	}
+	for _, tc := range cases {
+		for _, failAt := range []int{0, 1} {
+			t.Run(tc.name+"/call"+string(rune('0'+failAt)), func(t *testing.T) {
+				calls := 0
+				client := NewClient(func(context.Context, string, []interface{}) (json.RawMessage, *db.RPCError, error) {
+					index := calls
+					calls++
+					if index == failAt {
+						failure := tc.failure
+						return nil, &failure, nil
+					}
+					return rawString("0x" + strings.Repeat("2", 128)), nil, nil
+				})
+				resolution, err := client.ResolveName(context.Background(), deployment, "alice.qrl")
+				switch {
+				case failAt == 0:
+					// Registry failures stay retryable errors.
+					if !errors.Is(err, ErrRegistryLookup) || !errors.Is(err, ErrRPC) || resolution != (Resolution{}) {
+						t.Errorf("ResolveName = %#v, %v, want a registry lookup error", resolution, err)
+					}
+				case tc.execution:
+					if want := (Resolution{Name: "alice.qrl", Missing: MissingAddress}); err != nil || resolution != want {
+						t.Errorf("ResolveName = %#v, %v, want %#v", resolution, err, want)
+					}
+				default:
+					if !errors.Is(err, ErrRPC) || errors.Is(err, ErrExecutionFailed) || resolution != (Resolution{}) {
+						t.Errorf("ResolveName = %#v, %v, want a retryable RPC error", resolution, err)
+					}
+				}
+				if calls != failAt+1 {
+					t.Errorf("calls = %d, want %d", calls, failAt+1)
+				}
+			})
+		}
+	}
+}

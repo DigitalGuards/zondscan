@@ -1130,7 +1130,7 @@
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "error": "invalid QNS name" } } }
           },
           "404": {
-            "description": "The name has no resolver or its resolver has no address record.",
+            "description": "The name has no resolver, or its resolver has no address record or fails addr(bytes32) deterministically (a revert or another VM error). Cached for the normal 15-second TTL.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1147,7 +1147,7 @@
           },
           "429": { "$ref": "#/components/responses/RateLimited" },
           "502": {
-            "description": "The node RPC failed, including a node HTTP timeout, or returned a malformed QNS response.",
+            "description": "The node connection or a registry call failed, or the node returned an unknown RPC error or a malformed QNS response.",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "error": "QNS resolution failed" } } }
           },
           "503": {

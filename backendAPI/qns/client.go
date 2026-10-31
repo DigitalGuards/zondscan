@@ -187,6 +187,11 @@ func (c *Client) ResolveName(
 
 	addressResult, err := c.qrlCall(ctx, resolver, addrCallData(node))
 	if err != nil {
+		// A resolver whose addr() fails deterministically has no usable
+		// address record, so both routes cache it as a negative.
+		if errors.Is(err, ErrExecutionFailed) {
+			return Resolution{Name: normalized, Missing: MissingAddress}, nil
+		}
 		return Resolution{}, err
 	}
 	address, zero, err := decodeAddressWord(addressResult)
@@ -234,6 +239,32 @@ func (c *Client) rpcString(
 	return *result, nil
 }
 
+// executionFailureMessages are go-qrl's core/vm errors. A qrl_call runs
+// under the node's RPC gas cap, far above any resolver read, so out of gas
+// is as deterministic as a revert.
+var executionFailureMessages = map[string]bool{
+	"execution reverted": true,
+	"out of gas":         true,
+	"contract creation code storage out of gas": true,
+	"max call depth exceeded":                   true,
+	"insufficient balance for transfer":         true,
+	"contract address collision":                true,
+	"max initcode size exceeded":                true,
+	"max code size exceeded":                    true,
+	"invalid jump destination":                  true,
+	"write protection":                          true,
+	"return data out of bounds":                 true,
+	"gas uint64 overflow":                       true,
+	"invalid code: must not begin with 0xef":    true,
+	"nonce uint64 overflow":                     true,
+}
+
+// executionFailurePrefixes cover the go-qrl VM errors with variable
+// suffixes: revert reasons, invalid opcodes and stack bounds.
+var executionFailurePrefixes = []string{
+	"execution reverted:", "invalid opcode:", "stack underflow (", "stack limit reached ",
+}
+
 func isExecutionFailure(rpcErr *db.RPCError) bool {
 	// Code 3 identifies a revert. Other VM failures use the node's generic
 	// server-error code and a recognized execution message.
@@ -244,22 +275,12 @@ func isExecutionFailure(rpcErr *db.RPCError) bool {
 		return false
 	}
 	message := strings.ToLower(strings.TrimSpace(rpcErr.Message))
-	switch message {
-	case "execution reverted", "invalid opcode", "out of gas",
-		"contract creation code storage out of gas", "max call depth exceeded",
-		"insufficient balance for transfer", "contract address collision",
-		"max initcode size exceeded", "max code size exceeded", "invalid jump destination",
-		"write protection", "return data out of bounds", "gas uint64 overflow",
-		"invalid code: must not begin with 0xef", "nonce uint64 overflow",
-		"stack underflow", "stack overflow":
+	if executionFailureMessages[message] {
 		return true
 	}
-	// Only these VM messages have variable suffixes. Unrecognized RPC
-	// messages, including node timeouts and cancellations, remain retryable.
-	for _, prefix := range []string{
-		"execution reverted:", "invalid opcode:", "stack underflow (",
-		"stack overflow (", "stack limit reached ",
-	} {
+	// Unrecognized RPC messages, including the node's own call timeout and
+	// cancellations, remain retryable.
+	for _, prefix := range executionFailurePrefixes {
 		if strings.HasPrefix(message, prefix) {
 			return true
 		}

@@ -467,9 +467,9 @@ Names use the conservative `@qns/sdk` normalization profile: ASCII uppercase fol
 | Status | Meaning |
 |--------|---------|
 | `400` | The name fails normalization or is outside `.qrl`. |
-| `404` | The registry has no resolver, or the resolver has no native address record. |
+| `404` | The registry has no resolver, or the resolver has no native address record. A resolver whose `addr(bytes32)` call reverts or fails another deterministic VM check counts as having no address record. |
 | `429` | The per-IP resolution limit was exceeded. |
-| `502` | The node connection failed or timed out, or the node returned an RPC error, malformed ABI data, or an invalid address checksum. |
+| `502` | The node connection failed, a registry call failed, or the node returned an unknown RPC error, malformed ABI data, or an invalid address checksum. |
 | `503` | QNS deployment variables are absent or invalid, the chain ID differs, or the registry has no bytecode. |
 | `504` | The bounded resolution request timed out. |
 
