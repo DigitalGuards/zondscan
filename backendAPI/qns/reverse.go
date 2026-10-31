@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"math/big"
 	"strings"
 )
@@ -34,8 +35,8 @@ func (c *Client) ReverseName(ctx context.Context, deployment Deployment, address
 }
 
 // ReverseNameWithLookup allows the route to share cached forward records.
-// Reverts and invalid records are negative results. RPC failures remain errors
-// so a shared cache can retry transient failures on the next request.
+// Resolver execution failures and invalid records are negative results.
+// Registry and transport failures remain errors so a shared cache can retry.
 func (c *Client) ReverseNameWithLookup(
 	ctx context.Context,
 	deployment Deployment,
@@ -52,11 +53,11 @@ func (c *Client) ReverseNameWithLookup(
 	node := reverseNodeFor(canonical)
 	resolverResult, err := c.qrlCall(ctx, deployment.registryAddress, resolverCallData(node))
 	if err != nil {
-		return Resolution{}, err
+		return Resolution{}, fmt.Errorf("%w: %w", ErrRegistryLookup, err)
 	}
 	resolver, zero, err := decodeAddressWord(resolverResult)
 	if err != nil {
-		return Resolution{}, err
+		return Resolution{}, fmt.Errorf("%w: %w", ErrRegistryLookup, err)
 	}
 	if zero {
 		return Resolution{Address: canonical, Missing: MissingResolver}, nil
@@ -65,7 +66,7 @@ func (c *Client) ReverseNameWithLookup(
 	missing := Resolution{Address: canonical, Missing: MissingName}
 	nameResult, err := c.qrlCall(ctx, resolver, nameCallData(node))
 	if err != nil {
-		if errors.Is(err, ErrExecutionReverted) {
+		if errors.Is(err, ErrExecutionFailed) {
 			return missing, nil
 		}
 		return Resolution{}, err
@@ -80,7 +81,10 @@ func (c *Client) ReverseNameWithLookup(
 	}
 	forward, err := lookup(ctx, normalized)
 	if err != nil {
-		if errors.Is(err, ErrExecutionReverted) || errors.Is(err, ErrMalformedRecord) {
+		if errors.Is(err, ErrRegistryLookup) {
+			return Resolution{}, err
+		}
+		if errors.Is(err, ErrExecutionFailed) || errors.Is(err, ErrMalformedRecord) {
 			return missing, nil
 		}
 		return Resolution{}, err
