@@ -12,7 +12,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -164,10 +166,22 @@ func qnsEncodedName(name string) string {
 }
 
 func TestQNSReverseRouteCachesOnlyRecordNegatives(t *testing.T) {
-	for _, failure := range []string{
-		"transport", "timeout", "deadline", "canceled", "node", "unrelated message", "unrelated code",
+	executionErrors := []string{
+		"invalid opcode: INVALID", "out of gas",
+		"contract creation code storage out of gas", "max call depth exceeded",
+		"insufficient balance for transfer", "contract address collision",
+		"max initcode size exceeded", "max code size exceeded", "invalid jump destination",
+		"write protection", "return data out of bounds", "gas uint64 overflow",
+		"invalid code: must not begin with 0xef", "nonce uint64 overflow",
+		"stack underflow (0 <=> 1)", "stack limit reached 1024 (1023)",
+		"execution reverted: missing record",
+	}
+	failures := append([]string{
+		"transport", "timeout", "HTTP timeout", "deadline", "canceled", "node", "unrelated message", "unrelated code",
+		"RPC timeout", "RPC deadline", "RPC cancellation", "unrelated opcode message",
 		"revert code", "revert message", "revert reason", "malformed", "empty", "null", "non-string", "invalid JSON",
-	} {
+	}, executionErrors...)
+	for _, failure := range failures {
 		for failAt := 0; failAt < 4; failAt++ {
 			t.Run(fmt.Sprintf("%s/call%d", failure, failAt), func(t *testing.T) {
 				configureQNSRoute(t)
@@ -197,6 +211,8 @@ func TestQNSReverseRouteCachesOnlyRecordNegatives(t *testing.T) {
 							return nil, nil, errors.New("network failure mentioning execution reverted")
 						case "timeout":
 							return nil, nil, os.ErrDeadlineExceeded
+						case "HTTP timeout":
+							return nil, nil, fmt.Errorf("rpc transport: %w", &url.Error{Op: http.MethodPost, Err: context.DeadlineExceeded})
 						case "deadline":
 							return nil, nil, fmt.Errorf("call interrupted: %w", context.DeadlineExceeded)
 						case "canceled":
@@ -207,6 +223,14 @@ func TestQNSReverseRouteCachesOnlyRecordNegatives(t *testing.T) {
 							return nil, &db.RPCError{Code: -32000, Message: "upstream failed before execution reverted"}, nil
 						case "unrelated code":
 							return nil, &db.RPCError{Code: -32603, Message: "execution reverted"}, nil
+						case "RPC timeout":
+							return nil, &db.RPCError{Code: -32000, Message: "execution aborted (timeout = 5s)"}, nil
+						case "RPC deadline":
+							return nil, &db.RPCError{Code: -32000, Message: "context deadline exceeded"}, nil
+						case "RPC cancellation":
+							return nil, &db.RPCError{Code: -32000, Message: "context canceled"}, nil
+						case "unrelated opcode message":
+							return nil, &db.RPCError{Code: -32000, Message: "upstream failed before invalid opcode"}, nil
 						case "revert code":
 							return nil, &db.RPCError{Code: 3}, nil
 						case "revert message":
@@ -221,15 +245,19 @@ func TestQNSReverseRouteCachesOnlyRecordNegatives(t *testing.T) {
 							return json.RawMessage(`null`), nil, nil
 						case "non-string":
 							return json.RawMessage(`{}`), nil, nil
-						default:
+						case "invalid JSON":
 							return json.RawMessage(`{`), nil, nil
+						default:
+							return nil, &db.RPCError{Code: -32000, Message: failure}, nil
 						}
 					}
 					return qnsRawString(responses[step]), nil, nil
 				})
 				wantStatus := http.StatusBadGateway
 				wantCalls := 2 + 2*(failAt+1)
-				if failure == "empty" || (failAt > 0 && (strings.HasPrefix(failure, "revert") || failure == "malformed")) {
+				resolverCall := failAt == 1 || failAt == 3
+				recordFailure := strings.HasPrefix(failure, "revert") || slices.Contains(executionErrors, failure) || failure == "malformed"
+				if failure == "empty" || (resolverCall && recordFailure) {
 					wantStatus = http.StatusNotFound
 					wantCalls = 2 + failAt + 1
 				}
@@ -638,6 +666,75 @@ func TestQNSResolveRouteReturns502OnRPCError(t *testing.T) {
 	}
 }
 
+func TestQNSResolveRouteTransportFailuresAreUncached502s(t *testing.T) {
+	failures := []struct {
+		name string
+		err  error
+	}{
+		{"network", errors.New("connection failed")},
+		{"timeout", os.ErrDeadlineExceeded},
+		{"HTTP timeout", fmt.Errorf("rpc transport: %w", &url.Error{Op: http.MethodPost, Err: context.DeadlineExceeded})},
+		{"deadline", fmt.Errorf("call interrupted: %w", context.DeadlineExceeded)},
+		{"cancellation", fmt.Errorf("call interrupted: %w", context.Canceled)},
+	}
+	for _, failure := range failures {
+		for failAt := 0; failAt < 4; failAt++ {
+			t.Run(fmt.Sprintf("%s/call%d", failure.name, failAt), func(t *testing.T) {
+				configureQNSRoute(t)
+				var mu sync.Mutex
+				attempts := 0
+				router := newQNSTestRouter(func(ctx context.Context, method string, params []interface{}) (json.RawMessage, *db.RPCError, error) {
+					mu.Lock()
+					defer mu.Unlock()
+					step := 0
+					result := "0x539"
+					switch method {
+					case "qrl_getCode":
+						step, result = 1, "0x6000"
+					case "qrl_call":
+						step, result = 2, "0x"+strings.Repeat("2", 128)
+						data := params[0].(map[string]interface{})["data"].(string)
+						if strings.HasPrefix(data, "0x3b3b57de") {
+							step = 3
+						}
+					}
+					if step == failAt {
+						if ctx.Err() != nil {
+							t.Error("QNS context expired before the upstream failure")
+						}
+						attempts++
+						return nil, nil, failure.err
+					}
+					return qnsRawString(result), nil, nil
+				})
+				for request := 0; request < 2; request++ {
+					w := serveQNS(router, "alice.qrl")
+					if w.Code != http.StatusBadGateway || w.Body.String() != `{"error":"QNS resolution failed"}` {
+						t.Fatalf("status = %d, body = %s, want 502", w.Code, w.Body.String())
+					}
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				if attempts != 2 {
+					t.Errorf("upstream attempts = %d, want 2", attempts)
+				}
+			})
+		}
+	}
+}
+
+func TestQNSResolveRouteReturns504OnFillDeadline(t *testing.T) {
+	configureQNSRoute(t)
+	router := newQNSTestRouter(func(ctx context.Context, method string, params []interface{}) (json.RawMessage, *db.RPCError, error) {
+		<-ctx.Done()
+		return nil, nil, fmt.Errorf("rpc transport: %w", ctx.Err())
+	})
+	w := serveQNS(router, "alice.qrl")
+	if w.Code != http.StatusGatewayTimeout || w.Body.String() != `{"error":"QNS resolution timed out"}` {
+		t.Fatalf("status = %d, body = %s, want 504", w.Code, w.Body.String())
+	}
+}
+
 func TestQNSResolveRouteFailsClosedOnDeploymentAndRecords(t *testing.T) {
 	cases := []struct {
 		name          string
@@ -689,6 +786,54 @@ func TestQNSResolveRouteFailsClosedOnDeploymentAndRecords(t *testing.T) {
 			}
 			if response.Error != tc.wantError || response.Name != tc.wantName {
 				t.Errorf("response = %#v, want error %q and name %q", response, tc.wantError, tc.wantName)
+			}
+		})
+	}
+}
+
+func TestQNSResolveRouteCachesResolverExecutionFailures(t *testing.T) {
+	for _, failAt := range []int{2, 3} {
+		t.Run(fmt.Sprintf("call%d", failAt), func(t *testing.T) {
+			configureQNSRoute(t)
+			var mu sync.Mutex
+			attempts := 0
+			router := newQNSTestRouter(func(ctx context.Context, method string, params []interface{}) (json.RawMessage, *db.RPCError, error) {
+				mu.Lock()
+				defer mu.Unlock()
+				step := 0
+				result := "0x539"
+				switch method {
+				case "qrl_getCode":
+					step, result = 1, "0x6000"
+				case "qrl_call":
+					step, result = 2, "0x"+strings.Repeat("2", 128)
+					data := params[0].(map[string]interface{})["data"].(string)
+					if strings.HasPrefix(data, "0x3b3b57de") {
+						step = 3
+					}
+				}
+				if step == failAt {
+					attempts++
+					return nil, &db.RPCError{Code: 3}, nil
+				}
+				return qnsRawString(result), nil, nil
+			})
+			// A registry revert stays a retryable 502; a resolver revert is a
+			// cached "no address record".
+			wantStatus, wantBody, wantAttempts := http.StatusBadGateway, `{"error":"QNS resolution failed"}`, 2
+			if failAt == 3 {
+				wantStatus, wantBody, wantAttempts = http.StatusNotFound, `{"error":"QNS name has no address record","name":"alice.qrl"}`, 1
+			}
+			for request := 0; request < 2; request++ {
+				w := serveQNS(router, "alice.qrl")
+				if w.Code != wantStatus || w.Body.String() != wantBody {
+					t.Fatalf("status = %d, body = %s, want %d %s", w.Code, w.Body.String(), wantStatus, wantBody)
+				}
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if attempts != wantAttempts {
+				t.Errorf("upstream attempts = %d, want %d", attempts, wantAttempts)
 			}
 		})
 	}

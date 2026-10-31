@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -135,10 +136,15 @@ func TestReverseNameOmitsUnverifiedNames(t *testing.T) {
 func TestReverseNameClassifiesFailures(t *testing.T) {
 	deployment := Deployment{registryAddress: "Q" + strings.Repeat("1", 128), expectedChainID: "1337"}
 	responses := []string{"0x" + strings.Repeat("2", 128), encodedName("alice.qrl"), "0x" + strings.Repeat("3", 128)}
-	for _, failure := range []string{
+	executionErrors := []string{
+		"invalid opcode: INVALID", "out of gas", "stack underflow (0 <=> 1)",
+		"stack limit reached 1024 (1023)", "write protection", "invalid jump destination",
+	}
+	failures := append([]string{
 		"transport", "timeout", "deadline", "canceled", "node", "unrelated message", "unrelated code",
 		"revert code", "revert message", "revert reason", "malformed", "empty", "null", "non-string", "invalid JSON",
-	} {
+	}, executionErrors...)
+	for _, failure := range failures {
 		for failAt := 0; failAt < 4; failAt++ {
 			t.Run(fmt.Sprintf("%s/call%d", failure, failAt), func(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
@@ -178,8 +184,10 @@ func TestReverseNameClassifiesFailures(t *testing.T) {
 							return json.RawMessage(`null`), nil, nil
 						case "non-string":
 							return json.RawMessage(`{}`), nil, nil
-						default:
+						case "invalid JSON":
 							return json.RawMessage(`{`), nil, nil
+						default:
+							return nil, &db.RPCError{Code: -32000, Message: failure}, nil
 						}
 					}
 					return rawString(responses[index]), nil, nil
@@ -190,10 +198,10 @@ func TestReverseNameClassifiesFailures(t *testing.T) {
 					wantError = ErrMalformedResponse
 				} else if failure == "canceled" {
 					wantError = context.Canceled
-				} else if failure == "deadline" {
-					wantError = context.DeadlineExceeded
 				}
-				negative := failure == "empty" || (failAt > 0 && (strings.HasPrefix(failure, "revert") || failure == "malformed"))
+				resolverCall := failAt == 1 || failAt == 3
+				recordFailure := strings.HasPrefix(failure, "revert") || slices.Contains(executionErrors, failure) || failure == "malformed"
+				negative := failure == "empty" || (resolverCall && recordFailure)
 				if negative {
 					missing := MissingName
 					if failAt == 0 {

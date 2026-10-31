@@ -1130,7 +1130,7 @@
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "error": "invalid QNS name" } } }
           },
           "404": {
-            "description": "The name has no resolver or its resolver has no address record.",
+            "description": "The name has no resolver, or its resolver has no address record or fails addr(bytes32) deterministically (a revert or another VM error). Cached for the normal 15-second TTL.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1147,7 +1147,7 @@
           },
           "429": { "$ref": "#/components/responses/RateLimited" },
           "502": {
-            "description": "The node RPC failed or returned a malformed QNS response.",
+            "description": "The node connection or a registry call failed, or the node returned an unknown RPC error or a malformed QNS response.",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "error": "QNS resolution failed" } } }
           },
           "503": {
@@ -1211,7 +1211,7 @@
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "error": "invalid QNS address" } } }
           },
           "404": {
-            "description": "The reverse resolver or name is missing, the name call or forward verification reverts or returns an empty or malformed record, or forward resolution resolves to a different address. Cached for the normal 15-second TTL.",
+            "description": "The reverse resolver or name is missing, the name resolver or forward address resolver has a deterministic execution failure (such as a revert, invalid opcode, out of gas, stack underflow or overflow, or write protection) or returns an empty or malformed record, the forward resolver is missing, or forward resolution resolves to a different address. Cached for the normal 15-second TTL.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1227,7 +1227,7 @@
           },
           "429": { "$ref": "#/components/responses/RateLimited" },
           "502": {
-            "description": "The node RPC failed, timed out, was canceled, returned a non-revert RPC error or malformed RPC envelope, or the reverse registry lookup failed. Uncached so the next request retries.",
+            "description": "The node RPC failed, timed out, was canceled, returned an unknown RPC error or malformed RPC envelope, or a registry lookup failed or returned a malformed resolver word during the reverse lookup or its forward verification. Uncached so the next request retries.",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "error": "QNS resolution failed" } } }
           },
           "503": {
