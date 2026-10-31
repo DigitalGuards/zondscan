@@ -467,20 +467,20 @@ Names use the conservative `@qns/sdk` normalization profile: ASCII uppercase fol
 | Status | Meaning |
 |--------|---------|
 | `400` | The name fails normalization or is outside `.qrl`. |
-| `404` | The registry has no resolver, or the resolver has no native address record. |
+| `404` | The registry has no resolver, or the resolver has no native address record. A resolver whose `addr(bytes32)` call reverts or fails another deterministic VM check counts as having no address record. |
 | `429` | The per-IP resolution limit was exceeded. |
-| `502` | The node returned an RPC error, malformed ABI data, or an invalid address checksum. |
+| `502` | The node connection failed, a registry call failed, or the node returned an unknown RPC error, malformed ABI data, or an invalid address checksum. |
 | `503` | QNS deployment variables are absent or invalid, the chain ID differs, or the registry has no bytecode. |
 | `504` | The bounded resolution request timed out. |
 
 **Protocol checks:** The backend verifies `qrl_chainId` and non-zero registry code before resolving. It then performs `resolver(bytes32)` followed by `addr(bytes32)` using the SDK's EIP-137 namehash and QRVM64 64-byte ABI words. Successful deployment checks and normalized-name results are cached for 15 seconds. Returned addresses use canonical QIP-55 checksum casing.
 
-The forward route has its own per-IP bucket: burst 30, refilling 30 per minute. A matching nonempty `QNS_INTERNAL_TOKEN` supplied in `X-QNS-Internal-Token` bypasses the limiter without consuming its allowance. Set the same server-only value on the backend and frontend server. An empty or unset value disables the bypass; wrong or missing headers use the normal limits.
+The forward route has its own per-IP bucket: burst 30, refilling 30 per minute. A matching nonempty `QNS_INTERNAL_TOKEN` supplied in `X-QNS-Internal-Token` bypasses the limiter without consuming its allowance. Set the same server-only value on the backend and frontend server only when `HANDLER_URL` reaches the backend over loopback or a private network, because the header carries the token in clear text. An empty or unset value disables the bypass; wrong or missing headers use the normal limits.
 
 #### `GET /qns/reverse/:address`
 Look up an address's normalized QNS primary name and verify that forward resolution returns the same canonical QIP-55 address. The reverse route has an independent per-IP bucket: burst 60, refilling 60 per minute, with the same optional internal caller bypass as the forward route.
 
-Verified names and real negatives are cached for the normal 15-second backend TTL. A missing reverse resolver, empty or malformed name record, contract revert from the name call or forward verification, missing forward record, or address mismatch returns `404` with `QNS address has no verified primary name`. Network errors, timeouts, context deadlines or cancellation, non-revert RPC errors, and malformed RPC envelopes return `502` and remain uncached so the next request retries. Reverse registry lookup failures also remain uncached. Deployment configuration failures return `503`.
+Verified names and real negatives are cached for the normal 15-second backend TTL. A missing reverse resolver, empty or malformed name record, deterministic execution failure from the name resolver or forward address resolver, invalid or missing forward address record, or address mismatch returns `404` with `QNS address has no verified primary name`. Deterministic execution failures include execution reverts, invalid opcodes, out of gas, stack underflow or overflow, write protection, and other recognized VM errors. Network errors, timeouts, context deadlines or cancellation, unknown RPC errors, and malformed RPC envelopes return `502` and remain uncached so the next request retries. Registry lookup failures, including malformed resolver words, return uncached `502` responses during both the reverse lookup and its forward verification. Deployment configuration failures return `503`.
 
 The frontend server shares a 60-second Next data-cache entry per address. Its QNS requests carry only the optional constant internal-token header. Reverse lookup runs alongside the address aggregate within a 1500 ms bound; metadata queries the reverse lookup independently of the aggregate.
 
@@ -1150,7 +1150,7 @@ type PendingTransaction struct {
 | `NODE_URL` | No | `http://127.0.0.1:8545` | Zond node RPC endpoint used for balance and configured QNS reads |
 | `QNS_REGISTRY_ADDRESS` | No | -- | Deployed QNS registry as a non-zero QIP-55 address. Both deployment variables are required to enable QNS lookups. |
 | `QNS_EXPECTED_CHAIN_ID` | No | -- | Expected registry deployment chain ID in decimal or `0x` hex. Checked against `qrl_chainId` before resolution. |
-| `QNS_INTERNAL_TOKEN` | No | -- | Optional server-only secret shared by backend and frontend. A matching `X-QNS-Internal-Token` header bypasses both QNS limiters without counting the request. Empty or unset disables the bypass. |
+| `QNS_INTERNAL_TOKEN` | No | -- | Optional server-only secret shared by backend and frontend. Set only when `HANDLER_URL` reaches the backend over loopback or a private network, because the `X-QNS-Internal-Token` header carries the token in clear text. A matching header bypasses both QNS limiters without counting the request. Empty or unset disables the bypass. |
 | `APP_ENV` | No | `development` | Environment mode. Set to `production` for HTTPS. |
 | `HTTP_PORT` | No | `:8080` | HTTP listen port (development mode) |
 | `HTTPS_PORT` | No* | -- | HTTPS listen port (production mode; required if `APP_ENV=production`) |

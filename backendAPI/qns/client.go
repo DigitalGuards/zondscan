@@ -25,7 +25,7 @@ var (
 	ErrRegistryUnavailable = errors.New("QNS registry code is unavailable")
 	ErrRegistryLookup      = errors.New("QNS registry lookup failed")
 	ErrRPC                 = errors.New("QNS RPC failure")
-	ErrExecutionReverted   = errors.New("QNS execution reverted")
+	ErrExecutionFailed     = errors.New("QNS execution failed")
 	ErrMalformedRecord     = errors.New("malformed QNS record")
 	ErrMalformedResponse   = errors.New("malformed QNS RPC response")
 	ErrInvalidAddress      = errors.New("invalid QNS address response")
@@ -179,7 +179,7 @@ func (c *Client) ResolveName(
 	}
 	resolver, zero, err := decodeAddressWord(resolverResult)
 	if err != nil {
-		return Resolution{}, fmt.Errorf("%w: %w: %w", ErrRegistryLookup, ErrMalformedRecord, err)
+		return Resolution{}, fmt.Errorf("%w: %w", ErrRegistryLookup, err)
 	}
 	if zero {
 		return Resolution{Name: normalized, Missing: MissingResolver}, nil
@@ -187,6 +187,11 @@ func (c *Client) ResolveName(
 
 	addressResult, err := c.qrlCall(ctx, resolver, addrCallData(node))
 	if err != nil {
+		// A resolver whose addr() fails deterministically has no usable
+		// address record, so both routes cache it as a negative.
+		if errors.Is(err, ErrExecutionFailed) {
+			return Resolution{Name: normalized, Missing: MissingAddress}, nil
+		}
 		return Resolution{}, err
 	}
 	address, zero, err := decodeAddressWord(addressResult)
@@ -216,21 +221,14 @@ func (c *Client) rpcString(
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return "", ctxErr
 		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			return "", context.DeadlineExceeded
-		}
-		if errors.Is(err, context.Canceled) {
-			return "", context.Canceled
-		}
+		// An upstream HTTP timeout is an RPC failure while our own context
+		// remains active. The forward route keeps 504 for its own context
+		// deadline or cancellation.
 		return "", fmt.Errorf("%w: %s transport", ErrRPC, method)
 	}
 	if rpcErr != nil {
-		// Code 3 identifies an execution revert. Some RPC servers use
-		// -32000 with the explicit execution-reverted message.
-		message := strings.ToLower(strings.TrimSpace(rpcErr.Message))
-		if method == "qrl_call" && (rpcErr.Code == 3 ||
-			(rpcErr.Code == -32000 && (message == "execution reverted" || strings.HasPrefix(message, "execution reverted:")))) {
-			return "", fmt.Errorf("%w: %w", ErrRPC, ErrExecutionReverted)
+		if method == "qrl_call" && isExecutionFailure(rpcErr) {
+			return "", fmt.Errorf("%w: %w", ErrRPC, ErrExecutionFailed)
 		}
 		return "", fmt.Errorf("%w: %s returned code %d", ErrRPC, method, rpcErr.Code)
 	}
@@ -239,6 +237,55 @@ func (c *Client) rpcString(
 		return "", fmt.Errorf("%w: %s result", ErrMalformedResponse, method)
 	}
 	return *result, nil
+}
+
+// executionFailureMessages are go-qrl's core/vm errors. A qrl_call runs
+// under the node's RPC gas cap, far above any resolver read, so out of gas
+// is as deterministic as a revert.
+var executionFailureMessages = map[string]bool{
+	"execution reverted": true,
+	"out of gas":         true,
+	"contract creation code storage out of gas": true,
+	"max call depth exceeded":                   true,
+	"insufficient balance for transfer":         true,
+	"contract address collision":                true,
+	"max initcode size exceeded":                true,
+	"max code size exceeded":                    true,
+	"invalid jump destination":                  true,
+	"write protection":                          true,
+	"return data out of bounds":                 true,
+	"gas uint64 overflow":                       true,
+	"invalid code: must not begin with 0xef":    true,
+	"nonce uint64 overflow":                     true,
+}
+
+// executionFailurePrefixes cover the go-qrl VM errors with variable
+// suffixes: revert reasons, invalid opcodes and stack bounds.
+var executionFailurePrefixes = []string{
+	"execution reverted:", "invalid opcode:", "stack underflow (", "stack limit reached ",
+}
+
+func isExecutionFailure(rpcErr *db.RPCError) bool {
+	// Code 3 identifies a revert. Other VM failures use the node's generic
+	// server-error code and a recognized execution message.
+	if rpcErr.Code == 3 {
+		return true
+	}
+	if rpcErr.Code != -32000 {
+		return false
+	}
+	message := strings.ToLower(strings.TrimSpace(rpcErr.Message))
+	if executionFailureMessages[message] {
+		return true
+	}
+	// Unrecognized RPC messages, including the node's own call timeout and
+	// cancellations, remain retryable.
+	for _, prefix := range executionFailurePrefixes {
+		if strings.HasPrefix(message, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeChainID(value string) (string, error) {
