@@ -18,6 +18,7 @@ const (
 	MaxNameBytes = 255
 	abiWordHex   = 128
 
+	ownerSelector    = "02571be3"
 	resolverSelector = "0178b8bf"
 	addrSelector     = "3b3b57de"
 	nameSelector     = "691f3431"
@@ -88,6 +89,10 @@ func keccak256(data []byte) [32]byte {
 	var out [32]byte
 	copy(out[:], sum)
 	return out
+}
+
+func ownerCallData(node [32]byte) string {
+	return encodeBytes32Call(ownerSelector, node)
 }
 
 func resolverCallData(node [32]byte) string {

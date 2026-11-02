@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import TransactionView from './transaction-view';
+import QnsNodeView from './qns-node-view';
+import { resolveUnknownHash } from './hash-fallback';
 import type { TransactionDetails } from '@/app/types';
 import { sharedMetadata } from '@/app/lib/seo/metaData';
 import { isTxHash } from '@/app/lib/helpers';
@@ -175,12 +177,21 @@ export default async function TransactionPage({ params }: PageProps): Promise<JS
   // the catch block (React doesn't render synchronously), so the rule
   // react-hooks/error-boundaries flags it. Resolve the transaction first,
   // then return the JSX outside the try.
-  let transaction;
+  let transaction: TransactionDetails | undefined;
+  let missing = false;
+  let failed = false;
   try {
     transaction = await getTransaction(txHash);
   } catch (error) {
-    if (error instanceof TransactionNotFoundError) notFound();
-    console.error('Error in TransactionPage:', error);
+    if (error instanceof TransactionNotFoundError) {
+      missing = true;
+    } else {
+      console.error('Error in TransactionPage:', error);
+      failed = true;
+    }
+  }
+
+  if (failed) {
     return (
       <div className="container mx-auto px-4">
         <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg mt-6">
@@ -191,6 +202,16 @@ export default async function TransactionPage({ params }: PageProps): Promise<JS
         </div>
       </div>
     );
+  }
+
+  if (missing || !transaction) {
+    // Block hashes and QNS name hashes share the 0x + 64 hex shape. The
+    // transaction 404 is definitive, so any failed follow-up check ends at
+    // the not-found page. redirect() stays outside try/catch.
+    const fallback = await resolveUnknownHash(txHash, config.handlerUrl);
+    if (fallback.kind === 'block') redirect(`/block/${fallback.number}`);
+    if (fallback.kind === 'qns') return <QnsNodeView record={fallback.record} />;
+    notFound();
   }
   return <TransactionView transaction={transaction} />;
 }

@@ -2,6 +2,8 @@ package routes
 
 import (
 	"backendAPI/db"
+	"backendAPI/models"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -109,36 +111,18 @@ func handleBlocks(c *gin.Context) {
 	c.JSON(http.StatusOK, v)
 }
 
-// handleBlock serves GET /block/:query, the block detail endpoint.
+// handleBlock serves GET /block/:query, the block detail endpoint. The
+// query is a block number (decimal or 0x hex) or a 0x + 64 hex block hash.
 func handleBlock(c *gin.Context) {
 	blockStr := c.Param("query")
-	var blockNum uint64
-	var err error
 
-	// Stays on strconv (not hexutil): the strconv error text below is
-	// appended to the public 400 body, so swapping the parser would
-	// change a client-visible message.
-	if strings.HasPrefix(blockStr, "0x") {
-		// Handle hex format by removing 0x prefix
-		blockNum, err = strconv.ParseUint(blockStr[2:], 16, 64)
-	} else {
-		// Handle decimal format
-		blockNum, err = strconv.ParseUint(blockStr, 10, 64)
-	}
-
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid block number. Please provide a decimal number or hex with 0x prefix: " + err.Error(),
-		})
+	block, ok := lookupBlock(c, blockStr)
+	if !ok {
 		return
 	}
-
-	block, err := db.ReturnSingleBlock(blockNum)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": err.Error(),
-		})
-		return
+	blockLabel := block.Result.Number
+	if blockNum, err := parseHexBlockNumber(blockLabel); err == nil {
+		blockLabel = strconv.FormatUint(blockNum, 10)
 	}
 
 	// Per-tx activity counts: each row in the block's tx table can
@@ -153,8 +137,8 @@ func handleBlock(c *gin.Context) {
 		}
 	}
 	lookup := txActivityCounts(txHashes,
-		fmt.Sprintf("token counts block %d", blockNum),
-		fmt.Sprintf("internal counts block %d", blockNum))
+		"token counts block "+blockLabel,
+		"internal counts block "+blockLabel)
 	activity := make(map[string]gin.H, len(txHashes))
 	for _, h := range txHashes {
 		tt, ic := lookup.counts(h)
@@ -167,6 +151,52 @@ func handleBlock(c *gin.Context) {
 		"block":      block,
 		"txActivity": activity,
 	})
+}
+
+// lookupBlock resolves a block query by hash or number. It writes the error
+// response itself and reports false when the handler must stop.
+func lookupBlock(c *gin.Context, blockStr string) (models.ZondUint64Version, bool) {
+	if isValidTxHash(blockStr) {
+		block, err := db.ReturnSingleBlockByHash(blockStr)
+		if errors.Is(err, db.ErrBlockNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "block " + strings.ToLower(blockStr) + " not found"})
+			return block, false
+		}
+		if err != nil {
+			log.Printf("error fetching block by hash %s: %v", blockStr, err)
+			respondInternal(c)
+			return block, false
+		}
+		return block, true
+	}
+
+	var blockNum uint64
+	var err error
+	// Stays on strconv (not hexutil): the strconv error text below is
+	// appended to the public 400 body, so swapping the parser would
+	// change a client-visible message.
+	if strings.HasPrefix(blockStr, "0x") {
+		// Handle hex format by removing 0x prefix
+		blockNum, err = strconv.ParseUint(blockStr[2:], 16, 64)
+	} else {
+		// Handle decimal format
+		blockNum, err = strconv.ParseUint(blockStr, 10, 64)
+	}
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid block number. Please provide a decimal number or hex with 0x prefix: " + err.Error(),
+		})
+		return models.ZondUint64Version{}, false
+	}
+
+	block, err := db.ReturnSingleBlock(blockNum)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": err.Error(),
+		})
+		return block, false
+	}
+	return block, true
 }
 
 // handleBlockSizes serves GET /blocksizes.

@@ -5,6 +5,7 @@ import type { AddressData } from '@/app/types';
 import { decodeToHex, formatAddress } from '../../lib/helpers';
 import { canonicalizeQrlAddress } from '../../lib/qrlAddress';
 import { hasQnsSuffix, normalizeQnsName } from '../../lib/qns';
+import { qnsRequestHeaders } from '../../lib/qnsRequest';
 
 interface ExplorerFetchResponse {
   ok: boolean;
@@ -61,11 +62,6 @@ function defaultFetch(input: string, init?: ExplorerRequestInit): Promise<Explor
 function handlerBase(handlerUrl: string | undefined): string | null {
   const base = handlerUrl?.trim().replace(/\/+$/, '');
   return base || null;
-}
-
-function qnsRequestHeaders(): Pick<RequestInit, 'headers'> {
-  const token = process.env.QNS_INTERNAL_TOKEN;
-  return token ? { headers: { 'X-QNS-Internal-Token': token } } : {};
 }
 
 async function readJson(response: ExplorerFetchResponse): Promise<unknown> {

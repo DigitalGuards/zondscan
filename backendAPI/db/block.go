@@ -4,8 +4,10 @@ import (
 	"backendAPI/configs"
 	"backendAPI/models"
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -105,6 +107,38 @@ func ReturnSingleBlock(block uint64) (models.ZondUint64Version, error) {
 		}
 	}
 
+	return result, nil
+}
+
+// ErrBlockNotFound reports that no completed block carries the requested hash.
+var ErrBlockNotFound = errors.New("block not found")
+
+// blockByHashFilter matches a completed block by exact hash. The node serves
+// lowercase hashes; the caller's spelling is kept as a second exact value so
+// both forms stay on the result_hash index.
+func blockByHashFilter(hash string) primitive.D {
+	spellings := primitive.A{strings.ToLower(hash)}
+	if hash != strings.ToLower(hash) {
+		spellings = append(spellings, hash)
+	}
+	return completedBlockFilter(primitive.D{{
+		Key: "result.hash", Value: primitive.D{{Key: "$in", Value: spellings}},
+	}})
+}
+
+// ReturnSingleBlockByHash finds one completed block by its 0x-prefixed hash.
+func ReturnSingleBlockByHash(hash string) (models.ZondUint64Version, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var result models.ZondUint64Version
+	err := configs.BlocksCollection.FindOne(ctx, blockByHashFilter(hash)).Decode(&result)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return result, ErrBlockNotFound
+	}
+	if err != nil {
+		return result, fmt.Errorf("find block by hash: %w", err)
+	}
 	return result, nil
 }
 
