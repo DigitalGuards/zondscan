@@ -85,7 +85,7 @@ func (v *Verifier) run(
 		return
 	}
 
-	primarySource := primarySourcePath(req.ContractName)
+	primarySource := effectivePrimarySourcePath(req)
 	contract, ok := findContract(out, primarySource, req.ContractName)
 	if !ok {
 		failJob(jobID, target, fmt.Sprintf(
@@ -136,6 +136,8 @@ func (v *Verifier) run(
 		ConstructorArguments: req.ConstructorArguments,
 		Libraries:            req.Libraries,
 		Imports:              req.Imports,
+		PrimarySourcePath:    req.PrimarySourcePath,
+		ViaIR:                req.ViaIR,
 		License:              req.License,
 		VerificationMethod:   "full-source",
 	}
@@ -156,18 +158,22 @@ func failJob(jobID string, target models.VerificationTarget, msg string) {
 }
 
 // wrapStandardJSON builds the Hyperion standard-JSON input from the user-
-// submitted single-file request. The primary source is keyed by
-// `<ContractName>.hyp`; canonical imports retain their exact source content
-// under the same clean paths persisted with the verification record.
+// submitted request. The primary source is keyed by its effective path
+// (`<ContractName>.hyp` unless primarySourcePath names another one);
+// canonical imports retain their exact source content under the same clean
+// paths persisted with the verification record. The resulting `sources` map
+// is the whole virtual source tree the sandboxed compiler sees, so relative
+// imports between directories resolve exactly as they did for the deployer.
 func wrapStandardJSON(req VerifyRequest) (StandardJSONInput, error) {
 	canonicalReq, err := CanonicalizeVerifyRequest(req)
 	if err != nil {
 		return StandardJSONInput{}, err
 	}
 	req = canonicalReq
+	primarySource := effectivePrimarySourcePath(req)
 
 	sources := map[string]StandardJSONSource{
-		primarySourcePath(req.ContractName): {Content: req.SourceCode},
+		primarySource: {Content: req.SourceCode},
 	}
 	for path, content := range req.Imports {
 		sources[path] = StandardJSONSource{Content: content}
@@ -181,6 +187,7 @@ func wrapStandardJSON(req VerifyRequest) (StandardJSONInput, error) {
 	// block with the requested runs.
 	settings := StandardJSONSettings{
 		EVMVersion: req.EvmVersion,
+		ViaIR:      req.ViaIR,
 		OutputSelection: map[string]map[string][]string{
 			"*": {
 				"*": {
@@ -206,10 +213,10 @@ func wrapStandardJSON(req VerifyRequest) (StandardJSONInput, error) {
 	}
 	if len(req.Libraries) > 0 {
 		// Libraries map is keyed by file → name → address. Best-effort:
-		// hoist into a single sentinel "<ContractName>.hyp" entry so users
+		// hoist into a single entry for the primary source unit so users
 		// don't have to know the multi-file shape.
 		settings.Libraries = map[string]map[string]string{
-			req.ContractName + ".hyp": req.Libraries,
+			primarySource: req.Libraries,
 		}
 	}
 

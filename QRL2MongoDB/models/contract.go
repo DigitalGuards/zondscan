@@ -10,6 +10,7 @@ import (
 const (
 	VerificationRecordSchemaV1 = "qrl.contract-verification-record.v1"
 	VerificationRecordSchemaV2 = "qrl.contract-verification-record.v2"
+	VerificationRecordSchemaV3 = "qrl.contract-verification-record.v3"
 )
 
 const (
@@ -166,6 +167,8 @@ type ContractInfo struct {
 	ConstructorArguments         string            `bson:"constructorArguments,omitempty" json:"constructorArguments,omitempty"`
 	Libraries                    map[string]string `bson:"libraries,omitempty" json:"libraries,omitempty"`
 	Imports                      map[string]string `bson:"imports,omitempty" json:"imports,omitempty"`
+	PrimarySourcePath            string            `bson:"primarySourcePath,omitempty" json:"primarySourcePath,omitempty"`
+	ViaIR                        bool              `bson:"viaIR,omitempty" json:"viaIR,omitempty"`
 	SourceBundleDigest           string            `bson:"sourceBundleDigest,omitempty" json:"sourceBundleDigest,omitempty"`
 	VerificationArtifactDigest   string            `bson:"verificationArtifactDigest,omitempty" json:"verificationArtifactDigest,omitempty"`
 	sourceBundleDigestSeen       bool

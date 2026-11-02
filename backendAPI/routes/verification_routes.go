@@ -186,6 +186,8 @@ func verificationJobPayload(
 		ConstructorArguments: req.ConstructorArguments,
 		Libraries:            req.Libraries,
 		Imports:              req.Imports,
+		PrimarySourcePath:    req.PrimarySourcePath,
+		ViaIR:                req.ViaIR,
 		License:              req.License,
 		VerificationMethod:   "full-source",
 	}

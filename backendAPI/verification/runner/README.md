@@ -284,6 +284,46 @@ unambiguous. Schema v1 records lack sandbox identity and classify as
 `legacy-unrecorded`; the backend never infers old provenance from the current
 registry.
 
+## Source trees and via-IR
+
+The verifier compiles every submission through standard JSON. Its `sources`
+map is the compiler's whole file system inside the sandbox: hypc reads no
+host files, and the backend writes none.
+
+- `sourceCode` holds the primary source. Without `primarySourcePath` it is
+  the source unit `<contractName>.hyp` at the root of the virtual tree.
+- `primarySourcePath` places the primary source at the repo-relative path the
+  deployer compiled, for example `contracts/core/Token.hyp`. It must name a
+  `.hyp` file. A path equal to `<contractName>.hyp` is stored as absent.
+- `imports` holds every other source, keyed by its repo-relative path in the
+  same tree. A relative import such as `../lib/Math.hyp` in
+  `contracts/core/Token.hyp` then resolves to `contracts/lib/Math.hyp`,
+  exactly as it did in the deployer's build.
+- `viaIR` sets `settings.viaIR` for the compile.
+
+Source unit names feed the metadata hash in the CBOR trailer, so the tree
+must match the deployer's build path for path. The real-sandbox source tree
+probe proves this: the sandboxed runtime code, trailer included, equals the
+output of `hypc --bin-runtime` run from the project root on disk.
+
+Every path is validated before a job is created. A path is relative, uses
+ASCII letters, digits, and `. _ - @ + ~` separated by `/`, is at most 256
+bytes and 32 segments long, and stays inside the virtual root after `./` and
+`../` segments are resolved. The request is rejected when two paths resolve
+to the same source, differ only by letter case, or use one name as both a
+file and a directory, or when it holds more than 128 sources in total. The
+standard JSON payload stays capped by `VERIFIER_SOURCE_MAX_BYTES`.
+
+Records keep schema `qrl.contract-verification-record.v2` whenever a
+verification uses the default primary path without via-IR, so the
+single-file flow writes the same bytes as before. A verification with a
+nested primary path or via-IR writes schema
+`qrl.contract-verification-record.v3`. Its artifact digest
+`qrl.contract-verification-artifact.v3` hashes the v2 field sequence under
+the v3 schema string, followed by the effective primary path and the via-IR
+flag. Only v3 records may carry `primarySourcePath` or `viaIR`. The frontend
+recomputes both digests, so deploy the frontend before the backend.
+
 ## Shared Go resource limits
 
 ```bash
@@ -324,6 +364,9 @@ The probes validate the empty root and environment, hostname, mandatory
 rlimits, host read and write denial, TCP and Unix socket denial, process
 creation denial, invalid-policy startup failure, a representative optimized
 Hyperion compile, and byte-for-byte equality with direct compiler output.
+`TestRealStaticHyperionVerifiesSourceTreeThroughSandbox` verifies a synthetic
+multi-directory project with `../` imports, with and without via-IR, against
+the same tree compiled by the hypc CLI on disk.
 
 ## Deployment gate
 

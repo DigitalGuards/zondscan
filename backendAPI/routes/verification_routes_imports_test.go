@@ -39,3 +39,37 @@ func TestVerificationJobPayloadPersistsCanonicalEffectiveInputs(t *testing.T) {
 		t.Fatalf("payload optimizerRuns = %d, want 200", payload.OptimizationRuns)
 	}
 }
+
+func TestVerificationJobPayloadPersistsSourceTreeAndViaIR(t *testing.T) {
+	req, err := verification.CanonicalizeVerifyRequest(verification.VerifyRequest{
+		SourceCode:        "contract Primary {}",
+		ContractName:      "Primary",
+		PrimarySourcePath: "./contracts/core/Primary.hyp",
+		ViaIR:             true,
+		Imports: map[string]string{
+			"contracts/lib/Owned.hyp": "contract Owned {}",
+		},
+	})
+	if err != nil {
+		t.Fatalf("canonicalize request: %v", err)
+	}
+	payload := verificationJobPayload(req, &verification.Compiler{BuildID: "current-q128"})
+	if payload.PrimarySourcePath != "contracts/core/Primary.hyp" {
+		t.Fatalf("payload primarySourcePath = %q", payload.PrimarySourcePath)
+	}
+	if !payload.ViaIR {
+		t.Fatal("payload dropped viaIR")
+	}
+
+	single, err := verification.CanonicalizeVerifyRequest(verification.VerifyRequest{
+		SourceCode:        "contract Primary {}",
+		ContractName:      "Primary",
+		PrimarySourcePath: "Primary.hyp",
+	})
+	if err != nil {
+		t.Fatalf("canonicalize default request: %v", err)
+	}
+	if payload := verificationJobPayload(single, &verification.Compiler{BuildID: "current-q128"}); payload.PrimarySourcePath != "" || payload.ViaIR {
+		t.Fatalf("default layout payload = %+v, want no v3 inputs", payload)
+	}
+}
