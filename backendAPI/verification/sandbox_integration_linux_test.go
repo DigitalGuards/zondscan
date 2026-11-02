@@ -83,7 +83,8 @@ int main(int argc, char **argv) {
     puts("Version: %s");
     return 0;
   }
-  if (argc != 2 || strcmp(argv[1], "--standard-json") != 0) return 64;
+  if (argc != 3 || strcmp(argv[1], "--standard-json") != 0 ||
+      strcmp(argv[2], "--no-import-callback") != 0) return 64;
   if (drain_stdin() != 0) return 70;
 
   if (strcmp(%s, "isolation") == 0) {
@@ -278,7 +279,7 @@ func TestRealStaticHyperionCompilesThroughSandbox(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal representative Hyperion input: %v", err)
 	}
-	direct := exec.Command(path, "--standard-json")
+	direct := exec.Command(path, compileArgs()...)
 	direct.Env = []string{}
 	direct.Stdin = bytes.NewReader(payload)
 	directOutput, err := direct.Output()
@@ -287,7 +288,7 @@ func TestRealStaticHyperionCompilesThroughSandbox(t *testing.T) {
 	}
 	sandboxOutput, stderr, err := compiler.runSnapshot(
 		context.Background(),
-		[]string{"--standard-json"},
+		compileArgs(),
 		bytes.NewReader(payload),
 	)
 	if err != nil {

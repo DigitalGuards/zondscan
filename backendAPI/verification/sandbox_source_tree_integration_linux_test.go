@@ -184,3 +184,32 @@ func TestRealStaticHyperionVerifiesSourceTreeThroughSandbox(t *testing.T) {
 		})
 	}
 }
+
+func TestRealStaticHyperionReportsMissingTreeSourceAsCompileError(t *testing.T) {
+	sandbox := realSandboxForIntegrationTest(t)
+	path := strings.TrimSpace(os.Getenv("VERIFIER_TEST_HYPC_BIN"))
+	digest := strings.TrimSpace(os.Getenv("VERIFIER_TEST_HYPC_SHA256"))
+	buildID := strings.TrimSpace(os.Getenv("VERIFIER_TEST_HYPC_BUILD_ID"))
+	if path == "" || digest == "" || buildID == "" {
+		t.Skip("set VERIFIER_TEST_HYPC_BIN, VERIFIER_TEST_HYPC_SHA256, and VERIFIER_TEST_HYPC_BUILD_ID for the real Hyperion probe")
+	}
+	compiler := compilerWithRealSandbox(t, sandbox, path, digest, buildID)
+
+	// A tree that leaves out one imported file must fail with the
+	// compiler's own message. With the import callback enabled, hypc would
+	// try to read the file from disk and the sandbox would kill it.
+	req := sourceTreeIntegrationRequest(true)
+	delete(req.Imports, "contracts/lib/MathLib.hyp")
+	input, err := wrapStandardJSON(req)
+	if err != nil {
+		t.Fatalf("wrap source tree request: %v", err)
+	}
+	output, err := compiler.Compile(context.Background(), input)
+	if err != nil {
+		t.Fatalf("missing source surfaced as an infrastructure error: %v", err)
+	}
+	message := formatCompileErrors(output.FatalErrors())
+	if !strings.Contains(message, `"contracts/lib/MathLib.hyp" not found`) {
+		t.Fatalf("missing source error = %q", message)
+	}
+}

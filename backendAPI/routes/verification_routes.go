@@ -82,6 +82,10 @@ func RegisterVerificationRoutes(router *gin.Engine) {
 			return
 		}
 		req.CompilerVersion = comp.BuildID
+		if err := comp.CheckRequestSize(req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid verification inputs: " + err.Error()})
+			return
+		}
 
 		// Idempotency: if the contract is already verified, return success
 		// without spawning another compile.

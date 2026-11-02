@@ -286,9 +286,13 @@ registry.
 
 ## Source trees and via-IR
 
-The verifier compiles every submission through standard JSON. Its `sources`
-map is the compiler's whole file system inside the sandbox: hypc reads no
-host files, and the backend writes none.
+The verifier compiles every submission through standard JSON with
+`hypc --standard-json --no-import-callback`. Its `sources` map is the
+compiler's whole file system inside the sandbox: hypc reads no host files,
+and the backend writes none. A source the tree leaves out fails as an
+ordinary `Source "..." not found` compile error. Every configured build must
+accept `--no-import-callback`; a build that rejects it fails each compile
+closed. All four pinned builds accept it.
 
 - `sourceCode` holds the primary source. Without `primarySourcePath` it is
   the source unit `<contractName>.hyp` at the root of the virtual tree.
@@ -312,7 +316,9 @@ bytes and 32 segments long, and stays inside the virtual root after `./` and
 `../` segments are resolved. The request is rejected when two paths resolve
 to the same source, differ only by letter case, or use one name as both a
 file and a directory, or when it holds more than 128 sources in total. The
-standard JSON payload stays capped by `VERIFIER_SOURCE_MAX_BYTES`.
+route also builds the standard JSON input and rejects it with 400 when it is
+larger than `VERIFIER_SOURCE_MAX_BYTES`, so an oversized tree never becomes a
+job.
 
 Records keep schema `qrl.contract-verification-record.v2` whenever a
 verification uses the default primary path without via-IR, so the

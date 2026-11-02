@@ -2,6 +2,7 @@ package verification
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -254,5 +255,34 @@ func TestWrapStandardJSONDefaultInputIsUnchanged(t *testing.T) {
 		`"qrvm.deployedBytecode.immutableReferences","metadata"]}}}}`
 	if string(payload) != want {
 		t.Fatalf("default standard JSON changed:\n got %s\nwant %s", payload, want)
+	}
+}
+
+func TestCompilerCheckRequestSizeRejectsOversizedTreesBeforeEnqueue(t *testing.T) {
+	req := sourceTreeRequest()
+	input, err := wrapStandardJSON(req)
+	if err != nil {
+		t.Fatalf("wrap standard JSON: %v", err)
+	}
+	payload, err := json.Marshal(input)
+	if err != nil {
+		t.Fatalf("marshal standard JSON: %v", err)
+	}
+
+	if err := (&Compiler{MaxStdin: len(payload)}).CheckRequestSize(req); err != nil {
+		t.Fatalf("request at the limit was rejected: %v", err)
+	}
+	err = (&Compiler{MaxStdin: len(payload) - 1}).CheckRequestSize(req)
+	if !errors.Is(err, ErrPayloadTooLarge) || !strings.Contains(err.Error(), "above the limit") {
+		t.Fatalf("oversized request error = %v", err)
+	}
+	if err := (&Compiler{}).CheckRequestSize(req); err != nil {
+		t.Fatalf("unlimited compiler rejected the request: %v", err)
+	}
+
+	bad := req
+	bad.PrimarySourcePath = "../Counter.hyp"
+	if err := (&Compiler{MaxStdin: 1 << 20}).CheckRequestSize(bad); err == nil {
+		t.Fatal("invalid request passed the size check")
 	}
 }

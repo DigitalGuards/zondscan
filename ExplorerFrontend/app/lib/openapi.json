@@ -2429,7 +2429,7 @@
             }
           },
           "400": {
-            "description": "Invalid body, invalid address, missing required fields, an invalid primarySourcePath or imports path, or unsupported compilerVersion (the body lists supported builds).",
+            "description": "Invalid body, invalid address, missing required fields, an invalid primarySourcePath or imports path, sources whose standard JSON input exceeds the compiler input limit, or unsupported compilerVersion (the body lists supported builds).",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
           },
           "409": {
