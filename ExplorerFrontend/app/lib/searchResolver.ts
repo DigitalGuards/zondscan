@@ -2,7 +2,12 @@
  * Pure resolver for the SearchBar input. Centralises the rules so the
  * component stays declarative and the rules can be unit-tested.
  *
- * Accepted input shapes (after trim + paste-noise cleanup):
+ * Paste-noise cleanup removes zero-width characters, byte-order marks and
+ * bidi controls anywhere in the input, turns no-break spaces into spaces,
+ * trims, strips surrounding slashes, and removes whitespace inside a value
+ * that is otherwise a hash- or address-length hex string.
+ *
+ * Accepted input shapes (after that cleanup):
  *   - decimal block number               → /block/<n>
  *   - "0x"-prefixed hex block number     → /block/0x<hex>     (≤ 16 hex chars)
  *   - 66-char tx hash ("0x" + 64 hex)    → /tx/<hash>
@@ -29,11 +34,38 @@ const RE_DECIMAL = /^[0-9]+$/;
 const RE_HEX_BLOCK = /^0x[0-9a-fA-F]{1,16}$/;
 const RE_TX_HASH = TX_HASH_RE;
 const RE_BARE_TX_HASH = /^[0-9a-fA-F]{64}$/;
+const RE_PREFIXED_HEX_BODY = /^0[xX]([0-9a-fA-F]+)$/;
+// Hash or address shaped: optional prefix, then a long hex body. Short
+// values such as "12 34" keep their spaces and stay unrecognised.
+const RE_LONG_HEX_LIKE = /^(0[xX]|[Qq])?[0-9a-fA-F]{48,}$/;
+const TX_HASH_HEX_LENGTH = 64;
+// A body this close to 64 hex characters is most likely a mangled
+// transaction hash; longer bodies belong to the address diagnostics.
+// Keep the lower bound equal to the RE_LONG_HEX_LIKE minimum.
+const TX_HASH_NEAR_MIN = 48;
+const TX_HASH_NEAR_MAX = 80;
+
+// Zero-width space/non-joiner/joiner, word joiner, byte-order mark, and the
+// bidi marks, embeddings, overrides and isolates that copy/paste carries.
+const RE_INVISIBLE = /[\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g;
+const RE_NBSP = /[\u00A0\u202F]/g;
+
+/**
+ * Remove paste noise: invisible characters, no-break spaces, surrounding
+ * whitespace and slashes, and whitespace inside a hex value.
+ */
+export function cleanSearchInput(raw: string): string {
+  const visible = raw.replace(RE_INVISIBLE, '').replace(RE_NBSP, ' ');
+  // Strip surrounding slashes so pasted /tx/<hash> URLs don't double up.
+  const trimmed = visible.trim().replace(/^\/+/, '').replace(/\/+$/, '').trim();
+  const compact = trimmed.replace(/\s+/g, '');
+  const joined = compact !== trimmed && RE_LONG_HEX_LIKE.test(compact) ? compact : trimmed;
+  // Hashes route on a lowercase 0x prefix; an uppercase 0X is the same value.
+  return /^0X[0-9a-fA-F]+$/.test(joined) ? `0x${joined.slice(2)}` : joined;
+}
 
 export function resolveSearchPath(raw: string): SearchResolution {
-  // Trim whitespace + strip a single leading slash so pasted /tx/<hash>
-  // URLs from external sources don't double-up.
-  const cleaned = raw.trim().replace(/^\/+/, '').replace(/\/+$/, '');
+  const cleaned = cleanSearchInput(raw);
   if (!cleaned) {
     return { error: 'Enter an address, transaction hash, or block number.' };
   }
@@ -79,11 +111,17 @@ export function resolveSearchPath(raw: string): SearchResolution {
 
   // Per-shape diagnostics so the user knows what they almost got right.
   // Length-first since that's the most common paste mistake.
-  if (cleaned.length === 65 && cleaned.startsWith('0x')) {
-    return { error: 'Transaction hash is one character short (need 64 hex chars after 0x).' };
-  }
-  if (cleaned.length === 67 && cleaned.startsWith('0x')) {
-    return { error: 'Transaction hash is one character too long (need 64 hex chars after 0x).' };
+  const hexBody = RE_PREFIXED_HEX_BODY.exec(cleaned)?.[1];
+  if (
+    hexBody !== undefined &&
+    hexBody.length >= TX_HASH_NEAR_MIN &&
+    hexBody.length <= TX_HASH_NEAR_MAX
+  ) {
+    const count = hexBody.length;
+    const unit = count === 1 ? 'character' : 'characters';
+    return {
+      error: `Transaction hash has ${count} hex ${unit} after 0x; a transaction hash has ${TX_HASH_HEX_LENGTH}.`,
+    };
   }
   if (cleaned.length === 129 && /^[Qq]/.test(cleaned)) {
     return { error: 'Address has a non-hex character after the Q prefix.' };

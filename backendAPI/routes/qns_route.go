@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"os"
@@ -37,6 +38,114 @@ func RegisterQNSRoutes(router *gin.Engine) {
 		qnsRateLimit(60),
 		newQNSReverseHandler(db.NodeRPC, routeCache),
 	)
+	router.GET(
+		"/qns/node/:node",
+		qnsRateLimit(60),
+		newQNSNodeHandler(db.NodeRPC, routeCache),
+	)
+}
+
+// errInvalidCachedDeployment marks a cache entry of the wrong type.
+var errInvalidCachedDeployment = errors.New("invalid cached QNS deployment")
+
+// loadQNSDeployment returns the cached chain ID and registry bytecode check
+// for one configured deployment.
+func loadQNSDeployment(
+	ctx context.Context,
+	client *qns.Client,
+	config qns.Config,
+	responseCache *cache.TTLCache,
+) (qns.Deployment, error) {
+	value, err := responseCache.GetOrComputeContext(
+		ctx,
+		"qns:deployment:"+config.CacheKey(),
+		qnsCacheTTL,
+		func() (interface{}, error) {
+			fillCtx, fillCancel := context.WithTimeout(context.Background(), qnsFillTimeout)
+			defer fillCancel()
+			return client.CheckDeployment(fillCtx, config)
+		},
+	)
+	if err != nil {
+		return qns.Deployment{}, err
+	}
+	deployment, ok := value.(qns.Deployment)
+	if !ok {
+		return qns.Deployment{}, errInvalidCachedDeployment
+	}
+	return deployment, nil
+}
+
+// newQNSNodeHandler serves GET /qns/node/:node. It reports the registry
+// owner and resolver of a 32-byte node and the resolver's name record when
+// that name hashes back to the node. A node without an owner is a 404.
+func newQNSNodeHandler(call qns.RPCFunc, responseCache *cache.TTLCache) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		node, err := qns.ParseNode(c.Param("node"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid QNS node"})
+			return
+		}
+		nodeHex := "0x" + hex.EncodeToString(node[:])
+
+		config, err := qns.ConfigFromEnv()
+		if err != nil {
+			respondQNSError(c, err, false)
+			return
+		}
+		if responseCache == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			return
+		}
+
+		requestCtx, cancel := context.WithTimeout(c.Request.Context(), qnsRequestTimeout)
+		defer cancel()
+		client := qns.NewClient(call)
+
+		deployment, err := loadQNSDeployment(requestCtx, client, config, responseCache)
+		if err != nil {
+			respondQNSError(c, err, false)
+			return
+		}
+
+		value, err := responseCache.GetOrComputeContext(
+			requestCtx,
+			"qns:node:"+config.CacheKey()+":"+nodeHex,
+			qnsCacheTTL,
+			func() (interface{}, error) {
+				fillCtx, fillCancel := context.WithTimeout(context.Background(), qnsFillTimeout)
+				defer fillCancel()
+				return client.LookupNode(fillCtx, deployment, node)
+			},
+		)
+		if err != nil {
+			respondQNSError(c, err, false)
+			return
+		}
+		record, ok := value.(qns.NodeRecord)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			return
+		}
+		if record.Owner == "" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "QNS node has no owner", "node": nodeHex})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"node":     nodeHex,
+			"owner":    record.Owner,
+			"resolver": optionalString(record.Resolver),
+			"name":     optionalString(record.Name),
+		})
+	}
+}
+
+// optionalString maps an empty value to JSON null.
+func optionalString(value string) interface{} {
+	if value == "" {
+		return nil
+	}
+	return value
 }
 
 func qnsRateLimit(limit float64) gin.HandlerFunc {
@@ -99,23 +208,9 @@ func newQNSHandler(call qns.RPCFunc, responseCache *cache.TTLCache, reverse bool
 		defer cancel()
 		client := qns.NewClient(call)
 
-		deploymentValue, err := responseCache.GetOrComputeContext(
-			requestCtx,
-			"qns:deployment:"+config.CacheKey(),
-			qnsCacheTTL,
-			func() (interface{}, error) {
-				fillCtx, fillCancel := context.WithTimeout(context.Background(), qnsFillTimeout)
-				defer fillCancel()
-				return client.CheckDeployment(fillCtx, config)
-			},
-		)
+		deployment, err := loadQNSDeployment(requestCtx, client, config, responseCache)
 		if err != nil {
 			respondQNSError(c, err, reverse)
-			return
-		}
-		deployment, ok := deploymentValue.(qns.Deployment)
-		if !ok {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
 

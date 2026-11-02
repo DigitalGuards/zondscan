@@ -172,7 +172,7 @@ Paginated list of latest blocks.
 - Projection includes: `number`, `timestamp`, `hash`, `transactions`.
 
 #### `GET /block/:query`
-Single block by number. Accepts both decimal (`420`) and hex (`0x1a4`) formats.
+Single block by number or hash. Accepts decimal (`420`) and hex (`0x1a4`) block numbers, and a block hash written as `0x` followed by 64 hex characters. Hash lookups match completed blocks through the `result_hash` index and return `404` when no stored block carries that hash.
 
 **Response:**
 ```json
@@ -483,6 +483,34 @@ Look up an address's normalized QNS primary name and verify that forward resolut
 Verified names and real negatives are cached for the normal 15-second backend TTL. A missing reverse resolver, empty or malformed name record, deterministic execution failure from the name resolver or forward address resolver, invalid or missing forward address record, or address mismatch returns `404` with `QNS address has no verified primary name`. Deterministic execution failures include execution reverts, invalid opcodes, out of gas, stack underflow or overflow, write protection, and other recognized VM errors. Network errors, timeouts, context deadlines or cancellation, unknown RPC errors, and malformed RPC envelopes return `502` and remain uncached so the next request retries. Registry lookup failures, including malformed resolver words, return uncached `502` responses during both the reverse lookup and its forward verification. Deployment configuration failures return `503`.
 
 The frontend server shares a 60-second Next data-cache entry per address. Its QNS requests carry only the optional constant internal-token header. Reverse lookup runs alongside the address aggregate within a 1500 ms bound; metadata queries the reverse lookup independently of the aggregate.
+
+#### `GET /qns/node/:node`
+Look up a QNS name hash: a 32-byte EIP-137 namehash node written as `0x` followed by 64 hex characters. The backend reads `owner(bytes32)` and `resolver(bytes32)` from the configured registry, then the resolver's `name(bytes32)` record. The name is returned only when the normalized name hashes back to the requested node; otherwise `name` is `null`.
+
+**Response:**
+```json
+{
+  "node": "0xefe3586aa9a851831a32d38044822af21cc5380e38f05cdc0dd562b4cfada103",
+  "owner": "QaaaAAaaaAAaAaaAaAAAAaAAAaAaAaAAaAaaAaaaaAAAAAAAAaAAAAaAaAAaaAAaaaaAaAAAAaaAaAAaaaaaaAaAAaaaaAaAaaaaAaaaAAAAaAAAAaAaAaaAAAaAaaaAA",
+  "resolver": "Q2222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
+  "name": "alice.qrl"
+}
+```
+
+**Failure responses:**
+
+| Status | Meaning |
+|--------|---------|
+| `400` | The node is not `0x` followed by 64 hex characters. |
+| `404` | The registry owner is the zero address (`QNS node has no owner`). |
+| `429` | The per-IP limit was exceeded. |
+| `502` | The node connection failed, or a registry owner or resolver lookup failed or returned a malformed word. |
+| `503` | QNS deployment variables are absent or invalid, the chain ID differs, or the registry has no bytecode. |
+| `504` | The bounded lookup timed out. |
+
+A missing resolver returns `resolver: null` and `name: null`. A name call that reverts or fails another deterministic VM check, an empty or malformed name record, and a name whose namehash differs from the node all return `name: null`. The route shares the deployment check and 15-second cache of the other QNS routes, and has its own per-IP bucket: burst 60, refilling 60 per minute, with the same optional internal caller bypass.
+
+The explorer's transaction page uses this route together with `GET /block/:query`: when a `0x` + 64 hex search matches no transaction, a block hash redirects to its block page and an owned QNS node shows its name, owner and resolver.
 
 #### `GET /walletdistribution/:query`
 Count wallets with balance greater than the specified threshold (in units of 1e12 wei).
