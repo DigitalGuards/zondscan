@@ -565,9 +565,9 @@
         "tags": ["Blocks"],
         "operationId": "getBlock",
         "summary": "Block detail",
-        "description": "Fetches one block by number, in decimal or 0x-prefixed hex form, plus per-transaction activity counts.",
+        "description": "Fetches one block by number, in decimal or 0x-prefixed hex form, or by its 0x + 64 hex block hash, plus per-transaction activity counts.",
         "parameters": [
-          { "name": "query", "in": "path", "required": true, "description": "Block number as a decimal integer or 0x-prefixed hex string.", "schema": { "type": "string" } }
+          { "name": "query", "in": "path", "required": true, "description": "Block number as a decimal integer or 0x-prefixed hex string (up to 16 hex digits), or a block hash as 0x followed by 64 hex characters.", "schema": { "type": "string" } }
         ],
         "responses": {
           "200": {
@@ -623,7 +623,8 @@
           "404": {
             "description": "Block not found.",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
-          }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
         }
       }
     },
@@ -1232,6 +1233,81 @@
           },
           "503": {
             "description": "QNS is unconfigured, the configured chain does not match, or registry bytecode is unavailable.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/qns/node/{node}": {
+      "get": {
+        "tags": ["Addresses"],
+        "operationId": "lookupQnsNode",
+        "summary": "Look up a QNS name hash",
+        "description": "Reads owner(bytes32) and resolver(bytes32) for a 32-byte QNS node (EIP-137 namehash) from the configured registry, then the resolver's name(bytes32) record. The name is returned only when the normalized name hashes back to the requested node; otherwise name is null. Uses the forward resolver's registry, chain and bytecode checks, bounded timeouts and 15-second server cache. Its independent per-IP bucket holds 60 requests and refills 60 per minute. Server callers with a matching nonempty QNS_INTERNAL_TOKEN in X-QNS-Internal-Token bypass this limit without consuming its allowance.",
+        "parameters": [
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "description": "QNS node: 0x or 0X followed by 64 hex characters.",
+            "schema": { "type": "string", "pattern": "^0[xX][0-9a-fA-F]{64}$" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The node has a nonzero registry owner.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "node": { "type": "string", "description": "The node as 0x followed by 64 lowercase hex characters." },
+                    "owner": { "type": "string", "description": "Canonical QIP-55 address of the registry owner." },
+                    "resolver": { "type": ["string", "null"], "description": "Canonical QIP-55 resolver address, or null when no resolver is set." },
+                    "name": { "type": ["string", "null"], "description": "Normalized name published by the resolver whose namehash equals the node, or null." }
+                  },
+                  "required": ["node", "owner", "resolver", "name"]
+                },
+                "example": {
+                  "node": "0xefe3586aa9a851831a32d38044822af21cc5380e38f05cdc0dd562b4cfada103",
+                  "owner": "QaaaAAaaaAAaAaaAaAAAAaAAAaAaAaAAaAaaAaaaaAAAAAAAAaAAAAaAaAAaaAAaaaaAaAAAAaaAaAAaaaaaaAaAAaaaaAaAaaaaAaaaAAAAaAAAAaAaAaaAAAaAaaaAA",
+                  "resolver": "Q2222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
+                  "name": "alice.qrl"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The node is not 0x followed by 64 hex characters.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "error": "invalid QNS node" } } }
+          },
+          "404": {
+            "description": "The registry owner of the node is the zero address. Cached for the normal 15-second TTL.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string", "enum": ["QNS node has no owner"] },
+                    "node": { "type": "string" }
+                  },
+                  "required": ["error", "node"]
+                }
+              }
+            }
+          },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "502": {
+            "description": "The node RPC failed, returned an unknown RPC error or malformed envelope, or a registry owner or resolver lookup failed. A deterministic execution failure or malformed record from the resolver's name call yields name null. Uncached so the next request retries.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "error": "QNS resolution failed" } } }
+          },
+          "503": {
+            "description": "QNS is unconfigured, the configured chain does not match, or registry bytecode is unavailable.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "504": {
+            "description": "The bounded lookup timed out.",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
           },
           "500": { "$ref": "#/components/responses/InternalError" }

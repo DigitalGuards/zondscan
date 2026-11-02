@@ -59,6 +59,11 @@ describe('resolveSearchPath', () => {
     });
   });
 
+  it('routes an uppercase 0X transaction hash like 0x', () => {
+    const hash = 'ab'.repeat(32);
+    expect(resolveSearchPath(`0X${hash}`)).toEqual({ path: `/tx/0x${hash}` });
+  });
+
   it('0x and 0X aliases route to the canonical checksum address', () => {
     expect(resolveSearchPath(`0x${ADDR128}`)).toEqual({
       path: `/address/${CHECKSUMMED_ADDRESS}`,
@@ -111,14 +116,71 @@ describe('resolveSearchPath', () => {
     expect(resolveSearchPath(address)).toEqual({ error: expect.any(String) });
   });
 
-  it('reports a length-specific error for "0x + 63 hex" (one short)', () => {
-    const result = resolveSearchPath('0x' + 'a'.repeat(63));
-    expect('error' in result && result.error).toMatch(/one character short/i);
+  it.each([63, 65])('reports the actual count for "0x + %i hex"', (count) => {
+    const result = resolveSearchPath('0x' + 'a'.repeat(count));
+    expect(result).toEqual({
+      error: `Transaction hash has ${count} hex characters after 0x; a transaction hash has 64.`,
+    });
   });
 
-  it('reports a length-specific error for "0x + 65 hex" (one too long)', () => {
-    const result = resolveSearchPath('0x' + 'a'.repeat(65));
-    expect('error' in result && result.error).toMatch(/one character too long/i);
+  it.each([48, 60, 70, 80])('reports the actual count for a near-hash body of %i hex', (count) => {
+    const result = resolveSearchPath('0x' + 'b'.repeat(count));
+    expect('error' in result && result.error).toContain(`has ${count} hex characters after 0x`);
+  });
+
+  it('routes the reported QNS name hash to /tx/ unchanged', () => {
+    const node = '0x2874b520ad0679a7c812be276fb0a234ca05373d48a02119afa825be09845e99';
+    expect(resolveSearchPath(node)).toEqual({ path: `/tx/${node}` });
+  });
+
+  it.each([
+    ['zero-width space', '\u200B'],
+    ['zero-width non-joiner', '\u200C'],
+    ['zero-width joiner', '\u200D'],
+    ['word joiner', '\u2060'],
+    ['byte-order mark', '\uFEFF'],
+    ['left-to-right mark', '\u200E'],
+    ['right-to-left mark', '\u200F'],
+    ['left-to-right embedding', '\u202A'],
+    ['pop directional formatting', '\u202C'],
+    ['right-to-left override', '\u202E'],
+    ['left-to-right isolate', '\u2066'],
+    ['pop directional isolate', '\u2069'],
+  ])('strips a %s anywhere in a tx hash', (_label, mark) => {
+    const tx = '0x' + HASH64;
+    const noisy = `${mark}${tx.slice(0, 20)}${mark}${tx.slice(20)}${mark}`;
+    expect(resolveSearchPath(noisy)).toEqual({ path: `/tx/${tx}` });
+  });
+
+  it('strips no-break spaces around and inside a tx hash', () => {
+    const tx = '0x' + HASH64;
+    const noisy = `\u00A0${tx.slice(0, 30)}\u00A0${tx.slice(30)}\u00A0`;
+    expect(resolveSearchPath(noisy)).toEqual({ path: `/tx/${tx}` });
+  });
+
+  it('joins a tx hash or address split by ordinary whitespace', () => {
+    const tx = '0x' + HASH64;
+    expect(resolveSearchPath(`${tx.slice(0, 34)} \n${tx.slice(34)}`)).toEqual({ path: `/tx/${tx}` });
+    expect(resolveSearchPath(`Q${ADDR128.slice(0, 64)} ${ADDR128.slice(64)}`)).toEqual({
+      path: `/address/${CHECKSUMMED_ADDRESS}`,
+    });
+  });
+
+  it('keeps spaces inside short values', () => {
+    const result = resolveSearchPath('12 34');
+    expect('error' in result && result.error).toMatch(/Unrecognised/);
+  });
+
+  it('counts only visible hex after removing paste noise', () => {
+    const result = resolveSearchPath('\u200B0x' + 'a'.repeat(64) + '\u200Ba');
+    expect(result).toEqual({
+      error: 'Transaction hash has 65 hex characters after 0x; a transaction hash has 64.',
+    });
+  });
+
+  it('keeps unrelated non-ASCII characters', () => {
+    const result = resolveSearchPath('caf\u00E9.qrl');
+    expect('error' in result && result.error).toMatch(/Invalid QNS name/i);
   });
 
   it('reports a non-hex error for malformed Q-address of right length', () => {
