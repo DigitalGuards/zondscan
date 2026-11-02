@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@jest/globals";
 
 import { makeContractDataV2 } from "./storedVerificationV2.fixture";
+import { storedVerificationV3Vector } from "./storedVerificationV3.fixture";
 import {
   classifyVerificationJobArtifact,
   type VerificationJobArtifactInput,
@@ -82,6 +83,58 @@ describe("classifyVerificationJobArtifact", () => {
         executionDigest: "f".repeat(64),
       },
     };
+    expect(classifyVerificationJobArtifact(job)).toBe("invalid-recorded");
+  });
+});
+
+describe("classifyVerificationJobArtifact for source trees and via-IR", () => {
+  function successfulV3Job(): VerificationJobArtifactInput {
+    const record = storedVerificationV3Vector(0);
+    return {
+      jobId: "fedcba9876543210",
+      status: "success",
+      address: record.address,
+      target: {
+        address: record.address,
+        creationTransaction: record.creationTransaction,
+        creationBlockNumber: record.creationBlockNumber,
+        creationBlockHash: record.creationBlockHash,
+        chainId: record.chainId,
+        deployedCodeSha256: record.contractCodeSha256,
+      },
+      payload: {
+        sourceCode: record.sourceCode,
+        contractName: record.contractName,
+        compilerVersion: record.compilerVersion,
+        compilerProvenance: record.compilerProvenance,
+        optimizationEnabled: record.optimizationEnabled,
+        optimizationRuns: record.optimizationRuns,
+        imports: record.imports,
+        primarySourcePath: record.primarySourcePath,
+        viaIR: record.viaIR,
+        license: record.license,
+        verificationMethod: record.verificationMethod,
+      },
+      result: {
+        abi: record.abi,
+        bytecodeHash: record.contractCodeSha256,
+        artifactDigest: record.verificationArtifactDigest,
+        compilerProvenance: record.compilerProvenance,
+        verifiedAt: "2026-11-02T00:00:00Z",
+      },
+    };
+  }
+
+  it("accepts a successful schema-v3 job artifact", () => {
+    expect(classifyVerificationJobArtifact(successfulV3Job())).toBe("digest-backed");
+  });
+
+  it.each([
+    ["via-IR flag dropped", { viaIR: undefined }],
+    ["primary path changed", { primarySourcePath: "contracts/Counter.hyp" }],
+  ] as const)("rejects a job whose %s", (_label, override) => {
+    const job = successfulV3Job();
+    job.payload = { ...job.payload, ...override };
     expect(classifyVerificationJobArtifact(job)).toBe("invalid-recorded");
   });
 });

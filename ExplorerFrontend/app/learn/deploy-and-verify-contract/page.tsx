@@ -199,18 +199,29 @@ export default function Page(): JSX.Element {
             <p>
               Enter the Q-prefixed contract address and the contract name, which must match a
               contract declared in the source (<code>Counter</code> here). Set the optimizer
-              checkbox and runs to whatever you compiled with, pick a license, and optionally
-              set an EVM version.
+              checkbox and runs to whatever you compiled with, tick <strong>Via IR</strong> if
+              you compiled with <code>viaIR</code>, pick a license, and optionally set an EVM
+              version.
             </p>
           </Step>
           <Step title="Paste the source">
             <p>
               Paste the full <code>.hyp</code> source into the source field. Multi-file
               projects put the main file there and supply the rest through the Imports field as
-              a JSON object mapping import paths to source contents, for example{' '}
+              a JSON object mapping each file&apos;s path to its source contents, for example{' '}
               <code>{'{"Context.hyp": "...source..."}'}</code>. Constructor arguments are an
               optional hex field; the byte-match runs against the deployed runtime code either
               way.
+            </p>
+            <p>
+              If the project keeps its sources in directories, give the files the paths you
+              compiled them under. Set <strong>Primary source path</strong> to the main
+              file&apos;s path, for example <code>contracts/core/Counter.hyp</code>, and key each
+              import by its own path, such as <code>contracts/lib/Math.hyp</code>. A{' '}
+              <code>../lib/Math.hyp</code> import then resolves exactly as it did at deploy time.
+              The quickest route is to load the standard JSON input file your deploy script
+              passed to <code>hypc --standard-json</code>: the form takes every path and the
+              optimizer and <code>viaIR</code> settings from it, and you pick the primary file.
             </p>
           </Step>
           <Step title="Submit and watch the job">
@@ -267,8 +278,9 @@ export default function Page(): JSX.Element {
             <code>POST /api/contract/verify</code> enqueues a job. The JSON body requires{' '}
             <code>address</code>, <code>sourceCode</code>, and <code>contractName</code>;
             optional fields include <code>compilerVersion</code>, <code>optimizerEnabled</code>
-            , <code>optimizerRuns</code>, <code>evmVersion</code>, <code>imports</code>, and{' '}
-            <code>license</code>. It returns a <code>jobId</code>. An unknown{' '}
+            , <code>optimizerRuns</code>, <code>viaIR</code>, <code>evmVersion</code>,{' '}
+            <code>primarySourcePath</code>, <code>imports</code>, and <code>license</code>. It
+            returns a <code>jobId</code>. An unknown{' '}
             <code>compilerVersion</code> returns 400 with the supported build list. The
             endpoint is rate-limited per IP and caps the request body at 1 MiB.
           </li>
@@ -300,10 +312,10 @@ export default function Page(): JSX.Element {
             q: 'Verification fails even though my source is correct. Why?',
             a: (
               <p>
-                The byte-match requires the exact compiler build and the exact optimizer
-                settings used at deploy time. Check the build list on the form or at{' '}
-                <code>/api/contract/compiler-info</code>, and make sure the optimizer checkbox
-                and runs value match your compile. The failed job includes the compiler output
+                The byte-match requires the exact compiler build and the exact optimizer and
+                via-IR settings used at deploy time. Check the build list on the form or at{' '}
+                <code>/api/contract/compiler-info</code>, and make sure the optimizer checkbox,
+                runs value, and Via IR checkbox match your compile. The failed job includes the compiler output
                 to help you diagnose the difference.
               </p>
             ),
@@ -332,9 +344,12 @@ export default function Page(): JSX.Element {
             a: (
               <p>
                 Put the main file in the source field and the imported files in the Imports
-                field as a JSON object mapping each import path to its full source, matching
-                the paths your import statements use. The API accepts the same structure in the{' '}
-                <code>imports</code> body field.
+                field as a JSON object mapping each file&apos;s path to its full source. When the
+                files live in directories, use the repo-relative paths you compiled with and set
+                the primary source path to the main file&apos;s path, so relative imports such as{' '}
+                <code>../lib/Math.hyp</code> resolve as they did at deploy time. Loading your
+                standard JSON input file fills all of this in. The API accepts the same structure
+                in the <code>primarySourcePath</code> and <code>imports</code> body fields.
               </p>
             ),
           },

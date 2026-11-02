@@ -160,6 +160,7 @@ function CompilerSettings({ contractData }: { contractData: ContractData }) {
         : 'disabled',
     ],
     ['EVM version', contractData.evmVersion ?? '…'],
+    ['Via IR', contractData.viaIR === true ? 'enabled' : 'disabled'],
     ['License', contractData.license ?? '…'],
     ['Verified at', contractData.verifiedAt ?? '…'],
   ];

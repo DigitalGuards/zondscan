@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { VERIFICATION_RECORD_SCHEMA_V1 } from "../lib/storedVerification";
 import { makeContractDataV2 } from "../lib/storedVerificationV2.fixture";
+import { storedVerificationV3Vector } from "../lib/storedVerificationV3.fixture";
 import type { ContractData } from "../types/address";
 import VerifiedSourceBundle, {
   classifyVerifiedImports,
@@ -10,6 +11,42 @@ import VerifiedSourceBundle, {
 } from "./VerifiedSourceBundle";
 
 describe("VerifiedSourceBundle", () => {
+  it("names the primary source path of a verified source tree", () => {
+    const record = storedVerificationV3Vector(0);
+    const html = renderToStaticMarkup(
+      <VerifiedSourceBundle
+        contractData={{
+          creatorAddress: `Q${"0".repeat(128)}`,
+          contractCode: "00",
+          isToken: false,
+          status: "0x1",
+          decimals: 0,
+          name: "",
+          symbol: "",
+          updatedAt: "",
+          verified: true,
+          ...record,
+        } as ContractData}
+      />,
+    );
+
+    expect(html).toContain("Contract source: contracts/core/Counter.hyp");
+    expect(html).toContain(
+      'data-source-bundle-status="digest-backed-multi-file"',
+    );
+    expect(html.indexOf("contracts/base/Base.hyp")).toBeLessThan(
+      html.indexOf("contracts/lib/MathLib.hyp"),
+    );
+  });
+
+  it("keeps the plain primary title for the default layout", () => {
+    const html = renderToStaticMarkup(
+      <VerifiedSourceBundle contractData={makeContractDataV2()} />,
+    );
+    expect(html).toContain("Contract source");
+    expect(html).not.toContain("Contract source:");
+  });
+
   it("renders every canonical import filename and exact source in stable order", () => {
     const imports = {
       "src/zeta/Math.hyp": "library Math { function max() {} }",

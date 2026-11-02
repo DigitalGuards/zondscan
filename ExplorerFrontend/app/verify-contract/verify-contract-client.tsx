@@ -1,9 +1,9 @@
 'use client';
 
-import { isRecord, isStringRecord } from '../lib/guards';
+import { isRecord } from '../lib/guards';
 
 import { useEffect, useMemo, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import axios, { AxiosError } from 'axios';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -15,6 +15,13 @@ import {
   type VerificationJobResult,
   type VerificationJobTarget,
 } from '../lib/verificationJobArtifact';
+import {
+  parseStandardJsonInput,
+  primarySourceCandidates,
+  standardJsonFormFields,
+  type StandardJsonInput,
+} from './standardJsonInput';
+import { buildVerifyRequestBody } from './verifyRequest';
 
 interface CompilerBuild {
   buildId: string;
@@ -71,12 +78,18 @@ export default function VerifyContractClient(): JSX.Element {
   const [address, setAddress] = useState(prefillAddress);
   const [contractName, setContractName] = useState('');
   const [sourceCode, setSourceCode] = useState('');
+  const [primarySourcePath, setPrimarySourcePath] = useState('');
   const [importsText, setImportsText] = useState('');
   const [optimizerEnabled, setOptimizerEnabled] = useState(false);
   const [optimizerRuns, setOptimizerRuns] = useState(200);
+  const [viaIR, setViaIR] = useState(false);
   const [evmVersion, setEvmVersion] = useState('');
   const [constructorArgs, setConstructorArgs] = useState('');
   const [license, setLicense] = useState('MIT');
+
+  const [standardJson, setStandardJson] = useState<StandardJsonInput | null>(null);
+  const [standardJsonError, setStandardJsonError] = useState<string | null>(null);
+  const [standardJsonPrimary, setStandardJsonPrimary] = useState('');
 
   const [compilerInfo, setCompilerInfo] = useState<CompilerInfo | null>(null);
   const [compilerErr, setCompilerErr] = useState<string | null>(null);
@@ -147,47 +160,83 @@ export default function VerifyContractClient(): JSX.Element {
     };
   }, [jobId, isTerminal]);
 
+  // Fill the source and compiler fields from one primary source of a loaded
+  // standard JSON input. Every other source becomes an import under its own
+  // path, so the tree the backend compiles matches the deployer's build.
+  const applyStandardJsonPrimary = (input: StandardJsonInput, path: string) => {
+    setStandardJsonPrimary(path);
+    const fields = standardJsonFormFields(input, path);
+    if (!fields) return;
+    setSourceCode(fields.sourceCode);
+    setPrimarySourcePath(fields.primarySourcePath);
+    setImportsText(
+      Object.keys(fields.imports).length > 0 ? JSON.stringify(fields.imports, null, 2) : ''
+    );
+    if (!contractName.trim() && fields.contractNameSuggestion) {
+      setContractName(fields.contractNameSuggestion);
+    }
+  };
+
+  const handleStandardJsonFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    setStandardJsonError(null);
+    setStandardJson(null);
+    setStandardJsonPrimary('');
+    if (!file) return;
+
+    let text: string;
+    try {
+      text = await file.text();
+    } catch (e) {
+      setStandardJsonError('Could not read the file: ' + (e instanceof Error ? e.message : String(e)));
+      return;
+    }
+    const result = parseStandardJsonInput(text);
+    if (!result.ok) {
+      setStandardJsonError(result.error);
+      return;
+    }
+    setStandardJson(result.input);
+    setOptimizerEnabled(result.input.optimizerEnabled);
+    setOptimizerRuns(result.input.optimizerRuns);
+    setViaIR(result.input.viaIR);
+    const candidates = primarySourceCandidates(result.input);
+    if (candidates.length === 1) {
+      applyStandardJsonPrimary(result.input, candidates[0]);
+    }
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitError(null);
     setAlreadyVerified(null);
     setJob(null);
 
-    let imports: Record<string, string> | undefined;
-    if (importsText.trim()) {
-      try {
-        const parsed: unknown = JSON.parse(importsText);
-        if (isStringRecord(parsed)) {
-          imports = parsed;
-        } else {
-          setSubmitError('Imports must be a JSON object: { "Filename.hyp": "<source>" }');
-          return;
-        }
-      } catch (e) {
-        setSubmitError(
-          'Imports field is not valid JSON: ' + (e instanceof Error ? e.message : String(e))
-        );
-        return;
-      }
+    const request = buildVerifyRequestBody({
+      address,
+      contractName,
+      sourceCode,
+      primarySourcePath,
+      importsText,
+      selectedBuild,
+      optimizerEnabled,
+      optimizerRuns,
+      viaIR,
+      evmVersion,
+      constructorArgs,
+      license,
+    });
+    if (!request.ok) {
+      setSubmitError(request.error);
+      return;
     }
 
     setSubmitting(true);
     try {
-      const resp = await axios.post<VerifyEnqueueResponse>(`${config.handlerUrl}/contract/verify`, {
-        address: address.trim(),
-        sourceCode,
-        contractName: contractName.trim(),
-        compilerVersion: selectedBuild || undefined,
-        optimizerEnabled,
-        // Pass the raw optimizerRuns through, 0 is a legitimate
-        // configuration distinct from the default, so don't fall back
-        // via `|| 200`.
-        optimizerRuns: optimizerRuns,
-        evmVersion: evmVersion.trim() || undefined,
-        constructorArguments: constructorArgs.trim() || undefined,
-        imports,
-        license: license || undefined,
-      });
+      const resp = await axios.post<VerifyEnqueueResponse>(
+        `${config.handlerUrl}/contract/verify`,
+        request.body
+      );
       if (resp.data.alreadyVerified) {
         setAlreadyVerified(resp.data.address);
       } else {
@@ -303,6 +352,59 @@ export default function VerifyContractClient(): JSX.Element {
           </Field>
         )}
 
+        <Field
+          label="Standard JSON input (optional)"
+          hint="Load the JSON file your deploy script passed to hypc --standard-json. Its source paths, optimizer settings, and viaIR flag fill the form below."
+        >
+          <input
+            type="file"
+            accept=".json,application/json"
+            onChange={(e) => void handleStandardJsonFile(e)}
+            disabled={submitting}
+            aria-label="Standard JSON input file"
+            className="form-input text-xs"
+          />
+          {standardJsonError && (
+            <div role="alert" className="mt-2 text-xs text-red-300">
+              {standardJsonError}
+            </div>
+          )}
+          {standardJson && (
+            <div className="mt-2 space-y-2">
+              <label className="block text-xs text-text-secondary">
+                Primary source
+                <select
+                  value={standardJsonPrimary}
+                  onChange={(e) => {
+                    applyStandardJsonPrimary(standardJson, e.target.value);
+                  }}
+                  disabled={submitting}
+                  className="form-input font-mono text-xs mt-1"
+                >
+                  <option value="" disabled>
+                    Choose the file that declares the contract
+                  </option>
+                  {primarySourceCandidates(standardJson).map((path) => (
+                    <option key={path} value={path}>
+                      {path}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="text-[11px] text-text-muted">
+                {Object.keys(standardJson.sources).length} source files loaded.
+              </div>
+              {standardJson.warnings.length > 0 && (
+                <ul className="list-disc pl-4 text-[11px] text-warning">
+                  {standardJson.warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </Field>
+
         <Field label="Contract address (Q…)">
           <input
             required
@@ -323,7 +425,7 @@ export default function VerifyContractClient(): JSX.Element {
           />
         </Field>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           <Field label="Optimizer">
             <label className="flex items-center gap-2 text-sm text-text-primary">
               <input
@@ -333,6 +435,19 @@ export default function VerifyContractClient(): JSX.Element {
                 className="form-checkbox"
               />
               Enabled
+            </label>
+          </Field>
+          <Field label="Via IR">
+            <label className="flex items-center gap-2 text-sm text-text-primary">
+              <input
+                type="checkbox"
+                checked={viaIR}
+                onChange={(e) => {
+                  setViaIR(e.target.checked);
+                }}
+                className="form-checkbox"
+              />
+              Compile via IR
             </label>
           </Field>
           <Field label="Optimizer runs">
@@ -370,8 +485,22 @@ export default function VerifyContractClient(): JSX.Element {
         </Field>
 
         <Field
-          label="Source code (single file)"
-          hint="Submit the contract source as a single .hyp file. Multi-file imports go in the Imports field below."
+          label="Primary source path (optional)"
+          hint="Repo-relative path the contract was compiled under, e.g. contracts/core/MyContract.hyp. Leave empty to compile it as <Contract name>.hyp at the root."
+        >
+          <input
+            value={primarySourcePath}
+            onChange={(e) => {
+              setPrimarySourcePath(e.target.value);
+            }}
+            placeholder="contracts/core/MyContract.hyp"
+            className="form-input font-mono text-xs"
+          />
+        </Field>
+
+        <Field
+          label="Source code (primary file)"
+          hint="The .hyp file that declares the contract. Every other file goes in the Imports field below."
         >
           <textarea
             required
@@ -385,7 +514,7 @@ export default function VerifyContractClient(): JSX.Element {
 
         <Field
           label="Imports (optional)"
-          hint='JSON object mapping import paths → source contents. Example: {"Context.hyp": "...source..."}'
+          hint='JSON object mapping each repo-relative source path to its contents, in the same tree as the primary source path. Example: {"contracts/lib/Context.hyp": "...source..."}'
         >
           <textarea
             value={importsText}

@@ -8,8 +8,11 @@ const SOURCE_BUNDLE_VERSION = 'qrl.verified-source-bundle.v1';
 const SOURCE_BUNDLE_PREFIX = `${SOURCE_BUNDLE_VERSION}:sha256:`;
 export const VERIFICATION_RECORD_SCHEMA_V1 = 'qrl.contract-verification-record.v1';
 export const VERIFICATION_RECORD_SCHEMA_V2 = 'qrl.contract-verification-record.v2';
+export const VERIFICATION_RECORD_SCHEMA_V3 = 'qrl.contract-verification-record.v3';
 export const VERIFICATION_ARTIFACT_DIGEST_PREFIX_V2 =
   'qrl.contract-verification-artifact.v2:sha256:';
+export const VERIFICATION_ARTIFACT_DIGEST_PREFIX_V3 =
+  'qrl.contract-verification-artifact.v3:sha256:';
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const Q128_ADDRESS_PATTERN = /^Q[0-9a-f]{128}$/;
@@ -46,6 +49,8 @@ export interface StoredVerificationInput {
   evmVersion?: unknown;
   constructorArguments?: unknown;
   libraries?: unknown;
+  primarySourcePath?: unknown;
+  viaIR?: unknown;
   license?: unknown;
   verificationMethod?: unknown;
   verificationArtifactDigest?: unknown;
@@ -101,33 +106,77 @@ export function classifyStoredVerification(
       : 'invalid-recorded';
   }
   if (contract.verificationRecordSchema === VERIFICATION_RECORD_SCHEMA_V1) {
-    if (contract.verificationArtifactDigest !== undefined) {
+    if (contract.verificationArtifactDigest !== undefined || !hasCanonicalCompileInputs(contract)) {
       return 'invalid-recorded';
     }
     return hasValidSourceAndCompilerRecord(contract) ? 'legacy-unrecorded' : 'invalid-recorded';
   }
-  if (contract.verificationRecordSchema !== VERIFICATION_RECORD_SCHEMA_V2) {
+
+  let digestPrefix: string;
+  let expectedArtifactDigest: (input: StoredVerificationInput) => string | null;
+  if (contract.verificationRecordSchema === VERIFICATION_RECORD_SCHEMA_V2) {
+    digestPrefix = VERIFICATION_ARTIFACT_DIGEST_PREFIX_V2;
+    expectedArtifactDigest = verificationArtifactDigestV2;
+  } else if (contract.verificationRecordSchema === VERIFICATION_RECORD_SCHEMA_V3) {
+    digestPrefix = VERIFICATION_ARTIFACT_DIGEST_PREFIX_V3;
+    expectedArtifactDigest = verificationArtifactDigestV3;
+  } else {
     return 'invalid-recorded';
   }
 
-  if (!hasValidSourceAndCompilerRecord(contract)) {
+  if (!hasValidSourceAndCompilerRecord(contract) || !hasCanonicalCompileInputs(contract)) {
     return 'invalid-recorded';
   }
   if (
     typeof contract.verificationArtifactDigest !== 'string' ||
-    !contract.verificationArtifactDigest.startsWith(VERIFICATION_ARTIFACT_DIGEST_PREFIX_V2) ||
-    !SHA256_PATTERN.test(
-      contract.verificationArtifactDigest.slice(VERIFICATION_ARTIFACT_DIGEST_PREFIX_V2.length)
-    )
+    !contract.verificationArtifactDigest.startsWith(digestPrefix) ||
+    !SHA256_PATTERN.test(contract.verificationArtifactDigest.slice(digestPrefix.length))
   ) {
     return 'invalid-recorded';
   }
 
-  const expectedArtifactDigest = verificationArtifactDigestV2(contract);
-  return expectedArtifactDigest !== null &&
-    contract.verificationArtifactDigest === expectedArtifactDigest
+  const expected = expectedArtifactDigest(contract);
+  return expected !== null && contract.verificationArtifactDigest === expected
     ? 'digest-backed'
     : 'invalid-recorded';
+}
+
+/** Mirrors backendAPI/models.DefaultPrimarySourcePath. */
+export function defaultPrimarySourcePath(contractName: string): string {
+  return `${contractName}.hyp`;
+}
+
+/**
+ * Mirrors backendAPI/models.VerificationResult.RequiresVerificationRecordSchemaV3:
+ * a verification needs record schema v3 when it compiled the primary source at
+ * a path other than `<contractName>.hyp` or used the via-IR pipeline.
+ */
+export function requiresVerificationRecordSchemaV3(
+  contractName: string,
+  primarySourcePath: string,
+  viaIR: boolean
+): boolean {
+  return (
+    viaIR ||
+    (primarySourcePath !== '' && primarySourcePath !== defaultPrimarySourcePath(contractName))
+  );
+}
+
+/**
+ * Mirrors backendAPI/sourcebundle.hasCanonicalCompileInputs. Only v3 records
+ * carry a primary source path or the via-IR flag, a v3 record carries at least
+ * one of them, and the default `<contractName>.hyp` path is never spelled out.
+ */
+function hasCanonicalCompileInputs(contract: StoredVerificationInput): boolean {
+  const primarySourcePath = optionalString(contract.primarySourcePath);
+  const viaIR = optionalBoolean(contract.viaIR);
+  if (primarySourcePath === null || viaIR === null) return false;
+  if (contract.verificationRecordSchema !== VERIFICATION_RECORD_SCHEMA_V3) {
+    return primarySourcePath === '' && !viaIR;
+  }
+  if (typeof contract.contractName !== 'string') return false;
+  if (primarySourcePath === defaultPrimarySourcePath(contract.contractName)) return false;
+  return requiresVerificationRecordSchemaV3(contract.contractName, primarySourcePath, viaIR);
 }
 
 /** Mirrors backendAPI/models.VerificationArtifactDigestV2. */
@@ -135,7 +184,42 @@ export function verificationArtifactDigestV2(contract: StoredVerificationInput):
   if (contract.verificationRecordSchema !== VERIFICATION_RECORD_SCHEMA_V2) {
     return null;
   }
+  const writer = writeVerificationArtifactFields(VERIFICATION_RECORD_SCHEMA_V2, contract);
+  return writer === null
+    ? null
+    : VERIFICATION_ARTIFACT_DIGEST_PREFIX_V2 + bytesToHex(writer.digest());
+}
 
+/**
+ * Mirrors backendAPI/models.VerificationArtifactDigestV3: the v2 field
+ * sequence under the v3 schema string, then the effective primary source path
+ * and the via-IR flag.
+ */
+export function verificationArtifactDigestV3(contract: StoredVerificationInput): string | null {
+  if (contract.verificationRecordSchema !== VERIFICATION_RECORD_SCHEMA_V3) {
+    return null;
+  }
+  const primarySourcePath = optionalString(contract.primarySourcePath);
+  const viaIR = optionalBoolean(contract.viaIR);
+  if (primarySourcePath === null || viaIR === null || typeof contract.contractName !== 'string') {
+    return null;
+  }
+  const writer = writeVerificationArtifactFields(VERIFICATION_RECORD_SCHEMA_V3, contract);
+  if (writer === null) return null;
+  writeDigestField(
+    writer,
+    primarySourcePath === '' ? defaultPrimarySourcePath(contract.contractName) : primarySourcePath
+  );
+  writeDigestField(writer, String(viaIR));
+  return VERIFICATION_ARTIFACT_DIGEST_PREFIX_V3 + bytesToHex(writer.digest());
+}
+
+type DigestWriter = HashWriter & { digest(): Uint8Array };
+
+function writeVerificationArtifactFields(
+  schema: string,
+  contract: StoredVerificationInput
+): DigestWriter | null {
   const compilerState = classifyCompilerProvenance(
     contract.compilerProvenance,
     typeof contract.compilerVersion === 'string' ? contract.compilerVersion : undefined
@@ -205,7 +289,7 @@ export function verificationArtifactDigestV2(contract: StoredVerificationInput):
 
   const writer = sha256.create();
   for (const value of [
-    VERIFICATION_RECORD_SCHEMA_V2,
+    schema,
     address,
     creationTransaction,
     creationBlockNumber,
@@ -251,8 +335,7 @@ export function verificationArtifactDigestV2(contract: StoredVerificationInput):
     writeDigestField(writer, key);
     writeDigestField(writer, value);
   }
-
-  return VERIFICATION_ARTIFACT_DIGEST_PREFIX_V2 + bytesToHex(writer.digest());
+  return writer;
 }
 
 function hasValidSourceAndCompilerRecord(contract: StoredVerificationInput): boolean {
