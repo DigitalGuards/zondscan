@@ -172,9 +172,8 @@ func lookupBlock(c *gin.Context, blockStr string) (models.ZondUint64Version, boo
 
 	var blockNum uint64
 	var err error
-	// Stays on strconv (not hexutil): the strconv error text below is
-	// appended to the public 400 body, so swapping the parser would
-	// change a client-visible message.
+	// Uses strconv on purpose: its error text is appended to the public
+	// 400 body, and another parser would change a client-visible message.
 	if strings.HasPrefix(blockStr, "0x") {
 		// Handle hex format by removing 0x prefix
 		blockNum, err = strconv.ParseUint(blockStr[2:], 16, 64)

@@ -100,25 +100,41 @@ describe('resolveUnknownHash', () => {
     await expect(resolveUnknownHash(NODE, HANDLER, fetcher)).resolves.toEqual({ kind: 'none' });
   });
 
-  it('treats upstream failures as no match', async () => {
+  it('reports a check that could not run', async () => {
     const { fetcher, calls } = fetcherFor({
       [`http://handler.test/block/${NODE}`]: new Error('offline'),
       [`http://handler.test/qns/node/${NODE}`]: respond(503, { error: 'QNS resolution is not configured' }),
     });
-    await expect(resolveUnknownHash(NODE, HANDLER, fetcher)).resolves.toEqual({ kind: 'none' });
+    await expect(resolveUnknownHash(NODE, HANDLER, fetcher)).resolves.toEqual({ kind: 'unavailable' });
     expect(calls.map((call) => call.url)).toEqual([
       `http://handler.test/block/${NODE}`,
       `http://handler.test/qns/node/${NODE}`,
     ]);
   });
 
-  it('sends the internal QNS header only to the QNS route', async () => {
+  it('treats a QNS 503 alone as unavailable', async () => {
+    const { fetcher } = fetcherFor({
+      [`http://handler.test/block/${NODE}`]: respond(404, { error: 'not found' }),
+      [`http://handler.test/qns/node/${NODE}`]: respond(503, { error: 'QNS resolution is not configured' }),
+    });
+    await expect(resolveUnknownHash(NODE, HANDLER, fetcher)).resolves.toEqual({ kind: 'unavailable' });
+  });
+
+  it('treats two 404 answers as no match', async () => {
+    const { fetcher } = fetcherFor({
+      [`http://handler.test/block/${NODE}`]: respond(404, { error: 'not found' }),
+      [`http://handler.test/qns/node/${NODE}`]: respond(404, { error: 'QNS node has no owner' }),
+    });
+    await expect(resolveUnknownHash(NODE, HANDLER, fetcher)).resolves.toEqual({ kind: 'none' });
+  });
+
+  it('sends no internal QNS header, so the per-IP limit applies', async () => {
     const token = 'test-internal-value';
     jest.replaceProperty(process, 'env', { ...process.env, QNS_INTERNAL_TOKEN: token });
     const { fetcher, calls } = fetcherFor({});
     await resolveUnknownHash(NODE, HANDLER, fetcher);
     expect(calls[0].init?.headers).toBeUndefined();
-    expect(calls[1].init?.headers).toEqual({ 'X-QNS-Internal-Token': token });
+    expect(calls[1].init?.headers).toBeUndefined();
   });
 
   it('does nothing without a handler URL', async () => {

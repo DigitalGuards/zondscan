@@ -59,6 +59,11 @@ describe('resolveSearchPath', () => {
     });
   });
 
+  it('routes an uppercase 0X transaction hash like 0x', () => {
+    const hash = 'ab'.repeat(32);
+    expect(resolveSearchPath(`0X${hash}`)).toEqual({ path: `/tx/0x${hash}` });
+  });
+
   it('0x and 0X aliases route to the canonical checksum address', () => {
     expect(resolveSearchPath(`0x${ADDR128}`)).toEqual({
       path: `/address/${CHECKSUMMED_ADDRESS}`,

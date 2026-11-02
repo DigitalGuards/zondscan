@@ -2,7 +2,6 @@ import 'server-only';
 import { isRecord } from '@/app/lib/guards';
 import { canonicalizeQrlAddress } from '@/app/lib/qrlAddress';
 import { normalizeQnsName } from '@/app/lib/qns';
-import { qnsRequestHeaders } from '@/app/lib/qnsRequest';
 
 /**
  * A 0x + 64 hex search can be a transaction hash, a block hash, or a QNS
@@ -20,6 +19,7 @@ export interface QnsNodeRecord {
 export type HashFallback =
   | { kind: 'block'; number: number }
   | { kind: 'qns'; record: QnsNodeRecord }
+  | { kind: 'unavailable' }
   | { kind: 'none' };
 
 interface FallbackResponse {
@@ -34,18 +34,27 @@ function defaultFetch(input: string, init?: RequestInit): Promise<FallbackRespon
   return fetch(input, init);
 }
 
+// A 404 is a definitive "no match"; any other failure means the check
+// could not run, so the page must not claim the hash matched nothing.
+type JsonResult = { payload: unknown } | { payload: null; failed: boolean };
+
 async function getJson(
   fetcher: FallbackFetch,
   url: string,
   init: RequestInit
-): Promise<unknown> {
+): Promise<JsonResult> {
   try {
     const response = await fetcher(url, init);
-    if (!response.ok || response.status !== 200) return null;
-    return await response.json();
+    if (response.status === 404) return { payload: null, failed: false };
+    if (!response.ok || response.status !== 200) return { payload: null, failed: true };
+    return { payload: await response.json() };
   } catch {
-    return null;
+    return { payload: null, failed: true };
   }
+}
+
+function checkFailed(result: JsonResult): boolean {
+  return 'failed' in result && result.failed;
 }
 
 function blockNumberFor(payload: unknown, hash: string): number | null {
@@ -90,18 +99,20 @@ export async function resolveUnknownHash(
   if (!base) return { kind: 'none' };
   const normalized = hash.toLowerCase();
 
-  const blockPayload = await getJson(fetcher, `${base}/block/${normalized}`, {
+  const block = await getJson(fetcher, `${base}/block/${normalized}`, {
     cache: 'no-store',
   });
-  const blockNumber = blockNumberFor(blockPayload, normalized);
+  const blockNumber = blockNumberFor(block.payload, normalized);
   if (blockNumber !== null) return { kind: 'block', number: blockNumber };
 
-  const qnsPayload = await getJson(fetcher, `${base}/qns/node/${normalized}`, {
+  // No internal token here: every unknown hash costs a node call, so these
+  // lookups stay inside the route's per-IP limit.
+  const qns = await getJson(fetcher, `${base}/qns/node/${normalized}`, {
     cache: 'no-store',
-    ...qnsRequestHeaders(),
   });
-  const record = qnsRecordFor(qnsPayload, normalized);
+  const record = qnsRecordFor(qns.payload, normalized);
   if (record) return { kind: 'qns', record };
 
+  if (checkFailed(block) || checkFailed(qns)) return { kind: 'unavailable' };
   return { kind: 'none' };
 }

@@ -207,10 +207,23 @@ export default async function TransactionPage({ params }: PageProps): Promise<JS
   if (missing || !transaction) {
     // Block hashes and QNS name hashes share the 0x + 64 hex shape. The
     // transaction 404 is definitive, so any failed follow-up check ends at
-    // the not-found page. redirect() stays outside try/catch.
+    // the not-found page unless a follow-up check could not run.
+    // redirect() stays outside try/catch.
     const fallback = await resolveUnknownHash(txHash, config.handlerUrl);
     if (fallback.kind === 'block') redirect(`/block/${fallback.number}`);
     if (fallback.kind === 'qns') return <QnsNodeView record={fallback.record} />;
+    if (fallback.kind === 'unavailable') {
+      return (
+        <div className="container mx-auto px-4">
+          <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 shadow-lg mt-6">
+            <h2 className="text-red-500 font-semibold mb-2">No transaction with this hash</h2>
+            <p className="text-text-secondary">
+              The explorer could not check it against blocks and QNS names right now. Please refresh to try again.
+            </p>
+          </div>
+        </div>
+      );
+    }
     notFound();
   }
   return <TransactionView transaction={transaction} />;

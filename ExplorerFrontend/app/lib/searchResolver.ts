@@ -59,7 +59,9 @@ export function cleanSearchInput(raw: string): string {
   // Strip surrounding slashes so pasted /tx/<hash> URLs don't double up.
   const trimmed = visible.trim().replace(/^\/+/, '').replace(/\/+$/, '').trim();
   const compact = trimmed.replace(/\s+/g, '');
-  return compact !== trimmed && RE_LONG_HEX_LIKE.test(compact) ? compact : trimmed;
+  const joined = compact !== trimmed && RE_LONG_HEX_LIKE.test(compact) ? compact : trimmed;
+  // Hashes route on a lowercase 0x prefix; an uppercase 0X is the same value.
+  return /^0X[0-9a-fA-F]+$/.test(joined) ? `0x${joined.slice(2)}` : joined;
 }
 
 export function resolveSearchPath(raw: string): SearchResolution {
