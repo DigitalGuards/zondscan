@@ -305,17 +305,30 @@ closed. All four pinned builds accept it.
   exactly as it did in the deployer's build.
 - `viaIR` sets `settings.viaIR` for the compile.
 
-Source unit names feed the metadata hash in the CBOR trailer, so the tree
-must match the deployer's build path for path. The real-sandbox source tree
-probe proves this: the sandboxed runtime code, trailer included, equals the
-output of `hypc --bin-runtime` run from the project root on disk.
+The paths must resolve every import as in the deployer's build. The
+matcher strips the CBOR metadata trailer from both sides before it compares
+code, so import resolution is what has to agree. Matching the exact paths
+also reproduces the metadata trailer, because it hashes every source unit
+name. The real-sandbox source tree probe shows both: the sandboxed runtime
+code, trailer included, equals the output of `hypc --bin-runtime` run from
+the project root on disk.
 
 Every path is validated before a job is created. A path is relative, uses
-ASCII letters, digits, and `. _ - @ + ~` separated by `/`, is at most 256
-bytes and 32 segments long, and stays inside the virtual root after `./` and
-`../` segments are resolved. The request is rejected when two paths resolve
-to the same source, differ only by letter case, or use one name as both a
-file and a directory, or when it holds more than 128 sources in total. The
+ASCII letters, digits, spaces, and `. _ - @ + ~` separated by `/`, is at most
+256 bytes and 32 segments long, and stays inside the virtual root after `./`
+and `../` segments are resolved. Spaces stay allowed because the single-file
+imports flow always accepted names such as `./My Token.hyp`; control
+characters, backslashes and non-ASCII characters are refused. The request is
+rejected when two paths resolve to the same source, differ only by letter
+case, or use one name as both a file and a directory, or when it holds more
+than 128 sources in total. Paths that differ only by letter case stay
+rejected although a Linux checkout can hold both: on the case-insensitive
+file systems macOS and Windows use by default they are one file, so such a
+tree cannot be checked out there, and the two names read as the same file to
+a reviewer. With a nested `primarySourcePath`, an import at the root named
+`<contractName>.hyp` (in any letter case) is also rejected. The verified
+source bundle the AI explainer reads labels the primary source with that
+name, so such an import would show up as a second copy of the primary. The
 route also builds the standard JSON input and rejects it with 400 when it is
 larger than `VERIFIER_SOURCE_MAX_BYTES`, so an oversized tree never becomes a
 job.
@@ -329,6 +342,26 @@ nested primary path or via-IR writes schema
 the v3 schema string, followed by the effective primary path and the via-IR
 flag. Only v3 records may carry `primarySourcePath` or `viaIR`. The frontend
 recomputes both digests, so deploy the frontend before the backend.
+
+### Deploy order for record schema v3
+
+1. Release the frontend first. A frontend from before schema v3 only knows
+   the v2 digest, so it shows every source tree or via-IR verification as an
+   integrity failure on the job page and on the contract page. Single-file
+   records keep schema v2 and display correctly with either frontend.
+2. Then swap the backend binary.
+3. Once v3 records exist, do not roll the backend back to a build without
+   schema v3 unless a repair plan for those records is ready. The older build
+   classifies them as `invalid-recorded`, hides their ABI from transaction
+   decoding, and answers a new verification of those addresses with 409
+   until an operator repairs the record.
+4. Smoke test: verify a known QRC20 token factory deployment from source and
+   check that the job compiles and matches before calling the deploy done.
+   Production runs the sandbox in path exec mode, which the real-sandbox test
+   suite only covers on a root-owned install. Use a deployment without a
+   verified record: an address that is already verified answers
+   `alreadyVerified` without compiling, so it proves nothing about the
+   sandbox.
 
 ## Shared Go resource limits
 

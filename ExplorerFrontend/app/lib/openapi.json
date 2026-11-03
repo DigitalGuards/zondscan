@@ -2377,7 +2377,7 @@
                   "primarySourcePath": {
                     "type": "string",
                     "maxLength": 256,
-                    "pattern": "^[A-Za-z0-9._@+~/-]+$",
+                    "pattern": "^[A-Za-z0-9._@+~/ -]+$",
                     "description": "Repo-relative path the primary source was compiled under, e.g. contracts/core/Token.hyp. Omit it to compile sourceCode as <contractName>.hyp at the root. The clean path must name a .hyp file, stay inside the source root, and have at most 32 segments. A value equal to <contractName>.hyp is stored as absent."
                   },
                   "viaIR": {
@@ -2387,7 +2387,7 @@
                   "imports": {
                     "type": "object",
                     "maxProperties": 127,
-                    "description": "Every source except the primary one, keyed by its repo-relative path in the same virtual tree as primarySourcePath, so relative imports such as ../lib/Math.hyp resolve as they did in the deployer's build. Paths use ASCII letters, digits, and . _ - @ + ~ separated by /, are at most 256 bytes and 32 segments long, and are canonicalized before compilation and persistence. Absolute paths, root escapes, collisions with the primary source, paths that differ only by letter case, and a path used as both a file and a directory are rejected. At most 128 sources in total.",
+                    "description": "Every source except the primary one, keyed by its repo-relative path in the same virtual tree as primarySourcePath, so relative imports such as ../lib/Math.hyp resolve as they did in the deployer's build. Paths use ASCII letters, digits, spaces, and . _ - @ + ~ separated by /, are at most 256 bytes and 32 segments long, and are canonicalized before compilation and persistence. Absolute paths, root escapes, control characters, collisions with the primary source, paths that differ only by letter case (one file on case-insensitive macOS and Windows checkouts), and a path used as both a file and a directory are rejected. With a nested primarySourcePath, a root import named <contractName>.hyp in any letter case is rejected too, because the verified source bundle labels the primary source with that name. At most 128 sources in total.",
                     "additionalProperties": { "type": "string" }
                   },
                   "license": { "type": "string" }

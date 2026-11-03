@@ -60,7 +60,7 @@ func CanonicalizeVerifyRequest(req VerifyRequest) (VerifyRequest, error) {
 	}
 	req.PrimarySourcePath = models.CanonicalPrimarySourcePath(req.ContractName, primary)
 
-	imports, err := canonicalizeImports(primary, req.Imports)
+	imports, err := canonicalizeImports(models.DefaultPrimarySourcePath(req.ContractName), primary, req.Imports)
 	if err != nil {
 		return VerifyRequest{}, err
 	}
@@ -77,7 +77,7 @@ func effectivePrimarySourcePath(req VerifyRequest) string {
 	return models.EffectivePrimarySourcePath(req.ContractName, req.PrimarySourcePath)
 }
 
-func canonicalizeImports(primary string, imports map[string]string) (map[string]string, error) {
+func canonicalizeImports(defaultPrimary, primary string, imports map[string]string) (map[string]string, error) {
 	if len(imports) == 0 {
 		return nil, nil
 	}
@@ -108,6 +108,18 @@ func canonicalizeImports(primary string, imports map[string]string) (map[string]
 		if cleanPath == primary {
 			return nil, fmt.Errorf("import path %q collides with primary source %q", rawPath, primary)
 		}
+		// The verified source bundle the AI explainer reads always labels
+		// the primary source <contractName>.hyp, wherever it was compiled.
+		// With a nested primary that label stays reserved, so a root import
+		// under the same name cannot pose as a second copy of the primary.
+		if primary != defaultPrimary && strings.EqualFold(cleanPath, defaultPrimary) {
+			return nil, fmt.Errorf(
+				"import path %q uses the name %q, which the verified source bundle reserves for the primary source %q",
+				rawPath,
+				defaultPrimary,
+				primary,
+			)
+		}
 		if previous, exists := seen[cleanPath]; exists {
 			return nil, fmt.Errorf(
 				"import paths %q and %q normalize to the same source %q",
@@ -116,8 +128,11 @@ func canonicalizeImports(primary string, imports map[string]string) (map[string]
 				cleanPath,
 			)
 		}
-		// Paths that differ only by letter case name one file on a
-		// case-insensitive checkout and read as the same file to a reviewer.
+		// Paths that differ only by letter case name one file on the
+		// case-insensitive file systems macOS and Windows use by default, so
+		// such a tree cannot be checked out there, and the two names read as
+		// the same file to a reviewer. They stay rejected even though a Linux
+		// checkout can hold both.
 		folded := strings.ToLower(cleanPath)
 		if previous, exists := seenFolded[folded]; exists {
 			return nil, fmt.Errorf(
@@ -164,10 +179,11 @@ func rejectFileDirectoryConflicts(foldedPaths map[string]string) error {
 
 // canonicalSourcePath validates one repo-relative source path and returns its
 // clean form. The character set is deliberately narrow: ASCII letters,
-// digits, ".", "_", "-", "@", "+" and "~" separated by "/". That excludes
-// NUL and control characters, backslashes, spaces, URL schemes, and Unicode
-// look-alikes or direction overrides that could disguise a path on the
-// verified-source page.
+// digits, spaces, ".", "_", "-", "@", "+" and "~" separated by "/". Spaces
+// stay allowed because the single-file imports flow always accepted names
+// such as "./My Token.hyp". The set excludes NUL and control characters,
+// backslashes, URL schemes, and Unicode look-alikes or direction overrides
+// that could disguise a path on the verified-source page.
 func canonicalSourcePath(field, rawPath string) (string, error) {
 	if rawPath == "" {
 		return "", fmt.Errorf("%s is empty", field)
@@ -182,7 +198,7 @@ func canonicalSourcePath(field, rawPath string) (string, error) {
 		}
 		if !isSourcePathByte(c) {
 			return "", fmt.Errorf(
-				"%s %q contains an unsupported character; use ASCII letters, digits, and . _ - @ + ~ separated by /",
+				"%s %q contains an unsupported character; use ASCII letters, digits, spaces, and . _ - @ + ~ separated by /",
 				field,
 				rawPath,
 			)
@@ -214,7 +230,7 @@ func isSourcePathByte(c byte) bool {
 		return true
 	}
 	switch c {
-	case '/', '.', '_', '-', '@', '+', '~':
+	case '/', '.', '_', '-', '@', '+', '~', ' ':
 		return true
 	}
 	return false
