@@ -6,6 +6,7 @@ import * as zondAbi from '@theqrl/web3-qrl-abi';
 import type { ContractData } from '../types/address';
 import { qNormaliseAbiValue } from '../lib/helpers';
 import { assertVm64AbiSupport } from '../lib/vm64Abi';
+import { parseContractArg } from '../lib/contractCall';
 import { parseAbiFunctions, type AbiFunction, isContractCallResponse } from '../lib/contractAbi';
 import { isRecord, errorMessage, InvalidInputError } from '../lib/guards';
 import config from '../../config';
@@ -98,7 +99,7 @@ function ReadFunctionCard({ fn, address }: { fn: AbiFunction; address: string })
     setReverted(false);
     try {
       assertVm64AbiSupport();
-      const args = fn.inputs.map((input, i) => parseArg(values[i] ?? '', input.type));
+      const args = fn.inputs.map((input, i) => parseContractArg(values[i] ?? '', input.type));
       const data = zondAbi.encodeFunctionCall(fn, args);
 
       const resp = await axios.post<unknown>(`${config.handlerUrl}/contract/call`, {
@@ -200,31 +201,6 @@ function ReadFunctionCard({ fn, address }: { fn: AbiFunction; address: string })
       )}
     </div>
   );
-}
-
-// parseArg converts a user-typed string into the right JS shape for
-// The installed ABI codec's encodeFunctionCall. Keep this minimal, anything
-// fancy (tuples, fixed arrays) the user can express as JSON.
-function parseArg(raw: string, type: string): unknown {
-  const t = raw.trim();
-  if (t === '') {
-    if (type === 'bool') return false;
-    if (type.startsWith('uint') || type.startsWith('int')) return '0';
-    return '';
-  }
-  if (type === 'bool') return t.toLowerCase() === 'true' || t === '1';
-  if (type.endsWith(']') || type === 'tuple') {
-    try {
-      return JSON.parse(t);
-    } catch {
-      throw new Error(`expected JSON for ${type}: e.g. [1,2,3]`);
-    }
-  }
-  if (type.startsWith('uint') || type.startsWith('int')) {
-    // Hand the string through because the ABI codec accepts strings for big ints.
-    return t;
-  }
-  return t;
 }
 
 function placeholderFor(type: string): string {
