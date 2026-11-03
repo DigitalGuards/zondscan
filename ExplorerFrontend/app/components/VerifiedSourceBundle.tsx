@@ -41,7 +41,11 @@ export default function VerifiedSourceBundle({
     <div className="space-y-3">
       {contractData.sourceCode ? (
         <SourceFilePanel
-          title="Contract source"
+          title={
+            contractData.primarySourcePath
+              ? `Contract source: ${contractData.primarySourcePath}`
+              : "Contract source"
+          }
           source={contractData.sourceCode}
           copyLabel="Copy source"
           defaultExpanded

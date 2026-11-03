@@ -2374,9 +2374,20 @@
                   "evmVersion": { "type": "string" },
                   "constructorArguments": { "type": "string" },
                   "libraries": { "type": "object", "additionalProperties": { "type": "string" } },
+                  "primarySourcePath": {
+                    "type": "string",
+                    "maxLength": 256,
+                    "pattern": "^[A-Za-z0-9._@+~/ -]+$",
+                    "description": "Repo-relative path the primary source was compiled under, e.g. contracts/core/Token.hyp. Omit it to compile sourceCode as <contractName>.hyp at the root. The clean path must name a .hyp file, stay inside the source root, and have at most 32 segments. A value equal to <contractName>.hyp is stored as absent."
+                  },
+                  "viaIR": {
+                    "type": "boolean",
+                    "description": "Compile through the via-IR pipeline (Hyperion standard JSON settings.viaIR). Defaults to false."
+                  },
                   "imports": {
                     "type": "object",
-                    "description": "Additional Hyperion sources keyed by clean relative forward-slash paths. Paths are canonicalized before compilation and persistence; aliases, absolute paths, root escapes, and collisions with <contractName>.hyp are rejected.",
+                    "maxProperties": 127,
+                    "description": "Every source except the primary one, keyed by its repo-relative path in the same virtual tree as primarySourcePath, so relative imports such as ../lib/Math.hyp resolve as they did in the deployer's build. Paths use ASCII letters, digits, spaces, and . _ - @ + ~ separated by /, are at most 256 bytes and 32 segments long, and are canonicalized before compilation and persistence. Absolute paths, root escapes, control characters, collisions with the primary source, paths that differ only by letter case (one file on case-insensitive macOS and Windows checkouts), and a path used as both a file and a directory are rejected. With a nested primarySourcePath, a root import named <contractName>.hyp in any letter case is rejected too, because the verified source bundle labels the primary source with that name. At most 128 sources in total.",
                     "additionalProperties": { "type": "string" }
                   },
                   "license": { "type": "string" }
@@ -2418,7 +2429,7 @@
             }
           },
           "400": {
-            "description": "Invalid body, invalid address, missing required fields, or unsupported compilerVersion (the body lists supported builds).",
+            "description": "Invalid body, invalid address, missing required fields, an invalid primarySourcePath or imports path, sources whose standard JSON input exceeds the compiler input limit, or unsupported compilerVersion (the body lists supported builds).",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
           },
           "409": {
@@ -2490,6 +2501,11 @@
                           "description": "Canonical effective import sources used for compilation.",
                           "additionalProperties": { "type": "string" }
                         },
+                        "primarySourcePath": {
+                          "type": "string",
+                          "description": "Canonical primary source path. Absent for the default <contractName>.hyp layout."
+                        },
+                        "viaIR": { "type": "boolean", "description": "Present and true when the job compiles via IR." },
                         "license": { "type": "string" },
                         "verificationMethod": { "type": "string", "const": "full-source" }
                       },
@@ -2502,8 +2518,8 @@
                         "bytecodeHash": { "type": "string" },
                         "artifactDigest": {
                           "type": "string",
-                          "pattern": "^qrl\\.contract-verification-artifact\\.v2:sha256:[0-9a-f]{64}$",
-                          "description": "V2 digest binding the source bundle, ABI, compiler identity and settings, and canonical deployment target."
+                          "pattern": "^qrl\\.contract-verification-artifact\\.v[23]:sha256:[0-9a-f]{64}$",
+                          "description": "V2 or V3 digest binding the source bundle, ABI, compiler identity and settings, and canonical deployment target. The job uses V3 when its payload carries primarySourcePath or viaIR."
                         },
                         "compilerProvenance": { "$ref": "#/components/schemas/CompilerProvenance" },
                         "verifiedAt": { "type": "string" }
@@ -3552,8 +3568,13 @@
           "verified": { "type": "boolean" },
           "verificationRecordSchema": {
             "type": ["string", "null"],
-            "enum": ["qrl.contract-verification-record.v1", "qrl.contract-verification-record.v2", null],
-            "description": "V2 records bind the source bundle and compiler settings to one canonical deployment generation. V1 and genuinely absent historical records remain legacy-unrecorded; explicit null or any unrecognized value is invalid-recorded."
+            "enum": [
+              "qrl.contract-verification-record.v1",
+              "qrl.contract-verification-record.v2",
+              "qrl.contract-verification-record.v3",
+              null
+            ],
+            "description": "V2 and V3 records bind the source bundle and compiler settings to one canonical deployment generation. V3 is used only when the verification compiled a nested primarySourcePath or via IR; it additionally binds both. V1 and genuinely absent historical records remain legacy-unrecorded; explicit null or any unrecognized value is invalid-recorded."
           },
           "sourceCode": { "type": "string" },
           "abi": { "type": "string", "description": "Exact compact JSON ABI bytes included in the V2 verification artifact digest." },
@@ -3570,6 +3591,14 @@
             "description": "Canonical effective import sources used to reproduce verified bytecode.",
             "additionalProperties": { "type": "string" }
           },
+          "primarySourcePath": {
+            "type": "string",
+            "description": "Repo-relative path the primary source was compiled under. Only V3 records carry it; absent means <contractName>.hyp at the root."
+          },
+          "viaIR": {
+            "type": "boolean",
+            "description": "True when the contract was compiled via IR. Only V3 records carry it; absent means false."
+          },
           "sourceBundleDigest": {
             "type": ["string", "null"],
             "description": "Versioned SHA-256 identity of the exact primary and canonical import source bytes for this verification.",
@@ -3577,8 +3606,8 @@
           },
           "verificationArtifactDigest": {
             "type": "string",
-            "pattern": "^qrl\\.contract-verification-artifact\\.v2:sha256:[0-9a-f]{64}$",
-            "description": "SHA-256 over uint64 big-endian length-prefixed verification fields: V2 marker, canonical deployment target, source bundle, ABI, compiler provenance and settings, and sorted libraries."
+            "pattern": "^qrl\\.contract-verification-artifact\\.v[23]:sha256:[0-9a-f]{64}$",
+            "description": "SHA-256 over uint64 big-endian length-prefixed verification fields: record schema marker, canonical deployment target, source bundle, ABI, compiler provenance and settings, and sorted libraries. V3 digests append the effective primary source path and the via-IR flag."
           },
           "optimizationEnabled": { "type": "boolean" },
           "optimizationRuns": { "type": "integer" },
@@ -3603,6 +3632,44 @@
               "required": ["verificationRecordSchema"]
             },
             "then": {
+              "properties": {
+                "verificationArtifactDigest": { "pattern": "^qrl\\.contract-verification-artifact\\.v2:sha256:[0-9a-f]{64}$" },
+                "primarySourcePath": false,
+                "viaIR": false
+              },
+              "required": [
+                "address",
+                "contractCodeSha256",
+                "creationTransaction",
+                "creationBlockNumber",
+                "creationBlockHash",
+                "chainId",
+                "sourceCode",
+                "abi",
+                "contractName",
+                "compilerVersion",
+                "compilerProvenance",
+                "sourceBundleDigest",
+                "verificationArtifactDigest",
+                "optimizationEnabled",
+                "optimizationRuns",
+                "verificationMethod"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "verificationRecordSchema": { "const": "qrl.contract-verification-record.v3" }
+              },
+              "required": ["verificationRecordSchema"]
+            },
+            "then": {
+              "properties": {
+                "verificationArtifactDigest": { "pattern": "^qrl\\.contract-verification-artifact\\.v3:sha256:[0-9a-f]{64}$" },
+                "viaIR": { "const": true }
+              },
+              "anyOf": [{ "required": ["primarySourcePath"] }, { "required": ["viaIR"] }],
               "required": [
                 "address",
                 "contractCodeSha256",

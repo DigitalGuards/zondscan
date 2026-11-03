@@ -11,10 +11,12 @@ func TestSyncerOwnedSetCannotOverwriteVerificationImports(t *testing.T) {
 		Address:                   "Qcontract",
 		VerificationRecordSchema:  models.VerificationRecordSchemaV1,
 		Imports:                   map[string]string{"lib/Owned.hyp": "contract Owned {}"},
+		PrimarySourcePath:         "contracts/core/Owned.hyp",
+		ViaIR:                     true,
 		SourceBundleDigest:        "qrl.verified-source-bundle.v1:sha256:source",
 		AIExplanationSourceDigest: "qrl.verified-source-bundle.v1:sha256:ai",
 	})
-	for _, field := range []string{"verificationRecordSchema", "imports", "sourceBundleDigest", "aiExplanationSourceDigest"} {
+	for _, field := range []string{"verificationRecordSchema", "imports", "primarySourcePath", "viaIR", "sourceBundleDigest", "aiExplanationSourceDigest"} {
 		if _, exists := fields[field]; exists {
 			t.Fatalf("syncer-owned update unexpectedly contains %q: %+v", field, fields)
 		}

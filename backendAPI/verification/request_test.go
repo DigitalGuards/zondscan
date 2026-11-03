@@ -38,7 +38,7 @@ func TestCanonicalizeVerifyRequestPersistsEffectiveInputs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("wrap standard JSON: %v", err)
 	}
-	if got := input.Sources[primarySourcePath(req.ContractName)].Content; got != req.SourceCode {
+	if got := input.Sources[effectivePrimarySourcePath(req)].Content; got != req.SourceCode {
 		t.Fatalf("primary source content = %q", got)
 	}
 	if len(input.Sources) != 3 {

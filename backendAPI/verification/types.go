@@ -8,12 +8,15 @@ import (
 
 // VerifyRequest is the JSON body for POST /contract/verify.
 //
-// Single-file submissions wrap the primary contract source in the
-// `sourceCode` field; additional dependencies (imports) go into the
-// `imports` map keyed by the path the source uses for the import (e.g.
-// "./Context.hyp" → the Context.hyp content). The Go layer wraps both
-// into a Hyperion standard-JSON `sources` map before invoking the
-// compiler, users never see standard-JSON directly in v1.
+// The primary contract source goes in `sourceCode`. By default it is compiled
+// as the source unit `<contractName>.hyp` at the root of the virtual source
+// tree. A project laid out in directories sets `primarySourcePath` to the
+// repo-relative path the deployer compiled (e.g. "contracts/core/Token.hyp").
+// Every other source goes into the `imports` map keyed by its repo-relative
+// path in the same tree (e.g. "contracts/lib/Math.hyp"), so a relative import
+// such as "../lib/Math.hyp" resolves exactly as it did for the deployer. The
+// Go layer wraps all of them into the Hyperion standard-JSON `sources` map,
+// which is the compiler's whole file system: nothing is written to disk.
 type VerifyRequest struct {
 	Address              string            `json:"address" binding:"required"`
 	SourceCode           string            `json:"sourceCode" binding:"required"`
@@ -25,6 +28,8 @@ type VerifyRequest struct {
 	ConstructorArguments string            `json:"constructorArguments,omitempty"`
 	Libraries            map[string]string `json:"libraries,omitempty"`
 	Imports              map[string]string `json:"imports,omitempty"`
+	PrimarySourcePath    string            `json:"primarySourcePath,omitempty"`
+	ViaIR                bool              `json:"viaIR,omitempty"`
 	License              string            `json:"license,omitempty"`
 }
 
@@ -77,9 +82,12 @@ type StandardJSONSource struct {
 }
 
 type StandardJSONSettings struct {
-	Optimizer       *Optimizer                     `json:"optimizer,omitempty"`
-	EVMVersion      string                         `json:"evmVersion,omitempty"`
-	Libraries       map[string]map[string]string   `json:"libraries,omitempty"`
+	Optimizer  *Optimizer                   `json:"optimizer,omitempty"`
+	EVMVersion string                       `json:"evmVersion,omitempty"`
+	Libraries  map[string]map[string]string `json:"libraries,omitempty"`
+	// ViaIR is omitted when false so default inputs stay byte-identical to
+	// the payloads the verifier produced before via-IR support.
+	ViaIR           bool                           `json:"viaIR,omitempty"`
 	OutputSelection map[string]map[string][]string `json:"outputSelection"`
 }
 

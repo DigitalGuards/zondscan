@@ -8,6 +8,7 @@ import type { CompilerProvenanceState } from "../lib/compilerProvenance";
 import {
   VERIFICATION_RECORD_SCHEMA_V1,
   VERIFICATION_RECORD_SCHEMA_V2,
+  VERIFICATION_RECORD_SCHEMA_V3,
 } from "../lib/storedVerification";
 import CopyButton from "./CopyButton";
 
@@ -33,7 +34,8 @@ export default function CompilerProvenanceDetails({
     verificationRecordSchema === undefined && provenance === undefined
       ? compilerState
       : verificationRecordSchema === VERIFICATION_RECORD_SCHEMA_V1 ||
-          verificationRecordSchema === VERIFICATION_RECORD_SCHEMA_V2
+          verificationRecordSchema === VERIFICATION_RECORD_SCHEMA_V2 ||
+          verificationRecordSchema === VERIFICATION_RECORD_SCHEMA_V3
         ? compilerState.status === "legacy-unrecorded"
           ? { status: "invalid-recorded" }
           : compilerState

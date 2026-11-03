@@ -95,9 +95,14 @@ const compilerProvenanceSchemaV2 = 'qrl.contract-compiler-provenance.v2';
 const nativeCompilerComponentNames = ['hypc', 'nsjail', 'policy'];
 const sourceBundleDigestPattern = '^qrl\\.verified-source-bundle\\.v1:sha256:[0-9a-f]{64}$';
 const verificationArtifactDigestPattern =
+  '^qrl\\.contract-verification-artifact\\.v[23]:sha256:[0-9a-f]{64}$';
+const verificationArtifactDigestPatternV2 =
   '^qrl\\.contract-verification-artifact\\.v2:sha256:[0-9a-f]{64}$';
+const verificationArtifactDigestPatternV3 =
+  '^qrl\\.contract-verification-artifact\\.v3:sha256:[0-9a-f]{64}$';
 const verificationRecordSchemaV1 = 'qrl.contract-verification-record.v1';
 const verificationRecordSchemaV2 = 'qrl.contract-verification-record.v2';
+const verificationRecordSchemaV3 = 'qrl.contract-verification-record.v3';
 const contractInfoSchema = spec.components?.schemas?.ContractInfo;
 const contractProvenanceSchema = contractInfoSchema?.properties?.compilerProvenance;
 const compilerProvenanceSchema = spec.components?.schemas?.CompilerProvenance;
@@ -138,6 +143,19 @@ if (
 ) {
   fail('Verification OpenAPI schema is missing compiler provenance or canonical imports.');
 }
+// Source trees and via-IR change the compiler input, so the request, the
+// job payload echo, and the stored record must all document both fields.
+if (
+  verifyRequestProperties?.primarySourcePath?.type !== 'string' ||
+  verifyRequestProperties?.primarySourcePath?.maxLength !== 256 ||
+  verifyRequestProperties?.viaIR?.type !== 'boolean' ||
+  jobProperties?.payload?.properties?.primarySourcePath?.type !== 'string' ||
+  jobProperties?.payload?.properties?.viaIR?.type !== 'boolean' ||
+  contractInfoSchema?.properties?.primarySourcePath?.type !== 'string' ||
+  contractInfoSchema?.properties?.viaIR?.type !== 'boolean'
+) {
+  fail('Verification OpenAPI schema is missing the primarySourcePath or viaIR compile inputs.');
+}
 if (
   !contractProvenanceSchema?.anyOf?.some((entry) => entry?.$ref === provenanceRef) ||
   !contractInfoSchema?.properties?.verificationRecordSchema?.enum?.includes(
@@ -145,6 +163,9 @@ if (
   ) ||
   !contractInfoSchema?.properties?.verificationRecordSchema?.enum?.includes(
     verificationRecordSchemaV2,
+  ) ||
+  !contractInfoSchema?.properties?.verificationRecordSchema?.enum?.includes(
+    verificationRecordSchemaV3,
   ) ||
   contractInfoSchema?.properties?.verificationArtifactDigest?.pattern !==
     verificationArtifactDigestPattern ||
@@ -154,7 +175,20 @@ if (
       entry?.if?.properties?.verificationRecordSchema?.const === verificationRecordSchemaV2 &&
       entry?.then?.required?.includes('verificationArtifactDigest') &&
       entry?.then?.required?.includes('creationBlockHash') &&
-      entry?.then?.required?.includes('chainId'),
+      entry?.then?.required?.includes('chainId') &&
+      entry?.then?.properties?.verificationArtifactDigest?.pattern ===
+        verificationArtifactDigestPatternV2 &&
+      entry?.then?.properties?.primarySourcePath === false &&
+      entry?.then?.properties?.viaIR === false,
+  ) ||
+  !contractInfoSchema?.allOf?.some(
+    (entry) =>
+      entry?.if?.properties?.verificationRecordSchema?.const === verificationRecordSchemaV3 &&
+      entry?.then?.required?.includes('verificationArtifactDigest') &&
+      entry?.then?.required?.includes('creationBlockHash') &&
+      entry?.then?.required?.includes('chainId') &&
+      entry?.then?.properties?.verificationArtifactDigest?.pattern ===
+        verificationArtifactDigestPatternV3,
   ) ||
   contractInfoSchema?.properties?.imports?.additionalProperties?.type !==
     'string' ||

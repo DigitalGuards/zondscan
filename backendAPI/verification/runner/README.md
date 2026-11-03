@@ -284,6 +284,85 @@ unambiguous. Schema v1 records lack sandbox identity and classify as
 `legacy-unrecorded`; the backend never infers old provenance from the current
 registry.
 
+## Source trees and via-IR
+
+The verifier compiles every submission through standard JSON with
+`hypc --standard-json --no-import-callback`. Its `sources` map is the
+compiler's whole file system inside the sandbox: hypc reads no host files,
+and the backend writes none. A source the tree leaves out fails as an
+ordinary `Source "..." not found` compile error. Every configured build must
+accept `--no-import-callback`; a build that rejects it fails each compile
+closed. All four pinned builds accept it.
+
+- `sourceCode` holds the primary source. Without `primarySourcePath` it is
+  the source unit `<contractName>.hyp` at the root of the virtual tree.
+- `primarySourcePath` places the primary source at the repo-relative path the
+  deployer compiled, for example `contracts/core/Token.hyp`. It must name a
+  `.hyp` file. A path equal to `<contractName>.hyp` is stored as absent.
+- `imports` holds every other source, keyed by its repo-relative path in the
+  same tree. A relative import such as `../lib/Math.hyp` in
+  `contracts/core/Token.hyp` then resolves to `contracts/lib/Math.hyp`,
+  exactly as it did in the deployer's build.
+- `viaIR` sets `settings.viaIR` for the compile.
+
+The paths must resolve every import as in the deployer's build. The
+matcher strips the CBOR metadata trailer from both sides before it compares
+code, so import resolution is what has to agree. Matching the exact paths
+also reproduces the metadata trailer, because it hashes every source unit
+name. The real-sandbox source tree probe shows both: the sandboxed runtime
+code, trailer included, equals the output of `hypc --bin-runtime` run from
+the project root on disk.
+
+Every path is validated before a job is created. A path is relative, uses
+ASCII letters, digits, spaces, and `. _ - @ + ~` separated by `/`, is at most
+256 bytes and 32 segments long, and stays inside the virtual root after `./`
+and `../` segments are resolved. Spaces stay allowed because the single-file
+imports flow always accepted names such as `./My Token.hyp`; control
+characters, backslashes and non-ASCII characters are refused. The request is
+rejected when two paths resolve to the same source, differ only by letter
+case, or use one name as both a file and a directory, or when it holds more
+than 128 sources in total. Paths that differ only by letter case stay
+rejected although a Linux checkout can hold both: on the case-insensitive
+file systems macOS and Windows use by default they are one file, so such a
+tree cannot be checked out there, and the two names read as the same file to
+a reviewer. With a nested `primarySourcePath`, an import at the root named
+`<contractName>.hyp` (in any letter case) is also rejected. The verified
+source bundle the AI explainer reads labels the primary source with that
+name, so such an import would show up as a second copy of the primary. The
+route also builds the standard JSON input and rejects it with 400 when it is
+larger than `VERIFIER_SOURCE_MAX_BYTES`, so an oversized tree never becomes a
+job.
+
+Records keep schema `qrl.contract-verification-record.v2` whenever a
+verification uses the default primary path without via-IR, so the
+single-file flow writes the same bytes as before. A verification with a
+nested primary path or via-IR writes schema
+`qrl.contract-verification-record.v3`. Its artifact digest
+`qrl.contract-verification-artifact.v3` hashes the v2 field sequence under
+the v3 schema string, followed by the effective primary path and the via-IR
+flag. Only v3 records may carry `primarySourcePath` or `viaIR`. The frontend
+recomputes both digests, so deploy the frontend before the backend.
+
+### Deploy order for record schema v3
+
+1. Release the frontend first. A frontend from before schema v3 only knows
+   the v2 digest, so it shows every source tree or via-IR verification as an
+   integrity failure on the job page and on the contract page. Single-file
+   records keep schema v2 and display correctly with either frontend.
+2. Then swap the backend binary.
+3. Once v3 records exist, do not roll the backend back to a build without
+   schema v3 unless a repair plan for those records is ready. The older build
+   classifies them as `invalid-recorded`, hides their ABI from transaction
+   decoding, and answers a new verification of those addresses with 409
+   until an operator repairs the record.
+4. Smoke test: verify a known QRC20 token factory deployment from source and
+   check that the job compiles and matches before calling the deploy done.
+   Production runs the sandbox in path exec mode, which the real-sandbox test
+   suite only covers on a root-owned install. Use a deployment without a
+   verified record: an address that is already verified answers
+   `alreadyVerified` without compiling, so it proves nothing about the
+   sandbox.
+
 ## Shared Go resource limits
 
 ```bash
@@ -324,6 +403,9 @@ The probes validate the empty root and environment, hostname, mandatory
 rlimits, host read and write denial, TCP and Unix socket denial, process
 creation denial, invalid-policy startup failure, a representative optimized
 Hyperion compile, and byte-for-byte equality with direct compiler output.
+`TestRealStaticHyperionVerifiesSourceTreeThroughSandbox` verifies a synthetic
+multi-directory project with `../` imports, with and without via-IR, against
+the same tree compiled by the hypc CLI on disk.
 
 ## Deployment gate
 
