@@ -1,4 +1,6 @@
-import { isArray } from './guards';
+import * as zondAbi from '@theqrl/web3-qrl-abi';
+import { qNormaliseAbiValue } from './helpers';
+import { errorMessage, InvalidInputError, isArray, isRecord } from './guards';
 
 // A lowercase q in front of a uniform-case body. @theqrl/web3 1.0.3 encoded
 // such an address, and 2.0.0 accepts only a capital Q. A mixed-case body
@@ -42,4 +44,54 @@ export function parseContractArg(raw: string, type: string): unknown {
   }
   // Integers stay strings, because the ABI codec accepts strings for big ints.
   return isAddressType(type) ? withCapitalQ(t) : t;
+}
+
+export type ContractReadResult =
+  { decoded: true; text: string } | { decoded: false; error: string; raw: string };
+
+/**
+ * Decodes a read call's reply for display. @theqrl/web3-qrl-abi 2.x refuses a
+ * reply that is not canonical ABI, such as a bool word other than 0 or 1, an
+ * integer with high bits set or bytesN with non-zero padding, where 1.x showed
+ * a value read from part of the word. Such a reply comes back undecoded with
+ * the codec's reason and the raw hex, so the node's answer stays visible.
+ */
+export function decodeContractRead(
+  outputs: readonly { name: string; type: string }[],
+  raw: string
+): ContractReadResult {
+  const types = outputs.map((o) => o.type);
+  let decoded: unknown;
+  try {
+    decoded = zondAbi.decodeParameters(types, raw);
+  } catch (e) {
+    return {
+      decoded: false,
+      error: `The reply does not decode as (${types.join(', ')}): ${errorMessage(e)}`,
+      raw,
+    };
+  }
+  return { decoded: true, text: formatDecoded(decoded, outputs) };
+}
+
+// formatDecoded renders the ABI codec's decodeParameters output for
+// human consumption. The Result object carries both `0,1,…` index keys
+// and any named keys, plus a `__length__`. We flatten to a stable shape,
+// and qNormaliseAbiValue (in app/lib/helpers.ts) maps any address-typed
+// value to the canonical Q prefix used by the rest of ZondScan.
+function formatDecoded(
+  decoded: unknown,
+  outputs: readonly { name: string; type: string }[]
+): string {
+  if (!isRecord(decoded)) throw new InvalidInputError('Invalid decoded contract response');
+  const out: Record<string, unknown> = {};
+  outputs.forEach((o, i) => {
+    const v = decoded[String(i)];
+    out[o.name && o.name !== '' ? o.name : `_${i}`] = qNormaliseAbiValue(v, o.type);
+  });
+  return JSON.stringify(out, replacer, 2);
+}
+
+function replacer(_k: string, v: unknown): unknown {
+  return typeof v === 'bigint' ? v.toString() : v;
 }

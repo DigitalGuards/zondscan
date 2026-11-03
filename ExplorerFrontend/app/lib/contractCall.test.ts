@@ -1,5 +1,5 @@
 import * as abi from '@theqrl/web3-qrl-abi';
-import { parseContractArg } from './contractCall';
+import { decodeContractRead, parseContractArg } from './contractCall';
 import { canonicalizeQrlAddress } from './qrlAddress';
 
 const BODY = 'ab'.repeat(64);
@@ -70,5 +70,42 @@ describe('parseContractArg', () => {
     // Only address inputs change: the same text for another type is untouched.
     expect(parseContractArg(`q${BODY}`, 'string')).toBe(`q${BODY}`);
     expect(parseContractArg(`["q${BODY}"]`, 'string[]')).toEqual([`q${BODY}`]);
+  });
+});
+
+describe('decodeContractRead', () => {
+  const word = (hex: string) => hex.padStart(128, '0');
+
+  it('formats a canonical reply', () => {
+    expect(
+      decodeContractRead(
+        [
+          { name: 'ok', type: 'bool' },
+          { name: '', type: 'uint256' },
+        ],
+        `0x${word('1')}${word('2a')}`
+      )
+    ).toEqual({ decoded: true, text: JSON.stringify({ ok: true, _1: '42' }, null, 2) });
+  });
+
+  it('shows a decoded address in the explorer canonical checksum form', () => {
+    const canonical = canonicalizeQrlAddress(`Q${BODY}`);
+    expect(canonical).toBe(`Q${checksummedBody()}`);
+    expect(decodeContractRead([{ name: 'owner', type: 'address' }], `0x${BODY}`)).toEqual({
+      decoded: true,
+      text: JSON.stringify({ owner: canonical }, null, 2),
+    });
+  });
+
+  it.each([
+    ['bool', word('2')],
+    ['uint8', word('1ff')],
+    ['bytes32', `${'11'.repeat(32)}01${'00'.repeat(31)}`],
+  ])('returns a non-canonical %s reply undecoded with its raw hex', (type, body) => {
+    const raw = `0x${body}`;
+    const read = decodeContractRead([{ name: 'value', type }], raw);
+    if (read.decoded) throw new Error(`the codec accepted a non-canonical ${type} reply`);
+    expect(read.raw).toBe(raw);
+    expect(read.error).toContain(`The reply does not decode as (${type}): `);
   });
 });

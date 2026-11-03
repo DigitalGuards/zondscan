@@ -99,6 +99,8 @@ async function startFakeNode(chainId: bigint): Promise<FakeNode> {
       }
       case 'qrl_getTransactionReceipt':
         return receipts.get(String(params[0])) ?? null;
+      case 'qrl_gasPrice':
+        return `0x${BASE_FEE.toString(16)}`;
       default:
         throw new Error(`fixture: unexpected ${method}`);
     }
@@ -111,7 +113,11 @@ async function startFakeNode(chainId: bigint): Promise<FakeNode> {
     request.on('end', () => {
       const replies = rpcRequests(body).map(({ id, method, params }) => {
         methods.push(method);
-        return { jsonrpc: '2.0', id, result: answer(method, params) };
+        try {
+          return { jsonrpc: '2.0', id, result: answer(method, params) };
+        } catch (error) {
+          return { jsonrpc: '2.0', id, error: { code: -32601, message: String(error) } };
+        }
       });
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify(replies.length === 1 ? replies[0] : replies));
@@ -205,6 +211,27 @@ describe('deploy-and-verify tutorial script', () => {
       expect(run.exitCode).toBe(1);
       expect(run.errors).toHaveLength(1);
       expect(String(run.errors[0])).toContain('unexpected chain: 1337');
+      expect(node.broadcasts).toEqual([]);
+    } finally {
+      await node.close();
+    }
+  }, 30000);
+
+  it('is refused by the installed web3 with the legacy gasPrice the page used to show', async () => {
+    const legacy = deployScript
+      .replace("    type: '0x2',\n", '')
+      .replace(
+        '    gas: (estimated * 12n) / 10n, // 20% headroom\n',
+        '    gas: (estimated * 12n) / 10n, // 20% headroom\n    gasPrice: await web3.qrl.getGasPrice(),\n'
+      );
+    expect(legacy).toContain('gasPrice: await web3.qrl.getGasPrice(),');
+    expect(legacy).not.toContain("type: '0x2'");
+    const node = await startFakeNode(explorerChainId());
+    try {
+      const run = await runSample(legacy, node.url);
+      expect(run.exitCode).toBe(1);
+      expect(run.errors).toHaveLength(1);
+      expect(run.errors[0]).toBeInstanceOf(web3Package.InvalidPropertiesForTransactionTypeError);
       expect(node.broadcasts).toEqual([]);
     } finally {
       await node.close();
