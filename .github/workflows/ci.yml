@@ -1,35 +1,51 @@
 name: CI
 
-# Only fire on pull requests. Triggering on `push: dev` AND
-# `pull_request: [main, dev]` caused every commit on dev to run twice
-# (push event + pull_request:synchronize on the open dev,main PR).
-# pull_request:synchronize already covers any push to a branch with an
-# open PR, and the workflow assumes a dev,main release PR is always
-# pending while changes are landing.
+# Each change is tested once, on its pull request. A pull request reads caches
+# from its base branch and the default branch only, so a push to dev that changes
+# dependencies runs the jobs once more to refresh the caches pull requests use.
+# The weekly run surfaces drift in the registry and the toolchains.
 on:
   pull_request:
     branches: [main, dev]
+  push:
+    branches: [dev]
+    paths:
+      - 'ExplorerFrontend/package-lock.json'
+      - 'backendAPI/go.sum'
+      - 'QRL2MongoDB/go.sum'
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
 
-# Belt-and-braces dedupe: if two events ever do collide (e.g. a future
-# branch protection ruleset opens a second PR for the same head),
-# cancel the older run instead of letting both finish.
+permissions:
+  contents: read
+
+# The weekly run tests dev, where changes land first. Scheduled runs read this
+# file from main.
+env:
+  TEST_REF: ${{ github.event_name == 'schedule' && 'dev' || '' }}
+
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   frontend:
     name: Frontend Build & Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: ExplorerFrontend
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TEST_REF }}
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: 'npm'
@@ -41,22 +57,30 @@ jobs:
       - name: API docs drift check
         run: node scripts/check-api-docs-drift.mjs
 
+      - name: Test
+        run: npm test -- --maxWorkers=3
+
       - name: Build
         run: npm run build
 
   backend:
     name: Backend Build
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     defaults:
       run:
         working-directory: backendAPI
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TEST_REF }}
+          persist-credentials: false
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
+          # setup-go reads the toolchain line, so CI builds with the pinned Go.
           go-version-file: 'backendAPI/go.mod'
           cache-dependency-path: backendAPI/go.sum
 
@@ -80,15 +104,19 @@ jobs:
   syncer:
     name: Syncer Build
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     defaults:
       run:
         working-directory: QRL2MongoDB
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TEST_REF }}
+          persist-credentials: false
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: 'QRL2MongoDB/go.mod'
           cache-dependency-path: QRL2MongoDB/go.sum
