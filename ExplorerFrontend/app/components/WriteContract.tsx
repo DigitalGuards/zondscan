@@ -7,6 +7,7 @@ import ConnectButton from './ConnectButton';
 import type { QRLConnectProvider } from '../lib/qrlConnect';
 import type { ContractData } from '../types/address';
 import { assertVm64AbiSupport } from '../lib/vm64Abi';
+import { parseContractArg } from '../lib/contractCall';
 import { parseAbiFunctions, type AbiFunction } from '../lib/contractAbi';
 import { isRecord, errorMessage } from '../lib/guards';
 import { classifyStoredVerification } from '../lib/storedVerification';
@@ -132,7 +133,7 @@ function WriteFunctionCard({
     setRejected(false);
     try {
       assertVm64AbiSupport();
-      const args = fn.inputs.map((input, i) => parseArg(values[i] ?? '', input.type));
+      const args = fn.inputs.map((input, i) => parseContractArg(values[i] ?? '', input.type));
       const data = zondAbi.encodeFunctionCall(fn, args);
 
       const tx: Record<string, string> = {
@@ -254,30 +255,6 @@ function WriteFunctionCard({
       )}
     </div>
   );
-}
-
-// parseArg converts a user-typed string into the right JS shape for
-// The installed ABI codec's encodeFunctionCall. Mirrors ReadContract's parser
-// so the Read/Write tabs accept identical input formats.
-function parseArg(raw: string, type: string): unknown {
-  const t = raw.trim();
-  if (t === '') {
-    if (type === 'bool') return false;
-    if (type.startsWith('uint') || type.startsWith('int')) return '0';
-    return '';
-  }
-  if (type === 'bool') return t.toLowerCase() === 'true' || t === '1';
-  if (type.endsWith(']') || type === 'tuple') {
-    try {
-      return JSON.parse(t);
-    } catch {
-      throw new Error(`expected JSON for ${type}: e.g. [1,2,3]`);
-    }
-  }
-  if (type.startsWith('uint') || type.startsWith('int')) {
-    return t;
-  }
-  return t;
 }
 
 function placeholderFor(type: string): string {

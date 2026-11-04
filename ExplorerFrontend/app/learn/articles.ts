@@ -175,7 +175,7 @@ export const learnArticles: LearnArticleMeta[] = [
       'Compile with Hyperion, deploy to the QRL 2.0 testnet, and publish verified source code on ZondScan.',
     category: 'tutorials',
     order: 6,
-    updated: '2026-08-05',
+    updated: '2026-11-03',
     readingMinutes: 8,
   },
 ];

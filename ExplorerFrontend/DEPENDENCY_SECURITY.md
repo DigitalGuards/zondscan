@@ -39,3 +39,27 @@ two unresolved advisories:
 Both packages are marked development-only in the lockfile. Their upstream fixes
 remain pending. npm's suggested major downgrades of Next lint tooling and Jest
 fall outside this security update's supported versions.
+
+## @theqrl/web3 2.0.0 (2026-11-03)
+
+`@theqrl/web3` and `@theqrl/web3-qrl-abi` moved to 2.0.0 together, and the
+tree now holds one copy of every `@theqrl/web3*` package (1.0.3 nested
+thirteen validator copies). Four overrides went away with the upgrade:
+
+- `@theqrl/mldsa87`, `@theqrl/qrl-cryptography` and `@theqrl/wallet.js`:
+  2.0.0 pins mldsa87 2.2.0, qrl-cryptography 0.3.3 and wallet.js 6.3.0
+  itself. Web3 still pins them exactly, so a crypto patch published before
+  the next web3 release needs a temporary override again.
+- `@theqrl/web3-validator` > `zod`: the validator now pins zod 4.6.7 itself.
+  The other zod dependents, `eslint-plugin-react-hooks` and
+  `zod-validation-error`, accept that version, so `npm ls zod` shows one copy.
+  An override equal to the validator's pin would hold zod back once a later
+  validator release raises it.
+
+`@theqrl/web3-providers-ws` 2.0.0 pins ws 8.22.0 while `engine.io-client`
+(through `@qrlwallet/connect`) takes `~8.21.0`, so the tree carries both. The
+explorer uses the HTTP provider only.
+
+`npm audit --omit=dev` still reports zero vulnerabilities. The full report
+lists the same 34 development packages (3 low, 31 moderate) as before the
+upgrade.

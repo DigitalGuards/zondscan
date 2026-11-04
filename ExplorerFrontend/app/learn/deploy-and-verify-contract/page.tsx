@@ -9,6 +9,7 @@ import LearnArticle, {
   CodeBlock,
   LearnFAQ,
 } from '../components/LearnArticle';
+import { deployScript } from './deploy-script';
 
 export const metadata: Metadata = learnMetadata('deploy-and-verify-contract');
 
@@ -44,39 +45,6 @@ fs.writeFileSync('Counter.json', JSON.stringify({
   abi: artifact.abi,
   bytecode: artifact.zvm.bytecode.object,
 }));`;
-
-const deployScript = `const { Web3 } = require('@theqrl/web3');
-const { MLDSA87 } = require('@theqrl/wallet.js');
-const { abi, bytecode } = require('./Counter.json');
-
-const web3 = new Web3(new Web3.providers.HttpProvider(
-  'https://qrlwallet.com/api/qrl-rpc/testnet',
-));
-
-// A 34-word test mnemonic. Never hardcode one; never reuse a real wallet.
-const mnemonic = process.env.MNEMONIC;
-const hexseed = MLDSA87.newWalletFromMnemonic(mnemonic).getHexExtendedSeed();
-const acc = web3.qrl.accounts.seedToAccount(hexseed);
-web3.qrl.wallet.add(hexseed);
-
-async function main() {
-  const chainId = BigInt(await web3.qrl.getChainId());
-  if (chainId !== 1337n) throw new Error('unexpected chain: ' + chainId);
-
-  const deploy = new web3.qrl.Contract(abi)
-    .deploy({ data: bytecode, arguments: [] });
-  const estimated = await deploy.estimateGas({ from: acc.address });
-
-  const receipt = await web3.qrl.sendTransaction({
-    from: acc.address,
-    data: deploy.encodeABI(),
-    gas: (estimated * 12n) / 10n, // 20% headroom
-    gasPrice: await web3.qrl.getGasPrice(),
-  });
-  console.log('Contract address:', receipt.contractAddress);
-}
-
-main().catch((e) => { console.error(e); process.exitCode = 1; });`;
 
 export default function Page(): JSX.Element {
   return (
@@ -160,7 +128,14 @@ export default function Page(): JSX.Element {
         <p>
           The deploy script signs with an ML-DSA-87 account derived from a 34-word mnemonic and
           talks to the public testnet RPC proxy. The QRL 2.0 testnet uses chain ID{' '}
-          <code>1337</code>, and the script aborts on a mismatch before signing anything.
+          <code>3151909</code>, and the script aborts on a mismatch before signing anything.
+        </p>
+        <p>
+          Gas on QRL 2.0 is priced by the EIP-1559 fee market, so the script sends a type 2
+          transaction. <code>@theqrl/web3</code> fills <code>maxFeePerGas</code> and{' '}
+          <code>maxPriorityFeePerGas</code> from the latest block; pass both fields yourself to
+          set your own fee cap. Version 2 of <code>@theqrl/web3</code> refuses a legacy{' '}
+          <code>gasPrice</code> field.
         </p>
         <CodeBlock code={deployScript} language="javascript" />
         <p>
