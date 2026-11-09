@@ -2,17 +2,16 @@
  * Brand copy tests: the rendered text of every page and component that names
  * the site.
  *
- *  1. Default identity: the capture equals app/lib/__fixtures__/brand-copy-default.json,
- *     taken from origin/dev before the copy moved onto lib/site.ts.
- *  2. Alternate identity (ShorScan): the same capture contains no `zondscan`
- *     in any letter case, apart from the allowlist below.
+ * Alternate identity (ShorScan): the capture contains no `zondscan` in any
+ * letter case, apart from the allowlist below, and carries the configured name.
+ * (The default text was proven identical to origin/dev when the copy moved
+ * onto lib/site.ts; the source guard in siteIdentity.test.ts keeps it there.)
  *
  * Not renderable here (state-dependent text): orderbook/fund-flow.tsx error
  * and band-note copy, and the live pairing name inside getQrlConnect(), which
- * needs a browser window. The pairing name logic is tested through
- * dappDisplayName(); fund-flow is covered by the source guard.
+ * needs a browser window. The pairing name is tested through PAIRING_NAME;
+ * fund-flow is covered by the source guard.
  */
-import fs from 'node:fs';
 import path from 'node:path';
 import { pageFiles, withSiteEnv, type SiteEnv } from './siteIdentityCollect.fixture';
 
@@ -26,7 +25,6 @@ jest.mock('next/navigation', () => ({
 }));
 
 const appDir = path.resolve(__dirname, '..');
-const fixturePath = path.join(__dirname, '__fixtures__/brand-copy-default.json');
 
 const RENDERED_PAGES = ['learn', 'api-explorer', 'faq'];
 
@@ -85,18 +83,6 @@ async function capture(env: SiteEnv) {
   }
 }
 
-it('writes or checks the default capture', async () => {
-  const out = await capture({});
-  if (process.env.WRITE_BRAND_FIXTURE) {
-    fs.mkdirSync(path.dirname(fixturePath), { recursive: true });
-    fs.writeFileSync(fixturePath, `${JSON.stringify(out, null, 2)}\n`);
-    return;
-  }
-  const fixture = JSON.parse(fs.readFileSync(fixturePath, 'utf8')) as Record<string, string>;
-  expect(Object.keys(out)).toEqual(Object.keys(fixture));
-  for (const key of Object.keys(fixture)) expect([key, out[key]]).toEqual([key, fixture[key]]);
-});
-
 /**
  * `zondscan` mentions that stay in the alternate build on purpose: the
  * repository links, the logo image file names, and element ids or URL
@@ -137,5 +123,20 @@ describe('alternate identity (ShorScan)', () => {
     expect(strings['es:0']).toBe('Inicio de ShorScan');
     expect(strings['zh:0']).toBe('ShorScan 首页');
     expect(strings.pairingName).toBe('ShorScan');
+  });
+});
+
+describe('pairing name', () => {
+  it('keeps the historical spelling for the default site name', async () => {
+    const name = await withSiteEnv({}, async () => (await import('./site')).PAIRING_NAME);
+    expect(name).toBe('Zondscan');
+  });
+
+  it('uses the configured name otherwise', async () => {
+    const name = await withSiteEnv(
+      { NEXT_PUBLIC_SITE_NAME: 'ShorScan' },
+      async () => (await import('./site')).PAIRING_NAME,
+    );
+    expect(name).toBe('ShorScan');
   });
 });
