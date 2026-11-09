@@ -1,3 +1,4 @@
+import { SITE_NAME, SITE_ORIGIN } from '../../lib/site';
 import type { Metadata } from 'next';
 import { sharedMetadata } from '../../lib/seo/metaData';
 import ValidatorDetailClient from './validator-detail-client';
@@ -12,8 +13,8 @@ interface PageProps {
 // and site name stay consistent across the explorer.
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { id } = await params;
-  const canonicalUrl = `https://zondscan.com/validators/${id}`;
-  const title = `Validator #${id} | ZondScan`;
+  const canonicalUrl = `${SITE_ORIGIN}/validators/${id}`;
+  const title = `Validator #${id} | ${SITE_NAME}`;
   const description = `Stake, status, age, and activation history for QRL 2.0 validator #${id}.`;
 
   return {
@@ -29,7 +30,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       title,
       description,
       url: canonicalUrl,
-      siteName: 'ZondScan',
+      siteName: SITE_NAME,
       type: 'website',
     },
     twitter: {

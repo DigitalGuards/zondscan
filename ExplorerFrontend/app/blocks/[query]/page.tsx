@@ -1,3 +1,4 @@
+import { SITE_NAME, SITE_ORIGIN } from '../../lib/site';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import BlocksClient from './blocks-client';
@@ -51,11 +52,11 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
   const pageNumber = resolvedParams.query || '1';
   // Self-referencing canonical: there is no /blocks index route (only
   // /blocks/<page>), so each paginated page canonicalizes to itself.
-  const canonicalUrl = `https://zondscan.com/blocks/${pageNumber}`;
+  const canonicalUrl = `${SITE_ORIGIN}/blocks/${pageNumber}`;
 
   return {
     ...sharedMetadata,
-    title: `Latest Synced Blocks - Page ${pageNumber} | ZondScan`,
+    title: `Latest Synced Blocks - Page ${pageNumber} | ${SITE_NAME}`,
     description: `View the most recently synced blocks on the QRL 2.0 blockchain network. Page ${pageNumber} of the blocks list.`,
     alternates: {
       ...sharedMetadata.alternates,
@@ -63,15 +64,15 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     },
     openGraph: {
       ...sharedMetadata.openGraph,
-      title: `Latest Synced Blocks - Page ${pageNumber} | ZondScan`,
+      title: `Latest Synced Blocks - Page ${pageNumber} | ${SITE_NAME}`,
       description: `View the most recently synced blocks on the QRL 2.0 blockchain network. Page ${pageNumber} of the blocks list.`,
-      url: `https://zondscan.com/blocks/${pageNumber}`,
-      siteName: 'ZondScan',
+      url: `${SITE_ORIGIN}/blocks/${pageNumber}`,
+      siteName: SITE_NAME,
       type: 'website',
     },
     twitter: {
       ...sharedMetadata.twitter,
-      title: `Latest Synced Blocks - Page ${pageNumber} | ZondScan`,
+      title: `Latest Synced Blocks - Page ${pageNumber} | ${SITE_NAME}`,
       description: `View the most recently synced blocks on the QRL 2.0 blockchain network. Page ${pageNumber} of the blocks list.`,
     },
   };

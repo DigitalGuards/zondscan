@@ -1,3 +1,4 @@
+import { SITE_NAME, siteUrl } from '../lib/site';
 import type { Metadata } from 'next';
 import TransactionsList from './[query]/TransactionsList';
 import type { Transaction } from '@/app/types';
@@ -11,25 +12,25 @@ export const dynamic = 'force-dynamic';
 // social previews are consistent across the explorer.
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'Transactions | ZondScan',
+  title: `Transactions | ${SITE_NAME}`,
   description:
     'Browse the latest transactions on the QRL 2.0 blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: 'https://zondscan.com/transactions',
+    canonical: siteUrl('/transactions'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'Transactions | ZondScan',
+    title: `Transactions | ${SITE_NAME}`,
     description:
       'Browse the latest transactions on the QRL 2.0 blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
-    url: 'https://zondscan.com/transactions',
-    siteName: 'ZondScan',
+    url: siteUrl('/transactions'),
+    siteName: SITE_NAME,
     type: 'website',
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'Transactions | ZondScan',
+    title: `Transactions | ${SITE_NAME}`,
     description:
       'Browse the latest transactions on the QRL 2.0 blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
   },

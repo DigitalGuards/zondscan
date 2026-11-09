@@ -1,3 +1,4 @@
+import { SITE_NAME, siteUrl } from '../lib/site';
 import CheckerClient from './checker-client';
 import type { Metadata } from 'next';
 import { sharedMetadata } from '../lib/seo/metaData';
@@ -5,23 +6,23 @@ import { sharedMetadata } from '../lib/seo/metaData';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'Balance Checker | ZondScan',
+  title: `Balance Checker | ${SITE_NAME}`,
   description:
     'Check wallet balances on the Quantum Resistant Ledger network with our intuitive balance checker tool. Verify holdings quickly and accurately.',
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: 'https://zondscan.com/checker',
+    canonical: siteUrl('/checker'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'Balance Checker | ZondScan',
+    title: `Balance Checker | ${SITE_NAME}`,
     description:
       'Check wallet balances on the Quantum Resistant Ledger network with our intuitive balance checker tool. Verify holdings quickly and accurately.',
-    url: 'https://zondscan.com/checker',
+    url: siteUrl('/checker'),
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'Balance Checker | ZondScan',
+    title: `Balance Checker | ${SITE_NAME}`,
     description:
       'Check wallet balances on the Quantum Resistant Ledger network with our intuitive balance checker tool. Verify holdings quickly and accurately.',
   },

@@ -1,3 +1,4 @@
+import { SITE_NAME, SITE_ORIGIN } from '../../lib/site';
 import type { Metadata } from 'next';
 import type { AddressPageLoadResult } from './address-page-data';
 import { sharedMetadata } from '../../lib/seo/metaData';
@@ -10,10 +11,10 @@ export function generateAddressPageMetadata(query: string, verifiedName?: string
   const address = canonicalizeQrlAddress(query);
   const identity = routeName ?? address ?? query;
   const displayIdentity = address ? compactQrlAddress(address) : identity;
-  const canonicalUrl = `https://zondscan.com/address/${encodeURIComponent(identity)}`;
+  const canonicalUrl = `${SITE_ORIGIN}/address/${encodeURIComponent(identity)}`;
   const title = routeName
-    ? `${routeName} QNS Address | ZondScan`
-    : `Address ${displayIdentity}${address && qnsName ? ` (${qnsName})` : ''} | ZondScan`;
+    ? `${routeName} QNS Address | ${SITE_NAME}`
+    : `Address ${displayIdentity}${address && qnsName ? ` (${qnsName})` : ''} | ${SITE_NAME}`;
   const description = routeName
     ? `View the QRL address resolved by QNS name ${routeName}, including balance, transactions, and other blockchain data.`
     : address && qnsName
@@ -33,7 +34,7 @@ export function generateAddressPageMetadata(query: string, verifiedName?: string
       title,
       description,
       url: canonicalUrl,
-      siteName: 'ZondScan',
+      siteName: SITE_NAME,
       type: 'website',
     },
     twitter: {

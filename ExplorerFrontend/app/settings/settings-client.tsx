@@ -1,5 +1,6 @@
 'use client';
 
+import { SITE_NAME } from '../lib/site';
 import { isOneOf } from '../lib/guards';
 
 import { useState } from 'react';
@@ -86,7 +87,7 @@ export default function SettingsClient() {
             {t('Site settings')}
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-text-secondary">
-            {t('Choose how ZondScan looks and how you read the chain. Changes apply immediately.')}
+            {t(`Choose how ${SITE_NAME} looks and how you read the chain. Changes apply immediately.`)}
           </p>
         </div>
         <button

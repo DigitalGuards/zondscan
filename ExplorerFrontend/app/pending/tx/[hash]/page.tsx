@@ -1,3 +1,4 @@
+import { SITE_NAME, SITE_ORIGIN } from '../../../lib/site';
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { fetchPendingTransactionStatus } from '../../../lib/pendingTransaction';
@@ -19,8 +20,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const shortHash = hash.length > 16
     ? `${hash.slice(0, 10)}...${hash.slice(-6)}`
     : hash;
-  const canonicalUrl = `https://zondscan.com/pending/tx/${hash}`;
-  const title = `Pending Transaction ${shortHash} | ZondScan`;
+  const canonicalUrl = `${SITE_ORIGIN}/pending/tx/${hash}`;
+  const title = `Pending Transaction ${shortHash} | ${SITE_NAME}`;
   const description = `Track QRL 2.0 pending transaction ${shortHash}: mempool status, ETA to inclusion, gas price vs median, and decoded calldata.`;
 
   return {
@@ -36,7 +37,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       title,
       description,
       url: canonicalUrl,
-      siteName: 'ZondScan',
+      siteName: SITE_NAME,
       type: 'website',
     },
     twitter: {

@@ -1,3 +1,4 @@
+import { SITE_NAME, siteUrl } from '../lib/site';
 import { Suspense } from 'react';
 import ValidatorsWrapper from './validators-client';
 import type { Metadata } from 'next';
@@ -6,23 +7,23 @@ import { sharedMetadata } from '../lib/seo/metaData';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'Validators | ZondScan',
+  title: `Validators | ${SITE_NAME}`,
   description:
     'View active validators, their ages, uptime, and staking information on the QRL 2.0 network',
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: 'https://zondscan.com/validators',
+    canonical: siteUrl('/validators'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'Validators | ZondScan',
+    title: `Validators | ${SITE_NAME}`,
     description:
       'View active validators, their ages, uptime, and staking information on the QRL 2.0 network',
-    url: 'https://zondscan.com/validators',
+    url: siteUrl('/validators'),
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'Validators | ZondScan',
+    title: `Validators | ${SITE_NAME}`,
     description:
       'View active validators, their ages, uptime, and staking information on the QRL 2.0 network',
   },

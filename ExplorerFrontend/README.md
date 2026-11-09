@@ -119,6 +119,7 @@ The frontend uses a single `.env` file for all environment variables.
 | ------ | ------ |
 | DATABASE_URL | mongodb://localhost:27017/qrldata-z?readPreference=primary |
 | DOMAIN_NAME | http://localhost:3000 (dev) OR http://your_domain_name.io (prod) |
+| NEXT_PUBLIC_SITE_NAME | Brand name shown in titles, header, footer, manifest and structured data. Defaults to `ZondScan`. |
 | HANDLER_URL | http://127.0.0.1:8080 (local server) OR http://backend:8080 (container network) |
 | NEXT_PUBLIC_HANDLER_URL | /api (same-origin browser proxy) |
 

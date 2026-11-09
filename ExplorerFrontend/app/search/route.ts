@@ -1,3 +1,4 @@
+import { SITE_ORIGIN } from '../lib/site';
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveSearchPath } from '../lib/searchResolver';
 
@@ -14,7 +15,7 @@ import { resolveSearchPath } from '../lib/searchResolver';
 // Behind the nginx proxy request.nextUrl.origin is the internal
 // localhost:3000, so anchor redirects to the canonical public origin
 // (same hardcode as metadataBase in lib/seo/metaData.ts).
-const CANONICAL_ORIGIN = 'https://zondscan.com';
+const CANONICAL_ORIGIN = SITE_ORIGIN;
 
 export function GET(request: NextRequest): NextResponse {
   try {

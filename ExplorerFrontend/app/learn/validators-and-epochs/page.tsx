@@ -1,3 +1,4 @@
+import { SITE_HOST } from '../../lib/site';
 import { fetchChainTiming } from '../../lib/chainTiming';
 import type { Metadata } from 'next';
 import Link from 'next/link';
@@ -204,7 +205,7 @@ export default async function Page(): Promise<JSX.Element> {
         <StepList>
           <Step title="Open the validators dashboard">
             <p>
-              Go to <Link href="/validators">zondscan.com/validators</Link>. The top
+              Go to <Link href="/validators">{SITE_HOST}/validators</Link>. The top
               panel shows the current epoch and slot, the finalized and
               justified epochs, and a countdown to the next epoch. Below it,
               stat cards break the validator set into total, active, pending,

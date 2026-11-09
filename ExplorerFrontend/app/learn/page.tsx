@@ -1,3 +1,4 @@
+import { SITE_NAME, siteUrl } from '../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
@@ -8,9 +9,9 @@ import {
   learnArticles,
 } from './articles';
 
-const TITLE = 'Learn QRL 2.0 | ZondScan';
+const TITLE = `Learn QRL 2.0 | ${SITE_NAME}`;
 const DESCRIPTION =
-  'Plain English guides to QRL 2.0: post-quantum signatures, proof of stake, wallets, staking, swaps, tokens, and smart contracts. Written by the team behind ZondScan and MyQRLWallet.';
+  `Plain English guides to QRL 2.0: post-quantum signatures, proof of stake, wallets, staking, swaps, tokens, and smart contracts. Written by the team behind ${SITE_NAME} and MyQRLWallet.`;
 
 export const metadata: Metadata = {
   ...sharedMetadata,
@@ -18,13 +19,13 @@ export const metadata: Metadata = {
   description: DESCRIPTION,
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: 'https://zondscan.com/learn',
+    canonical: siteUrl('/learn'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
     title: TITLE,
     description: DESCRIPTION,
-    url: 'https://zondscan.com/learn',
+    url: siteUrl('/learn'),
   },
   twitter: {
     ...sharedMetadata.twitter,

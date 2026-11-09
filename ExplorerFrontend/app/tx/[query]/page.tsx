@@ -1,3 +1,4 @@
+import { SITE_NAME, SITE_ORIGIN } from '../../lib/site';
 import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import TransactionView from './transaction-view';
@@ -23,8 +24,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const shortHash = txHash.length > 16
     ? `${txHash.slice(0, 10)}...${txHash.slice(-6)}`
     : txHash;
-  const canonicalUrl = `https://zondscan.com/tx/${txHash}`;
-  const title = `Transaction ${shortHash} | ZondScan`;
+  const canonicalUrl = `${SITE_ORIGIN}/tx/${txHash}`;
+  const title = `Transaction ${shortHash} | ${SITE_NAME}`;
   const description = `View detailed information for QRL 2.0 transaction ${shortHash}. See from / to, value, gas, decoded events, and contract calls.`;
 
   return {
@@ -40,7 +41,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       title,
       description,
       url: canonicalUrl,
-      siteName: 'ZondScan',
+      siteName: SITE_NAME,
       type: 'website',
     },
     twitter: {

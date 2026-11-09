@@ -1,19 +1,20 @@
 // lib/seo/metaData.ts
+import { SITE_NAME, SITE_ORIGIN } from '../site';
 import { Metadata } from 'next';
 
 // Shared social preview image. Purpose-made 1200x630 brand card in public/,
 // matching the recommended 1.91:1 aspect for summary_large_image.
-// metadataBase resolves the relative URL to zondscan.com.
+// metadataBase resolves the relative URL to the site origin.
 const OG_IMAGE = {
   url: '/og-image.png',
   width: 1200,
   height: 630,
-  alt: 'ZondScan, the QRL 2.0 blockchain explorer',
+  alt: `${SITE_NAME}, the QRL 2.0 blockchain explorer`,
 };
 
 export const sharedMetadata: Partial<Metadata> = {
-  metadataBase: new URL('https://zondscan.com'),
-  applicationName: 'ZondScan',
+  metadataBase: new URL(SITE_ORIGIN),
+  applicationName: SITE_NAME,
   keywords:
     'QRL, QRL 2.0, Quantum Resistant Ledger, Zond, blockchain explorer, post-quantum cryptography, Proof of Stake, Web3, EVM, quantum resistant, cryptocurrency, smart contracts, validators, transactions, blocks',
   manifest: '/manifest.json',
@@ -30,7 +31,7 @@ export const sharedMetadata: Partial<Metadata> = {
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    siteName: 'ZondScan',
+    siteName: SITE_NAME,
     images: [OG_IMAGE],
   },
   twitter: {

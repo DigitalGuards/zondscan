@@ -1,3 +1,4 @@
+import { SITE_HOST, siteUrl } from '../../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { learnMetadata } from '../components/learn-metadata';
@@ -100,8 +101,8 @@ export default function Page() {
           <Step title="Open the demo dApp">
             <p>
               Go to{' '}
-              <a href="https://zondscan.com/dapp-example" target="_blank" rel="noopener noreferrer">
-                zondscan.com/dapp-example
+              <a href={siteUrl('/dapp-example')} target="_blank" rel="noopener noreferrer">
+                {SITE_HOST}/dapp-example
               </a>
               . If you want to send a test transaction later, fund your address first at the{' '}
               <Link href="/faucet">ZondScan faucet</Link>; the{' '}
@@ -254,8 +255,8 @@ const accounts = await qrl.request({ method: 'qrl_requestAccounts' });`}
             a: (
               <p>
                 The demo at{' '}
-                <a href="https://zondscan.com/dapp-example" target="_blank" rel="noopener noreferrer">
-                  zondscan.com/dapp-example
+                <a href={siteUrl('/dapp-example')} target="_blank" rel="noopener noreferrer">
+                  {SITE_HOST}/dapp-example
                 </a>{' '}
                 is the quickest test. For real testnet flows, both{' '}
                 <a href="/learn/stake-with-quantapool">liquid staking with QuantaPool</a> and{' '}

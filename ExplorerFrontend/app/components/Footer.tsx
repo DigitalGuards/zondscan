@@ -1,8 +1,10 @@
+import { SITE_NAME, splitBrand } from '../lib/site';
 import InterfaceText from './InterfaceText';
 import Link from 'next/link';
 
 export default function Footer(): JSX.Element {
   const year = new Date().getFullYear();
+  const [brandPlain, brandAccent] = splitBrand();
 
   return (
     <footer lang="en" className="border-t border-border mt-8 bg-background-tertiary/40">
@@ -10,11 +12,11 @@ export default function Footer(): JSX.Element {
         {/* Brand / About */}
         <div className="flex-1">
           <h2 className="font-display text-xl font-semibold text-text-primary mb-1">
-            Zond<span className="text-accent">Scan</span>
+            {brandPlain}<span className="text-accent">{brandAccent}</span>
           </h2>
           <p className="eyebrow mb-4">QRL 2.0 Explorer</p>
           <p className="text-sm leading-relaxed text-text-secondary max-w-sm">
-            ZondScan is your gateway to the QRL 2.0 network. Explore blocks, transactions, smart contracts, and more.
+            {SITE_NAME} is your gateway to the QRL 2.0 network. Explore blocks, transactions, smart contracts, and more.
           </p>
         </div>
 
@@ -60,7 +62,7 @@ export default function Footer(): JSX.Element {
 
       <div className="border-t border-border">
         <div className="page-content py-6 text-sm text-text-muted flex flex-col md:flex-row items-center justify-between gap-2">
-          <span>&copy; {year} ZondScan. Built for the Quantum Resistant Ledger (QRL) Network.</span>
+          <span>&copy; {year} {SITE_NAME}. Built for the Quantum Resistant Ledger (QRL) Network.</span>
           <Link href="/sitemap.xml" className="hover:text-accent transition-colors"><InterfaceText text="Sitemap" /></Link>
         </div>
       </div>

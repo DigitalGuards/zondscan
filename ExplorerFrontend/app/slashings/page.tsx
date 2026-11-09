@@ -1,3 +1,4 @@
+import { SITE_NAME, siteUrl } from '../lib/site';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { sharedMetadata } from '../lib/seo/metaData';
@@ -5,16 +6,16 @@ import SlashingsClient from './slashings-client';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'Slashings | ZondScan',
+  title: `Slashings | ${SITE_NAME}`,
   description: 'Slashing events and validator set changes on the QRL network.',
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: 'https://zondscan.com/slashings',
+    canonical: siteUrl('/slashings'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'Slashings | ZondScan',
-    url: 'https://zondscan.com/slashings',
+    title: `Slashings | ${SITE_NAME}`,
+    url: siteUrl('/slashings'),
   },
 };
 
