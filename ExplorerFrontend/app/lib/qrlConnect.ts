@@ -2,6 +2,7 @@
 
 import { QRLConnect, ConnectionStatus } from '@qrlwallet/connect';
 import type { QRLConnectProvider } from '@qrlwallet/connect';
+import { DEFAULT_SITE_NAME, SITE_NAME } from './site';
 
 // Module-level singleton. The QRLConnect constructor announces itself via
 // EIP-6963 and opens a relay socket, instantiating twice would double the
@@ -28,6 +29,14 @@ function getRelayUrl(): string {
   return 'https://qrlwallet.com';
 }
 
+/**
+ * Name a paired wallet shows for this dApp. The default build keeps its
+ * historical spelling `Zondscan`; any other site name is used as configured.
+ */
+export function dappDisplayName(): string {
+  return SITE_NAME === DEFAULT_SITE_NAME ? 'Zondscan' : SITE_NAME;
+}
+
 export function getQrlConnect(): QRLConnectProvider {
   if (instance) return instance;
   if (typeof window === 'undefined') {
@@ -35,7 +44,7 @@ export function getQrlConnect(): QRLConnectProvider {
   }
   instance = new QRLConnect({
     dappMetadata: {
-      name: 'Zondscan',
+      name: dappDisplayName(),
       url: window.location.origin,
     },
     relayUrl: getRelayUrl(),

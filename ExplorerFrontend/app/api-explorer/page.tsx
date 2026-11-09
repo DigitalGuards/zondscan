@@ -1,8 +1,8 @@
-import { SITE_NAME, pageTitle, siteUrl } from '../lib/site';
+import { pageTitle, SITE_NAME, SITE_ORIGIN, siteUrl } from '../lib/site';
 import { isRecord, isArray } from '../lib/guards';
 import type { Metadata } from 'next';
 import { sharedMetadata } from '../lib/seo/metaData';
-import { getTaggedEndpoints } from '../lib/openapi';
+import { getTaggedEndpoints, renderOpenApiSpec } from '../lib/openapi';
 import type { OpenApiOperation, OpenApiParameter } from '../lib/openapi';
 import CopyButton from '../components/CopyButton';
 import ApiReference from './api-reference';
@@ -210,7 +210,7 @@ function toCard(
   };
 }
 
-const sections: TagSectionData[] = getTaggedEndpoints().map((group) => ({
+const sections: TagSectionData[] = getTaggedEndpoints(renderOpenApiSpec({ origin: SITE_ORIGIN, name: SITE_NAME })).map((group) => ({
   tag: group.tag,
   slug: slugify(group.tag),
   description: group.description ?? '',
@@ -276,7 +276,7 @@ function Hero(): JSX.Element {
       </h1>
       <p className="mt-4 text-text-secondary max-w-2xl leading-relaxed">
         {totalEndpoints} endpoints serve blocks, transactions, addresses, tokens, validators, gas
-        data, and contract tooling for the QRL 2.0 public testnet, straight from the ZondScan
+        data, and contract tooling for the QRL 2.0 public testnet, straight from the {SITE_NAME}{' '}
         indexer. The whole surface is described by one OpenAPI 3.1 document.
       </p>
       <div className="mt-6 flex flex-wrap gap-3">

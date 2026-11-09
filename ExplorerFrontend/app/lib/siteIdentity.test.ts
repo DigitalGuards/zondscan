@@ -301,3 +301,44 @@ describe('translated brand strings', () => {
     );
   });
 });
+
+describe('hardcoded brand name guard', () => {
+  // The default name lives in lib/site.ts; qrlConnect.ts keeps the historical
+  // `Zondscan` pairing spelling for the default build only.
+  const ALLOWLIST = new Set([
+    'lib/site.ts',
+    'lib/qrlConnect.ts',
+    'lib/siteIdentityCollect.fixture.ts',
+  ]);
+
+  function sourceFiles(dir: string, out: string[] = []): string[] {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== 'node_modules') sourceFiles(full, out);
+      } else if (/\.(ts|tsx)$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)) {
+        out.push(full);
+      }
+    }
+    return out;
+  }
+
+  it('finds no literal ZondScan or Zondscan in strings or JSX text outside the allowlist', () => {
+    const appDir = path.resolve(__dirname, '..');
+    const offenders: string[] = [];
+    for (const file of sourceFiles(appDir)) {
+      const rel = path.relative(appDir, file).split(path.sep).join('/');
+      if (ALLOWLIST.has(rel)) continue;
+      fs.readFileSync(file, 'utf8')
+        .split('\n')
+        .forEach((line, index) => {
+          const code = line
+            .replace(/(^|\s)\/\/\s.*$/, '')
+            .replace(/ZondScan_Logo\w*\.\w+/g, '');
+          if (/^\s*(\*|\/\*)/.test(line)) return;
+          if (/Zond[sS]can/.test(code)) offenders.push(`${rel}:${index + 1}: ${line.trim()}`);
+        });
+    }
+    expect(offenders).toEqual([]);
+  });
+});

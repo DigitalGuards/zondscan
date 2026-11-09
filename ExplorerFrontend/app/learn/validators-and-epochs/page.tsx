@@ -1,4 +1,4 @@
-import { SITE_HOST } from '../../lib/site';
+import { SITE_HOST, SITE_NAME } from '../../lib/site';
 import { fetchChainTiming } from '../../lib/chainTiming';
 import type { Metadata } from 'next';
 import Link from 'next/link';
@@ -26,7 +26,7 @@ export default async function Page(): Promise<JSX.Element> {
         QRL 2.0 is a proof of stake network. A set of validators takes turns
         proposing blocks and voting on them, and the chain&apos;s clock is
         divided into slots and epochs. Once you understand those three ideas,
-        every number on the ZondScan{' '}
+        every number on the {SITE_NAME}{' '}
         <Link href="/validators">validators dashboard</Link> and{' '}
         <Link href="/epochs/1">epoch browser</Link> starts to make sense.
       </p>
@@ -35,7 +35,7 @@ export default async function Page(): Promise<JSX.Element> {
         epochs structure time on the beacon chain, how a validator moves
         through its lifecycle from activation to exit, and how rewards reach a
         regular address. Along the way you will see exactly where each piece
-        of data lives on ZondScan.
+        of data lives on {SITE_NAME}.
       </p>
       <p>
         If you are new to the chain itself, read{' '}
@@ -92,7 +92,7 @@ export default async function Page(): Promise<JSX.Element> {
           attestations, a recent epoch checkpoint first becomes{' '}
           <strong>justified</strong> and then <strong>finalized</strong>.
           Finalized blocks are permanent: reverting them would require a large
-          share of all staked Quanta to be destroyed. ZondScan shows the
+          share of all staked Quanta to be destroyed. {SITE_NAME} shows the
           current head epoch, the justified epoch, and the finalized epoch at
           the top of the <Link href="/validators">validators page</Link>, along with
           a live progress bar counting slots toward the next epoch. The{' '}
@@ -122,7 +122,7 @@ export default async function Page(): Promise<JSX.Element> {
         </p>
         <p>
           One practical consequence is key size. An ML-DSA-87 public key is
-          2,592 bytes, which is why ZondScan collapses the public key field on
+          2,592 bytes, which is why {SITE_NAME} collapses the public key field on
           validator detail pages behind an expandable view.
         </p>
       </LearnSection>
@@ -130,7 +130,7 @@ export default async function Page(): Promise<JSX.Element> {
       <LearnSection id="the-validator-lifecycle" title="The validator lifecycle">
         <p>
           A validator passes through a well defined sequence of epochs, and
-          ZondScan renders the whole timeline on each validator&apos;s detail
+          {' '}{SITE_NAME} renders the whole timeline on each validator&apos;s detail
           page:
         </p>
         <ul>
@@ -141,7 +141,7 @@ export default async function Page(): Promise<JSX.Element> {
           </li>
           <li>
             <strong>Activation.</strong> The epoch it entered the active set
-            and began receiving duties. From here ZondScan counts its age in
+            and began receiving duties. From here {SITE_NAME} counts its age in
             epochs and days.
           </li>
           <li>
@@ -155,7 +155,7 @@ export default async function Page(): Promise<JSX.Element> {
           </li>
         </ul>
         <p>
-          From these epochs ZondScan derives one of four statuses for every
+          From these epochs {SITE_NAME} derives one of four statuses for every
           validator: <strong>active</strong>, <strong>pending</strong>{' '}
           (deposited, waiting for activation), <strong>exited</strong>, or{' '}
           <strong>slashed</strong>.
@@ -192,7 +192,7 @@ export default async function Page(): Promise<JSX.Element> {
           claim transaction to send.
         </p>
         <p>
-          The withdrawal address is an ordinary Q-prefixed account. ZondScan
+          The withdrawal address is an ordinary Q-prefixed account. {SITE_NAME}{' '}
           decodes it from the validator&apos;s withdrawal credentials and
           links it directly on the detail page, so you can follow rewards
           landing on a normal address page. All amounts display in Quanta;
@@ -201,7 +201,7 @@ export default async function Page(): Promise<JSX.Element> {
         </p>
       </LearnSection>
 
-      <LearnSection id="follow-it-on-zondscan" title="Follow it all on ZondScan">
+      <LearnSection id="follow-it-on-zondscan" title={`Follow it all on ${SITE_NAME}`}>
         <StepList>
           <Step title="Open the validators dashboard">
             <p>
@@ -281,7 +281,7 @@ export default async function Page(): Promise<JSX.Element> {
                 No. <a href="/learn/stake-with-quantapool">QuantaPool</a>{' '}
                 provides liquid staking on the testnet: you stake Quanta
                 through the pool, receive a liquid staking token, and track
-                your position on ZondScan.
+                your position on {SITE_NAME}.
               </p>
             ),
           },
@@ -302,7 +302,7 @@ export default async function Page(): Promise<JSX.Element> {
             a: (
               <p>
                 The protocol represents &quot;no exit requested&quot; with a
-                far-future epoch value. ZondScan renders that as Not
+                far-future epoch value. {SITE_NAME} renders that as Not
                 scheduled, which means the validator is expected to keep
                 operating indefinitely.
               </p>
@@ -313,7 +313,7 @@ export default async function Page(): Promise<JSX.Element> {
             a: (
               <p>
                 At the validator&apos;s withdrawal address, a normal
-                Q-prefixed account. ZondScan links it from each validator
+                Q-prefixed account. {SITE_NAME} links it from each validator
                 detail page, and the incoming protocol withdrawals appear on
                 that address like any other balance change, denominated in
                 Quanta.

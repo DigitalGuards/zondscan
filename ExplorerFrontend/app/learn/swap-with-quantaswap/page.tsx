@@ -1,3 +1,4 @@
+import { SITE_NAME } from '../../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { learnMetadata } from '../components/learn-metadata';
@@ -102,7 +103,7 @@ export default function Page(): JSX.Element {
         </p>
         <p>
           You also need a little gas on each chain you transact on: testnet Quanta from the{' '}
-          <Link href="/faucet">ZondScan faucet</Link> (see{' '}
+          <Link href="/faucet">{SITE_NAME} faucet</Link> (see{' '}
           <a href="/learn/get-testnet-quanta">the faucet guide</a>) and Sepolia ETH from any
           public Sepolia faucet.
         </p>
@@ -173,7 +174,7 @@ export default function Page(): JSX.Element {
               Your client reads the now-public secret from the other chain and you claim the
               maker&apos;s escrow with it. The app shows &quot;Atomic swap complete on both
               chains&quot; when both legs settle. Every swap also has a shareable status page,
-              and the QRL-leg transactions link straight to ZondScan, so you can follow along
+              and the QRL-leg transactions link straight to {SITE_NAME}, so you can follow along
               with <a href="/learn/read-a-transaction">How to read a transaction</a>.
             </p>
           </Step>
@@ -256,7 +257,7 @@ export default function Page(): JSX.Element {
               <p>
                 The QRL-leg lock and claim are ordinary transactions on the{' '}
                 <Link href="/transactions">QRL 2.0 testnet</Link>, and the app links each one to its
-                ZondScan page. The Sepolia leg shows up on any Sepolia block explorer.
+                {' '}{SITE_NAME} page. The Sepolia leg shows up on any Sepolia block explorer.
               </p>
             ),
           },

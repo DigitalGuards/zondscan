@@ -84,12 +84,12 @@ function anchorFor(method: string, path: string): string {
  * document's tags array. Operations tagged with a name missing from that
  * array are appended in encounter order so nothing is silently dropped.
  */
-export function getTaggedEndpoints(): TagGroup[] {
+export function getTaggedEndpoints(document: OpenApiDocument = openApiSpec): TagGroup[] {
   const groups = new Map<string, TagGroup>();
-  for (const tag of openApiSpec.tags ?? []) {
+  for (const tag of document.tags ?? []) {
     groups.set(tag.name, { tag: tag.name, description: tag.description, endpoints: [] });
   }
-  for (const [path, operations] of Object.entries(openApiSpec.paths)) {
+  for (const [path, operations] of Object.entries(document.paths)) {
     for (const [method, operation] of Object.entries(operations)) {
       const tagName = operation.tags?.[0];
       if (!tagName) continue;

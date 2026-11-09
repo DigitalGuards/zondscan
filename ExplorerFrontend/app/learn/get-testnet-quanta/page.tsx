@@ -1,3 +1,4 @@
+import { SITE_NAME } from '../../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { learnMetadata } from '../components/learn-metadata';
@@ -16,7 +17,7 @@ export default function Page(): JSX.Element {
     <LearnArticle slug="get-testnet-quanta">
       <p>
         Every hands-on tutorial on the QRL 2.0 testnet starts with the same requirement: an
-        address that holds some testnet Quanta to pay for gas. ZondScan runs a built in faucet
+        address that holds some testnet Quanta to pay for gas. {SITE_NAME} runs a built in faucet
         at <Link href="/faucet">/faucet</Link> that sends a small amount of testnet Quanta to any
         valid address, free of charge.
       </p>
@@ -110,7 +111,7 @@ export default function Page(): JSX.Element {
           </Step>
           <Step title="Check the balance on your address page">
             <p>
-              Paste your address into the ZondScan search bar, or open{' '}
+              Paste your address into the {SITE_NAME} search bar, or open{' '}
               <code>/address/&lt;your address&gt;</code> directly. Once the transaction
               confirms, your balance updates and the faucet transfer appears in the
               address&apos;s transaction list. You are ready for the rest of the tutorials.
@@ -189,7 +190,7 @@ export default function Page(): JSX.Element {
               <p>
                 From a funded testnet account operated alongside the explorer. Each drip is an
                 ordinary native transfer signed with a post-quantum ML-DSA-87 signature, so you
-                can inspect it on ZondScan exactly like any other transaction.
+                can inspect it on {SITE_NAME} exactly like any other transaction.
               </p>
             ),
           },
