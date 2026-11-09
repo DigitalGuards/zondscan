@@ -14,6 +14,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { pageFiles, withSiteEnv, type SiteEnv } from './siteIdentityCollect.fixture';
 
 jest.setTimeout(240000);
 jest.mock('server-only', () => ({}));
@@ -24,40 +25,27 @@ jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-const ENV_KEYS = ['DOMAIN_NAME', 'NEXT_PUBLIC_DOMAIN_NAME', 'NEXT_PUBLIC_SITE_NAME'] as const;
 const appDir = path.resolve(__dirname, '..');
 const fixturePath = path.join(__dirname, '__fixtures__/brand-copy-default.json');
 
-function pageFiles(dir: string, out: string[] = []): string[] {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (!/[[\]]|^api$|node_modules/.test(entry.name)) pageFiles(full, out);
-    } else if (/^page\.tsx$/.test(entry.name)) {
-      out.push(full);
-    }
-  }
-  return out;
-}
-
 const RENDERED_PAGES = ['learn', 'api-explorer', 'faq'];
 
-async function capture(env: Partial<Record<(typeof ENV_KEYS)[number], string>>) {
-  const saved = ENV_KEYS.map((key) => [key, process.env[key]] as const);
-  for (const key of ENV_KEYS) Reflect.deleteProperty(process.env, key);
-  Object.assign(process.env, env);
-  jest.resetModules();
+async function capture(env: SiteEnv) {
   const realFetch = global.fetch;
   global.fetch = () => Promise.reject(new Error('offline'));
   try {
+    return await withSiteEnv(env, async () => {
     const { renderToStaticMarkup } = await import('react-dom/server');
     const { createElement } = await import('react');
     const out: Record<string, string> = {};
     const render = (node: unknown): string =>
       renderToStaticMarkup(node as Parameters<typeof renderToStaticMarkup>[0]);
-    const files = pageFiles(appDir).filter((file) => {
+    const files = pageFiles().filter((file) => {
       const rel = path.relative(appDir, file).split(path.sep).join('/');
-      return RENDERED_PAGES.some((p) => rel === `${p}/page.tsx` || rel.startsWith(`${p}/`));
+      return (
+        !rel.includes('[') &&
+        RENDERED_PAGES.some((p) => rel === `${p}/page.tsx` || rel.startsWith(`${p}/`))
+      );
     });
     for (const file of files) {
       const rel = path.relative(appDir, file).split(path.sep).join('/');
@@ -86,18 +74,14 @@ async function capture(env: Partial<Record<(typeof ENV_KEYS)[number], string>>) 
     queryClient.clear();
     out['component:AnimatedLogo'] = render(createElement(AnimatedLogo));
     out['component:Footer'] = render(createElement(Footer));
-    const { articleSummaries } = await import('./brandCopyHelpers');
+    const { articleSummaries } = await import('./brandCopy.fixture');
     out['learn:articles'] = JSON.stringify(articleSummaries());
-    const strings = await import('./brandCopyHelpers').then((m) => m.translatedSiteStrings());
+    const strings = await import('./brandCopy.fixture').then((m) => m.translatedSiteStrings());
     out['translations'] = JSON.stringify(strings);
     return out;
+    });
   } finally {
     global.fetch = realFetch;
-    for (const [key, value] of saved) {
-      if (value === undefined) Reflect.deleteProperty(process.env, key);
-      else process.env[key] = value;
-    }
-    jest.resetModules();
   }
 }
 
@@ -150,8 +134,8 @@ describe('alternate identity (ShorScan)', () => {
     expect(out['component:Footer']).toContain('Shor<span class="text-accent">Scan</span>');
     expect(out['page:learn/page.tsx']).toContain('ShorScan');
     const strings = JSON.parse(out.translations) as Record<string, string>;
-    expect(strings['es:1']).toBe('Inicio de ShorScan');
-    expect(strings['zh:0']).toBe('探索 ShorScan');
+    expect(strings['es:0']).toBe('Inicio de ShorScan');
+    expect(strings['zh:0']).toBe('ShorScan 首页');
     expect(strings.pairingName).toBe('ShorScan');
   });
 });

@@ -1,14 +1,12 @@
 import { learnArticles } from '../learn/articles';
 import { translate } from './i18n';
-import { SITE_NAME } from './site';
-import { dappDisplayName } from './qrlConnect';
+import { PAIRING_NAME, SITE_NAME } from './site';
 
 export function articleSummaries(): unknown {
   return learnArticles.map((article) => ({ ...article }));
 }
 
 const KEYS = [
-  'Explore {name}',
   '{name} home',
   'Choose how {name} looks and how you read the chain. Changes apply immediately.',
 ] as const;
@@ -21,6 +19,6 @@ export function translatedSiteStrings(): Record<string, string> {
       result[`${locale}:${index}`] = translate(key, locale, { name: SITE_NAME });
     });
   }
-  result.pairingName = dappDisplayName();
+  result.pairingName = PAIRING_NAME;
   return result;
 }

@@ -56,6 +56,12 @@ export const SITE_ORIGIN: string = identity.origin;
 /** Brand name, e.g. `ZondScan`. */
 export const SITE_NAME: string = identity.name;
 
+/**
+ * Name a paired wallet shows for this dApp. The default build keeps its
+ * historical spelling `Zondscan`; any other site name is used as configured.
+ */
+export const PAIRING_NAME: string = identity.name === DEFAULT_SITE_NAME ? 'Zondscan' : identity.name;
+
 /** Bare host of the origin, e.g. `zondscan.com`. */
 export const SITE_HOST: string = new URL(SITE_ORIGIN).host;
 
