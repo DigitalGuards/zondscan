@@ -1,3 +1,4 @@
+import { pageTitle, siteUrl } from '../lib/site';
 import { parseContractsResponse, type ContractsResponse } from '../lib/listResponses';
 import { Suspense } from 'react';
 import ContractsWrapper from './contracts-wrapper';
@@ -54,21 +55,21 @@ async function getContracts(
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'Smart Contracts | ZondScan',
+  title: pageTitle('Smart Contracts'),
   description: 'View all smart contracts deployed on the QRL 2.0 network',
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: 'https://zondscan.com/contracts',
+    canonical: siteUrl('/contracts'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'Smart Contracts | ZondScan',
+    title: pageTitle('Smart Contracts'),
     description: 'View all smart contracts deployed on the QRL 2.0 network',
-    url: 'https://zondscan.com/contracts',
+    url: siteUrl('/contracts'),
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'Smart Contracts | ZondScan',
+    title: pageTitle('Smart Contracts'),
     description: 'View all smart contracts deployed on the QRL 2.0 network',
   },
 };

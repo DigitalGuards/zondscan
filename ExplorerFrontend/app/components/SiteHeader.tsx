@@ -1,5 +1,6 @@
 'use client';
 
+import { SITE_NAME } from '../lib/site';
 import { useTranslation } from './InterfaceText';
 
 import {
@@ -397,12 +398,12 @@ export default function SiteHeader() {
           <Link
             href="/"
             className="flex shrink-0 items-center gap-2.5 rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
-            aria-label={t('ZondScan home')}
+            aria-label={t('{name} home', { name: SITE_NAME })}
           >
             <Image src="/ZondScan_Logo_static.webp" width={38} height={38} alt="" priority />
             <span>
               <span className="block font-display text-xl font-semibold tracking-wide text-text-primary">
-                ZondScan
+                {SITE_NAME}
               </span>
               <span className="block text-[10px] uppercase tracking-[0.13em] text-text-muted">
                 {t(CURRENT_EXPLORER_NETWORK_NAME)}

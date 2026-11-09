@@ -1,3 +1,4 @@
+import { siteUrl } from '../../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { learnMetadata } from '../components/learn-metadata';
@@ -241,7 +242,7 @@ export default function Page(): JSX.Element {
       <LearnSection id="verify-programmatically" title="Verify programmatically">
         <p>
           Everything the form does is available over the public API at{' '}
-          <code>https://zondscan.com/api</code>, which suits CI pipelines that verify every
+          <code>{siteUrl('/api')}</code>, which suits CI pipelines that verify every
           deployment automatically:
         </p>
         <ul>

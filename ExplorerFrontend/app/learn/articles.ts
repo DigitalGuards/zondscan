@@ -1,3 +1,4 @@
+import { SITE_NAME } from '../lib/site';
 // Registry for the /learn knowledge base. Every article page under
 // app/learn/<slug>/page.tsx has exactly one row here; the row drives the
 // index page cards, per-article metadata, JSON-LD, prev/next navigation,
@@ -38,7 +39,7 @@ export const LEARN_CATEGORIES: Record<
   explorer: {
     label: 'Using the explorer',
     blurb:
-      'How to read on-chain data on ZondScan: transactions, validators, epochs, and the testnet faucet.',
+      `How to read on-chain data on ${SITE_NAME}: transactions, validators, epochs, and the testnet faucet.`,
   },
   tutorials: {
     label: 'Hands-on tutorials',
@@ -72,7 +73,7 @@ export const learnArticles: LearnArticleMeta[] = [
     slug: 'quanta-shor-planck',
     title: 'Quanta, Shor and Planck: units on QRL 2.0',
     description:
-      'What the three units mean, how they convert, and how to read amounts on ZondScan. One Quanta is 10^9 Shor and 10^18 Planck.',
+      `What the three units mean, how they convert, and how to read amounts on ${SITE_NAME}. One Quanta is 10^9 Shor and 10^18 Planck.`,
     category: 'basics',
     order: 3,
     updated: '2026-08-05',
@@ -90,9 +91,9 @@ export const learnArticles: LearnArticleMeta[] = [
   },
   {
     slug: 'read-a-transaction',
-    title: 'How to read a transaction on ZondScan',
+    title: `How to read a transaction on ${SITE_NAME}`,
     description:
-      'Status, confirmations, gas, token transfers and internal calls: every field on a ZondScan transaction page explained.',
+      `Status, confirmations, gas, token transfers and internal calls: every field on a ${SITE_NAME} transaction page explained.`,
     category: 'explorer',
     order: 1,
     updated: '2026-08-05',
@@ -102,7 +103,7 @@ export const learnArticles: LearnArticleMeta[] = [
     slug: 'validators-and-epochs',
     title: 'Validators, epochs and staking on QRL 2.0',
     description:
-      'How proof of stake works on QRL 2.0 and how to follow validators, epochs and rewards on ZondScan.',
+      `How proof of stake works on QRL 2.0 and how to follow validators, epochs and rewards on ${SITE_NAME}.`,
     category: 'explorer',
     order: 2,
     updated: '2026-08-05',
@@ -110,7 +111,7 @@ export const learnArticles: LearnArticleMeta[] = [
   },
   {
     slug: 'get-testnet-quanta',
-    title: 'Get testnet Quanta from the ZondScan faucet',
+    title: `Get testnet Quanta from the ${SITE_NAME} faucet`,
     description:
       'Fund a testnet address in under a minute with the built in faucet, then watch the transaction confirm.',
     category: 'explorer',
@@ -142,7 +143,7 @@ export const learnArticles: LearnArticleMeta[] = [
     slug: 'stake-with-quantapool',
     title: 'Liquid staking with QuantaPool',
     description:
-      'Stake Quanta through QuantaPool, receive a liquid staking token, and track your position on ZondScan.',
+      `Stake Quanta through QuantaPool, receive a liquid staking token, and track your position on ${SITE_NAME}.`,
     category: 'tutorials',
     order: 3,
     updated: '2026-08-05',
@@ -162,7 +163,7 @@ export const learnArticles: LearnArticleMeta[] = [
     slug: 'launch-a-qrc20',
     title: 'Launch a QRC20 token from your wallet',
     description:
-      'Create your own token on QRL 2.0 straight from MyQRLWallet and find it on ZondScan.',
+      `Create your own token on QRL 2.0 straight from MyQRLWallet and find it on ${SITE_NAME}.`,
     category: 'tutorials',
     order: 5,
     updated: '2026-08-05',
@@ -170,9 +171,9 @@ export const learnArticles: LearnArticleMeta[] = [
   },
   {
     slug: 'deploy-and-verify-contract',
-    title: 'Deploy a smart contract and verify it on ZondScan',
+    title: `Deploy a smart contract and verify it on ${SITE_NAME}`,
     description:
-      'Compile with Hyperion, deploy to the QRL 2.0 testnet, and publish verified source code on ZondScan.',
+      `Compile with Hyperion, deploy to the QRL 2.0 testnet, and publish verified source code on ${SITE_NAME}.`,
     category: 'tutorials',
     order: 6,
     updated: '2026-11-03',

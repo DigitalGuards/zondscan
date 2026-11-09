@@ -1,3 +1,4 @@
+import { SITE_NAME, SITE_ORIGIN, pageTitle } from '../../lib/site';
 import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
@@ -57,11 +58,11 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
   const pageNumber = resolvedParams.query || '1';
   // Self-referencing canonical so pages 2+ stay indexable instead of all
   // collapsing into the /transactions index page.
-  const canonicalUrl = `https://zondscan.com/transactions/${pageNumber}`;
+  const canonicalUrl = `${SITE_ORIGIN}/transactions/${pageNumber}`;
 
   return {
     ...sharedMetadata,
-    title: `Transactions - Page ${pageNumber} | ZondScan`,
+    title: pageTitle(`Transactions - Page ${pageNumber}`),
     description: `View all transactions on the QRL 2.0 blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
     alternates: {
       ...sharedMetadata.alternates,
@@ -69,15 +70,15 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     },
     openGraph: {
       ...sharedMetadata.openGraph,
-      title: `Transactions - Page ${pageNumber} | ZondScan`,
+      title: pageTitle(`Transactions - Page ${pageNumber}`),
       description: `View all transactions on the QRL 2.0 blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
-      url: `https://zondscan.com/transactions/${pageNumber}`,
-      siteName: 'ZondScan',
+      url: `${SITE_ORIGIN}/transactions/${pageNumber}`,
+      siteName: SITE_NAME,
       type: 'website',
     },
     twitter: {
       ...sharedMetadata.twitter,
-      title: `Transactions - Page ${pageNumber} | ZondScan`,
+      title: pageTitle(`Transactions - Page ${pageNumber}`),
       description: `View all transactions on the QRL 2.0 blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
     },
   };

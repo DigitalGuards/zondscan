@@ -8,6 +8,8 @@
  */
 
 import spec from './openapi.json';
+import { isArray, isRecord } from './guards';
+import { DEFAULT_SITE_NAME, DEFAULT_SITE_ORIGIN, type SiteIdentity } from './site';
 
 /** One parameter of an operation (path or query). */
 export interface OpenApiParameter {
@@ -105,4 +107,47 @@ export function getTaggedEndpoints(): TagGroup[] {
     }
   }
   return Array.from(groups.values());
+}
+
+/**
+ * The spec as served at /openapi.json. The JSON file keeps the default
+ * zondscan.com identity (the drift check reads it directly); this swaps in
+ * the configured origin and brand name for the served copy.
+ */
+const renderedSpecs = new Map<string, OpenApiDocument>();
+
+export function renderOpenApiSpec(identity: SiteIdentity): OpenApiDocument {
+  if (identity.origin === DEFAULT_SITE_ORIGIN && identity.name === DEFAULT_SITE_NAME) {
+    return openApiSpec;
+  }
+  const cacheKey = `${identity.origin}\n${identity.name}`;
+  const cached = renderedSpecs.get(cacheKey);
+  if (cached) return cached;
+  const defaultHost = new URL(DEFAULT_SITE_ORIGIN).host;
+  const host = new URL(identity.origin).host;
+  const substitute = (value: string): string =>
+    value
+      .split(DEFAULT_SITE_ORIGIN)
+      .join(identity.origin)
+      .split(defaultHost)
+      .join(host)
+      .split(DEFAULT_SITE_NAME)
+      .join(identity.name);
+  const walk = (node: unknown): void => {
+    if (isArray(node)) {
+      node.forEach((item, index) => {
+        if (typeof item === 'string') node[index] = substitute(item);
+        else walk(item);
+      });
+    } else if (isRecord(node)) {
+      for (const [key, item] of Object.entries(node)) {
+        if (typeof item === 'string') node[key] = substitute(item);
+        else walk(item);
+      }
+    }
+  };
+  const doc = structuredClone(openApiSpec);
+  walk(doc);
+  renderedSpecs.set(cacheKey, doc);
+  return doc;
 }

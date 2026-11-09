@@ -1,3 +1,4 @@
+import { pageTitle, siteUrl } from '../lib/site';
 import config from "../../config";
 import RichlistClient from "./richlist-client";
 import type { Metadata } from 'next';
@@ -6,23 +7,23 @@ import { sharedMetadata } from '../lib/seo/metaData';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'Rich List | ZondScan',
+  title: pageTitle('Rich List'),
   description:
     'Explore the top wallets by balance on the Quantum Resistant Ledger Proof-of-Stake network. Discover which addresses hold the most value in our rich list.',
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: 'https://zondscan.com/richlist',
+    canonical: siteUrl('/richlist'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'Rich List | ZondScan',
+    title: pageTitle('Rich List'),
     description:
       'Explore the top wallets by balance on the Quantum Resistant Ledger Proof-of-Stake network. Discover which addresses hold the most value in our rich list.',
-    url: 'https://zondscan.com/richlist',
+    url: siteUrl('/richlist'),
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'Rich List | ZondScan',
+    title: pageTitle('Rich List'),
     description:
       'Explore the top wallets by balance on the Quantum Resistant Ledger Proof-of-Stake network. Discover which addresses hold the most value in our rich list.',
   },

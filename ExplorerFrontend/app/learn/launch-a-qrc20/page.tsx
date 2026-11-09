@@ -1,3 +1,4 @@
+import { SITE_NAME } from '../../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { learnMetadata } from '../components/learn-metadata';
@@ -257,7 +258,7 @@ export default function Page(): JSX.Element {
             ),
           },
           {
-            q: 'Will my token show up on ZondScan automatically?',
+            q: `Will my token show up on ${SITE_NAME} automatically?`,
             a: (
               <p>
                 Yes. The explorer&apos;s synchronizer indexes contract deployments and token

@@ -1,3 +1,4 @@
+import { SITE_NAME, SITE_ORIGIN, pageTitle } from '../../lib/site';
 import type { Metadata } from 'next';
 import PendingList from './PendingList';
 import axios from 'axios';
@@ -40,11 +41,11 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
   const pageNumber = resolvedParams.query || '1';
   // Self-referencing canonical: there is no /pending index route (only
   // /pending/<page>), so each paginated page canonicalizes to itself.
-  const canonicalUrl = `https://zondscan.com/pending/${pageNumber}`;
+  const canonicalUrl = `${SITE_ORIGIN}/pending/${pageNumber}`;
 
   return {
     ...sharedMetadata,
-    title: `Pending Transactions - Page ${pageNumber} | ZondScan`,
+    title: pageTitle(`Pending Transactions - Page ${pageNumber}`),
     description:
       `View all pending transactions waiting to be included in the next block on the QRL 2.0 blockchain network. Page ${pageNumber} of the mempool transactions list.`,
     alternates: {
@@ -53,16 +54,16 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     },
     openGraph: {
       ...sharedMetadata.openGraph,
-      title: `Pending Transactions - Page ${pageNumber} | ZondScan`,
+      title: pageTitle(`Pending Transactions - Page ${pageNumber}`),
       description:
         `View all pending transactions waiting to be included in the next block on the QRL 2.0 blockchain network. Page ${pageNumber} of the mempool transactions list.`,
       url: canonicalUrl,
-      siteName: 'ZondScan',
+      siteName: SITE_NAME,
       type: 'website',
     },
     twitter: {
       ...sharedMetadata.twitter,
-      title: `Pending Transactions - Page ${pageNumber} | ZondScan`,
+      title: pageTitle(`Pending Transactions - Page ${pageNumber}`),
       description:
         `View all pending transactions waiting to be included in the next block on the QRL 2.0 blockchain network. Page ${pageNumber} of the mempool transactions list.`,
     },

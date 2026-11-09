@@ -1,3 +1,4 @@
+import { SITE_HOST, SITE_NAME } from '../lib/site';
 import React from 'react';
 import Link from 'next/link';
 
@@ -14,10 +15,10 @@ export interface FaqItem {
 export const faqs: FaqItem[] = [
   {
     id: 'what-is-zondscan',
-    q: 'What is ZondScan?',
+    q: `What is ${SITE_NAME}?`,
     a: (
       <>
-        ZondScan is the block explorer for the QRL 2.0 network. Use it to
+        {SITE_NAME} is the block explorer for the QRL 2.0 network. Use it to
         search and inspect blocks, transactions, addresses,{' '}
         <Link href="/validators" className={LINK}>
           validators
@@ -35,7 +36,7 @@ export const faqs: FaqItem[] = [
       </>
     ),
     aText:
-      'ZondScan is the block explorer for the QRL 2.0 network. Use it to search and inspect blocks, transactions, addresses, validators, and smart contracts. It also bundles developer tools, including a contract verifier, an open REST API, a gas tracker, a unit converter, and a testnet faucet.',
+      `${SITE_NAME} is the block explorer for the QRL 2.0 network. Use it to search and inspect blocks, transactions, addresses, validators, and smart contracts. It also bundles developer tools, including a contract verifier, an open REST API, a gas tracker, a unit converter, and a testnet faucet.`,
   },
   {
     id: 'what-is-qrl-2',
@@ -128,14 +129,14 @@ export const faqs: FaqItem[] = [
       </>
     ),
     aText:
-      'Use the built in faucet at zondscan.com/faucet to request free testnet Quanta for any Q-prefixed address. Testnet coins have no monetary value; they exist so you can try transactions, contracts, and tooling without risk. The faucet sends a fixed amount per request with a cooldown between requests for the same address.',
+      `Use the built in faucet at ${SITE_HOST}/faucet to request free testnet Quanta for any Q-prefixed address. Testnet coins have no monetary value; they exist so you can try transactions, contracts, and tooling without risk. The faucet sends a fixed amount per request with a cooldown between requests for the same address.`,
   },
   {
     id: 'api-key',
-    q: 'Does the ZondScan API require an API key?',
+    q: `Does the ${SITE_NAME} API require an API key?`,
     a: (
       <>
-        No. The ZondScan API is free and requires no signup, key, or
+        No. The {SITE_NAME} API is free and requires no signup, key, or
         authentication. GET endpoints are open to any origin via CORS, so you
         can call them directly from a browser application. Browse every
         endpoint and run live requests in the{' '}
@@ -146,7 +147,7 @@ export const faqs: FaqItem[] = [
       </>
     ),
     aText:
-      'No. The ZondScan API is free and requires no signup, key, or authentication. GET endpoints are open to any origin via CORS, so you can call them directly from a browser application. Browse every endpoint and run live requests in the API explorer at zondscan.com/api-explorer.',
+      `No. The ${SITE_NAME} API is free and requires no signup, key, or authentication. GET endpoints are open to any origin via CORS, so you can call them directly from a browser application. Browse every endpoint and run live requests in the API explorer at ${SITE_HOST}/api-explorer.`,
   },
   {
     id: 'smart-contracts',
@@ -179,7 +180,7 @@ export const faqs: FaqItem[] = [
           verify contract page
         </Link>
         , paste your source code, pick the exact Hyperion (hypc) compiler
-        build you deployed with, and set the same optimizer settings. ZondScan
+        build you deployed with, and set the same optimizer settings. {SITE_NAME}
         recompiles the source and byte-matches the result against the runtime
         code on chain. On success the source, ABI, and compiler settings are
         published on the contract&apos;s address page. A full walkthrough from
@@ -191,7 +192,7 @@ export const faqs: FaqItem[] = [
       </>
     ),
     aText:
-      'Open the verify contract page, paste your source code, pick the exact Hyperion (hypc) compiler build you deployed with, and set the same optimizer settings. ZondScan recompiles the source and byte-matches the result against the runtime code on chain. On success the source, ABI, and compiler settings are published on the contract’s address page.',
+      `Open the verify contract page, paste your source code, pick the exact Hyperion (hypc) compiler build you deployed with, and set the same optimizer settings. ${SITE_NAME} recompiles the source and byte-matches the result against the runtime code on chain. On success the source, ABI, and compiler settings are published on the contract’s address page.`,
   },
   {
     id: 'qrl-vs-ethereum',
@@ -271,10 +272,10 @@ export const faqs: FaqItem[] = [
   },
   {
     id: 'who-builds-zondscan',
-    q: 'Who builds ZondScan?',
+    q: `Who builds ${SITE_NAME}?`,
     a: (
       <>
-        ZondScan was created by DigitalGuards, a company based in the
+        {SITE_NAME} was created by DigitalGuards, a company based in the
         Netherlands. The explorer is completely open source and its code is
         available on GitHub at{' '}
         <a
@@ -298,7 +299,7 @@ export const faqs: FaqItem[] = [
       </>
     ),
     aText:
-      'ZondScan was created by DigitalGuards, a company based in the Netherlands. The explorer is completely open source and its code is available on GitHub at github.com/DigitalGuards/zondscan. You can learn more about DigitalGuards at digitalguards.nl.',
+      `${SITE_NAME} was created by DigitalGuards, a company based in the Netherlands. The explorer is completely open source and its code is available on GitHub at github.com/DigitalGuards/zondscan. You can learn more about DigitalGuards at digitalguards.nl.`,
   },
   {
     id: 'support',
@@ -330,12 +331,12 @@ export const faqs: FaqItem[] = [
           rel="noopener noreferrer"
           className={LINK}
         >
-          ZondScan repository
+          {SITE_NAME} repository
         </a>
         .
       </>
     ),
     aText:
-      'For technical support and explorer issues, email info@digitalguards.nl. For wallet and general inquiries, email info@qrlwallet.com. You can also join the QRL community on Discord for real time discussion and support. Bug reports and feature requests are welcome as issues on the ZondScan GitHub repository.',
+      `For technical support and explorer issues, email info@digitalguards.nl. For wallet and general inquiries, email info@qrlwallet.com. You can also join the QRL community on Discord for real time discussion and support. Bug reports and feature requests are welcome as issues on the ${SITE_NAME} GitHub repository.`,
   },
 ];

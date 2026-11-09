@@ -34,8 +34,8 @@ export const translations: Record<'zh' | 'es' | 'ru', Record<string, string>> = 
       '浏览器存储不可用。偏好设置仅应用于此标签页。',
     Chinese: '中文',
     'Choose appearance': '选择外观',
-    'Choose how ZondScan looks and how you read the chain. Changes apply immediately.':
-      '自定义 ZondScan 的外观和链上数据的显示方式。更改立即生效。',
+    'Choose how {name} looks and how you read the chain. Changes apply immediately.':
+      '自定义 {name} 的外观和链上数据的显示方式。更改立即生效。',
     'Choose which part of a shortened address stays visible.': '选择缩略地址中保留显示的部分。',
     'Circulating Quanta': '流通中的 Quanta',
     'Close navigation': '关闭导航',
@@ -203,7 +203,7 @@ export const translations: Record<'zh' | 'es' | 'ru', Record<string, string>> = 
     'Your explorer': '你的区块浏览器',
     'Your preferences are saved in this browser.': '你的偏好设置保存在此浏览器中。',
     'Zero-quantity token transfers': '零数量代币转账',
-    'ZondScan home': 'ZondScan 首页',
+    '{name} home': '{name} 首页',
     ago: '前',
     'dApp example': 'dApp 示例',
     of: '共',
@@ -246,8 +246,8 @@ export const translations: Record<'zh' | 'es' | 'ru', Record<string, string>> = 
       'El almacenamiento del navegador no está disponible. Las preferencias se aplican a esta pestaña.',
     Chinese: 'Chino',
     'Choose appearance': 'Elige la apariencia',
-    'Choose how ZondScan looks and how you read the chain. Changes apply immediately.':
-      'Personaliza la apariencia de ZondScan y cómo consultas la cadena. Los cambios se aplican al instante.',
+    'Choose how {name} looks and how you read the chain. Changes apply immediately.':
+      'Personaliza la apariencia de {name} y cómo consultas la cadena. Los cambios se aplican al instante.',
     'Choose which part of a shortened address stays visible.':
       'Elige qué parte de una dirección abreviada permanece visible.',
     'Circulating Quanta': 'Quanta en circulación',
@@ -420,7 +420,7 @@ export const translations: Record<'zh' | 'es' | 'ru', Record<string, string>> = 
     'Your explorer': 'Tu explorador',
     'Your preferences are saved in this browser.': 'Tus preferencias se guardan en este navegador.',
     'Zero-quantity token transfers': 'Transferencias de tokens de importe cero',
-    'ZondScan home': 'Inicio de ZondScan',
+    '{name} home': 'Inicio de {name}',
     ago: 'hace',
     'dApp example': 'Ejemplo de dApp',
     of: 'de',
@@ -463,8 +463,8 @@ export const translations: Record<'zh' | 'es' | 'ru', Record<string, string>> = 
       'Хранилище браузера недоступно. Настройки действуют в этой вкладке.',
     Chinese: 'Китайский',
     'Choose appearance': 'Выберите оформление',
-    'Choose how ZondScan looks and how you read the chain. Changes apply immediately.':
-      'Настройте оформление ZondScan и отображение данных блокчейна. Изменения применяются сразу.',
+    'Choose how {name} looks and how you read the chain. Changes apply immediately.':
+      'Настройте оформление {name} и отображение данных блокчейна. Изменения применяются сразу.',
     'Choose which part of a shortened address stays visible.':
       'Выберите, какая часть сокращённого адреса остаётся видимой.',
     'Circulating Quanta': 'Quanta в обращении',
@@ -638,7 +638,7 @@ export const translations: Record<'zh' | 'es' | 'ru', Record<string, string>> = 
     'Your explorer': 'Ваш обозреватель',
     'Your preferences are saved in this browser.': 'Ваши настройки сохраняются в этом браузере.',
     'Zero-quantity token transfers': 'Переводы токенов с нулевым количеством',
-    'ZondScan home': 'Главная ZondScan',
+    '{name} home': 'Главная {name}',
     ago: 'назад',
     'dApp example': 'Пример dApp',
     of: 'из',

@@ -1,3 +1,4 @@
+import { SITE_NAME, pageTitle, siteUrl } from '../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { sharedMetadata } from '../lib/seo/metaData';
@@ -5,25 +6,25 @@ import { faqs } from './faq-data';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'FAQ | ZondScan',
+  title: pageTitle('FAQ'),
   description:
-    'Answers to frequently asked questions about ZondScan, QRL 2.0, transactions, smart contracts, wallets, and the open API.',
+    `Answers to frequently asked questions about ${SITE_NAME}, QRL 2.0, transactions, smart contracts, wallets, and the open API.`,
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: 'https://zondscan.com/faq',
+    canonical: siteUrl('/faq'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'FAQ | ZondScan',
+    title: pageTitle('FAQ'),
     description:
-      'Answers to frequently asked questions about ZondScan, QRL 2.0, transactions, smart contracts, wallets, and the open API.',
-    url: 'https://zondscan.com/faq',
+      `Answers to frequently asked questions about ${SITE_NAME}, QRL 2.0, transactions, smart contracts, wallets, and the open API.`,
+    url: siteUrl('/faq'),
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'FAQ | ZondScan',
+    title: pageTitle('FAQ'),
     description:
-      'Answers to frequently asked questions about ZondScan, QRL 2.0, transactions, smart contracts, wallets, and the open API.',
+      `Answers to frequently asked questions about ${SITE_NAME}, QRL 2.0, transactions, smart contracts, wallets, and the open API.`,
   },
 };
 
@@ -44,7 +45,7 @@ export default function FAQPage(): JSX.Element {
   return (
     <div aria-labelledby="faq-heading">
       <h1 id="faq-heading" className="sr-only">
-        ZondScan FAQ
+        {SITE_NAME} FAQ
       </h1>
       <script type="application/ld+json">{JSON.stringify(faqJsonLd)}</script>
       <div className="min-h-0 text-text-secondary px-4 sm:px-6 py-4 md:py-8">
