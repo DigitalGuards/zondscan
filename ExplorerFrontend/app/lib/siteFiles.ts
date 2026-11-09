@@ -1,14 +1,9 @@
-import { SITE_ORIGIN } from './site';
+import { SITE_ORIGIN, type SiteIdentity } from './site';
 
 /**
  * Bodies of the generated site files (robots.txt, security.txt, web
  * manifest). Each takes the identity so tests can render alternates.
  */
-
-interface Identity {
-  origin: string;
-  name: string;
-}
 
 export function renderRobotsTxt(origin: string = SITE_ORIGIN): string {
   return `# https://www.robotstxt.org/robotstxt.html
@@ -34,7 +29,7 @@ Policy: https://qrlwallet.com/security
 `;
 }
 
-export function renderManifest(identity: Identity): Record<string, unknown> {
+export function renderManifest(identity: Pick<SiteIdentity, 'name'>): Record<string, unknown> {
   return {
     short_name: identity.name,
     name: `${identity.name} | QRL 2.0 Explorer`,

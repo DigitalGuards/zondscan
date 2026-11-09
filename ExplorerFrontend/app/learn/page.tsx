@@ -1,4 +1,4 @@
-import { SITE_NAME, siteUrl } from '../lib/site';
+import { SITE_NAME, pageTitle, siteUrl } from '../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
@@ -9,7 +9,7 @@ import {
   learnArticles,
 } from './articles';
 
-const TITLE = `Learn QRL 2.0 | ${SITE_NAME}`;
+const TITLE = pageTitle('Learn QRL 2.0');
 const DESCRIPTION =
   `Plain English guides to QRL 2.0: post-quantum signatures, proof of stake, wallets, staking, swaps, tokens, and smart contracts. Written by the team behind ${SITE_NAME} and MyQRLWallet.`;
 

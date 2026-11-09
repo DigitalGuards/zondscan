@@ -1,4 +1,4 @@
-import { SITE_NAME, SITE_ORIGIN } from '../../../lib/site';
+import { SITE_NAME, SITE_ORIGIN, pageTitle } from '../../../lib/site';
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { fetchPendingTransactionStatus } from '../../../lib/pendingTransaction';
@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     ? `${hash.slice(0, 10)}...${hash.slice(-6)}`
     : hash;
   const canonicalUrl = `${SITE_ORIGIN}/pending/tx/${hash}`;
-  const title = `Pending Transaction ${shortHash} | ${SITE_NAME}`;
+  const title = pageTitle(`Pending Transaction ${shortHash}`);
   const description = `Track QRL 2.0 pending transaction ${shortHash}: mempool status, ETA to inclusion, gas price vs median, and decoded calldata.`;
 
   return {

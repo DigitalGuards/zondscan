@@ -1,4 +1,4 @@
-import { SITE_ORIGIN } from '../lib/site';
+import { siteUrl } from '../lib/site';
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveSearchPath } from '../lib/searchResolver';
 
@@ -13,9 +13,8 @@ import { resolveSearchPath } from '../lib/searchResolver';
  * back to the homepage.
  */
 // Behind the nginx proxy request.nextUrl.origin is the internal
-// localhost:3000, so anchor redirects to the canonical public origin
-// (same hardcode as metadataBase in lib/seo/metaData.ts).
-const CANONICAL_ORIGIN = SITE_ORIGIN;
+// localhost:3000, so anchor redirects to the public site origin from
+// lib/site.ts (the same value metadataBase uses).
 
 export function GET(request: NextRequest): NextResponse {
   try {
@@ -26,8 +25,8 @@ export function GET(request: NextRequest): NextResponse {
     if (!destination.startsWith('/') || destination.startsWith('//')) {
       destination = '/';
     }
-    return NextResponse.redirect(new URL(destination, CANONICAL_ORIGIN), 302);
+    return NextResponse.redirect(new URL(siteUrl(destination)), 302);
   } catch {
-    return NextResponse.redirect(new URL('/', CANONICAL_ORIGIN), 302);
+    return NextResponse.redirect(new URL(siteUrl('/')), 302);
   }
 }

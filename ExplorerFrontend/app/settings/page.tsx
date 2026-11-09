@@ -1,9 +1,9 @@
-import { SITE_NAME, siteUrl } from '../lib/site';
+import { pageTitle, siteUrl } from '../lib/site';
 import type { Metadata } from 'next';
 import SettingsClient from './settings-client';
 
 export const metadata: Metadata = {
-  title: `Site Settings | ${SITE_NAME}`,
+  title: pageTitle('Site Settings'),
   description: 'Choose your appearance, address display, date format, and transaction preferences.',
   alternates: { canonical: siteUrl('/settings') },
 };

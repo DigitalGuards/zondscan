@@ -1,4 +1,4 @@
-import { SITE_NAME, SITE_ORIGIN } from '../../lib/site';
+import { SITE_NAME, SITE_ORIGIN, pageTitle } from '../../lib/site';
 import type { Metadata } from 'next';
 import PendingList from './PendingList';
 import axios from 'axios';
@@ -45,7 +45,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
 
   return {
     ...sharedMetadata,
-    title: `Pending Transactions - Page ${pageNumber} | ${SITE_NAME}`,
+    title: pageTitle(`Pending Transactions - Page ${pageNumber}`),
     description:
       `View all pending transactions waiting to be included in the next block on the QRL 2.0 blockchain network. Page ${pageNumber} of the mempool transactions list.`,
     alternates: {
@@ -54,7 +54,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     },
     openGraph: {
       ...sharedMetadata.openGraph,
-      title: `Pending Transactions - Page ${pageNumber} | ${SITE_NAME}`,
+      title: pageTitle(`Pending Transactions - Page ${pageNumber}`),
       description:
         `View all pending transactions waiting to be included in the next block on the QRL 2.0 blockchain network. Page ${pageNumber} of the mempool transactions list.`,
       url: canonicalUrl,
@@ -63,7 +63,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     },
     twitter: {
       ...sharedMetadata.twitter,
-      title: `Pending Transactions - Page ${pageNumber} | ${SITE_NAME}`,
+      title: pageTitle(`Pending Transactions - Page ${pageNumber}`),
       description:
         `View all pending transactions waiting to be included in the next block on the QRL 2.0 blockchain network. Page ${pageNumber} of the mempool transactions list.`,
     },

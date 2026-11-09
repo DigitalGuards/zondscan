@@ -1,4 +1,4 @@
-import { SITE_NAME, SITE_ORIGIN } from '../../lib/site';
+import { SITE_NAME, SITE_ORIGIN, pageTitle } from '../../lib/site';
 import type { Metadata } from 'next';
 import { sharedMetadata } from '../../lib/seo/metaData';
 import ValidatorDetailClient from './validator-detail-client';
@@ -14,7 +14,7 @@ interface PageProps {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { id } = await params;
   const canonicalUrl = `${SITE_ORIGIN}/validators/${id}`;
-  const title = `Validator #${id} | ${SITE_NAME}`;
+  const title = pageTitle(`Validator #${id}`);
   const description = `Stake, status, age, and activation history for QRL 2.0 validator #${id}.`;
 
   return {

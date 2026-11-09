@@ -398,7 +398,7 @@ export default function SiteHeader() {
           <Link
             href="/"
             className="flex shrink-0 items-center gap-2.5 rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
-            aria-label={t(`${SITE_NAME} home`)}
+            aria-label={t('{name} home', { name: SITE_NAME })}
           >
             <Image src="/ZondScan_Logo_static.webp" width={38} height={38} alt="" priority />
             <span>

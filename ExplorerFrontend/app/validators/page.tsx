@@ -1,4 +1,4 @@
-import { SITE_NAME, siteUrl } from '../lib/site';
+import { pageTitle, siteUrl } from '../lib/site';
 import { Suspense } from 'react';
 import ValidatorsWrapper from './validators-client';
 import type { Metadata } from 'next';
@@ -7,7 +7,7 @@ import { sharedMetadata } from '../lib/seo/metaData';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: `Validators | ${SITE_NAME}`,
+  title: pageTitle('Validators'),
   description:
     'View active validators, their ages, uptime, and staking information on the QRL 2.0 network',
   alternates: {
@@ -16,14 +16,14 @@ export const metadata: Metadata = {
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: `Validators | ${SITE_NAME}`,
+    title: pageTitle('Validators'),
     description:
       'View active validators, their ages, uptime, and staking information on the QRL 2.0 network',
     url: siteUrl('/validators'),
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: `Validators | ${SITE_NAME}`,
+    title: pageTitle('Validators'),
     description:
       'View active validators, their ages, uptime, and staking information on the QRL 2.0 network',
   },

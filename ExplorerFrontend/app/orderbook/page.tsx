@@ -1,11 +1,11 @@
-import { SITE_NAME, siteUrl } from '../lib/site';
+import { pageTitle, siteUrl } from '../lib/site';
 import type { Metadata } from 'next';
 import { sharedMetadata } from '../lib/seo/metaData';
 import OrderBookClient from './orderbook-client';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: `QRL Order Book | ${SITE_NAME}`,
+  title: pageTitle('QRL Order Book'),
   description: 'Live MEXC QRL/USDT spot order book, recent trades and fund-flow analysis.',
   alternates: {
     ...sharedMetadata.alternates,
@@ -13,13 +13,13 @@ export const metadata: Metadata = {
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: `QRL Order Book | ${SITE_NAME}`,
+    title: pageTitle('QRL Order Book'),
     description: 'MEXC QRL/USDT market depth, recent trades and fund flow.',
     url: siteUrl('/orderbook'),
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: `QRL Order Book | ${SITE_NAME}`,
+    title: pageTitle('QRL Order Book'),
     description: 'MEXC QRL/USDT market depth, recent trades and fund flow.',
   },
 };

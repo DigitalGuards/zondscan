@@ -1,4 +1,4 @@
-import { SITE_NAME, SITE_ORIGIN } from '../../lib/site';
+import { SITE_NAME, SITE_ORIGIN, pageTitle } from '../../lib/site';
 import type { Metadata } from 'next';
 import type { AddressPageLoadResult } from './address-page-data';
 import { sharedMetadata } from '../../lib/seo/metaData';
@@ -13,8 +13,8 @@ export function generateAddressPageMetadata(query: string, verifiedName?: string
   const displayIdentity = address ? compactQrlAddress(address) : identity;
   const canonicalUrl = `${SITE_ORIGIN}/address/${encodeURIComponent(identity)}`;
   const title = routeName
-    ? `${routeName} QNS Address | ${SITE_NAME}`
-    : `Address ${displayIdentity}${address && qnsName ? ` (${qnsName})` : ''} | ${SITE_NAME}`;
+    ? pageTitle(`${routeName} QNS Address`)
+    : pageTitle(`Address ${displayIdentity}${address && qnsName ? ` (${qnsName})` : ''}`);
   const description = routeName
     ? `View the QRL address resolved by QNS name ${routeName}, including balance, transactions, and other blockchain data.`
     : address && qnsName

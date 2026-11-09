@@ -28,6 +28,7 @@ const fixture = JSON.parse(
 ) as Record<string, unknown>;
 
 const ENV_KEYS = ['DOMAIN_NAME', 'NEXT_PUBLIC_DOMAIN_NAME', 'NEXT_PUBLIC_SITE_NAME'] as const;
+const DEFAULT_ORIGIN = 'https://zondscan.com';
 
 async function collectOutputs(env: Partial<Record<(typeof ENV_KEYS)[number], string>>) {
   const saved = ENV_KEYS.map((key) => [key, process.env[key]] as const);
@@ -218,5 +219,85 @@ describe('hardcoded origin guard', () => {
       .filter((file) => /https?:\/\/(www\.)?zondscan\.com/.test(fs.readFileSync(file, 'utf8')))
       .map((file) => path.relative(appDir, file));
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('generated file routes (force-static)', () => {
+  it('serve the pinned robots.txt, security.txt and manifest', async () => {
+    const robots = await import('../robots.txt/route');
+    const security = await import('../.well-known/security.txt/route');
+    const manifest = await import('../manifest.json/route');
+    expect(await robots.GET().text()).toBe(fixture.robots);
+    expect(await security.GET().text()).toBe(fixture.securityTxt);
+    expect(await manifest.GET().json()).toEqual(fixture.manifest);
+  });
+});
+
+describe('origin resolution', () => {
+  it('ignores the runtime DOMAIN_NAME', async () => {
+    const out = await collectOutputs({ DOMAIN_NAME: 'http://localhost:3000' });
+    expect(out.searchRedirect).toBe('https://zondscan.com/block/1');
+    expect(out.sitemap).toEqual(fixture.sitemap);
+    expect(out.layoutMetadata).toEqual(fixture.layoutMetadata);
+  });
+
+  it('reads NEXT_PUBLIC_DOMAIN_NAME even when DOMAIN_NAME differs', async () => {
+    const out = await collectOutputs({
+      DOMAIN_NAME: 'http://localhost:3000',
+      NEXT_PUBLIC_DOMAIN_NAME: 'https://shorscan.com',
+    });
+    expect(out.searchRedirect).toBe('https://shorscan.com/block/1');
+  });
+
+  it.each([
+    ['https://', DEFAULT_ORIGIN],
+    ['', DEFAULT_ORIGIN],
+    ['https://bad host.com', DEFAULT_ORIGIN],
+    ['localhost', DEFAULT_ORIGIN],
+    ['localhost:3000', DEFAULT_ORIGIN],
+    ['ftp://shorscan.com', DEFAULT_ORIGIN],
+    ['javascript:alert(1)', DEFAULT_ORIGIN],
+    ['https://shorscan.com/', 'https://shorscan.com'],
+    ['https://shorscan.com/path?q=1#h', 'https://shorscan.com'],
+    ['  https://shorscan.com  ', 'https://shorscan.com'],
+    ['http://localhost:3000', 'http://localhost:3000'],
+  ])('resolves %j to %s', async (raw, expected) => {
+    const { resolveSiteIdentity } = await import('./site');
+    expect(resolveSiteIdentity(raw, undefined).origin).toBe(expected);
+  });
+
+  it('never throws at import time on a malformed origin', async () => {
+    for (const raw of ['https://', 'https://bad host', '::::']) {
+      const out = await collectOutputs({ NEXT_PUBLIC_DOMAIN_NAME: raw });
+      expect(out.sitemap).toEqual(fixture.sitemap);
+    }
+  });
+});
+
+describe('translated brand strings', () => {
+  const HOME = '{name} home';
+  const CHOOSE = 'Choose how {name} looks and how you read the chain. Changes apply immediately.';
+
+  it('renders the default name identically in every language', async () => {
+    const { translate } = await import('./i18n');
+    const name = { name: 'ZondScan' };
+    expect(translate(HOME, 'en', name)).toBe('ZondScan home');
+    expect(translate(HOME, 'zh', name)).toBe('ZondScan 首页');
+    expect(translate(HOME, 'es', name)).toBe('Inicio de ZondScan');
+    expect(translate(HOME, 'ru', name)).toBe('Главная ZondScan');
+    expect(translate(CHOOSE, 'es', name)).toBe(
+      'Personaliza la apariencia de ZondScan y cómo consultas la cadena. Los cambios se aplican al instante.',
+    );
+    expect(translate(CHOOSE, 'en', name)).toBe(
+      'Choose how ZondScan looks and how you read the chain. Changes apply immediately.',
+    );
+  });
+
+  it('carries an alternate name into a non-English language', async () => {
+    const { translate } = await import('./i18n');
+    expect(translate(HOME, 'es', { name: 'ShorScan' })).toBe('Inicio de ShorScan');
+    expect(translate(CHOOSE, 'ru', { name: 'ShorScan' })).toBe(
+      'Настройте оформление ShorScan и отображение данных блокчейна. Изменения применяются сразу.',
+    );
   });
 });

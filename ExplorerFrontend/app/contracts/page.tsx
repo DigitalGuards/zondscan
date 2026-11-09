@@ -1,4 +1,4 @@
-import { SITE_NAME, siteUrl } from '../lib/site';
+import { pageTitle, siteUrl } from '../lib/site';
 import { parseContractsResponse, type ContractsResponse } from '../lib/listResponses';
 import { Suspense } from 'react';
 import ContractsWrapper from './contracts-wrapper';
@@ -55,7 +55,7 @@ async function getContracts(
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: `Smart Contracts | ${SITE_NAME}`,
+  title: pageTitle('Smart Contracts'),
   description: 'View all smart contracts deployed on the QRL 2.0 network',
   alternates: {
     ...sharedMetadata.alternates,
@@ -63,13 +63,13 @@ export const metadata: Metadata = {
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: `Smart Contracts | ${SITE_NAME}`,
+    title: pageTitle('Smart Contracts'),
     description: 'View all smart contracts deployed on the QRL 2.0 network',
     url: siteUrl('/contracts'),
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: `Smart Contracts | ${SITE_NAME}`,
+    title: pageTitle('Smart Contracts'),
     description: 'View all smart contracts deployed on the QRL 2.0 network',
   },
 };

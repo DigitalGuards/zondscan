@@ -1,4 +1,4 @@
-import { SITE_NAME, SITE_ORIGIN } from '../../lib/site';
+import { SITE_NAME, SITE_ORIGIN, pageTitle } from '../../lib/site';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import BlocksClient from './blocks-client';
@@ -56,7 +56,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
 
   return {
     ...sharedMetadata,
-    title: `Latest Synced Blocks - Page ${pageNumber} | ${SITE_NAME}`,
+    title: pageTitle(`Latest Synced Blocks - Page ${pageNumber}`),
     description: `View the most recently synced blocks on the QRL 2.0 blockchain network. Page ${pageNumber} of the blocks list.`,
     alternates: {
       ...sharedMetadata.alternates,
@@ -64,7 +64,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     },
     openGraph: {
       ...sharedMetadata.openGraph,
-      title: `Latest Synced Blocks - Page ${pageNumber} | ${SITE_NAME}`,
+      title: pageTitle(`Latest Synced Blocks - Page ${pageNumber}`),
       description: `View the most recently synced blocks on the QRL 2.0 blockchain network. Page ${pageNumber} of the blocks list.`,
       url: `${SITE_ORIGIN}/blocks/${pageNumber}`,
       siteName: SITE_NAME,
@@ -72,7 +72,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     },
     twitter: {
       ...sharedMetadata.twitter,
-      title: `Latest Synced Blocks - Page ${pageNumber} | ${SITE_NAME}`,
+      title: pageTitle(`Latest Synced Blocks - Page ${pageNumber}`),
       description: `View the most recently synced blocks on the QRL 2.0 blockchain network. Page ${pageNumber} of the blocks list.`,
     },
   };

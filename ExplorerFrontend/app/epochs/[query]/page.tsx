@@ -1,4 +1,4 @@
-import { SITE_NAME, SITE_ORIGIN } from '../../lib/site';
+import { SITE_NAME, SITE_ORIGIN, pageTitle } from '../../lib/site';
 import { parseEpochsData, type EpochsData } from '../../lib/listResponses';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
@@ -42,7 +42,7 @@ export async function generateMetadata({
 
   return {
     ...sharedMetadata,
-    title: `Epochs - Page ${pageNumber} | ${SITE_NAME}`,
+    title: pageTitle(`Epochs - Page ${pageNumber}`),
     description: `View epochs on the QRL 2.0 beacon chain. Page ${pageNumber} of the epochs list.`,
     alternates: {
       ...sharedMetadata.alternates,
@@ -52,7 +52,7 @@ export async function generateMetadata({
     },
     openGraph: {
       ...sharedMetadata.openGraph,
-      title: `Epochs - Page ${pageNumber} | ${SITE_NAME}`,
+      title: pageTitle(`Epochs - Page ${pageNumber}`),
       description: `View epochs on the QRL 2.0 beacon chain. Page ${pageNumber} of the epochs list.`,
       url: `${SITE_ORIGIN}/epochs/${pageNumber}`,
       siteName: SITE_NAME,
@@ -60,7 +60,7 @@ export async function generateMetadata({
     },
     twitter: {
       ...sharedMetadata.twitter,
-      title: `Epochs - Page ${pageNumber} | ${SITE_NAME}`,
+      title: pageTitle(`Epochs - Page ${pageNumber}`),
       description: `View epochs on the QRL 2.0 beacon chain. Page ${pageNumber} of the epochs list.`,
     },
   };

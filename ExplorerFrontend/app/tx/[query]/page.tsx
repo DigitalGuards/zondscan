@@ -1,4 +1,4 @@
-import { SITE_NAME, SITE_ORIGIN } from '../../lib/site';
+import { SITE_NAME, SITE_ORIGIN, pageTitle } from '../../lib/site';
 import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import TransactionView from './transaction-view';
@@ -25,7 +25,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     ? `${txHash.slice(0, 10)}...${txHash.slice(-6)}`
     : txHash;
   const canonicalUrl = `${SITE_ORIGIN}/tx/${txHash}`;
-  const title = `Transaction ${shortHash} | ${SITE_NAME}`;
+  const title = pageTitle(`Transaction ${shortHash}`);
   const description = `View detailed information for QRL 2.0 transaction ${shortHash}. See from / to, value, gas, decoded events, and contract calls.`;
 
   return {

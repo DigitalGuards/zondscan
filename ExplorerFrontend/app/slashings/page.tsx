@@ -1,4 +1,4 @@
-import { SITE_NAME, siteUrl } from '../lib/site';
+import { pageTitle, siteUrl } from '../lib/site';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { sharedMetadata } from '../lib/seo/metaData';
@@ -6,7 +6,7 @@ import SlashingsClient from './slashings-client';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: `Slashings | ${SITE_NAME}`,
+  title: pageTitle('Slashings'),
   description: 'Slashing events and validator set changes on the QRL network.',
   alternates: {
     ...sharedMetadata.alternates,
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: `Slashings | ${SITE_NAME}`,
+    title: pageTitle('Slashings'),
     url: siteUrl('/slashings'),
   },
 };

@@ -1,4 +1,4 @@
-import { SITE_NAME, siteUrl } from '../lib/site';
+import { SITE_NAME, pageTitle, siteUrl } from '../lib/site';
 import type { Metadata } from 'next';
 import TransactionsList from './[query]/TransactionsList';
 import type { Transaction } from '@/app/types';
@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 // social previews are consistent across the explorer.
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: `Transactions | ${SITE_NAME}`,
+  title: pageTitle('Transactions'),
   description:
     'Browse the latest transactions on the QRL 2.0 blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
   alternates: {
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: `Transactions | ${SITE_NAME}`,
+    title: pageTitle('Transactions'),
     description:
       'Browse the latest transactions on the QRL 2.0 blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
     url: siteUrl('/transactions'),
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: `Transactions | ${SITE_NAME}`,
+    title: pageTitle('Transactions'),
     description:
       'Browse the latest transactions on the QRL 2.0 blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
   },

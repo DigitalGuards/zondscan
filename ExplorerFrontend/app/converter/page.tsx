@@ -1,11 +1,11 @@
-import { SITE_NAME, siteUrl } from '../lib/site';
+import { SITE_NAME, pageTitle, siteUrl } from '../lib/site';
 import type { Metadata } from 'next';
 import { sharedMetadata } from '../lib/seo/metaData';
 import ConverterClient from './converter-client';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: `QRL Unit Converter: Quanta, Shor, Planck | ${SITE_NAME}`,
+  title: pageTitle('QRL Unit Converter: Quanta, Shor, Planck'),
   description:
     `Convert between QRL units with exact precision: 1 Quanta = 10^9 Shor = 10^18 Planck. Free unit conversion tool on the ${SITE_NAME} explorer.`,
   alternates: {
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: `QRL Unit Converter: Quanta, Shor, Planck | ${SITE_NAME}`,
+    title: pageTitle('QRL Unit Converter: Quanta, Shor, Planck'),
     description:
       `Convert between QRL units with exact precision: 1 Quanta = 10^9 Shor = 10^18 Planck. Free unit conversion tool on the ${SITE_NAME} explorer.`,
     url: siteUrl('/converter'),
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: `QRL Unit Converter: Quanta, Shor, Planck | ${SITE_NAME}`,
+    title: pageTitle('QRL Unit Converter: Quanta, Shor, Planck'),
     description:
       `Convert between QRL units with exact precision: 1 Quanta = 10^9 Shor = 10^18 Planck. Free unit conversion tool on the ${SITE_NAME} explorer.`,
   },

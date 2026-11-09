@@ -1,4 +1,4 @@
-import { SITE_NAME, SITE_ORIGIN } from '../../lib/site';
+import { SITE_NAME, SITE_ORIGIN, pageTitle } from '../../lib/site';
 import type { Metadata } from 'next';
 import EpochDetailClient from './epoch-detail-client';
 import { sharedMetadata } from '../../lib/seo/metaData';
@@ -9,7 +9,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
   return {
     ...sharedMetadata,
-    title: `Epoch ${epochId} | ${SITE_NAME}`,
+    title: pageTitle(`Epoch ${epochId}`),
     description: `View detailed information for epoch ${epochId} on the QRL 2.0 beacon chain.`,
     alternates: {
       ...sharedMetadata.alternates,
@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     },
     openGraph: {
       ...sharedMetadata.openGraph,
-      title: `Epoch ${epochId} | ${SITE_NAME}`,
+      title: pageTitle(`Epoch ${epochId}`),
       description: `View detailed information for epoch ${epochId} on the QRL 2.0 beacon chain.`,
       url: `${SITE_ORIGIN}/epoch/${epochId}`,
       siteName: SITE_NAME,

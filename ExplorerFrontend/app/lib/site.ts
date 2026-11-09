@@ -1,10 +1,7 @@
-import config from '../../config';
-
 /**
  * Site identity: the public origin and brand name of this explorer build.
  *
- * Origin comes from the existing domain config (`DOMAIN_NAME` on the server,
- * `NEXT_PUBLIC_DOMAIN_NAME` in the browser). The brand name comes from
+ * Origin comes from `NEXT_PUBLIC_DOMAIN_NAME`, fixed at build time. The brand name comes from
  * `NEXT_PUBLIC_SITE_NAME`. With neither set the defaults reproduce the
  * zondscan.com build.
  *
@@ -22,20 +19,36 @@ export interface SiteIdentity {
   readonly name: string;
 }
 
-/** Normalises raw env values: trims, drops trailing slashes, applies defaults. */
+/**
+ * Normalises raw env values. The origin is parsed with `new URL()` and only
+ * its `.origin` is kept, so a path, query, credentials or trailing slash are
+ * dropped. Anything that is not a valid http(s) origin falls back to the
+ * default, and so does an empty name.
+ */
 export function resolveSiteIdentity(
   rawOrigin: string | undefined,
   rawName: string | undefined,
 ): SiteIdentity {
-  const origin = (rawOrigin ?? '').trim().replace(/\/+$/, '');
+  let origin = DEFAULT_SITE_ORIGIN;
+  try {
+    const parsed = new URL((rawOrigin ?? '').trim());
+    if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.origin !== 'null') {
+      origin = parsed.origin;
+    }
+  } catch {
+    // Malformed value: keep the default.
+  }
   const name = (rawName ?? '').trim();
-  return {
-    origin: /^https?:\/\//i.test(origin) ? origin : DEFAULT_SITE_ORIGIN,
-    name: name || DEFAULT_SITE_NAME,
-  };
+  return { origin, name: name || DEFAULT_SITE_NAME };
 }
 
-const identity = resolveSiteIdentity(config.siteUrl, process.env.NEXT_PUBLIC_SITE_NAME);
+// Both variables are NEXT_PUBLIC_*, so the bundler inlines them at build time
+// on the server and in the browser. The runtime-only DOMAIN_NAME is not read:
+// every page, route and client component must agree on one origin.
+const identity = resolveSiteIdentity(
+  process.env.NEXT_PUBLIC_DOMAIN_NAME,
+  process.env.NEXT_PUBLIC_SITE_NAME,
+);
 
 /** Public origin without a trailing slash, e.g. `https://zondscan.com`. */
 export const SITE_ORIGIN: string = identity.origin;

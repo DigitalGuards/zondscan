@@ -1,4 +1,4 @@
-import { SITE_NAME, SITE_ORIGIN } from '../../lib/site';
+import { SITE_NAME, SITE_ORIGIN, pageTitle } from '../../lib/site';
 import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
@@ -62,7 +62,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
 
   return {
     ...sharedMetadata,
-    title: `Transactions - Page ${pageNumber} | ${SITE_NAME}`,
+    title: pageTitle(`Transactions - Page ${pageNumber}`),
     description: `View all transactions on the QRL 2.0 blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
     alternates: {
       ...sharedMetadata.alternates,
@@ -70,7 +70,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     },
     openGraph: {
       ...sharedMetadata.openGraph,
-      title: `Transactions - Page ${pageNumber} | ${SITE_NAME}`,
+      title: pageTitle(`Transactions - Page ${pageNumber}`),
       description: `View all transactions on the QRL 2.0 blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
       url: `${SITE_ORIGIN}/transactions/${pageNumber}`,
       siteName: SITE_NAME,
@@ -78,7 +78,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
     },
     twitter: {
       ...sharedMetadata.twitter,
-      title: `Transactions - Page ${pageNumber} | ${SITE_NAME}`,
+      title: pageTitle(`Transactions - Page ${pageNumber}`),
       description: `View all transactions on the QRL 2.0 blockchain network. Page ${pageNumber} of the transaction list showing latest transfers, smart contract interactions, and more.`,
     },
   };

@@ -1,4 +1,4 @@
-import { SITE_NAME, siteUrl } from '../lib/site';
+import { SITE_NAME, pageTitle, siteUrl } from '../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { sharedMetadata } from '../lib/seo/metaData';
@@ -6,7 +6,7 @@ import { faqs } from './faq-data';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: `FAQ | ${SITE_NAME}`,
+  title: pageTitle('FAQ'),
   description:
     `Answers to frequently asked questions about ${SITE_NAME}, QRL 2.0, transactions, smart contracts, wallets, and the open API.`,
   alternates: {
@@ -15,14 +15,14 @@ export const metadata: Metadata = {
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: `FAQ | ${SITE_NAME}`,
+    title: pageTitle('FAQ'),
     description:
       `Answers to frequently asked questions about ${SITE_NAME}, QRL 2.0, transactions, smart contracts, wallets, and the open API.`,
     url: siteUrl('/faq'),
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: `FAQ | ${SITE_NAME}`,
+    title: pageTitle('FAQ'),
     description:
       `Answers to frequently asked questions about ${SITE_NAME}, QRL 2.0, transactions, smart contracts, wallets, and the open API.`,
   },

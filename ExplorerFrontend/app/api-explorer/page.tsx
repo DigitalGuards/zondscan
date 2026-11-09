@@ -1,4 +1,4 @@
-import { SITE_NAME, SITE_ORIGIN, siteUrl } from '../lib/site';
+import { SITE_NAME, pageTitle, siteUrl } from '../lib/site';
 import { isRecord, isArray } from '../lib/guards';
 import type { Metadata } from 'next';
 import { sharedMetadata } from '../lib/seo/metaData';
@@ -13,7 +13,7 @@ const DESCRIPTION =
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: `API Documentation | ${SITE_NAME}`,
+  title: pageTitle('API Documentation'),
   description: DESCRIPTION,
   alternates: {
     ...sharedMetadata.alternates,
@@ -21,20 +21,19 @@ export const metadata: Metadata = {
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: `API Documentation | ${SITE_NAME}`,
+    title: pageTitle('API Documentation'),
     description: DESCRIPTION,
     url: siteUrl('/api-explorer'),
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: `API Documentation | ${SITE_NAME}`,
+    title: pageTitle('API Documentation'),
     description: DESCRIPTION,
   },
 };
 
 /* ── Spec-to-card precomputation (runs on the server) ──────────────────────── */
 
-const SERVER = SITE_ORIGIN;
 const BASE_URL = siteUrl('/api');
 
 // Example values reused from the spec's own response examples so curl
@@ -75,11 +74,11 @@ const QUERY_EXAMPLES: Record<string, string> = {
 
 /** Full curl commands for the POST endpoints (bodies vary per endpoint). */
 const POST_CURL: Record<string, string> = {
-  '/api/getBalance': `curl -s -X POST "${SERVER}/api/getBalance" --data-urlencode "address=${EXAMPLE_WALLET}"`,
-  '/api/contract/verify': `curl -s -X POST "${SERVER}/api/contract/verify" -H "Content-Type: application/json" -d '{"address":"${EXAMPLE_CONTRACT}","sourceCode":"<contract source>","contractName":"ExampleToken"}'`,
-  '/api/contract/call': `curl -s -X POST "${SERVER}/api/contract/call" -H "Content-Type: application/json" -d '{"to":"${EXAMPLE_CONTRACT}","data":"0x06fdde03"}'`,
-  '/api/contract/explain/{address}': `curl -s -X POST "${SERVER}/api/contract/explain/${EXAMPLE_CONTRACT}"`,
-  '/faucet/claim': `curl -s -X POST "${SERVER}/faucet/claim" -H "Content-Type: application/json" -d '{"address":"${EXAMPLE_WALLET}","turnstileToken":"<turnstile-token>"}'`,
+  '/api/getBalance': `curl -s -X POST "${siteUrl('/api/getBalance')}" --data-urlencode "address=${EXAMPLE_WALLET}"`,
+  '/api/contract/verify': `curl -s -X POST "${siteUrl('/api/contract/verify')}" -H "Content-Type: application/json" -d '{"address":"${EXAMPLE_CONTRACT}","sourceCode":"<contract source>","contractName":"ExampleToken"}'`,
+  '/api/contract/call': `curl -s -X POST "${siteUrl('/api/contract/call')}" -H "Content-Type: application/json" -d '{"to":"${EXAMPLE_CONTRACT}","data":"0x06fdde03"}'`,
+  '/api/contract/explain/{address}': `curl -s -X POST "${siteUrl(`/api/contract/explain/${EXAMPLE_CONTRACT}`)}"`,
+  '/faucet/claim': `curl -s -X POST "${siteUrl('/faucet/claim')}" -H "Content-Type: application/json" -d '{"address":"${EXAMPLE_WALLET}","turnstileToken":"<turnstile-token>"}'`,
 };
 
 function slugify(value: string): string {
@@ -173,12 +172,12 @@ function buildRequest(
 ): { curl: string; tryItUrl: string | null } {
   if (method === 'GET') {
     const query = exampleQuery(path, parameters);
-    const url = `${SERVER}${resolvePath(path)}${query ? `?${query}` : ''}`;
+    const url = `${siteUrl(resolvePath(path))}${query ? `?${query}` : ''}`;
     return { curl: `curl -s "${url}"`, tryItUrl: url };
   }
   const preset = POST_CURL[path];
   return {
-    curl: preset ?? `curl -s -X ${method} "${SERVER}${resolvePath(path)}"`,
+    curl: preset ?? `curl -s -X ${method} "${siteUrl(resolvePath(path))}"`,
     tryItUrl: null,
   };
 }

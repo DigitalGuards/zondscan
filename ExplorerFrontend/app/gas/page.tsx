@@ -1,4 +1,4 @@
-import { SITE_NAME, siteUrl } from '../lib/site';
+import { pageTitle, siteUrl } from '../lib/site';
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { sharedMetadata } from '../lib/seo/metaData';
@@ -6,7 +6,7 @@ import GasClient from './gas-client';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: `Gas Tracker | ${SITE_NAME}`,
+  title: pageTitle('Gas Tracker'),
   description: 'Network gas metrics, average gas price, gas usage, mempool size, and recent block gas history on the QRL 2.0 network',
   alternates: {
     ...sharedMetadata.alternates,
@@ -14,13 +14,13 @@ export const metadata: Metadata = {
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: `Gas Tracker | ${SITE_NAME}`,
+    title: pageTitle('Gas Tracker'),
     description: 'Network gas metrics for the QRL 2.0 network',
     url: siteUrl('/gas'),
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: `Gas Tracker | ${SITE_NAME}`,
+    title: pageTitle('Gas Tracker'),
     description: 'Network gas metrics for the QRL 2.0 network',
   },
 };

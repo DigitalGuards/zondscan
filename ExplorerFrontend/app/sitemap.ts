@@ -1,4 +1,4 @@
-import { SITE_ORIGIN } from './lib/site';
+import { siteUrl } from './lib/site';
 import type { MetadataRoute } from 'next';
 import { learnArticles } from './learn/articles';
 
@@ -13,8 +13,6 @@ import { learnArticles } from './learn/articles';
  * the deploy time (build evaluation moment).
  */
 
-const BASE = SITE_ORIGIN;
-
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
   const entry = (
@@ -22,7 +20,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     changeFrequency: MetadataRoute.Sitemap[number]['changeFrequency'],
     priority: number,
   ): MetadataRoute.Sitemap[number] => ({
-    url: `${BASE}${path}`,
+    url: siteUrl(path),
     lastModified: now,
     changeFrequency,
     priority,

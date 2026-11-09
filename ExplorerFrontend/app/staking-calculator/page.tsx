@@ -1,10 +1,10 @@
-import { SITE_NAME, siteUrl } from '../lib/site';
+import { SITE_NAME, pageTitle, siteUrl } from '../lib/site';
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { sharedMetadata } from '../lib/seo/metaData';
 import StakingCalculatorClient from './staking-calculator-client';
 
-const title = `QRL Staking Calculator: Validator Rewards and APY | ${SITE_NAME}`;
+const title = pageTitle('QRL Staking Calculator: Validator Rewards and APY');
 const description =
   'Estimate QRL 2.0 validator rewards. Model APR, real yield after inflation, and reward payouts from live network data, using the beacon-chain reward formula.';
 
