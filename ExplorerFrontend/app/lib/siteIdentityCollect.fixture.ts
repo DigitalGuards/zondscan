@@ -9,6 +9,32 @@ import path from 'node:path';
 
 const appDir = path.resolve(__dirname, '..');
 
+const SITE_ENV_KEYS = ['DOMAIN_NAME', 'NEXT_PUBLIC_DOMAIN_NAME', 'NEXT_PUBLIC_SITE_NAME'] as const;
+
+export type SiteEnv = Partial<Record<(typeof SITE_ENV_KEYS)[number], string>>;
+
+/**
+ * Runs `fn` with the site env variables replaced by `env` and a fresh module
+ * registry, so `lib/site.ts` is evaluated for that identity. Modules that
+ * `fn` needs must be imported inside it (after the reset). Restores the
+ * previous env and resets modules again afterwards.
+ */
+export async function withSiteEnv<T>(env: SiteEnv, fn: () => Promise<T>): Promise<T> {
+  const saved = SITE_ENV_KEYS.map((key) => [key, process.env[key]] as const);
+  for (const key of SITE_ENV_KEYS) Reflect.deleteProperty(process.env, key);
+  Object.assign(process.env, env);
+  jest.resetModules();
+  try {
+    return await fn();
+  } finally {
+    for (const [key, value] of saved) {
+      if (value === undefined) Reflect.deleteProperty(process.env, key);
+      else process.env[key] = value;
+    }
+    jest.resetModules();
+  }
+}
+
 const SAMPLE_PARAMS = {
   query: '1',
   id: '1',

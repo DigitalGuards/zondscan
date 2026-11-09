@@ -1,3 +1,4 @@
+import { SITE_NAME } from '../../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { learnMetadata } from '../components/learn-metadata';
@@ -30,7 +31,7 @@ export default function Page(): JSX.Element {
       </p>
       <p>
         This article explains what each unit means, gives the exact
-        conversion factors, shows which unit each ZondScan page uses, and
+        conversion factors, shows which unit each {SITE_NAME} page uses, and
         walks through the built in{' '}
         <Link href="/converter">unit converter</Link>. If the chain itself is new
         to you, start with{' '}
@@ -86,9 +87,9 @@ export default function Page(): JSX.Element {
         </Callout>
       </LearnSection>
 
-      <LearnSection id="units-on-zondscan" title="How amounts appear on ZondScan">
+      <LearnSection id="units-on-zondscan" title={`How amounts appear on ${SITE_NAME}`}>
         <p>
-          ZondScan picks the unit that keeps each number readable, so you
+          {SITE_NAME} picks the unit that keeps each number readable, so you
           will meet all three while browsing:
         </p>
         <ul>
@@ -124,7 +125,7 @@ export default function Page(): JSX.Element {
 
       <LearnSection id="use-the-converter" title="Convert units with the built in converter">
         <p>
-          For quick math between the three units, ZondScan ships a
+          For quick math between the three units, {SITE_NAME} ships a
           converter that uses exact integer arithmetic, so results are
           never rounded.
         </p>
@@ -171,7 +172,7 @@ export default function Page(): JSX.Element {
             a: (
               <p>
                 QRL is the project name and the exchange ticker. One coin
-                of the native asset is one Quanta, and ZondScan displays
+                of the native asset is one Quanta, and {SITE_NAME} displays
                 every native amount in Quanta, Shor, or Planck.
               </p>
             ),

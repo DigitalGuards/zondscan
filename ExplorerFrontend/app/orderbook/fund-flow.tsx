@@ -1,4 +1,5 @@
 'use client';
+import { SITE_NAME } from '../lib/site';
 
 import { useMemo, useState } from 'react';
 import { useParentSize } from '@visx/responsive';
@@ -320,7 +321,7 @@ export default function FundFlowPanel(): JSX.Element {
           Fund flow unavailable
         </h2>
         <p className="mt-2 text-sm text-text-secondary">
-          ZondScan could not load the collected trade rollup.
+          {SITE_NAME} could not load the collected trade rollup.
         </p>
         <button
           type="button"
@@ -515,7 +516,7 @@ export default function FundFlowPanel(): JSX.Element {
               </tbody>
             </table>
             <p className="mt-2 text-[11px] text-text-muted">
-              Size bands are ZondScan&apos;s own classification by {data.bands.quoteAsset} notional.
+              Size bands are {SITE_NAME}&apos;s own classification by {data.bands.quoteAsset} notional.
               Quantities are QRL.
             </p>
           </div>

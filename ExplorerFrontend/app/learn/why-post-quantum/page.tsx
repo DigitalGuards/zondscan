@@ -1,3 +1,4 @@
+import { SITE_NAME } from '../../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { learnMetadata } from '../components/learn-metadata';
@@ -210,7 +211,7 @@ export default function Page(): JSX.Element {
           </Step>
           <Step title="Fund it with testnet Quanta">
             <p>
-              Use the <Link href="/faucet">ZondScan faucet</Link>, or read{' '}
+              Use the <Link href="/faucet">{SITE_NAME} faucet</Link>, or read{' '}
               <a href="/learn/get-testnet-quanta">the faucet guide</a> first.
             </p>
           </Step>

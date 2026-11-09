@@ -1,4 +1,4 @@
-import { SITE_NAME, pageTitle, siteUrl } from '../lib/site';
+import { pageTitle, SITE_NAME, siteUrl } from '../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
@@ -115,7 +115,7 @@ export default function LearnIndexPage(): JSX.Element {
         <p className="text-text-secondary leading-relaxed">
           Plain English guides to QRL 2.0: how post-quantum signatures and proof of
           stake work, and how to use wallets, staking, swaps, tokens, and smart
-          contracts on the network. Written by the team that builds ZondScan and
+          contracts on the network. Written by the team that builds {SITE_NAME} and
           MyQRLWallet. Every guide runs on the public testnet, where coins have no
           monetary value, so you can follow along and experiment freely.
         </p>
@@ -158,7 +158,7 @@ export default function LearnIndexPage(): JSX.Element {
         </h2>
         <p className="text-sm text-text-secondary mb-4">
           Independent sites worth bookmarking once you have the basics down. These
-          are maintained outside ZondScan and open in a new tab.
+          are maintained outside {SITE_NAME} and open in a new tab.
         </p>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {EXTERNAL_RESOURCES.map((resource) => (

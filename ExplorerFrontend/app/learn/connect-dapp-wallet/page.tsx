@@ -1,4 +1,4 @@
-import { SITE_HOST, siteUrl } from '../../lib/site';
+import { SITE_HOST, SITE_NAME, siteUrl } from '../../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { learnMetadata } from '../components/learn-metadata';
@@ -26,7 +26,7 @@ export default function Page() {
         This guide explains what a wallet connection actually is, walks through the two ways to connect on
         QRL 2.0 (a browser extension picker and QR pairing with the MyQRLWallet app), and shows how the
         pairing channel is protected with post-quantum encryption. You will finish by pairing your own wallet
-        with the live demo dApp hosted here on ZondScan.
+        with the live demo dApp hosted here on {SITE_NAME}.
       </p>
       <p>
         You need a wallet first: the <a href="/learn/create-a-wallet">create a wallet</a> guide covers that in
@@ -94,7 +94,7 @@ export default function Page() {
 
       <LearnSection id="try-the-qr-flow" title="Try it: pair a wallet with the demo dApp">
         <p>
-          The connect SDK ships with a demo dApp, and ZondScan hosts it live. It exercises the full flow:
+          The connect SDK ships with a demo dApp, and {SITE_NAME} hosts it live. It exercises the full flow:
           pairing, sending a transaction, post-quantum message signing, and read-only RPC calls.
         </p>
         <StepList>
@@ -105,7 +105,7 @@ export default function Page() {
                 {SITE_HOST}/dapp-example
               </a>
               . If you want to send a test transaction later, fund your address first at the{' '}
-              <Link href="/faucet">ZondScan faucet</Link>; the{' '}
+              <Link href="/faucet">{SITE_NAME} faucet</Link>; the{' '}
               <a href="/learn/get-testnet-quanta">testnet Quanta guide</a> shows how.
             </p>
           </Step>

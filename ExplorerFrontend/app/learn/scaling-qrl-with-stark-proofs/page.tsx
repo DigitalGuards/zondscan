@@ -1,3 +1,4 @@
+import { SITE_NAME } from '../../lib/site';
 import type { Metadata } from 'next';
 import { learnMetadata } from '../components/learn-metadata';
 import LearnArticle, { LearnSection, Callout, LearnFAQ } from '../components/LearnArticle';
@@ -26,7 +27,7 @@ export default function Page(): JSX.Element {
       </p>
       <Callout type="warning" title="Research status">
         <p>
-          QuantaStark is a research project by DigitalGuards, the team behind ZondScan and
+          QuantaStark is a research project by DigitalGuards, the team behind {SITE_NAME} and
           MyQRLWallet. It is experimental, unaudited and subject to breaking changes. Every number
           below was measured on local test networks; nothing is deployed on the public testnet
           yet, and nothing in the project should secure funds.
@@ -297,7 +298,7 @@ export default function Page(): JSX.Element {
           </li>
           <li>
             Once the verifier is deployed on the public testnet, the plan is to publish its contracts
-            as verified source on ZondScan, so that every verification transaction can be read
+            as verified source on {SITE_NAME}, so that every verification transaction can be read
             field by field with <a href="/learn/read-a-transaction">how to read a transaction</a>. The gas
             used on that page is the number this article is about.
           </li>

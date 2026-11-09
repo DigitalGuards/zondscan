@@ -13,6 +13,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { withSiteEnv, type SiteEnv } from './siteIdentityCollect.fixture';
 
 jest.setTimeout(120000);
 jest.mock('server-only', () => ({}));
@@ -27,15 +28,10 @@ const fixture = JSON.parse(
   fs.readFileSync(path.join(__dirname, '__fixtures__/default-site-output.json'), 'utf8'),
 ) as Record<string, unknown>;
 
-const ENV_KEYS = ['DOMAIN_NAME', 'NEXT_PUBLIC_DOMAIN_NAME', 'NEXT_PUBLIC_SITE_NAME'] as const;
 const DEFAULT_ORIGIN = 'https://zondscan.com';
 
-async function collectOutputs(env: Partial<Record<(typeof ENV_KEYS)[number], string>>) {
-  const saved = ENV_KEYS.map((key) => [key, process.env[key]] as const);
-  for (const key of ENV_KEYS) Reflect.deleteProperty(process.env, key);
-  Object.assign(process.env, env);
-  jest.resetModules();
-  try {
+async function collectOutputs(env: SiteEnv) {
+  return withSiteEnv(env, async () => {
     const { renderToStaticMarkup } = await import('react-dom/server');
     const { createElement } = await import('react');
     const { collectPageMetadata } = await import('./siteIdentityCollect.fixture');
@@ -66,13 +62,7 @@ async function collectOutputs(env: Partial<Record<(typeof ENV_KEYS)[number], str
       footerHtml: renderToStaticMarkup(createElement(Footer)),
       searchRedirect,
     };
-  } finally {
-    for (const [key, value] of saved) {
-      if (value === undefined) Reflect.deleteProperty(process.env, key);
-      else process.env[key] = value;
-    }
-    jest.resetModules();
-  }
+  });
 }
 
 describe('default site identity', () => {
@@ -299,5 +289,79 @@ describe('translated brand strings', () => {
     expect(translate(CHOOSE, 'ru', { name: 'ShorScan' })).toBe(
       'Настройте оформление ShorScan и отображение данных блокчейна. Изменения применяются сразу.',
     );
+  });
+});
+
+describe('hardcoded brand name guard', () => {
+  // Files that define the default identity or help the tests; they may name it.
+  const ALLOWLIST = new Set([
+    'lib/site.ts',
+    'lib/siteIdentityCollect.fixture.ts',
+    'lib/brandCopy.fixture.ts',
+  ]);
+
+  // Mentions that stay on purpose, each stripped from a line before matching.
+  const ALLOWED_PATTERNS: readonly RegExp[] = [
+    // The public repository link.
+    /github\.com\/DigitalGuards\/zondscan(\.git)?/gi,
+    // The clone instruction shown next to the repository link.
+    /cd zondscan\b/g,
+    // Logo image file names in public/.
+    /ZondScan_Logo\w*\.\w+/g,
+    // Element ids and URL fragments such as `what-is-zondscan`.
+    /[a-z0-9-]*-zondscan\b[a-z0-9-]*/g,
+    // Persisted preference storage key (renaming would reset saved settings).
+    /'zondscan\.preferences\.v1'/g,
+    // Preference change event name.
+    /'zondscan:preferences'/g,
+    // Network switcher entry that links to the zondscan.com explorer.
+    /href: 'https:\/\/zondscan\.com'/g,
+  ];
+
+  function sourceFiles(dir: string, out: string[] = []): string[] {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== 'node_modules') sourceFiles(full, out);
+      } else if (/\.(ts|tsx)$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)) {
+        out.push(full);
+      }
+    }
+    return out;
+  }
+
+  /** Lines that carry code or copy: drops full-line comments and block comments. */
+  function codeLines(source: string): { line: string; number: number }[] {
+    const result: { line: string; number: number }[] = [];
+    let inBlock = false;
+    source.split('\n').forEach((line, index) => {
+      const trimmed = line.trim();
+      if (inBlock) {
+        if (trimmed.includes('*/')) inBlock = false;
+        return;
+      }
+      if (trimmed.startsWith('//')) return;
+      if (/^(\{)?\/\*.*\*\/(\})?$/.test(trimmed)) return;
+      if (trimmed.startsWith('/*') || trimmed.startsWith('{/*')) {
+        if (!trimmed.includes('*/')) inBlock = true;
+        return;
+      }
+      result.push({ line, number: index + 1 });
+    });
+    return result;
+  }
+
+  it('finds no literal zondscan in strings or JSX text outside the allowlists', () => {
+    const appDir = path.resolve(__dirname, '..');
+    const offenders: string[] = [];
+    for (const file of sourceFiles(appDir)) {
+      const rel = path.relative(appDir, file).split(path.sep).join('/');
+      if (ALLOWLIST.has(rel)) continue;
+      for (const { line, number } of codeLines(fs.readFileSync(file, 'utf8'))) {
+        const stripped = ALLOWED_PATTERNS.reduce((acc, re) => acc.replace(re, ''), line);
+        if (/zondscan/i.test(stripped)) offenders.push(`${rel}:${number}: ${line.trim()}`);
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });

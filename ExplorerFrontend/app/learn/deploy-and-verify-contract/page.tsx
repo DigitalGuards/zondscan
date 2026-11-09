@@ -1,4 +1,4 @@
-import { siteUrl } from '../../lib/site';
+import { SITE_NAME, siteUrl } from '../../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { learnMetadata } from '../components/learn-metadata';
@@ -60,7 +60,7 @@ export default function Page(): JSX.Element {
       <p>
         This tutorial walks the full loop: write a small Hyperion contract, compile it with{' '}
         <code>hypc</code>, deploy it to the QRL 2.0 testnet with a short{' '}
-        <code>@theqrl/web3</code> script, and then verify the source on ZondScan so anyone can
+        <code>@theqrl/web3</code> script, and then verify the source on {SITE_NAME} so anyone can
         read it, call it, and audit it. If the chain itself is new to you, start with{' '}
         <a href="/learn/what-is-qrl-2">What is QRL 2.0?</a>.
       </p>
@@ -141,7 +141,7 @@ export default function Page(): JSX.Element {
         <CodeBlock code={deployScript} language="javascript" />
         <p>
           Run it with <code>MNEMONIC</code> set in your environment. On success it prints the
-          new Q-prefixed contract address. Paste that address into the ZondScan search bar to
+          new Q-prefixed contract address. Paste that address into the {SITE_NAME} search bar to
           see the creation transaction, or open the deployment hash directly;{' '}
           <a href="/learn/read-a-transaction">How to read a transaction</a> explains every
           field, and <Link href="/gas">the gas page</Link> shows current prices. Your contract also
@@ -149,7 +149,7 @@ export default function Page(): JSX.Element {
         </p>
       </LearnSection>
 
-      <LearnSection id="verify-on-zondscan" title="Verify the source on ZondScan">
+      <LearnSection id="verify-on-zondscan" title={`Verify the source on ${SITE_NAME}`}>
         <p>
           Right after deployment the explorer only knows your contract&apos;s bytecode.
           Verification publishes the source: you submit it, the backend recompiles it with the

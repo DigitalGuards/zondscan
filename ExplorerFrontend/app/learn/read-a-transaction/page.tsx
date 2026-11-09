@@ -1,3 +1,4 @@
+import { SITE_NAME } from '../../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { learnMetadata } from '../components/learn-metadata';
@@ -16,7 +17,7 @@ export default function Page(): JSX.Element {
     <LearnArticle slug="read-a-transaction">
       <p>
         Every action on QRL 2.0, from a simple transfer to a contract
-        deployment, is recorded as a transaction. The ZondScan transaction page
+        deployment, is recorded as a transaction. The {SITE_NAME} transaction page
         collects everything the network knows about one of them: who sent it,
         where it went, what it cost, and what it changed.
       </p>
@@ -39,7 +40,7 @@ export default function Page(): JSX.Element {
           <Step title="Search for it directly">
             <p>
               Paste the transaction hash into the search bar at the top of any
-              ZondScan page. The search accepts addresses, transaction hashes,
+              {' '}{SITE_NAME} page. The search accepts addresses, transaction hashes,
               and block numbers. A transaction hash starts with{' '}
               <code>0x</code> followed by 64 hexadecimal characters.
             </p>
@@ -120,7 +121,7 @@ export default function Page(): JSX.Element {
         <ul>
           <li>
             <strong>Gas limit</strong>: the maximum amount of computation the
-            sender authorized. While a transaction is pending, ZondScan shows
+            sender authorized. While a transaction is pending, {SITE_NAME} shows
             this as its own row.
           </li>
           <li>
@@ -146,7 +147,7 @@ export default function Page(): JSX.Element {
 
       <LearnSection id="token-transfers" title="Decoded token transfers">
         <p>
-          When a transaction moves tokens, ZondScan decodes the transfer events
+          When a transaction moves tokens, {SITE_NAME} decodes the transfer events
           and renders one card per transfer. For a QRC-20 transfer the card
           shows the token name and symbol linked to the token contract, the
           amount formatted with the token&apos;s own decimals, and the sender
@@ -170,7 +171,7 @@ export default function Page(): JSX.Element {
         </p>
         <Callout type="tip" title="Raw hex means the contract is unverified">
           If the Event Logs or Input Data panels show undecoded hex, the
-          contract behind them has no verified source on ZondScan. Anyone with
+          contract behind them has no verified source on {SITE_NAME}. Anyone with
           the source can fix that through{' '}
           <Link href="/verify-contract">contract verification</Link>; after that,
           every visitor sees named events and labeled arguments on this
@@ -181,7 +182,7 @@ export default function Page(): JSX.Element {
       <LearnSection id="internal-transactions" title="Internal transactions">
         <p>
           A transaction targeting a contract can trigger further calls while it
-          executes, and some of those calls move coins of their own. ZondScan
+          executes, and some of those calls move coins of their own. {SITE_NAME}{' '}
           records the nested call frames that moved native value, plus any
           contract creations, as internal transactions; they appear in the{' '}
           <strong>Internal Transactions</strong> panel, one row per call frame,
@@ -198,7 +199,7 @@ export default function Page(): JSX.Element {
 
       <LearnSection id="pending-and-eta" title="Pending transactions and the inclusion ETA">
         <p>
-          Before a transaction is mined it sits in the mempool, and ZondScan
+          Before a transaction is mined it sits in the mempool, and {SITE_NAME}{' '}
           gives it a dedicated live view. The{' '}
           <Link href="/pending/1">pending transactions list</Link> refreshes every
           five seconds and marks each entry pending, mined, or dropped. Opening
@@ -221,7 +222,7 @@ export default function Page(): JSX.Element {
         <p>
           A contract deployment is a transaction with no recipient. The sender
           publishes bytecode, and the network derives a fresh address for the
-          new contract. On ZondScan the <strong>To</strong> row shows a{' '}
+          new contract. On {SITE_NAME} the <strong>To</strong> row shows a{' '}
           <strong>Contract Created</strong> label with the new contract&apos;s
           address, and a dedicated Contract Created card repeats the address
           with more detail. When the deployed contract is a token, the card
@@ -257,7 +258,7 @@ export default function Page(): JSX.Element {
               <p>
                 Each confirmation is one more block built on top of the one
                 containing your transaction, so deeper means harder to reorder.
-                ZondScan stops refining the live count after a couple dozen
+                {' '}{SITE_NAME} stops refining the live count after a couple dozen
                 confirmations, the range most chain interfaces treat as
                 effectively final.
               </p>
@@ -269,7 +270,7 @@ export default function Page(): JSX.Element {
               <p>
                 That transaction deployed a contract. Deployments carry no
                 recipient; the network assigns the new contract an address when
-                the transaction executes, and ZondScan links that address in
+                the transaction executes, and {SITE_NAME} links that address in
                 place of the empty field.
               </p>
             ),
@@ -281,7 +282,7 @@ export default function Page(): JSX.Element {
                 Token standards represent creation and destruction as transfers
                 involving the zero address. A transfer from the zero address
                 minted new tokens, and a transfer to the zero address burned
-                them, so ZondScan replaces the address with a badge.
+                them, so {SITE_NAME} replaces the address with a badge.
               </p>
             ),
           },
@@ -290,7 +291,7 @@ export default function Page(): JSX.Element {
             a: (
               <p>
                 The calldata matched none of the well-known token methods and
-                the target contract has no verified ABI on ZondScan. Verifying
+                the target contract has no verified ABI on {SITE_NAME}. Verifying
                 the contract on the{' '}
                 <Link href="/verify-contract">verify contract page</Link> lets the
                 explorer decode the method name and arguments for everyone.

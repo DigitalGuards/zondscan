@@ -1,3 +1,4 @@
+import { SITE_NAME } from '../../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { learnMetadata } from '../components/learn-metadata';
@@ -26,7 +27,7 @@ export default function Page(): JSX.Element {
         <a href="https://quantapool.com">QuantaPool</a>, a liquid staking protocol running
         on the QRL 2.0 testnet. You will connect a wallet, deposit Quanta, receive the
         stQRL liquid staking token, and learn how rewards, withdrawals, and the maturity
-        lock work. You will also see how to follow your position on ZondScan, since stQRL
+        lock work. You will also see how to follow your position on {SITE_NAME}, since stQRL
         is an ordinary token contract with a public holders list and transfer history.
       </p>
       <p>
@@ -86,7 +87,7 @@ export default function Page(): JSX.Element {
               You need a Q-prefixed QRL 2.0 address with enough balance to cover the
               minimum deposit plus gas. Set one up with the{' '}
               <a href="/learn/create-a-wallet">wallet creation guide</a>, then fund it
-              from the <Link href="/faucet">ZondScan faucet</Link> as described in{' '}
+              from the <Link href="/faucet">{SITE_NAME} faucet</Link> as described in{' '}
               <a href="/learn/get-testnet-quanta">get testnet Quanta</a>.
             </p>
           </Step>
@@ -112,7 +113,7 @@ export default function Page(): JSX.Element {
           <Step title="Confirm the deposit in your wallet">
             <p>
               Select <strong>Stake QRL</strong> and approve the transaction in your
-              wallet. The app tracks the transaction and links it to ZondScan, where you
+              wallet. The app tracks the transaction and links it to {SITE_NAME}, where you
               can watch it confirm. The guide to{' '}
               <a href="/learn/read-a-transaction">reading a transaction</a> explains
               every field on that page.
@@ -174,7 +175,7 @@ export default function Page(): JSX.Element {
         </ul>
       </LearnSection>
 
-      <LearnSection id="track-on-zondscan" title="Track your position on ZondScan">
+      <LearnSection id="track-on-zondscan" title={`Track your position on ${SITE_NAME}`}>
         <p>
           Because stQRL is a standard token contract, everything about it is public.
           Your deposit appears as a transaction from your address to the deposit pool
