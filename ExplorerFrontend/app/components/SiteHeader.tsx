@@ -1,6 +1,6 @@
 'use client';
 
-import { SITE_NAME } from '../lib/site';
+import { BRAND, SITE_NAME, splitBrand } from '../lib/site';
 import { useTranslation } from './InterfaceText';
 
 import {
@@ -25,6 +25,7 @@ import AppearanceMenu from './AppearanceMenu';
 import NetworkMenu from './NetworkMenu';
 import MarketSummary from './MarketSummary';
 import SearchBar from './SearchBar';
+import ShorScanMark from './ShorScanMark';
 import NavigationLink from './NavigationLink';
 import MobileNavigation from './MobileNavigation';
 
@@ -249,6 +250,7 @@ function DesktopMenu({ group, pathname, open, onOpen, onClose }: DesktopMenuProp
 
 export default function SiteHeader() {
   const { t } = useTranslation();
+  const [brandPlain, brandAccent] = splitBrand();
   const pathname = usePathname();
   const headerRef = useRef<HTMLElement>(null);
   const mobileButtonRef = useRef<HTMLButtonElement>(null);
@@ -400,10 +402,21 @@ export default function SiteHeader() {
             className="flex shrink-0 items-center gap-2.5 rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
             aria-label={t('{name} home', { name: SITE_NAME })}
           >
-            <Image src="/ZondScan_Logo_static.webp" width={38} height={38} alt="" priority />
+            {BRAND.mark === 'shor' ? (
+              <ShorScanMark className="h-[38px] w-[38px] shrink-0" />
+            ) : (
+              <Image src="/ZondScan_Logo_static.webp" width={38} height={38} alt="" priority />
+            )}
             <span>
               <span className="block font-display text-xl font-semibold tracking-wide text-text-primary">
-                {SITE_NAME}
+                {BRAND.mark === 'shor' ? (
+                  <>
+                    {brandPlain}
+                    <span className="text-accent">{brandAccent}</span>
+                  </>
+                ) : (
+                  SITE_NAME
+                )}
               </span>
               <span className="block text-[10px] uppercase tracking-[0.13em] text-text-muted">
                 {t(CURRENT_EXPLORER_NETWORK_NAME)}
