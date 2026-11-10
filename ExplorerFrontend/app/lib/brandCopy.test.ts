@@ -84,16 +84,15 @@ async function capture(env: SiteEnv) {
 }
 
 /**
- * `zondscan` mentions that stay in the alternate build on purpose: the
- * repository links, the logo image file names, and element ids or URL
- * fragments such as `what-is-zondscan`, and the `cd zondscan` line of the
- * repository clone command.
+ * `zond` mentions that stay in the alternate build on purpose: the public
+ * repository links and the `cd zondscan` line of the repository clone
+ * command. Element ids and anchors follow the brand slug.
  */
 const ALLOWED_ALTERNATE_MENTIONS: readonly RegExp[] = [
   /github\.com\/DigitalGuards\/zondscan/gi,
-  /ZondScan_Logo\w*\.\w+/g,
-  /[a-z0-9-]+-zondscan\b[a-z0-9-]*/g,
   /cd zondscan/g,
+  // Invisible alias anchors for old deep links (components/LegacyAnchor.tsx).
+  /<span id=\\?"[a-z0-9-]*zondscan[a-z0-9-]*\\?" aria-hidden=\\?"true\\?" class=\\?"absolute/g,
 ];
 
 describe('alternate identity (ShorScan)', () => {
@@ -105,11 +104,11 @@ describe('alternate identity (ShorScan)', () => {
     });
   });
 
-  it('mentions no zondscan outside the allowlist', () => {
+  it('mentions no zond outside the allowlist', () => {
     const offenders: string[] = [];
     for (const [key, text] of Object.entries(out)) {
       const stripped = ALLOWED_ALTERNATE_MENTIONS.reduce((acc, re) => acc.replace(re, ''), text);
-      for (const hit of stripped.match(/.{0,40}zondscan.{0,40}/gi) ?? []) {
+      for (const hit of stripped.match(/.{0,40}zond.{0,40}/gi) ?? []) {
         offenders.push(`${key}: ${hit}`);
       }
     }

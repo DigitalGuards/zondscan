@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { sharedMetadata } from '../lib/seo/metaData';
 import { faqs } from './faq-data';
+import LegacyAnchor from '../components/LegacyAnchor';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
@@ -60,6 +61,7 @@ export default function FAQPage(): JSX.Element {
                 className="card-simple overflow-hidden group"
               >
                 <summary className="flex w-full cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-left [&::-webkit-details-marker]:hidden">
+                  <LegacyAnchor id={faq.id} />
                   <span className="text-sm md:text-base font-medium text-text-primary">
                     {faq.q}
                   </span>

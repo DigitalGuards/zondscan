@@ -1,4 +1,4 @@
-import { SITE_NAME } from '../../lib/site';
+import { SITE_NAME, BRAND_SLUG } from '../../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { learnMetadata } from '../components/learn-metadata';
@@ -175,7 +175,7 @@ export default function Page(): JSX.Element {
         </ul>
       </LearnSection>
 
-      <LearnSection id="track-on-zondscan" title={`Track your position on ${SITE_NAME}`}>
+      <LearnSection id={`track-on-${BRAND_SLUG}`} title={`Track your position on ${SITE_NAME}`}>
         <p>
           Because stQRL is a standard token contract, everything about it is public.
           Your deposit appears as a transaction from your address to the deposit pool

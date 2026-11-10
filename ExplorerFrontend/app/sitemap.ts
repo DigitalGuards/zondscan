@@ -3,7 +3,7 @@ import type { MetadataRoute } from 'next';
 import { learnArticles } from './learn/articles';
 
 /**
- * Sitemap for ZondScan. Lists the static routes that have meaningful
+ * Sitemap of the explorer. Lists the static routes that have meaningful
  * standalone landing pages so search crawlers index the site map
  * (not every block / tx / address; those are uncacheable per-instance
  * pages that crawlers reach via internal links). Next.js App Router

@@ -1,4 +1,4 @@
-import { SITE_NAME } from '../../lib/site';
+import { SITE_NAME, BRAND_SLUG } from '../../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { learnMetadata } from '../components/learn-metadata';
@@ -161,7 +161,7 @@ export default function Page(): JSX.Element {
         </p>
       </LearnSection>
 
-      <LearnSection id="where-zondscan-fits" title={`Where ${SITE_NAME} fits`}>
+      <LearnSection id={`where-${BRAND_SLUG}-fits`} title={`Where ${SITE_NAME} fits`}>
         <p>
           {SITE_NAME} is the block explorer for QRL 2.0. A synchronizer reads every block from a
           network node and indexes it into a database, and this site serves that data with

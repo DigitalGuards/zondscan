@@ -6,7 +6,7 @@ import { Metadata } from 'next';
 // matching the recommended 1.91:1 aspect for summary_large_image.
 // metadataBase resolves the relative URL to the site origin.
 const OG_IMAGE = {
-  url: '/og-image.png',
+  url: BRAND.ogImage,
   width: 1200,
   height: 630,
   alt: `${SITE_NAME}, the QRL 2.0 blockchain explorer`,
@@ -15,8 +15,7 @@ const OG_IMAGE = {
 export const sharedMetadata: Partial<Metadata> = {
   metadataBase: new URL(SITE_ORIGIN),
   applicationName: SITE_NAME,
-  keywords:
-    'QRL, QRL 2.0, Quantum Resistant Ledger, Zond, blockchain explorer, post-quantum cryptography, Proof of Stake, Web3, EVM, quantum resistant, cryptocurrency, smart contracts, validators, transactions, blocks',
+  keywords: `QRL, QRL 2.0, Quantum Resistant Ledger, ${BRAND.chainKeyword ? `${BRAND.chainKeyword}, ` : ''}blockchain explorer, post-quantum cryptography, Proof of Stake, Web3, EVM, quantum resistant, cryptocurrency, smart contracts, validators, transactions, blocks`,
   manifest: '/manifest.json',
   icons: {
     icon: [
@@ -26,7 +25,7 @@ export const sharedMetadata: Partial<Metadata> = {
       { url: BRAND.favicon48, sizes: '48x48', type: 'image/png' },
     ],
     apple: [{ url: BRAND.appleTouchIcon }],
-    other: [{ rel: 'mask-icon', url: '/favis/safari-pinned-tab.svg' }],
+    other: [{ rel: 'mask-icon', url: BRAND.maskIcon }],
   },
   openGraph: {
     type: 'website',

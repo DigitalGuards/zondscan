@@ -1,4 +1,4 @@
-import { SITE_HOST, SITE_NAME } from '../../lib/site';
+import { SITE_HOST, SITE_NAME, BRAND_SLUG } from '../../lib/site';
 import { fetchChainTiming } from '../../lib/chainTiming';
 import type { Metadata } from 'next';
 import Link from 'next/link';
@@ -201,7 +201,7 @@ export default async function Page(): Promise<JSX.Element> {
         </p>
       </LearnSection>
 
-      <LearnSection id="follow-it-on-zondscan" title={`Follow it all on ${SITE_NAME}`}>
+      <LearnSection id={`follow-it-on-${BRAND_SLUG}`} title={`Follow it all on ${SITE_NAME}`}>
         <StepList>
           <Step title="Open the validators dashboard">
             <p>

@@ -9,7 +9,7 @@
 
 import spec from './openapi.json';
 import { isArray, isRecord } from './guards';
-import { DEFAULT_SITE_NAME, DEFAULT_SITE_ORIGIN, type SiteIdentity } from './site';
+import { brandAssetsFor, DEFAULT_SITE_NAME, DEFAULT_SITE_ORIGIN, type SiteIdentity } from './site';
 
 /** One parameter of an operation (path or query). */
 export interface OpenApiParameter {
@@ -133,15 +133,18 @@ export function renderOpenApiSpec(identity: SiteIdentity): OpenApiDocument {
       .join(host)
       .split(DEFAULT_SITE_NAME)
       .join(identity.name);
+  const dropChainTag = brandAssetsFor(identity.name).mark === 'shor';
+  const cleaned = (value: string): string =>
+    dropChainTag ? substitute(value).split(' (Zond)').join('') : substitute(value);
   const walk = (node: unknown): void => {
     if (isArray(node)) {
       node.forEach((item, index) => {
-        if (typeof item === 'string') node[index] = substitute(item);
+        if (typeof item === 'string') node[index] = cleaned(item);
         else walk(item);
       });
     } else if (isRecord(node)) {
       for (const [key, item] of Object.entries(node)) {
-        if (typeof item === 'string') node[key] = substitute(item);
+        if (typeof item === 'string') node[key] = cleaned(item);
         else walk(item);
       }
     }

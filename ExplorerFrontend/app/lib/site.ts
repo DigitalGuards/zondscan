@@ -107,6 +107,16 @@ export interface BrandAssets {
   /** Manifest icon sources, relative like the web manifest lists them. */
   readonly manifestIco: string;
   readonly manifestPng512: string;
+  /** Share card for OpenGraph and Twitter, 1200x630. */
+  readonly ogImage: string;
+  /** Monochrome Safari pinned-tab icon. */
+  readonly maskIcon: string;
+  /** Large PNG logo (site-absolute) used as the structured-data logo. */
+  readonly logoPng: string;
+  /** Text after the site name in the home page eyebrow. */
+  readonly eyebrowSuffix: string;
+  /** Extra chain keyword for the keywords meta tag; absent when the site name already is one. */
+  readonly chainKeyword?: string;
 }
 
 const ZOND_ASSETS: BrandAssets = {
@@ -118,6 +128,11 @@ const ZOND_ASSETS: BrandAssets = {
   appleTouchIcon: '/favis/apple-touch-icon.png',
   manifestIco: 'favicon.ico',
   manifestPng512: 'logo512.png',
+  ogImage: '/og-image.png',
+  maskIcon: '/favis/safari-pinned-tab.svg',
+  logoPng: '/logo512.png',
+  eyebrowSuffix: ' · QRL 2.0 · Zond Network',
+  chainKeyword: 'Zond',
 };
 
 const SHOR_ASSETS: BrandAssets = {
@@ -129,6 +144,10 @@ const SHOR_ASSETS: BrandAssets = {
   appleTouchIcon: '/brand/shorscan/apple-touch-icon.png',
   manifestIco: 'brand/shorscan/favicon.ico',
   manifestPng512: 'brand/shorscan/logo512.png',
+  ogImage: '/brand/shorscan/og-image.png',
+  maskIcon: '/brand/shorscan/safari-pinned-tab.svg',
+  logoPng: '/brand/shorscan/logo512.png',
+  eyebrowSuffix: ' · QRL 2.0 · QRL Network',
 };
 
 /**
@@ -143,3 +162,19 @@ export function brandAssetsFor(name: string): BrandAssets {
 
 /** Brand assets of this build. */
 export const BRAND: BrandAssets = brandAssetsFor(SITE_NAME);
+
+/**
+ * Lowercase slug of the site name for section anchors: `ZondScan` ->
+ * `zondscan`, `ShorScan` -> `shorscan`.
+ */
+export function brandSlug(name: string = SITE_NAME): string {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || 'explorer';
+}
+
+/** Slug of this build, e.g. `zondscan`. */
+export const BRAND_SLUG: string = brandSlug(SITE_NAME);

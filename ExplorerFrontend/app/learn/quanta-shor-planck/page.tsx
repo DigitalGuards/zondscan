@@ -1,4 +1,4 @@
-import { SITE_NAME } from '../../lib/site';
+import { SITE_NAME, BRAND_SLUG } from '../../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { learnMetadata } from '../components/learn-metadata';
@@ -87,7 +87,7 @@ export default function Page(): JSX.Element {
         </Callout>
       </LearnSection>
 
-      <LearnSection id="units-on-zondscan" title={`How amounts appear on ${SITE_NAME}`}>
+      <LearnSection id={`units-on-${BRAND_SLUG}`} title={`How amounts appear on ${SITE_NAME}`}>
         <p>
           {SITE_NAME} picks the unit that keeps each number readable, so you
           will meet all three while browsing:

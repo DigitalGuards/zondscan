@@ -1,4 +1,4 @@
-import { SITE_NAME } from '../../lib/site';
+import { SITE_NAME, BRAND_SLUG } from '../../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { learnMetadata } from '../components/learn-metadata';
@@ -176,7 +176,7 @@ export default function Page(): JSX.Element {
         </p>
       </Callout>
 
-      <LearnSection id="find-your-token-on-zondscan" title={`Find your token on ${SITE_NAME}`}>
+      <LearnSection id={`find-your-token-on-${BRAND_SLUG}`} title={`Find your token on ${SITE_NAME}`}>
         <p>
           {SITE_NAME} indexes new contract deployments and token transfer events as it syncs, so
           your token appears without any registration step. Open the{' '}

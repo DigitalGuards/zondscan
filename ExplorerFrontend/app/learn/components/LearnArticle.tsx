@@ -4,11 +4,12 @@
 // in app/globals.css; the pieces here provide structure (steps, callouts,
 // code blocks, FAQ) plus the article header, prev/next cards, and JSON-LD.
 
-import { SITE_ORIGIN, siteUrl } from '../../lib/site';
+import { BRAND, SITE_ORIGIN, siteUrl } from '../../lib/site';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import CopyButton from '../../components/CopyButton';
+import LegacyAnchor from '../../components/LegacyAnchor';
 import { getLearnArticle, getPrevNext, LEARN_CATEGORIES } from '../articles';
 
 /* ── Building blocks (named exports) ─────────────────────────────────── */
@@ -23,6 +24,7 @@ interface LearnSectionProps {
 export function LearnSection({ id, title, children }: LearnSectionProps): JSX.Element {
   return (
     <section id={id} className="scroll-mt-24">
+      <LegacyAnchor id={id} />
       <h2>{title}</h2>
       {children}
     </section>
@@ -132,7 +134,7 @@ export default function LearnArticle({ slug, children }: LearnArticleProps): JSX
           '@type': 'Organization',
           name: 'DigitalGuards',
           url: 'https://digitalguards.nl',
-          logo: siteUrl('/logo512.png'),
+          logo: siteUrl(BRAND.logoPng),
         },
         mainEntityOfPage: url,
       },

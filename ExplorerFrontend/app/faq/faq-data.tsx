@@ -1,4 +1,4 @@
-import { SITE_HOST, SITE_NAME } from '../lib/site';
+import { SITE_HOST, SITE_NAME, BRAND_SLUG } from '../lib/site';
 import React from 'react';
 import Link from 'next/link';
 
@@ -14,7 +14,7 @@ export interface FaqItem {
 
 export const faqs: FaqItem[] = [
   {
-    id: 'what-is-zondscan',
+    id: `what-is-${BRAND_SLUG}`,
     q: `What is ${SITE_NAME}?`,
     a: (
       <>
@@ -271,7 +271,7 @@ export const faqs: FaqItem[] = [
       'MyQRLWallet, available at qrlwallet.com, is the open source wallet for QRL 2.0. It runs in the browser, with desktop and mobile apps available and a browser extension in preparation. It manages Q-prefixed accounts, sends Quanta and QRC20 tokens, and connects to dApps.',
   },
   {
-    id: 'who-builds-zondscan',
+    id: `who-builds-${BRAND_SLUG}`,
     q: `Who builds ${SITE_NAME}?`,
     a: (
       <>
