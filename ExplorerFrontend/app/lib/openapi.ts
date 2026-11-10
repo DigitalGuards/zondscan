@@ -132,7 +132,9 @@ export function renderOpenApiSpec(identity: SiteIdentity): OpenApiDocument {
       .split(defaultHost)
       .join(host)
       .split(DEFAULT_SITE_NAME)
-      .join(identity.name);
+      .join(identity.name)
+      .split(' (Zond)')
+      .join('');
   const walk = (node: unknown): void => {
     if (isArray(node)) {
       node.forEach((item, index) => {

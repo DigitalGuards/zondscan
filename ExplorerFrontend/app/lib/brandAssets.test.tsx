@@ -122,6 +122,49 @@ describe('ShorScan site name', () => {
   });
 });
 
+describe('ShorScan share card and mask icon', () => {
+  it('ships a 1200x630 share card and a monochrome mask icon', () => {
+    const png = fs.readFileSync(path.join(publicDir, 'brand', 'shorscan', 'og-image.png'));
+    expect(png.readUInt32BE(16)).toBe(1200);
+    expect(png.readUInt32BE(20)).toBe(630);
+    const svg = fs.readFileSync(path.join(publicDir, 'brand', 'shorscan', 'safari-pinned-tab.svg'), 'utf8');
+    expect(svg).toContain('viewBox="0 0 64 64"');
+    expect(svg).not.toMatch(/fill=|style=|<image/);
+  });
+
+  it('keeps the default build on the existing files', async () => {
+    const { brandAssetsFor } = await import('./site');
+    const zond = brandAssetsFor('ZondScan');
+    expect(zond.ogImage).toBe('/og-image.png');
+    expect(zond.maskIcon).toBe('/favis/safari-pinned-tab.svg');
+    expect(zond.logoPng).toBe('/logo512.png');
+    expect(zond.eyebrowSuffix).toBe(' · QRL 2.0 · Zond Network');
+  });
+
+  it('rewrites the root icon files only in a ShorScan build', async () => {
+    const config = (await import('../../next.config.js')) as {
+      default: { rewrites: () => Promise<{ beforeFiles: { source: string; destination: string }[] }> };
+    };
+    const original = process.env.NEXT_PUBLIC_SITE_NAME;
+    try {
+      delete process.env.NEXT_PUBLIC_SITE_NAME;
+      expect((await config.default.rewrites()).beforeFiles).toEqual([]);
+      process.env.NEXT_PUBLIC_SITE_NAME = 'ShorScan';
+      const rules = (await config.default.rewrites()).beforeFiles;
+      expect(rules).toEqual([
+        { source: '/favicon.ico', destination: '/brand/shorscan/favicon.ico' },
+        { source: '/logo512.png', destination: '/brand/shorscan/logo512.png' },
+      ]);
+      for (const rule of rules) {
+        expect(fs.existsSync(path.join(publicDir, rule.destination))).toBe(true);
+      }
+    } finally {
+      if (original === undefined) delete process.env.NEXT_PUBLIC_SITE_NAME;
+      else process.env.NEXT_PUBLIC_SITE_NAME = original;
+    }
+  });
+});
+
 describe('brandAssetsFor', () => {
   it('selects the ShorScan set only for the ShorScan name', async () => {
     const { brandAssetsFor } = await import('./site');

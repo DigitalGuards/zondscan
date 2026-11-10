@@ -1,4 +1,4 @@
-import { SITE_NAME, SITE_ORIGIN, siteId, siteUrl } from '../site';
+import { BRAND, SITE_NAME, SITE_ORIGIN, siteId, siteUrl } from '../site';
 
 // Structured data for search engines. One @graph carrying:
 //   - Organization: DigitalGuards, the publisher.
@@ -17,7 +17,7 @@ export const structuredData = {
       '@id': siteId('organization'),
       name: 'DigitalGuards',
       url: 'https://digitalguards.nl',
-      logo: siteUrl('/logo512.png'),
+      logo: siteUrl(BRAND.logoPng),
     },
     {
       '@type': 'WebSite',

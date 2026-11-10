@@ -4,7 +4,7 @@
 // in app/globals.css; the pieces here provide structure (steps, callouts,
 // code blocks, FAQ) plus the article header, prev/next cards, and JSON-LD.
 
-import { SITE_ORIGIN, siteUrl } from '../../lib/site';
+import { BRAND, SITE_ORIGIN, siteUrl } from '../../lib/site';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import Breadcrumbs from '../../components/Breadcrumbs';
@@ -132,7 +132,7 @@ export default function LearnArticle({ slug, children }: LearnArticleProps): JSX
           '@type': 'Organization',
           name: 'DigitalGuards',
           url: 'https://digitalguards.nl',
-          logo: siteUrl('/logo512.png'),
+          logo: siteUrl(BRAND.logoPng),
         },
         mainEntityOfPage: url,
       },

@@ -52,20 +52,33 @@ const nextConfig = {
   },
   // Proxy /api/* requests to the backend API server
   async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${process.env.HANDLER_URL || 'http://127.0.0.1:8080'}/:path*`,
-      },
-      {
-        source: '/dapp-example',
-        destination: '/dapp-example/index.html',
-      },
-      {
-        source: '/dapp-example/',
-        destination: '/dapp-example/index.html',
-      },
-    ];
+    // Browsers and crawlers fetch /favicon.ico and /logo512.png by convention.
+    // A ShorScan build serves its own files at those paths. The name check
+    // mirrors brandAssetsFor() in app/lib/site.ts (brandAssets.test.tsx pins both).
+    const isShorScan = (process.env.NEXT_PUBLIC_SITE_NAME || '').trim().toLowerCase() === 'shorscan';
+    const brandRoot = isShorScan
+      ? [
+          { source: '/favicon.ico', destination: '/brand/shorscan/favicon.ico' },
+          { source: '/logo512.png', destination: '/brand/shorscan/logo512.png' },
+        ]
+      : [];
+    return {
+      beforeFiles: brandRoot,
+      afterFiles: [
+        {
+          source: '/api/:path*',
+          destination: `${process.env.HANDLER_URL || 'http://127.0.0.1:8080'}/:path*`,
+        },
+        {
+          source: '/dapp-example',
+          destination: '/dapp-example/index.html',
+        },
+        {
+          source: '/dapp-example/',
+          destination: '/dapp-example/index.html',
+        },
+      ],
+    };
   },
 }
 

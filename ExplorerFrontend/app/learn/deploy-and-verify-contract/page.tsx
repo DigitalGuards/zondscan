@@ -1,4 +1,4 @@
-import { SITE_NAME, siteUrl } from '../../lib/site';
+import { SITE_NAME, siteUrl, BRAND_SLUG } from '../../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { learnMetadata } from '../components/learn-metadata';
@@ -149,7 +149,7 @@ export default function Page(): JSX.Element {
         </p>
       </LearnSection>
 
-      <LearnSection id="verify-on-zondscan" title={`Verify the source on ${SITE_NAME}`}>
+      <LearnSection id={`verify-on-${BRAND_SLUG}`} title={`Verify the source on ${SITE_NAME}`}>
         <p>
           Right after deployment the explorer only knows your contract&apos;s bytecode.
           Verification publishes the source: you submit it, the backend recompiles it with the

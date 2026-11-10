@@ -161,6 +161,26 @@ describe('alternate site identity (ShorScan on shorscan.com)', () => {
     expect(text.match(/.{0,40}zondscan.{0,40}/gi) ?? []).toEqual([]);
   });
 
+  it.each(surfaces)('%s mentions no zond at all', (surface) => {
+    const text = stripAllowed(JSON.stringify(out[surface]));
+    expect(text.match(/.{0,40}zond.{0,40}/gi) ?? []).toEqual([]);
+  });
+
+  it('points share images and the structured-data logo at the ShorScan files', () => {
+    const shared = out.sharedMetadata as {
+      openGraph: { images: { url: string }[] };
+      twitter: { images: string[] };
+      icons: { other: { url: string }[] };
+    };
+    expect(shared.openGraph.images[0]?.url).toBe('/brand/shorscan/og-image.png');
+    expect(shared.twitter.images).toEqual(['/brand/shorscan/og-image.png']);
+    expect(shared.icons.other[0]?.url).toBe('/brand/shorscan/safari-pinned-tab.svg');
+    const org = (out.structuredData as { '@graph': { '@type': string; logo?: string }[] })['@graph'].find(
+      (node) => node['@type'] === 'Organization',
+    );
+    expect(org?.logo).toBe('https://shorscan.com/brand/shorscan/logo512.png');
+  });
+
   it('uses the configured origin and name', () => {
     expect(out.sitemap[0]?.url).toBe('https://shorscan.com/');
     expect(out.robots).toContain('Sitemap: https://shorscan.com/sitemap.xml');
@@ -308,12 +328,6 @@ describe('hardcoded brand name guard', () => {
     /cd zondscan\b/g,
     // Logo image file names in public/.
     /ZondScan_Logo\w*\.\w+/g,
-    // Element ids and URL fragments such as `what-is-zondscan`.
-    /[a-z0-9-]*-zondscan\b[a-z0-9-]*/g,
-    // Persisted preference storage key (renaming would reset saved settings).
-    /'zondscan\.preferences\.v1'/g,
-    // Preference change event name.
-    /'zondscan:preferences'/g,
     // Network switcher entry that links to the zondscan.com explorer.
     /href: 'https:\/\/zondscan\.com'/g,
   ];
