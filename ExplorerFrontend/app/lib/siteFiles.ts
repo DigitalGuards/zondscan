@@ -1,4 +1,4 @@
-import { SITE_ORIGIN, type SiteIdentity } from './site';
+import { brandAssetsFor, SITE_ORIGIN, type SiteIdentity } from './site';
 
 /**
  * Bodies of the generated site files (robots.txt, security.txt, web
@@ -30,17 +30,18 @@ Policy: https://qrlwallet.com/security
 }
 
 export function renderManifest(identity: Pick<SiteIdentity, 'name'>): Record<string, unknown> {
+  const assets = brandAssetsFor(identity.name);
   return {
     short_name: identity.name,
     name: `${identity.name} | QRL 2.0 Explorer`,
     icons: [
       {
-        src: 'favicon.ico',
+        src: assets.manifestIco,
         sizes: '48x48 32x32 16x16',
         type: 'image/x-icon',
       },
       {
-        src: 'logo512.png',
+        src: assets.manifestPng512,
         type: 'image/png',
         sizes: '512x512',
       },

@@ -14,6 +14,9 @@
 export const DEFAULT_SITE_ORIGIN = 'https://zondscan.com';
 export const DEFAULT_SITE_NAME = 'ZondScan';
 
+/** Site name that selects the ShorScan mark, wordmark and icon set. */
+export const SHORSCAN_NAME = 'ShorScan';
+
 export interface SiteIdentity {
   readonly origin: string;
   readonly name: string;
@@ -89,3 +92,54 @@ export function splitBrand(name: string = SITE_NAME): [string, string] {
   const match = /^(.+?)([A-Z][a-z0-9]*)$/.exec(name);
   return match ? [match[1], match[2]] : [name, ''];
 }
+
+/** Which logo mark a build shows. */
+export type BrandMark = 'zond' | 'shor';
+
+/** Icon files and manifest entries of one brand. Paths are site-absolute. */
+export interface BrandAssets {
+  readonly mark: BrandMark;
+  readonly favicon: string;
+  readonly favicon16: string;
+  readonly favicon32: string;
+  readonly favicon48: string;
+  readonly appleTouchIcon: string;
+  /** Manifest icon sources, relative like the web manifest lists them. */
+  readonly manifestIco: string;
+  readonly manifestPng512: string;
+}
+
+const ZOND_ASSETS: BrandAssets = {
+  mark: 'zond',
+  favicon: '/favis/favicon.ico',
+  favicon16: '/favis/favicon-16x16.png',
+  favicon32: '/favis/favicon-32x32.png',
+  favicon48: '/favis/favicon-48x48.png',
+  appleTouchIcon: '/favis/apple-touch-icon.png',
+  manifestIco: 'favicon.ico',
+  manifestPng512: 'logo512.png',
+};
+
+const SHOR_ASSETS: BrandAssets = {
+  mark: 'shor',
+  favicon: '/brand/shorscan/favicon.ico',
+  favicon16: '/brand/shorscan/favicon-16x16.png',
+  favicon32: '/brand/shorscan/favicon-32x32.png',
+  favicon48: '/brand/shorscan/favicon-48x48.png',
+  appleTouchIcon: '/brand/shorscan/apple-touch-icon.png',
+  manifestIco: 'brand/shorscan/favicon.ico',
+  manifestPng512: 'brand/shorscan/logo512.png',
+};
+
+/**
+ * The one place that maps a site name to a brand. ShorScan gets its own mark
+ * and icon set; every other name keeps the ZondScan assets.
+ */
+export function brandAssetsFor(name: string): BrandAssets {
+  // Letter case is ignored, so "Shorscan" in a build setting still gets the
+  // ShorScan assets that match its titles.
+  return name.trim().toLowerCase() === SHORSCAN_NAME.toLowerCase() ? SHOR_ASSETS : ZOND_ASSETS;
+}
+
+/** Brand assets of this build. */
+export const BRAND: BrandAssets = brandAssetsFor(SITE_NAME);

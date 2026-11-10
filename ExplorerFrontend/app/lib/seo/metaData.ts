@@ -1,5 +1,5 @@
 // lib/seo/metaData.ts
-import { SITE_NAME, SITE_ORIGIN } from '../site';
+import { BRAND, SITE_NAME, SITE_ORIGIN } from '../site';
 import { Metadata } from 'next';
 
 // Shared social preview image. Purpose-made 1200x630 brand card in public/,
@@ -20,12 +20,12 @@ export const sharedMetadata: Partial<Metadata> = {
   manifest: '/manifest.json',
   icons: {
     icon: [
-      { url: '/favis/favicon.ico' },
-      { url: '/favis/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
-      { url: '/favis/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
-      { url: '/favis/favicon-48x48.png', sizes: '48x48', type: 'image/png' },
+      { url: BRAND.favicon },
+      { url: BRAND.favicon16, sizes: '16x16', type: 'image/png' },
+      { url: BRAND.favicon32, sizes: '32x32', type: 'image/png' },
+      { url: BRAND.favicon48, sizes: '48x48', type: 'image/png' },
     ],
-    apple: [{ url: '/favis/apple-touch-icon.png' }],
+    apple: [{ url: BRAND.appleTouchIcon }],
     other: [{ rel: 'mask-icon', url: '/favis/safari-pinned-tab.svg' }],
   },
   openGraph: {
