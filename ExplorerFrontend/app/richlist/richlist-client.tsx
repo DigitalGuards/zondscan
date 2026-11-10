@@ -47,16 +47,6 @@ export default function RichlistClient({ richlist }: RichlistProps): JSX.Element
     id: canonicalizeQrlAddress(item.id) ?? item.id,
   }));
 
-  const [windowWidth, setWindowWidth] = React.useState(
-    typeof window !== "undefined" ? window.innerWidth : 0
-  );
-
-  React.useEffect(() => {
-    const handleResize = (): void => setWindowWidth(window.innerWidth);
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
   const renderMobileView = (): JSX.Element => (
     <div className="space-y-4">
       {safeRichlist.map((item, index) => (
@@ -217,7 +207,11 @@ export default function RichlistClient({ richlist }: RichlistProps): JSX.Element
         </div>
 
         <div className="card">
-          {windowWidth < 768 ? renderMobileView() : renderDesktopView()}
+          {/* Both layouts are in the markup and CSS picks one at the md
+              breakpoint (768px), so the server and the browser render the
+              same HTML whatever the window width. */}
+          <div className="md:hidden">{renderMobileView()}</div>
+          <div className="hidden md:block">{renderDesktopView()}</div>
         </div>
 
         <div className="mt-4 md:mt-6 text-center text-xs md:text-sm text-text-secondary">
