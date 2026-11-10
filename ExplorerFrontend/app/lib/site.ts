@@ -51,11 +51,12 @@ function parseOrigin(raw: string | undefined): string | null {
 }
 
 /**
- * Origin that canonical links and page-identifying structured data point at.
- * An invalid or missing value means the site's own origin.
+ * Origin that canonical links and `og:url` point at. Only an https origin is
+ * accepted; an invalid, http or missing value means the site's own origin.
  */
 export function resolveCanonicalOrigin(rawCanonical: string | undefined, siteOrigin: string): string {
-  return parseOrigin(rawCanonical) ?? siteOrigin;
+  const origin = parseOrigin(rawCanonical);
+  return origin !== null && origin.startsWith('https://') ? origin : siteOrigin;
 }
 
 // Both variables are NEXT_PUBLIC_*, so the bundler inlines them at build time
@@ -71,8 +72,9 @@ export const SITE_ORIGIN: string = identity.origin;
 
 /**
  * Origin of the canonical twin of every page. Set `NEXT_PUBLIC_CANONICAL_ORIGIN`
- * while another domain serves the same site and its pages must name this
- * build's domain as canonical. Sitemap and robots keep the site's own origin.
+ * while another domain serves the same site and its pages must name that
+ * domain as canonical. Only `<link rel="canonical">` and `og:url` use it;
+ * sitemap, robots and structured data keep the site's own origin.
  */
 export const CANONICAL_ORIGIN: string = resolveCanonicalOrigin(
   process.env.NEXT_PUBLIC_CANONICAL_ORIGIN,
@@ -104,11 +106,6 @@ export function canonicalUrl(path = ''): string {
 /** JSON-LD `@id` for a node of this site, e.g. `https://zondscan.com/#website`. */
 export function siteId(fragment: string): string {
   return `${SITE_ORIGIN}/#${fragment}`;
-}
-
-/** JSON-LD `@id` on the canonical origin. */
-export function canonicalId(fragment: string): string {
-  return `${CANONICAL_ORIGIN}/#${fragment}`;
 }
 
 /** Page title with the brand suffix: `Gas Tracker | ZondScan`. */

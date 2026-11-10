@@ -4,7 +4,7 @@
 // in app/globals.css; the pieces here provide structure (steps, callouts,
 // code blocks, FAQ) plus the article header, prev/next cards, and JSON-LD.
 
-import { BRAND, CANONICAL_ORIGIN, canonicalUrl } from '../../lib/site';
+import { BRAND, SITE_ORIGIN, siteUrl } from '../../lib/site';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import Breadcrumbs from '../../components/Breadcrumbs';
@@ -117,7 +117,7 @@ export default function LearnArticle({ slug, children }: LearnArticleProps): JSX
   const article = getLearnArticle(slug);
   const { prev, next } = getPrevNext(slug);
   const category = LEARN_CATEGORIES[article.category];
-  const url = `${CANONICAL_ORIGIN}/learn/${article.slug}`;
+  const url = `${SITE_ORIGIN}/learn/${article.slug}`;
 
   // TechArticle + BreadcrumbList structured data, same plain <script>
   // pattern as the site-wide @graph in app/layout.tsx.
@@ -134,15 +134,15 @@ export default function LearnArticle({ slug, children }: LearnArticleProps): JSX
           '@type': 'Organization',
           name: 'DigitalGuards',
           url: 'https://digitalguards.nl',
-          logo: canonicalUrl(BRAND.logoPng),
+          logo: siteUrl(BRAND.logoPng),
         },
         mainEntityOfPage: url,
       },
       {
         '@type': 'BreadcrumbList',
         itemListElement: [
-          { '@type': 'ListItem', position: 1, name: 'Home', item: CANONICAL_ORIGIN },
-          { '@type': 'ListItem', position: 2, name: 'Learn', item: canonicalUrl('/learn') },
+          { '@type': 'ListItem', position: 1, name: 'Home', item: SITE_ORIGIN },
+          { '@type': 'ListItem', position: 2, name: 'Learn', item: siteUrl('/learn') },
           { '@type': 'ListItem', position: 3, name: article.title, item: url },
         ],
       },

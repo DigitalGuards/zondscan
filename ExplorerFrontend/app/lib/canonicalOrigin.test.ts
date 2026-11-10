@@ -9,6 +9,11 @@ import { withSiteEnv, type SiteEnv } from './siteIdentityCollect.fixture';
 
 jest.setTimeout(120000);
 jest.mock('server-only', () => ({}));
+jest.mock('next/navigation', () => ({
+  usePathname: () => '/',
+  useRouter: () => ({ push: () => undefined, replace: () => undefined, prefetch: () => undefined }),
+  useSearchParams: () => new URLSearchParams(),
+}));
 jest.mock('../address/[query]/address-view', () => ({ __esModule: true, default: () => null }));
 jest.mock('../address/[query]/token-contract-view', () => ({
   __esModule: true,
@@ -31,7 +36,13 @@ async function collect(env: SiteEnv) {
     const { default: sitemap } = await import('../sitemap');
     const { renderRobotsTxt } = await import('./siteFiles');
     const { learnMetadata } = await import('../learn/components/learn-metadata');
+    const { renderToStaticMarkup } = await import('react-dom/server');
+    const { createElement } = await import('react');
+    const { default: LearnArticle } = await import('../learn/components/LearnArticle');
+    const learnHtml = renderToStaticMarkup(createElement(LearnArticle, { slug: 'what-is-qrl-2', children: null }));
+    const learnJsonLd = /<script type="application\/ld\+json">(.*?)<\/script>/s.exec(learnHtml)?.[1] ?? '';
     return {
+      learnJsonLd,
       pages: await collectPageMetadata(),
       layoutMetadata: JSON.parse(JSON.stringify(metadata)) as unknown,
       structuredData: JSON.parse(JSON.stringify(structuredData)) as unknown,
@@ -48,22 +59,31 @@ interface PageMeta {
 }
 
 describe('unset canonical origin', () => {
-  it('keeps the pinned default output', async () => {
-    const out = await collect({});
-    expect(out.pages).toEqual(fixture.pages);
-    expect(out.structuredData).toEqual(fixture.structuredData);
-    expect(out.sitemap).toEqual(fixture.sitemap);
-    expect(out.robots).toBe(fixture.robots);
+  let base: Awaited<ReturnType<typeof collect>>;
+  beforeAll(async () => {
+    base = await collect({});
   });
 
-  it.each(['https://', '', 'localhost', 'ftp://shorscan.com', 'javascript:alert(1)'])(
-    'ignores the invalid value %j',
-    async (raw) => {
-      const base = await collect({});
-      const out = await collect({ NEXT_PUBLIC_CANONICAL_ORIGIN: raw });
-      expect(out).toEqual(base);
-    },
-  );
+  it('keeps the pinned default output', () => {
+    expect(base.pages).toEqual(fixture.pages);
+    expect(base.layoutMetadata).toEqual(fixture.layoutMetadata);
+    expect(base.learn).toEqual((fixture.pages as Record<string, unknown>)['learn/what-is-qrl-2/page.tsx']);
+    expect(base.structuredData).toEqual(fixture.structuredData);
+    expect(base.sitemap).toEqual(fixture.sitemap);
+    expect(base.robots).toBe(fixture.robots);
+  });
+
+  it.each([
+    'https://',
+    '',
+    'localhost',
+    'ftp://shorscan.com',
+    'javascript:alert(1)',
+    'http://shorscan.com',
+  ])('ignores the invalid or non-https value %j', async (raw) => {
+    const out = await collect({ NEXT_PUBLIC_CANONICAL_ORIGIN: raw });
+    expect(out).toEqual(base);
+  });
 });
 
 describe('canonical origin set', () => {
@@ -116,10 +136,13 @@ describe('canonical origin set', () => {
     expect(out.robots).toContain(`Sitemap: ${OLD}/sitemap.xml`);
   });
 
-  it('moves structured-data ids and urls', () => {
+  it('keeps structured data on the site origin', () => {
+    expect(out.structuredData).toEqual(base.structuredData);
     const text = JSON.stringify(out.structuredData);
-    expect(text).not.toContain(OLD);
-    expect(text).toContain(`${NEW}/#website`);
-    expect(text).toContain(`${NEW}/faq`);
+    expect(text).not.toContain(NEW);
+    expect(text).toContain(`${OLD}/#website`);
+    expect(out.learnJsonLd).toEqual(base.learnJsonLd);
+    expect(out.learnJsonLd).toContain(`${OLD}/learn/what-is-qrl-2`);
+    expect(out.learnJsonLd).not.toContain(NEW);
   });
 });
