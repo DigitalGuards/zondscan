@@ -136,7 +136,9 @@ const SHOR_ASSETS: BrandAssets = {
  * and icon set; every other name keeps the ZondScan assets.
  */
 export function brandAssetsFor(name: string): BrandAssets {
-  return name === SHORSCAN_NAME ? SHOR_ASSETS : ZOND_ASSETS;
+  // Letter case is ignored, so "Shorscan" in a build setting still gets the
+  // ShorScan assets that match its titles.
+  return name.trim().toLowerCase() === SHORSCAN_NAME.toLowerCase() ? SHOR_ASSETS : ZOND_ASSETS;
 }
 
 /** Brand assets of this build. */

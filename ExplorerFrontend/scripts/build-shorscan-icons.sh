@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # Generates the ShorScan favicon and app icon set in public/brand/shorscan/
 # from the mark in app/components/ShorScanMark.tsx (same geometry, flat colours).
-# Needs rsvg-convert and ImageMagick (convert). Run from ExplorerFrontend/:
+# Needs rsvg-convert and ImageMagick. Runs from any directory:
 #   bash scripts/build-shorscan-icons.sh
 set -euo pipefail
+cd "$(dirname "$0")/.."
+# ImageMagick 7 ships `magick`; version 6 only has `convert`.
+IM="$(command -v magick || command -v convert)"
 
 OUT="public/brand/shorscan"
 BG="#0b0d13"
@@ -40,5 +43,5 @@ render 2.5 32 "$OUT/favicon-32x32.png"
 render 3.5 48 "$OUT/favicon-48x48.png"
 render 8 180 "$OUT/apple-touch-icon.png"
 render 10 512 "$OUT/logo512.png"
-convert "$OUT/favicon-16x16.png" "$OUT/favicon-32x32.png" "$OUT/favicon-48x48.png" "$OUT/favicon.ico"
+"$IM" "$OUT/favicon-16x16.png" "$OUT/favicon-32x32.png" "$OUT/favicon-48x48.png" "$OUT/favicon.ico"
 ls -l "$OUT"

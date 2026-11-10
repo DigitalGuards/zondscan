@@ -126,6 +126,8 @@ describe('brandAssetsFor', () => {
   it('selects the ShorScan set only for the ShorScan name', async () => {
     const { brandAssetsFor } = await import('./site');
     expect(brandAssetsFor('ShorScan').mark).toBe('shor');
+    expect(brandAssetsFor('Shorscan').mark).toBe('shor');
+    expect(brandAssetsFor(' SHORSCAN ').mark).toBe('shor');
     expect(brandAssetsFor('ZondScan').mark).toBe('zond');
     expect(brandAssetsFor('Other').mark).toBe('zond');
   });
