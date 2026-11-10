@@ -28,3 +28,14 @@ describe('RichlistClient address links', () => {
     expect(html).not.toContain(`>${CHECKSUMMED_ADDRESS}</a>`);
   });
 });
+
+describe('RichlistClient layout', () => {
+  it('renders both layouts so the server and the browser produce the same markup', () => {
+    const html = renderToStaticMarkup(
+      <RichlistClient richlist={[{ id: `0x${LOWER_BODY}`, balance: '0' }]} />,
+    );
+
+    expect(html).toContain('<div class="md:hidden">');
+    expect(html).toContain('<div class="hidden md:block">');
+  });
+});
