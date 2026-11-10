@@ -1,4 +1,4 @@
-import { SITE_NAME, SITE_ORIGIN, pageTitle } from '../../lib/site';
+import { SITE_NAME, pageTitle, CANONICAL_ORIGIN } from '../../lib/site';
 import { parseEpochsData, type EpochsData } from '../../lib/listResponses';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
@@ -48,13 +48,13 @@ export async function generateMetadata({
       ...sharedMetadata.alternates,
       // Self-referencing canonical: there is no /epochs index route (only
       // /epochs/<page>), so each paginated page canonicalizes to itself.
-      canonical: `${SITE_ORIGIN}/epochs/${pageNumber}`,
+      canonical: `${CANONICAL_ORIGIN}/epochs/${pageNumber}`,
     },
     openGraph: {
       ...sharedMetadata.openGraph,
       title: pageTitle(`Epochs - Page ${pageNumber}`),
       description: `View epochs on the QRL 2.0 beacon chain. Page ${pageNumber} of the epochs list.`,
-      url: `${SITE_ORIGIN}/epochs/${pageNumber}`,
+      url: `${CANONICAL_ORIGIN}/epochs/${pageNumber}`,
       siteName: SITE_NAME,
       type: 'website',
     },

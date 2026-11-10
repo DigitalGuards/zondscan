@@ -1,4 +1,4 @@
-import { SITE_NAME, pageTitle, siteUrl } from '../lib/site';
+import { SITE_NAME, pageTitle, canonicalUrl } from '../lib/site';
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { sharedMetadata } from '../lib/seo/metaData';
@@ -14,13 +14,13 @@ export const metadata: Metadata = {
   description,
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: siteUrl('/staking-calculator'),
+    canonical: canonicalUrl('/staking-calculator'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
     title,
     description,
-    url: siteUrl('/staking-calculator'),
+    url: canonicalUrl('/staking-calculator'),
     siteName: SITE_NAME,
     type: 'website',
   },

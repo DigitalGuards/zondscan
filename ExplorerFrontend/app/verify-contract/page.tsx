@@ -1,4 +1,4 @@
-import { pageTitle, siteUrl } from '../lib/site';
+import { pageTitle, canonicalUrl } from '../lib/site';
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import VerifyContractClient from './verify-contract-client';
@@ -10,13 +10,13 @@ export const metadata: Metadata = {
   description: 'Verify and publish a Hyperion smart contract on the QRL 2.0 network.',
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: siteUrl('/verify-contract'),
+    canonical: canonicalUrl('/verify-contract'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
     title: pageTitle('Verify Contract'),
     description: 'Verify and publish a Hyperion smart contract on the QRL 2.0 network.',
-    url: siteUrl('/verify-contract'),
+    url: canonicalUrl('/verify-contract'),
   },
   twitter: {
     ...sharedMetadata.twitter,

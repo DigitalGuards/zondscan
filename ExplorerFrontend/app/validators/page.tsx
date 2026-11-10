@@ -1,4 +1,4 @@
-import { pageTitle, siteUrl } from '../lib/site';
+import { pageTitle, canonicalUrl } from '../lib/site';
 import { Suspense } from 'react';
 import ValidatorsWrapper from './validators-client';
 import type { Metadata } from 'next';
@@ -12,14 +12,14 @@ export const metadata: Metadata = {
     'View active validators, their ages, uptime, and staking information on the QRL 2.0 network',
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: siteUrl('/validators'),
+    canonical: canonicalUrl('/validators'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
     title: pageTitle('Validators'),
     description:
       'View active validators, their ages, uptime, and staking information on the QRL 2.0 network',
-    url: siteUrl('/validators'),
+    url: canonicalUrl('/validators'),
   },
   twitter: {
     ...sharedMetadata.twitter,

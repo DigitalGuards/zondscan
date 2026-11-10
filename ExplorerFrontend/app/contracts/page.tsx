@@ -1,4 +1,4 @@
-import { pageTitle, siteUrl } from '../lib/site';
+import { pageTitle, canonicalUrl } from '../lib/site';
 import { parseContractsResponse, type ContractsResponse } from '../lib/listResponses';
 import { Suspense } from 'react';
 import ContractsWrapper from './contracts-wrapper';
@@ -59,13 +59,13 @@ export const metadata: Metadata = {
   description: 'View all smart contracts deployed on the QRL 2.0 network',
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: siteUrl('/contracts'),
+    canonical: canonicalUrl('/contracts'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
     title: pageTitle('Smart Contracts'),
     description: 'View all smart contracts deployed on the QRL 2.0 network',
-    url: siteUrl('/contracts'),
+    url: canonicalUrl('/contracts'),
   },
   twitter: {
     ...sharedMetadata.twitter,

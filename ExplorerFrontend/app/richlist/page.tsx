@@ -1,4 +1,4 @@
-import { pageTitle, siteUrl } from '../lib/site';
+import { pageTitle, canonicalUrl } from '../lib/site';
 import config from "../../config";
 import RichlistClient from "./richlist-client";
 import type { Metadata } from 'next';
@@ -12,14 +12,14 @@ export const metadata: Metadata = {
     'Explore the top wallets by balance on the Quantum Resistant Ledger Proof-of-Stake network. Discover which addresses hold the most value in our rich list.',
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: siteUrl('/richlist'),
+    canonical: canonicalUrl('/richlist'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
     title: pageTitle('Rich List'),
     description:
       'Explore the top wallets by balance on the Quantum Resistant Ledger Proof-of-Stake network. Discover which addresses hold the most value in our rich list.',
-    url: siteUrl('/richlist'),
+    url: canonicalUrl('/richlist'),
   },
   twitter: {
     ...sharedMetadata.twitter,

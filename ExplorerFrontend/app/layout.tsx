@@ -1,4 +1,4 @@
-import { SITE_NAME, SITE_ORIGIN } from './lib/site';
+import { SITE_NAME, CANONICAL_ORIGIN } from './lib/site';
 import { structuredData } from './lib/seo/structuredData';
 import './globals.css'
 import SiteHeader from './components/SiteHeader';
@@ -36,14 +36,14 @@ export const metadata: Metadata = {
   description:
     'Blockchain explorer for QRL 2.0, an EVM-compatible blockchain secured with post-quantum cryptography. Track transactions, smart contracts, blocks, and validators.',
   alternates: {
-    canonical: SITE_ORIGIN,
+    canonical: CANONICAL_ORIGIN,
   },
   openGraph: {
     ...sharedMetadata.openGraph,
     title: `${SITE_NAME} | QRL 2.0 Explorer`,
     description:
       'Blockchain explorer for QRL 2.0. Track smart contracts, blocks, and transactions on a quantum-resistant EVM-compatible chain.',
-    url: SITE_ORIGIN,
+    url: CANONICAL_ORIGIN,
   },
   twitter: {
     ...sharedMetadata.twitter,

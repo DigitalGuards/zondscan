@@ -32,17 +32,30 @@ export function resolveSiteIdentity(
   rawOrigin: string | undefined,
   rawName: string | undefined,
 ): SiteIdentity {
-  let origin = DEFAULT_SITE_ORIGIN;
-  try {
-    const parsed = new URL((rawOrigin ?? '').trim());
-    if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.origin !== 'null') {
-      origin = parsed.origin;
-    }
-  } catch {
-    // Malformed value: keep the default.
-  }
+  const origin = parseOrigin(rawOrigin) ?? DEFAULT_SITE_ORIGIN;
   const name = (rawName ?? '').trim();
   return { origin, name: name || DEFAULT_SITE_NAME };
+}
+
+/** The `.origin` of a valid http(s) URL string, or null for anything else. */
+function parseOrigin(raw: string | undefined): string | null {
+  try {
+    const parsed = new URL((raw ?? '').trim());
+    if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.origin !== 'null') {
+      return parsed.origin;
+    }
+  } catch {
+    // Malformed value: no origin.
+  }
+  return null;
+}
+
+/**
+ * Origin that canonical links and page-identifying structured data point at.
+ * An invalid or missing value means the site's own origin.
+ */
+export function resolveCanonicalOrigin(rawCanonical: string | undefined, siteOrigin: string): string {
+  return parseOrigin(rawCanonical) ?? siteOrigin;
 }
 
 // Both variables are NEXT_PUBLIC_*, so the bundler inlines them at build time
@@ -55,6 +68,16 @@ const identity = resolveSiteIdentity(
 
 /** Public origin without a trailing slash, e.g. `https://zondscan.com`. */
 export const SITE_ORIGIN: string = identity.origin;
+
+/**
+ * Origin of the canonical twin of every page. Set `NEXT_PUBLIC_CANONICAL_ORIGIN`
+ * while another domain serves the same site and its pages must name this
+ * build's domain as canonical. Sitemap and robots keep the site's own origin.
+ */
+export const CANONICAL_ORIGIN: string = resolveCanonicalOrigin(
+  process.env.NEXT_PUBLIC_CANONICAL_ORIGIN,
+  identity.origin,
+);
 
 /** Brand name, e.g. `ZondScan`. */
 export const SITE_NAME: string = identity.name;
@@ -73,9 +96,19 @@ export function siteUrl(path = ''): string {
   return `${SITE_ORIGIN}${path}`;
 }
 
+/** Absolute canonical URL for a site path, e.g. for `<link rel="canonical">` and `og:url`. */
+export function canonicalUrl(path = ''): string {
+  return `${CANONICAL_ORIGIN}${path}`;
+}
+
 /** JSON-LD `@id` for a node of this site, e.g. `https://zondscan.com/#website`. */
 export function siteId(fragment: string): string {
   return `${SITE_ORIGIN}/#${fragment}`;
+}
+
+/** JSON-LD `@id` on the canonical origin. */
+export function canonicalId(fragment: string): string {
+  return `${CANONICAL_ORIGIN}/#${fragment}`;
 }
 
 /** Page title with the brand suffix: `Gas Tracker | ZondScan`. */

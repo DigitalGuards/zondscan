@@ -1,4 +1,4 @@
-import { pageTitle, siteUrl } from '../lib/site';
+import { pageTitle, canonicalUrl } from '../lib/site';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { sharedMetadata } from '../lib/seo/metaData';
@@ -10,12 +10,12 @@ export const metadata: Metadata = {
   description: 'Slashing events and validator set changes on the QRL network.',
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: siteUrl('/slashings'),
+    canonical: canonicalUrl('/slashings'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
     title: pageTitle('Slashings'),
-    url: siteUrl('/slashings'),
+    url: canonicalUrl('/slashings'),
   },
 };
 

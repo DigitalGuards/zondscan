@@ -1,4 +1,4 @@
-import { SITE_NAME, SITE_ORIGIN, pageTitle } from '../../lib/site';
+import { SITE_NAME, pageTitle, CANONICAL_ORIGIN } from '../../lib/site';
 import type { Metadata } from 'next';
 import BlockDetailClient from './block-detail-client';
 import { sharedMetadata } from '../../lib/seo/metaData';
@@ -6,7 +6,7 @@ import { sharedMetadata } from '../../lib/seo/metaData';
 export async function generateMetadata({ params }: { params: Promise<{ query: string }> }): Promise<Metadata> {
   const resolvedParams = await params;
   const blockNumber = resolvedParams.query;
-  const canonicalUrl = `${SITE_ORIGIN}/block/${blockNumber}`;
+  const canonicalUrl = `${CANONICAL_ORIGIN}/block/${blockNumber}`;
   
   return {
     ...sharedMetadata,
@@ -20,7 +20,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
       ...sharedMetadata.openGraph,
       title: pageTitle(`Block #${blockNumber}`),
       description: `View detailed information for QRL blockchain block #${blockNumber}. See block hash, timestamp, transactions, gas used, and more.`,
-      url: `${SITE_ORIGIN}/block/${blockNumber}`,
+      url: `${CANONICAL_ORIGIN}/block/${blockNumber}`,
       siteName: SITE_NAME,
       type: 'website',
     },
