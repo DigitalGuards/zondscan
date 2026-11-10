@@ -15,7 +15,7 @@ const OG_IMAGE = {
 export const sharedMetadata: Partial<Metadata> = {
   metadataBase: new URL(SITE_ORIGIN),
   applicationName: SITE_NAME,
-  keywords: `QRL, QRL 2.0, Quantum Resistant Ledger, ${BRAND.chainKeyword}, blockchain explorer, post-quantum cryptography, Proof of Stake, Web3, EVM, quantum resistant, cryptocurrency, smart contracts, validators, transactions, blocks`,
+  keywords: `QRL, QRL 2.0, Quantum Resistant Ledger, ${BRAND.chainKeyword ? `${BRAND.chainKeyword}, ` : ''}blockchain explorer, post-quantum cryptography, Proof of Stake, Web3, EVM, quantum resistant, cryptocurrency, smart contracts, validators, transactions, blocks`,
   manifest: '/manifest.json',
   icons: {
     icon: [

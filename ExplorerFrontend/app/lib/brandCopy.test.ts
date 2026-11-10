@@ -91,6 +91,8 @@ async function capture(env: SiteEnv) {
 const ALLOWED_ALTERNATE_MENTIONS: readonly RegExp[] = [
   /github\.com\/DigitalGuards\/zondscan/gi,
   /cd zondscan/g,
+  // Invisible alias anchors for old deep links (components/LegacyAnchor.tsx).
+  /<span id=\\?"[a-z0-9-]*zondscan[a-z0-9-]*\\?" aria-hidden=\\?"true\\?" class=\\?"absolute/g,
 ];
 
 describe('alternate identity (ShorScan)', () => {

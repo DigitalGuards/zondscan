@@ -115,8 +115,8 @@ export interface BrandAssets {
   readonly logoPng: string;
   /** Text after the site name in the home page eyebrow. */
   readonly eyebrowSuffix: string;
-  /** Chain keyword in the page keywords meta tag. */
-  readonly chainKeyword: string;
+  /** Extra chain keyword for the keywords meta tag; absent when the site name already is one. */
+  readonly chainKeyword?: string;
 }
 
 const ZOND_ASSETS: BrandAssets = {
@@ -148,7 +148,6 @@ const SHOR_ASSETS: BrandAssets = {
   maskIcon: '/brand/shorscan/safari-pinned-tab.svg',
   logoPng: '/brand/shorscan/logo512.png',
   eyebrowSuffix: ' · QRL 2.0 · QRL Network',
-  chainKeyword: 'ShorScan',
 };
 
 /**
@@ -169,11 +168,12 @@ export const BRAND: BrandAssets = brandAssetsFor(SITE_NAME);
  * `zondscan`, `ShorScan` -> `shorscan`.
  */
 export function brandSlug(name: string = SITE_NAME): string {
-  return name
+  const slug = name
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+  return slug || 'explorer';
 }
 
 /** Slug of this build, e.g. `zondscan`. */

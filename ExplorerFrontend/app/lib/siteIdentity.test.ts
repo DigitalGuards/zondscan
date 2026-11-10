@@ -316,6 +316,7 @@ describe('hardcoded brand name guard', () => {
   // Files that define the default identity or help the tests; they may name it.
   const ALLOWLIST = new Set([
     'lib/site.ts',
+    'components/LegacyAnchor.tsx',
     'lib/siteIdentityCollect.fixture.ts',
     'lib/brandCopy.fixture.ts',
   ]);
