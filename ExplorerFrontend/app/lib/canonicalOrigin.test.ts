@@ -40,7 +40,7 @@ async function collect(env: SiteEnv) {
     const { createElement } = await import('react');
     const { default: LearnArticle } = await import('../learn/components/LearnArticle');
     const learnHtml = renderToStaticMarkup(createElement(LearnArticle, { slug: 'what-is-qrl-2', children: null }));
-    const learnJsonLd = /<script type="application\/ld\+json">(.*?)<\/script>/s.exec(learnHtml)?.[1] ?? '';
+    const learnJsonLd = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(learnHtml)?.[1] ?? '';
     return {
       learnJsonLd,
       pages: await collectPageMetadata(),
