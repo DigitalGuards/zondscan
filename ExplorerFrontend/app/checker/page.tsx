@@ -1,4 +1,4 @@
-import { pageTitle, siteUrl } from '../lib/site';
+import { pageTitle, canonicalUrl } from '../lib/site';
 import CheckerClient from './checker-client';
 import type { Metadata } from 'next';
 import { sharedMetadata } from '../lib/seo/metaData';
@@ -11,14 +11,14 @@ export const metadata: Metadata = {
     'Check wallet balances on the Quantum Resistant Ledger network with our intuitive balance checker tool. Verify holdings quickly and accurately.',
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: siteUrl('/checker'),
+    canonical: canonicalUrl('/checker'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
     title: pageTitle('Balance Checker'),
     description:
       'Check wallet balances on the Quantum Resistant Ledger network with our intuitive balance checker tool. Verify holdings quickly and accurately.',
-    url: siteUrl('/checker'),
+    url: canonicalUrl('/checker'),
   },
   twitter: {
     ...sharedMetadata.twitter,

@@ -1,4 +1,4 @@
-import { pageTitle, SITE_NAME, SITE_ORIGIN, siteUrl } from '../lib/site';
+import { pageTitle, SITE_NAME, SITE_ORIGIN, siteUrl, canonicalUrl } from '../lib/site';
 import { isRecord, isArray } from '../lib/guards';
 import type { Metadata } from 'next';
 import { sharedMetadata } from '../lib/seo/metaData';
@@ -17,13 +17,13 @@ export const metadata: Metadata = {
   description: DESCRIPTION,
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: siteUrl('/api-explorer'),
+    canonical: canonicalUrl('/api-explorer'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
     title: pageTitle('API Documentation'),
     description: DESCRIPTION,
-    url: siteUrl('/api-explorer'),
+    url: canonicalUrl('/api-explorer'),
   },
   twitter: {
     ...sharedMetadata.twitter,

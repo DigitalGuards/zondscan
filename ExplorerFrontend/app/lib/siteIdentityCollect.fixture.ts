@@ -9,7 +9,12 @@ import path from 'node:path';
 
 const appDir = path.resolve(__dirname, '..');
 
-const SITE_ENV_KEYS = ['DOMAIN_NAME', 'NEXT_PUBLIC_DOMAIN_NAME', 'NEXT_PUBLIC_SITE_NAME'] as const;
+const SITE_ENV_KEYS = [
+  'DOMAIN_NAME',
+  'NEXT_PUBLIC_DOMAIN_NAME',
+  'NEXT_PUBLIC_SITE_NAME',
+  'NEXT_PUBLIC_CANONICAL_ORIGIN',
+] as const;
 
 export type SiteEnv = Partial<Record<(typeof SITE_ENV_KEYS)[number], string>>;
 

@@ -1,4 +1,4 @@
-import { pageTitle, siteUrl } from '../lib/site';
+import { pageTitle, canonicalUrl } from '../lib/site';
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { sharedMetadata } from '../lib/seo/metaData';
@@ -10,13 +10,13 @@ export const metadata: Metadata = {
   description: 'Network gas metrics, average gas price, gas usage, mempool size, and recent block gas history on the QRL 2.0 network',
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: siteUrl('/gas'),
+    canonical: canonicalUrl('/gas'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
     title: pageTitle('Gas Tracker'),
     description: 'Network gas metrics for the QRL 2.0 network',
-    url: siteUrl('/gas'),
+    url: canonicalUrl('/gas'),
   },
   twitter: {
     ...sharedMetadata.twitter,

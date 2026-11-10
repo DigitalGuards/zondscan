@@ -1,4 +1,4 @@
-import { SITE_NAME, SITE_ORIGIN, pageTitle } from '../../lib/site';
+import { SITE_NAME, pageTitle, CANONICAL_ORIGIN } from '../../lib/site';
 import type { Metadata } from 'next';
 import type { AddressPageLoadResult } from './address-page-data';
 import { sharedMetadata } from '../../lib/seo/metaData';
@@ -11,7 +11,7 @@ export function generateAddressPageMetadata(query: string, verifiedName?: string
   const address = canonicalizeQrlAddress(query);
   const identity = routeName ?? address ?? query;
   const displayIdentity = address ? compactQrlAddress(address) : identity;
-  const canonicalUrl = `${SITE_ORIGIN}/address/${encodeURIComponent(identity)}`;
+  const canonicalUrl = `${CANONICAL_ORIGIN}/address/${encodeURIComponent(identity)}`;
   const title = routeName
     ? pageTitle(`${routeName} QNS Address`)
     : pageTitle(`Address ${displayIdentity}${address && qnsName ? ` (${qnsName})` : ''}`);

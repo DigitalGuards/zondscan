@@ -1,4 +1,4 @@
-import { SITE_NAME, SITE_ORIGIN, pageTitle } from '../../lib/site';
+import { SITE_NAME, pageTitle, CANONICAL_ORIGIN } from '../../lib/site';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import BlocksClient from './blocks-client';
@@ -52,7 +52,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
   const pageNumber = resolvedParams.query || '1';
   // Self-referencing canonical: there is no /blocks index route (only
   // /blocks/<page>), so each paginated page canonicalizes to itself.
-  const canonicalUrl = `${SITE_ORIGIN}/blocks/${pageNumber}`;
+  const canonicalUrl = `${CANONICAL_ORIGIN}/blocks/${pageNumber}`;
 
   return {
     ...sharedMetadata,
@@ -66,7 +66,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
       ...sharedMetadata.openGraph,
       title: pageTitle(`Latest Synced Blocks - Page ${pageNumber}`),
       description: `View the most recently synced blocks on the QRL 2.0 blockchain network. Page ${pageNumber} of the blocks list.`,
-      url: `${SITE_ORIGIN}/blocks/${pageNumber}`,
+      url: `${CANONICAL_ORIGIN}/blocks/${pageNumber}`,
       siteName: SITE_NAME,
       type: 'website',
     },

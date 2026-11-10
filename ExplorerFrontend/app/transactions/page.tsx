@@ -1,4 +1,4 @@
-import { SITE_NAME, pageTitle, siteUrl } from '../lib/site';
+import { SITE_NAME, pageTitle, canonicalUrl } from '../lib/site';
 import type { Metadata } from 'next';
 import TransactionsList from './[query]/TransactionsList';
 import type { Transaction } from '@/app/types';
@@ -17,14 +17,14 @@ export const metadata: Metadata = {
     'Browse the latest transactions on the QRL 2.0 blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: siteUrl('/transactions'),
+    canonical: canonicalUrl('/transactions'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
     title: pageTitle('Transactions'),
     description:
       'Browse the latest transactions on the QRL 2.0 blockchain: hash, sender, recipient, value, and gas across the most recent network activity.',
-    url: siteUrl('/transactions'),
+    url: canonicalUrl('/transactions'),
     siteName: SITE_NAME,
     type: 'website',
   },

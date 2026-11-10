@@ -1,4 +1,4 @@
-import { SITE_NAME, SITE_ORIGIN, pageTitle } from '../../lib/site';
+import { SITE_NAME, pageTitle, CANONICAL_ORIGIN } from '../../lib/site';
 import type { Metadata } from 'next';
 import EpochDetailClient from './epoch-detail-client';
 import { sharedMetadata } from '../../lib/seo/metaData';
@@ -13,13 +13,13 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     description: `View detailed information for epoch ${epochId} on the QRL 2.0 beacon chain.`,
     alternates: {
       ...sharedMetadata.alternates,
-      canonical: `${SITE_ORIGIN}/epoch/${epochId}`,
+      canonical: `${CANONICAL_ORIGIN}/epoch/${epochId}`,
     },
     openGraph: {
       ...sharedMetadata.openGraph,
       title: pageTitle(`Epoch ${epochId}`),
       description: `View detailed information for epoch ${epochId} on the QRL 2.0 beacon chain.`,
-      url: `${SITE_ORIGIN}/epoch/${epochId}`,
+      url: `${CANONICAL_ORIGIN}/epoch/${epochId}`,
       siteName: SITE_NAME,
       type: 'website',
     },

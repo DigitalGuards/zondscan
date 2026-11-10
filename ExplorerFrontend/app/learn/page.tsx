@@ -1,4 +1,4 @@
-import { pageTitle, SITE_NAME, siteUrl } from '../lib/site';
+import { pageTitle, SITE_NAME, canonicalUrl } from '../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
@@ -19,13 +19,13 @@ export const metadata: Metadata = {
   description: DESCRIPTION,
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: siteUrl('/learn'),
+    canonical: canonicalUrl('/learn'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
     title: TITLE,
     description: DESCRIPTION,
-    url: siteUrl('/learn'),
+    url: canonicalUrl('/learn'),
   },
   twitter: {
     ...sharedMetadata.twitter,

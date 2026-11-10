@@ -3,14 +3,14 @@
 // Title, description, and canonical URL all derive from the registry row
 // in app/learn/articles.ts, so page files never restate them.
 
-import { SITE_NAME, SITE_ORIGIN } from '../../lib/site';
+import { SITE_NAME, CANONICAL_ORIGIN } from '../../lib/site';
 import type { Metadata } from 'next';
 import { sharedMetadata } from '../../lib/seo/metaData';
 import { getLearnArticle } from '../articles';
 
 export function learnMetadata(slug: string): Metadata {
   const article = getLearnArticle(slug);
-  const url = `${SITE_ORIGIN}/learn/${article.slug}`;
+  const url = `${CANONICAL_ORIGIN}/learn/${article.slug}`;
   const title = `${article.title} | ${SITE_NAME} Learn`;
 
   return {

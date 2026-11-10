@@ -1,4 +1,4 @@
-import { SITE_NAME, pageTitle, siteUrl } from '../lib/site';
+import { SITE_NAME, pageTitle, canonicalUrl } from '../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { sharedMetadata } from '../lib/seo/metaData';
@@ -12,14 +12,14 @@ export const metadata: Metadata = {
     `Answers to frequently asked questions about ${SITE_NAME}, QRL 2.0, transactions, smart contracts, wallets, and the open API.`,
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: siteUrl('/faq'),
+    canonical: canonicalUrl('/faq'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
     title: pageTitle('FAQ'),
     description:
       `Answers to frequently asked questions about ${SITE_NAME}, QRL 2.0, transactions, smart contracts, wallets, and the open API.`,
-    url: siteUrl('/faq'),
+    url: canonicalUrl('/faq'),
   },
   twitter: {
     ...sharedMetadata.twitter,

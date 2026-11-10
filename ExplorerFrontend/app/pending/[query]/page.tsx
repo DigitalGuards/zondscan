@@ -1,4 +1,4 @@
-import { SITE_NAME, SITE_ORIGIN, pageTitle } from '../../lib/site';
+import { SITE_NAME, pageTitle, CANONICAL_ORIGIN } from '../../lib/site';
 import type { Metadata } from 'next';
 import PendingList from './PendingList';
 import axios from 'axios';
@@ -41,7 +41,7 @@ export async function generateMetadata({ params }: { params: Promise<{ query: st
   const pageNumber = resolvedParams.query || '1';
   // Self-referencing canonical: there is no /pending index route (only
   // /pending/<page>), so each paginated page canonicalizes to itself.
-  const canonicalUrl = `${SITE_ORIGIN}/pending/${pageNumber}`;
+  const canonicalUrl = `${CANONICAL_ORIGIN}/pending/${pageNumber}`;
 
   return {
     ...sharedMetadata,
