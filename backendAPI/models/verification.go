@@ -68,6 +68,8 @@ type VerificationJobPayload struct {
 	ConstructorArguments string              `bson:"constructorArguments,omitempty" json:"constructorArguments,omitempty"`
 	Libraries            map[string]string   `bson:"libraries,omitempty" json:"libraries,omitempty"`
 	Imports              map[string]string   `bson:"imports,omitempty" json:"imports,omitempty"`
+	PrimarySourcePath    string              `bson:"primarySourcePath,omitempty" json:"primarySourcePath,omitempty"`
+	ViaIR                bool                `bson:"viaIR,omitempty" json:"viaIR,omitempty"`
 	License              string              `bson:"license,omitempty" json:"license,omitempty"`
 	VerificationMethod   string              `bson:"verificationMethod,omitempty" json:"verificationMethod,omitempty"`
 }
@@ -85,18 +87,75 @@ type VerificationJobResultRef struct {
 	VerifiedAt         string              `bson:"verifiedAt,omitempty" json:"verifiedAt,omitempty"`
 }
 
-const verificationArtifactDigestPrefixV2 = "qrl.contract-verification-artifact.v2:sha256:"
+const (
+	verificationArtifactDigestPrefixV2 = "qrl.contract-verification-artifact.v2:sha256:"
+	verificationArtifactDigestPrefixV3 = "qrl.contract-verification-artifact.v3:sha256:"
+)
 
 func IsVerificationArtifactDigestV2(value string) bool {
-	if !strings.HasPrefix(value, verificationArtifactDigestPrefixV2) {
+	return isPrefixedSHA256(value, verificationArtifactDigestPrefixV2)
+}
+
+func IsVerificationArtifactDigestV3(value string) bool {
+	return isPrefixedSHA256(value, verificationArtifactDigestPrefixV3)
+}
+
+func isPrefixedSHA256(value, prefix string) bool {
+	if !strings.HasPrefix(value, prefix) {
 		return false
 	}
-	digest := strings.TrimPrefix(value, verificationArtifactDigestPrefixV2)
+	digest := strings.TrimPrefix(value, prefix)
 	if len(digest) != sha256.Size*2 || digest != strings.ToLower(digest) {
 		return false
 	}
 	decoded, err := hex.DecodeString(digest)
 	return err == nil && len(decoded) == sha256.Size
+}
+
+// DefaultPrimarySourcePath is the source unit name the verifier has always
+// used for the primary source: <contractName>.hyp at the virtual root.
+func DefaultPrimarySourcePath(contractName string) string {
+	return contractName + ".hyp"
+}
+
+// EffectivePrimarySourcePath resolves the stored or requested primary source
+// path. An empty value selects the default <contractName>.hyp layout.
+func EffectivePrimarySourcePath(contractName, primarySourcePath string) string {
+	if primarySourcePath == "" {
+		return DefaultPrimarySourcePath(contractName)
+	}
+	return primarySourcePath
+}
+
+// CanonicalPrimarySourcePath returns the stored form of a primary source
+// path: empty for the default <contractName>.hyp layout, the path otherwise.
+func CanonicalPrimarySourcePath(contractName, primarySourcePath string) string {
+	if primarySourcePath == DefaultPrimarySourcePath(contractName) {
+		return ""
+	}
+	return primarySourcePath
+}
+
+// RequiresVerificationRecordSchemaV3 reports whether a result carries any
+// compile input that the v2 record cannot express: a primary source path
+// other than the default, or the via-IR pipeline.
+func (r VerificationResult) RequiresVerificationRecordSchemaV3() bool {
+	return r.ViaIR || CanonicalPrimarySourcePath(r.ContractName, r.PrimarySourcePath) != ""
+}
+
+// DeploymentBoundVerificationRecord selects the record schema and artifact
+// digest for a deployment-bound verification. Results that only use the
+// default primary path without via-IR keep the v2 schema and digest, so the
+// single-file flow writes exactly what it wrote before schema v3 existed.
+func DeploymentBoundVerificationRecord(
+	target VerificationTarget,
+	result VerificationResult,
+	sourceBundleDigest string,
+) (schema string, artifactDigest string) {
+	if result.RequiresVerificationRecordSchemaV3() {
+		return VerificationRecordSchemaV3, VerificationArtifactDigestV3(target, result, sourceBundleDigest)
+	}
+	return VerificationRecordSchemaV2, VerificationArtifactDigestV2(target, result, sourceBundleDigest)
 }
 
 // VerificationArtifactDigestV2 binds the complete published verification
@@ -108,8 +167,34 @@ func VerificationArtifactDigestV2(
 	sourceBundleDigest string,
 ) string {
 	h := sha256.New()
+	writeVerificationArtifactFields(h, VerificationRecordSchemaV2, target, result, sourceBundleDigest)
+	return verificationArtifactDigestPrefixV2 + hex.EncodeToString(h.Sum(nil))
+}
+
+// VerificationArtifactDigestV3 extends the v2 field sequence, under the v3
+// schema string, with the effective primary source path and the via-IR flag.
+// Both change the compiler input, so both are bound to the published record.
+func VerificationArtifactDigestV3(
+	target VerificationTarget,
+	result VerificationResult,
+	sourceBundleDigest string,
+) string {
+	h := sha256.New()
+	writeVerificationArtifactFields(h, VerificationRecordSchemaV3, target, result, sourceBundleDigest)
+	writeCompilerProvenanceField(h, EffectivePrimarySourcePath(result.ContractName, result.PrimarySourcePath))
+	writeCompilerProvenanceField(h, strconv.FormatBool(result.ViaIR))
+	return verificationArtifactDigestPrefixV3 + hex.EncodeToString(h.Sum(nil))
+}
+
+func writeVerificationArtifactFields(
+	h hash.Hash,
+	schema string,
+	target VerificationTarget,
+	result VerificationResult,
+	sourceBundleDigest string,
+) {
 	for _, value := range []string{
-		VerificationRecordSchemaV2,
+		schema,
 		target.Address,
 		target.CreationTransaction,
 		target.CreationBlockNumber,
@@ -153,7 +238,6 @@ func VerificationArtifactDigestV2(
 		writeCompilerProvenanceField(h, value)
 	}
 	writeSortedStringMap(h, result.Libraries)
-	return verificationArtifactDigestPrefixV2 + hex.EncodeToString(h.Sum(nil))
 }
 
 func writeSortedStringMap(h hash.Hash, values map[string]string) {
@@ -309,6 +393,10 @@ type VerificationResult struct {
 	ConstructorArguments string
 	Libraries            map[string]string
 	Imports              map[string]string
-	License              string
-	VerificationMethod   string
+	// PrimarySourcePath is the canonical primary source unit name. Empty
+	// means the default <ContractName>.hyp layout.
+	PrimarySourcePath  string
+	ViaIR              bool
+	License            string
+	VerificationMethod string
 }

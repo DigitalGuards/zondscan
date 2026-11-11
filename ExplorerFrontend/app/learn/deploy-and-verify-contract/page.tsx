@@ -1,3 +1,4 @@
+import { SITE_NAME, siteUrl, BRAND_SLUG } from '../../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { learnMetadata } from '../components/learn-metadata';
@@ -9,6 +10,7 @@ import LearnArticle, {
   CodeBlock,
   LearnFAQ,
 } from '../components/LearnArticle';
+import { deployScript } from './deploy-script';
 
 export const metadata: Metadata = learnMetadata('deploy-and-verify-contract');
 
@@ -45,39 +47,6 @@ fs.writeFileSync('Counter.json', JSON.stringify({
   bytecode: artifact.zvm.bytecode.object,
 }));`;
 
-const deployScript = `const { Web3 } = require('@theqrl/web3');
-const { MLDSA87 } = require('@theqrl/wallet.js');
-const { abi, bytecode } = require('./Counter.json');
-
-const web3 = new Web3(new Web3.providers.HttpProvider(
-  'https://qrlwallet.com/api/qrl-rpc/testnet',
-));
-
-// A 34-word test mnemonic. Never hardcode one; never reuse a real wallet.
-const mnemonic = process.env.MNEMONIC;
-const hexseed = MLDSA87.newWalletFromMnemonic(mnemonic).getHexExtendedSeed();
-const acc = web3.qrl.accounts.seedToAccount(hexseed);
-web3.qrl.wallet.add(hexseed);
-
-async function main() {
-  const chainId = BigInt(await web3.qrl.getChainId());
-  if (chainId !== 1337n) throw new Error('unexpected chain: ' + chainId);
-
-  const deploy = new web3.qrl.Contract(abi)
-    .deploy({ data: bytecode, arguments: [] });
-  const estimated = await deploy.estimateGas({ from: acc.address });
-
-  const receipt = await web3.qrl.sendTransaction({
-    from: acc.address,
-    data: deploy.encodeABI(),
-    gas: (estimated * 12n) / 10n, // 20% headroom
-    gasPrice: await web3.qrl.getGasPrice(),
-  });
-  console.log('Contract address:', receipt.contractAddress);
-}
-
-main().catch((e) => { console.error(e); process.exitCode = 1; });`;
-
 export default function Page(): JSX.Element {
   return (
     <LearnArticle slug="deploy-and-verify-contract">
@@ -91,7 +60,7 @@ export default function Page(): JSX.Element {
       <p>
         This tutorial walks the full loop: write a small Hyperion contract, compile it with{' '}
         <code>hypc</code>, deploy it to the QRL 2.0 testnet with a short{' '}
-        <code>@theqrl/web3</code> script, and then verify the source on ZondScan so anyone can
+        <code>@theqrl/web3</code> script, and then verify the source on {SITE_NAME} so anyone can
         read it, call it, and audit it. If the chain itself is new to you, start with{' '}
         <a href="/learn/what-is-qrl-2">What is QRL 2.0?</a>.
       </p>
@@ -160,12 +129,19 @@ export default function Page(): JSX.Element {
         <p>
           The deploy script signs with an ML-DSA-87 account derived from a 34-word mnemonic and
           talks to the public testnet RPC proxy. The QRL 2.0 testnet uses chain ID{' '}
-          <code>1337</code>, and the script aborts on a mismatch before signing anything.
+          <code>3151909</code>, and the script aborts on a mismatch before signing anything.
+        </p>
+        <p>
+          Gas on QRL 2.0 is priced by the EIP-1559 fee market, so the script sends a type 2
+          transaction. <code>@theqrl/web3</code> fills <code>maxFeePerGas</code> and{' '}
+          <code>maxPriorityFeePerGas</code> from the latest block; pass both fields yourself to
+          set your own fee cap. Version 2 of <code>@theqrl/web3</code> refuses a legacy{' '}
+          <code>gasPrice</code> field.
         </p>
         <CodeBlock code={deployScript} language="javascript" />
         <p>
           Run it with <code>MNEMONIC</code> set in your environment. On success it prints the
-          new Q-prefixed contract address. Paste that address into the ZondScan search bar to
+          new Q-prefixed contract address. Paste that address into the {SITE_NAME} search bar to
           see the creation transaction, or open the deployment hash directly;{' '}
           <a href="/learn/read-a-transaction">How to read a transaction</a> explains every
           field, and <Link href="/gas">the gas page</Link> shows current prices. Your contract also
@@ -173,7 +149,7 @@ export default function Page(): JSX.Element {
         </p>
       </LearnSection>
 
-      <LearnSection id="verify-on-zondscan" title="Verify the source on ZondScan">
+      <LearnSection id={`verify-on-${BRAND_SLUG}`} title={`Verify the source on ${SITE_NAME}`}>
         <p>
           Right after deployment the explorer only knows your contract&apos;s bytecode.
           Verification publishes the source: you submit it, the backend recompiles it with the
@@ -199,18 +175,29 @@ export default function Page(): JSX.Element {
             <p>
               Enter the Q-prefixed contract address and the contract name, which must match a
               contract declared in the source (<code>Counter</code> here). Set the optimizer
-              checkbox and runs to whatever you compiled with, pick a license, and optionally
-              set an EVM version.
+              checkbox and runs to whatever you compiled with, tick <strong>Via IR</strong> if
+              you compiled with <code>viaIR</code>, pick a license, and optionally set an EVM
+              version.
             </p>
           </Step>
           <Step title="Paste the source">
             <p>
               Paste the full <code>.hyp</code> source into the source field. Multi-file
               projects put the main file there and supply the rest through the Imports field as
-              a JSON object mapping import paths to source contents, for example{' '}
+              a JSON object mapping each file&apos;s path to its source contents, for example{' '}
               <code>{'{"Context.hyp": "...source..."}'}</code>. Constructor arguments are an
               optional hex field; the byte-match runs against the deployed runtime code either
               way.
+            </p>
+            <p>
+              If the project keeps its sources in directories, give the files the paths you
+              compiled them under. Set <strong>Primary source path</strong> to the main
+              file&apos;s path, for example <code>contracts/core/Counter.hyp</code>, and key each
+              import by its own path, such as <code>contracts/lib/Math.hyp</code>. A{' '}
+              <code>../lib/Math.hyp</code> import then resolves exactly as it did at deploy time.
+              The quickest route is to load the standard JSON input file your deploy script
+              passed to <code>hypc --standard-json</code>: the form takes every path and the
+              optimizer and <code>viaIR</code> settings from it, and you pick the primary file.
             </p>
           </Step>
           <Step title="Submit and watch the job">
@@ -255,7 +242,7 @@ export default function Page(): JSX.Element {
       <LearnSection id="verify-programmatically" title="Verify programmatically">
         <p>
           Everything the form does is available over the public API at{' '}
-          <code>https://zondscan.com/api</code>, which suits CI pipelines that verify every
+          <code>{siteUrl('/api')}</code>, which suits CI pipelines that verify every
           deployment automatically:
         </p>
         <ul>
@@ -267,8 +254,9 @@ export default function Page(): JSX.Element {
             <code>POST /api/contract/verify</code> enqueues a job. The JSON body requires{' '}
             <code>address</code>, <code>sourceCode</code>, and <code>contractName</code>;
             optional fields include <code>compilerVersion</code>, <code>optimizerEnabled</code>
-            , <code>optimizerRuns</code>, <code>evmVersion</code>, <code>imports</code>, and{' '}
-            <code>license</code>. It returns a <code>jobId</code>. An unknown{' '}
+            , <code>optimizerRuns</code>, <code>viaIR</code>, <code>evmVersion</code>,{' '}
+            <code>primarySourcePath</code>, <code>imports</code>, and <code>license</code>. It
+            returns a <code>jobId</code>. An unknown{' '}
             <code>compilerVersion</code> returns 400 with the supported build list. The
             endpoint is rate-limited per IP and caps the request body at 1 MiB.
           </li>
@@ -300,10 +288,10 @@ export default function Page(): JSX.Element {
             q: 'Verification fails even though my source is correct. Why?',
             a: (
               <p>
-                The byte-match requires the exact compiler build and the exact optimizer
-                settings used at deploy time. Check the build list on the form or at{' '}
-                <code>/api/contract/compiler-info</code>, and make sure the optimizer checkbox
-                and runs value match your compile. The failed job includes the compiler output
+                The byte-match requires the exact compiler build and the exact optimizer and
+                via-IR settings used at deploy time. Check the build list on the form or at{' '}
+                <code>/api/contract/compiler-info</code>, and make sure the optimizer checkbox,
+                runs value, and Via IR checkbox match your compile. The failed job includes the compiler output
                 to help you diagnose the difference.
               </p>
             ),
@@ -332,9 +320,12 @@ export default function Page(): JSX.Element {
             a: (
               <p>
                 Put the main file in the source field and the imported files in the Imports
-                field as a JSON object mapping each import path to its full source, matching
-                the paths your import statements use. The API accepts the same structure in the{' '}
-                <code>imports</code> body field.
+                field as a JSON object mapping each file&apos;s path to its full source. When the
+                files live in directories, use the repo-relative paths you compiled with and set
+                the primary source path to the main file&apos;s path, so relative imports such as{' '}
+                <code>../lib/Math.hyp</code> resolve as they did at deploy time. Loading your
+                standard JSON input file fills all of this in. The API accepts the same structure
+                in the <code>primarySourcePath</code> and <code>imports</code> body fields.
               </p>
             ),
           },

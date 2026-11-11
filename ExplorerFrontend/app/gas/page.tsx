@@ -1,3 +1,4 @@
+import { pageTitle, canonicalUrl } from '../lib/site';
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { sharedMetadata } from '../lib/seo/metaData';
@@ -5,21 +6,21 @@ import GasClient from './gas-client';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'Gas Tracker | ZondScan',
+  title: pageTitle('Gas Tracker'),
   description: 'Network gas metrics, average gas price, gas usage, mempool size, and recent block gas history on the QRL 2.0 network',
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: 'https://zondscan.com/gas',
+    canonical: canonicalUrl('/gas'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'Gas Tracker | ZondScan',
+    title: pageTitle('Gas Tracker'),
     description: 'Network gas metrics for the QRL 2.0 network',
-    url: 'https://zondscan.com/gas',
+    url: canonicalUrl('/gas'),
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'Gas Tracker | ZondScan',
+    title: pageTitle('Gas Tracker'),
     description: 'Network gas metrics for the QRL 2.0 network',
   },
 };

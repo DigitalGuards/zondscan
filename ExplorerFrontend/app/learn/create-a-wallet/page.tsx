@@ -1,3 +1,4 @@
+import { SITE_NAME } from '../../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { learnMetadata } from '../components/learn-metadata';
@@ -177,13 +178,13 @@ export default function Page() {
         </p>
       </LearnSection>
 
-      <LearnSection id="fund-and-explore" title="Fund the wallet and watch it on ZondScan">
+      <LearnSection id="fund-and-explore" title={`Fund the wallet and watch it on ${SITE_NAME}`}>
         <p>
           A fresh wallet holds 0 Quanta. Request free testnet Quanta from the{' '}
-          <Link href="/faucet">ZondScan faucet</Link>; the short guide{' '}
+          <Link href="/faucet">{SITE_NAME} faucet</Link>; the short guide{' '}
           <a href="/learn/get-testnet-quanta">get testnet Quanta</a> walks
           through it. Once the faucet transaction confirms, paste your Q
-          address into the ZondScan search bar to see the balance and history,
+          address into the {SITE_NAME} search bar to see the balance and history,
           or browse recent activity on the{' '}
           <Link href="/transactions">transactions page</Link>.
         </p>

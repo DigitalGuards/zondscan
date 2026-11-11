@@ -1,7 +1,10 @@
 import { isOneOf, isRecord } from './guards';
+import { BRAND_SLUG } from './site';
 
-export const PREFERENCES_KEY = 'zondscan.preferences.v1';
-export const PREFERENCES_EVENT = 'zondscan:preferences';
+// Storage key and event name carry the brand slug: `zondscan.preferences.v1`
+// in the default build, `shorscan.preferences.v1` in a ShorScan build.
+export const PREFERENCES_KEY = `${BRAND_SLUG}.preferences.v1`;
+export const PREFERENCES_EVENT = `${BRAND_SLUG}:preferences`;
 
 export type ThemePreference = 'light' | 'dim' | 'dark' | 'system';
 export type ResolvedTheme = Exclude<ThemePreference, 'system'>;

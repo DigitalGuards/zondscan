@@ -1,3 +1,5 @@
+import { SITE_NAME, CANONICAL_ORIGIN } from './lib/site';
+import { structuredData } from './lib/seo/structuredData';
 import './globals.css'
 import SiteHeader from './components/SiteHeader';
 import Providers from './providers'
@@ -30,22 +32,22 @@ const monoFont = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'ZondScan | QRL 2.0 Explorer',
+  title: `${SITE_NAME} | QRL 2.0 Explorer`,
   description:
     'Blockchain explorer for QRL 2.0, an EVM-compatible blockchain secured with post-quantum cryptography. Track transactions, smart contracts, blocks, and validators.',
   alternates: {
-    canonical: 'https://zondscan.com',
+    canonical: CANONICAL_ORIGIN,
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'ZondScan | QRL 2.0 Explorer',
+    title: `${SITE_NAME} | QRL 2.0 Explorer`,
     description:
       'Blockchain explorer for QRL 2.0. Track smart contracts, blocks, and transactions on a quantum-resistant EVM-compatible chain.',
-    url: 'https://zondscan.com',
+    url: CANONICAL_ORIGIN,
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'ZondScan | QRL 2.0 Explorer',
+    title: `${SITE_NAME} | QRL 2.0 Explorer`,
     description:
       'Blockchain explorer for QRL 2.0. Track transactions, blocks, smart contracts, and validators on a post-quantum EVM chain.',
   },
@@ -58,186 +60,6 @@ export const viewport = {
   themeColor: '#0b0d13',
 }
 
-// Structured data for search engines. One @graph carrying:
-//   - Organization: DigitalGuards, the publisher.
-//   - WebSite: ZondScan with a SearchAction wired to the real /search
-//     redirect route (app/search/route.ts), so Google can surface a
-//     sitelinks search box that resolves addresses / tx hashes / blocks.
-//   - WebApplication: the explorer itself, with its key sections and
-//     related ecosystem apps.
-// Serialized once at module scope; rendered with a plain <script> tag
-// (the Next.js-documented pattern for JSON-LD in the App Router).
-const structuredData = {
-  '@context': 'https://schema.org',
-  '@graph': [
-    {
-      '@type': 'Organization',
-      '@id': 'https://zondscan.com/#organization',
-      name: 'DigitalGuards',
-      url: 'https://digitalguards.nl',
-      logo: 'https://zondscan.com/logo512.png',
-    },
-    {
-      '@type': 'WebSite',
-      '@id': 'https://zondscan.com/#website',
-      name: 'ZondScan',
-      alternateName: 'QRL 2.0 Explorer',
-      description:
-        'Blockchain explorer for QRL 2.0, the post-quantum blockchain. Track transactions, blocks, smart contracts, and validators.',
-      url: 'https://zondscan.com',
-      publisher: { '@id': 'https://zondscan.com/#organization' },
-      inLanguage: 'en',
-      potentialAction: {
-        '@type': 'SearchAction',
-        target: {
-          '@type': 'EntryPoint',
-          urlTemplate: 'https://zondscan.com/search?q={search_term_string}',
-        },
-        'query-input': 'required name=search_term_string',
-      },
-    },
-    {
-      '@type': 'WebApplication',
-      '@id': 'https://zondscan.com/#webapplication',
-      name: 'ZondScan',
-      description:
-        'Blockchain explorer for QRL 2.0. Track transactions, blocks, smart contracts, and validators on the quantum-resistant proof-of-stake network.',
-      url: 'https://zondscan.com',
-      applicationCategory: 'Blockchain Explorer',
-      operatingSystem: 'All',
-      browserRequirements: 'Requires JavaScript',
-      publisher: { '@id': 'https://zondscan.com/#organization' },
-      isPartOf: { '@id': 'https://zondscan.com/#website' },
-      offers: {
-        '@type': 'Offer',
-        price: '0',
-        priceCurrency: 'USD',
-      },
-      relatedApplication: [
-        {
-          '@type': 'SoftwareApplication',
-          name: 'MyQRLWallet Web Wallet',
-          url: 'https://qrlwallet.com',
-          applicationCategory: 'Blockchain Wallet',
-          operatingSystem: 'All',
-        },
-        {
-          '@type': 'SoftwareApplication',
-          name: 'MyQRLWallet',
-          url: 'https://myqrlwallet.com',
-          applicationCategory: 'Blockchain Wallet',
-          operatingSystem: 'All',
-        },
-        {
-          '@type': 'SoftwareApplication',
-          name: 'QuantaPool',
-          url: 'https://quantapool.com',
-          applicationCategory: 'DeFi Staking',
-          operatingSystem: 'All',
-        },
-        {
-          '@type': 'SoftwareApplication',
-          name: 'QuantaSwap',
-          url: 'https://quantaswap.io',
-          applicationCategory: 'Cross-chain Swaps',
-          operatingSystem: 'All',
-        },
-      ],
-      hasPart: [
-        {
-          '@type': 'WebPage',
-          name: 'Latest Transactions',
-          description: 'View recent transactions on QRL 2.0',
-          url: 'https://zondscan.com/transactions/1',
-        },
-        {
-          '@type': 'WebPage',
-          name: 'Pending Transactions',
-          description: 'View pending mempool transactions',
-          url: 'https://zondscan.com/pending/1',
-        },
-        {
-          '@type': 'WebPage',
-          name: 'Latest Blocks',
-          description: 'View recently synced blocks',
-          url: 'https://zondscan.com/blocks/1',
-        },
-        {
-          '@type': 'WebPage',
-          name: 'Smart Contracts',
-          description: 'View QRL 2.0 smart contracts',
-          url: 'https://zondscan.com/contracts',
-        },
-        {
-          '@type': 'WebPage',
-          name: 'Validators',
-          description: 'Network validators',
-          url: 'https://zondscan.com/validators',
-        },
-        {
-          '@type': 'WebPage',
-          name: 'Testnet Faucet',
-          description: 'Claim QRL 2.0 testnet funds',
-          url: 'https://zondscan.com/faucet',
-        },
-        {
-          '@type': 'WebPage',
-          name: 'Balance Checker',
-          description: 'Check account balances',
-          url: 'https://zondscan.com/checker',
-        },
-        {
-          '@type': 'WebPage',
-          name: 'Unit Converter',
-          description: 'Convert Quanta to Shor',
-          url: 'https://zondscan.com/converter',
-        },
-        {
-          '@type': 'WebPage',
-          name: 'Richlist',
-          description: 'Top QRL 2.0 holders',
-          url: 'https://zondscan.com/richlist',
-        },
-        {
-          '@type': 'WebPage',
-          name: 'Learn QRL 2.0',
-          description: 'Plain English guides to QRL 2.0, wallets, staking, and smart contracts',
-          url: 'https://zondscan.com/learn',
-        },
-        {
-          '@type': 'WebPage',
-          name: 'FAQ',
-          description: 'Frequently asked questions about QRL 2.0 and ZondScan',
-          url: 'https://zondscan.com/faq',
-        },
-        {
-          '@type': 'WebPage',
-          name: 'API Documentation',
-          description: 'Interactive reference for the ZondScan REST API',
-          url: 'https://zondscan.com/api-explorer',
-        },
-        {
-          '@type': 'WebPage',
-          name: 'Gas Tracker',
-          description: 'Live gas prices and network usage on QRL 2.0',
-          url: 'https://zondscan.com/gas',
-        },
-        {
-          '@type': 'WebPage',
-          name: 'QRL Order Book',
-          description: 'MEXC QRL/USDT market depth, recent trades and fund flow',
-          url: 'https://zondscan.com/orderbook',
-        },
-        {
-          '@type': 'WebPage',
-          name: 'Verify Contract',
-          description: 'Publish verified smart contract source code',
-          url: 'https://zondscan.com/verify-contract',
-        },
-      ],
-    },
-  ],
-};
 
 interface RootLayoutProps {
   children: React.ReactNode

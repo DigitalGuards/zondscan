@@ -1,29 +1,31 @@
+import { SITE_NAME, pageTitle, canonicalUrl } from '../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { sharedMetadata } from '../lib/seo/metaData';
 import { faqs } from './faq-data';
+import LegacyAnchor from '../components/LegacyAnchor';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'FAQ | ZondScan',
+  title: pageTitle('FAQ'),
   description:
-    'Answers to frequently asked questions about ZondScan, QRL 2.0, transactions, smart contracts, wallets, and the open API.',
+    `Answers to frequently asked questions about ${SITE_NAME}, QRL 2.0, transactions, smart contracts, wallets, and the open API.`,
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: 'https://zondscan.com/faq',
+    canonical: canonicalUrl('/faq'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'FAQ | ZondScan',
+    title: pageTitle('FAQ'),
     description:
-      'Answers to frequently asked questions about ZondScan, QRL 2.0, transactions, smart contracts, wallets, and the open API.',
-    url: 'https://zondscan.com/faq',
+      `Answers to frequently asked questions about ${SITE_NAME}, QRL 2.0, transactions, smart contracts, wallets, and the open API.`,
+    url: canonicalUrl('/faq'),
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'FAQ | ZondScan',
+    title: pageTitle('FAQ'),
     description:
-      'Answers to frequently asked questions about ZondScan, QRL 2.0, transactions, smart contracts, wallets, and the open API.',
+      `Answers to frequently asked questions about ${SITE_NAME}, QRL 2.0, transactions, smart contracts, wallets, and the open API.`,
   },
 };
 
@@ -44,7 +46,7 @@ export default function FAQPage(): JSX.Element {
   return (
     <div aria-labelledby="faq-heading">
       <h1 id="faq-heading" className="sr-only">
-        ZondScan FAQ
+        {SITE_NAME} FAQ
       </h1>
       <script type="application/ld+json">{JSON.stringify(faqJsonLd)}</script>
       <div className="min-h-0 text-text-secondary px-4 sm:px-6 py-4 md:py-8">
@@ -59,6 +61,7 @@ export default function FAQPage(): JSX.Element {
                 className="card-simple overflow-hidden group"
               >
                 <summary className="flex w-full cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-left [&::-webkit-details-marker]:hidden">
+                  <LegacyAnchor id={faq.id} />
                   <span className="text-sm md:text-base font-medium text-text-primary">
                     {faq.q}
                   </span>

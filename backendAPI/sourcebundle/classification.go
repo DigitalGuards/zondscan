@@ -28,7 +28,11 @@ func ClassifyStoredVerification(contract models.ContractInfo) models.CompilerPro
 	if contract.SourceBundleDigest != Digest(contract.ContractName, contract.SourceCode, contract.Imports) {
 		return models.CompilerProvenanceInvalidRecorded
 	}
-	if contract.VerificationRecordSchema == models.VerificationRecordSchemaV2 {
+	if !hasCanonicalCompileInputs(contract) {
+		return models.CompilerProvenanceInvalidRecorded
+	}
+	switch contract.VerificationRecordSchema {
+	case models.VerificationRecordSchemaV2:
 		if !models.IsVerificationArtifactDigestV2(contract.VerificationArtifactDigest) ||
 			contract.VerificationArtifactDigest != models.VerificationArtifactDigestV2(
 				verificationTargetFromContract(contract),
@@ -37,8 +41,34 @@ func ClassifyStoredVerification(contract models.ContractInfo) models.CompilerPro
 			) {
 			return models.CompilerProvenanceInvalidRecorded
 		}
+	case models.VerificationRecordSchemaV3:
+		if !models.IsVerificationArtifactDigestV3(contract.VerificationArtifactDigest) ||
+			contract.VerificationArtifactDigest != models.VerificationArtifactDigestV3(
+				verificationTargetFromContract(contract),
+				verificationResultFromContract(contract),
+				contract.SourceBundleDigest,
+			) {
+			return models.CompilerProvenanceInvalidRecorded
+		}
 	}
 	return models.CompilerProvenanceDigestBacked
+}
+
+// hasCanonicalCompileInputs enforces the writer rule for the fields that
+// schema v3 introduced. Only v3 records carry a primary source path or the
+// via-IR flag, a v3 record must carry at least one of them, and the default
+// <contractName>.hyp path is never spelled out.
+func hasCanonicalCompileInputs(contract models.ContractInfo) bool {
+	if contract.VerificationRecordSchema != models.VerificationRecordSchemaV3 {
+		return contract.PrimarySourcePath == "" && !contract.ViaIR
+	}
+	if contract.PrimarySourcePath != models.CanonicalPrimarySourcePath(
+		contract.ContractName,
+		contract.PrimarySourcePath,
+	) {
+		return false
+	}
+	return verificationResultFromContract(contract).RequiresVerificationRecordSchemaV3()
 }
 
 // ClassifyRecordedMetadata is the lean classification used by compact
@@ -58,8 +88,15 @@ func ClassifyRecordedMetadata(contract models.ContractInfo) models.CompilerProve
 		!isVersionedDigest(contract.SourceBundleDigest) {
 		return models.CompilerProvenanceInvalidRecorded
 	}
+	if !hasCanonicalCompileInputs(contract) {
+		return models.CompilerProvenanceInvalidRecorded
+	}
 	if contract.VerificationRecordSchema == models.VerificationRecordSchemaV2 &&
 		!models.IsVerificationArtifactDigestV2(contract.VerificationArtifactDigest) {
+		return models.CompilerProvenanceInvalidRecorded
+	}
+	if contract.VerificationRecordSchema == models.VerificationRecordSchemaV3 &&
+		!models.IsVerificationArtifactDigestV3(contract.VerificationArtifactDigest) {
 		return models.CompilerProvenanceInvalidRecorded
 	}
 	return models.CompilerProvenanceDigestBacked
@@ -75,7 +112,8 @@ func classifyVerificationRecordSchema(
 		return models.CompilerProvenanceInvalidRecorded, true
 	}
 	if contract.VerificationRecordSchema != models.VerificationRecordSchemaV1 &&
-		contract.VerificationRecordSchema != models.VerificationRecordSchemaV2 {
+		contract.VerificationRecordSchema != models.VerificationRecordSchemaV2 &&
+		contract.VerificationRecordSchema != models.VerificationRecordSchemaV3 {
 		return models.CompilerProvenanceInvalidRecorded, true
 	}
 	return "", false
@@ -106,6 +144,8 @@ func verificationResultFromContract(contract models.ContractInfo) models.Verific
 		ConstructorArguments: contract.ConstructorArguments,
 		Libraries:            contract.Libraries,
 		Imports:              contract.Imports,
+		PrimarySourcePath:    contract.PrimarySourcePath,
+		ViaIR:                contract.ViaIR,
 		License:              contract.License,
 		VerificationMethod:   contract.VerificationMethod,
 	}

@@ -1,0 +1,147 @@
+{
+  "description": "Schema-v3 verification records shared by the Go and TypeScript digest tests. Regenerate only together with models.VerificationArtifactDigestV3 and storedVerification.ts.",
+  "vectors": [
+    {
+      "name": "source tree with via-IR",
+      "record": {
+        "address": "Qaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "creationTransaction": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "creationBlockNumber": "0x10",
+        "creationBlockHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "chainId": "0x539",
+        "contractCodeSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "verified": true,
+        "verificationRecordSchema": "qrl.contract-verification-record.v3",
+        "contractName": "Counter",
+        "primarySourcePath": "contracts/core/Counter.hyp",
+        "viaIR": true,
+        "sourceCode": "// SPDX-License-Identifier: MIT\npragma hyperion >=0.0.2;\n\nimport \"../lib/MathLib.hyp\";\nimport {Base} from \"../base/Base.hyp\";\n\ncontract Counter is Base {\n    function twice(uint256 x) public pure returns (uint256) {\n        return MathLib.double(x);\n    }\n}\n",
+        "imports": {
+          "contracts/base/Base.hyp": "// SPDX-License-Identifier: MIT\npragma hyperion >=0.0.2;\n\nabstract contract Base {\n    uint256 public stored = 7;\n}\n",
+          "contracts/lib/MathLib.hyp": "// SPDX-License-Identifier: MIT\npragma hyperion >=0.0.2;\n\nlibrary MathLib {\n    function double(uint256 x) internal pure returns (uint256) {\n        return x * 2;\n    }\n}\n"
+        },
+        "compilerVersion": "0.2.0-develop.2026.8.27+commit.6f862206.mod.Linux.g++",
+        "compilerProvenance": {
+          "schema": "qrl.contract-compiler-provenance.v2",
+          "kind": "native",
+          "buildId": "0.2.0-develop.2026.8.27+commit.6f862206.mod.Linux.g++",
+          "executionDigest": "fd84c18ce627b6e90bd2bc482e2033283ff7e8d2aeeb422a96be2f2921e669bf",
+          "components": [
+            {
+              "name": "hypc",
+              "sha256": "fe8e2344dbd902d6fc8c8cbb24114378c2de3a996b0d58f642d303c8bf30e930"
+            },
+            {
+              "name": "nsjail",
+              "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            },
+            {
+              "name": "policy",
+              "sha256": "cc2c6d14e943c9b4b9252e69c2fbf9a5a4313938cd561594a255746393baaa8c"
+            }
+          ]
+        },
+        "abi": "[{\"type\":\"function\",\"name\":\"twice\",\"stateMutability\":\"pure\",\"inputs\":[{\"name\":\"x\",\"type\":\"uint256\"}],\"outputs\":[{\"name\":\"\",\"type\":\"uint256\"}]}]",
+        "optimizationEnabled": true,
+        "optimizationRuns": 200,
+        "license": "MIT",
+        "verificationMethod": "full-source",
+        "sourceBundleDigest": "qrl.verified-source-bundle.v1:sha256:7300c995e73f5625d3edb8a4f5ffbd26f08d6a11d9386c32ade1bf59a21a715e",
+        "verificationArtifactDigest": "qrl.contract-verification-artifact.v3:sha256:ae9e32d9f1158fd81945fe3def3f8769a31b329e1804f20ff0d630bc679f725b"
+      }
+    },
+    {
+      "name": "via-IR at the default path",
+      "record": {
+        "address": "Qaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "creationTransaction": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "creationBlockNumber": "0x10",
+        "creationBlockHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "chainId": "0x539",
+        "contractCodeSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "verified": true,
+        "verificationRecordSchema": "qrl.contract-verification-record.v3",
+        "contractName": "Main",
+        "viaIR": true,
+        "sourceCode": "contract Main {}",
+        "compilerVersion": "0.2.0-develop.2026.8.27+commit.6f862206.mod.Linux.g++",
+        "compilerProvenance": {
+          "schema": "qrl.contract-compiler-provenance.v2",
+          "kind": "native",
+          "buildId": "0.2.0-develop.2026.8.27+commit.6f862206.mod.Linux.g++",
+          "executionDigest": "fd84c18ce627b6e90bd2bc482e2033283ff7e8d2aeeb422a96be2f2921e669bf",
+          "components": [
+            {
+              "name": "hypc",
+              "sha256": "fe8e2344dbd902d6fc8c8cbb24114378c2de3a996b0d58f642d303c8bf30e930"
+            },
+            {
+              "name": "nsjail",
+              "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            },
+            {
+              "name": "policy",
+              "sha256": "cc2c6d14e943c9b4b9252e69c2fbf9a5a4313938cd561594a255746393baaa8c"
+            }
+          ]
+        },
+        "abi": "[{\"type\":\"function\",\"name\":\"twice\",\"stateMutability\":\"pure\",\"inputs\":[{\"name\":\"x\",\"type\":\"uint256\"}],\"outputs\":[{\"name\":\"\",\"type\":\"uint256\"}]}]",
+        "optimizationEnabled": true,
+        "optimizationRuns": 200,
+        "libraries": {
+          "A": "Qa",
+          "Z": "Qz"
+        },
+        "license": "MIT",
+        "verificationMethod": "full-source",
+        "sourceBundleDigest": "qrl.verified-source-bundle.v1:sha256:6fbba9a103a2b6214f7139a26a1216c63fbf855127cd403e6ded17446aedb5a8",
+        "verificationArtifactDigest": "qrl.contract-verification-artifact.v3:sha256:283452c534abb6db5bbe12dcf32b6228e4199b76db7463513cbd26dda62893bb"
+      }
+    },
+    {
+      "name": "nested primary without via-IR",
+      "record": {
+        "address": "Qaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "creationTransaction": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "creationBlockNumber": "0x10",
+        "creationBlockHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "chainId": "0x539",
+        "contractCodeSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "verified": true,
+        "verificationRecordSchema": "qrl.contract-verification-record.v3",
+        "contractName": "Main",
+        "primarySourcePath": "src/Main.hyp",
+        "sourceCode": "contract Main {}",
+        "compilerVersion": "0.2.0-develop.2026.8.27+commit.6f862206.mod.Linux.g++",
+        "compilerProvenance": {
+          "schema": "qrl.contract-compiler-provenance.v2",
+          "kind": "native",
+          "buildId": "0.2.0-develop.2026.8.27+commit.6f862206.mod.Linux.g++",
+          "executionDigest": "fd84c18ce627b6e90bd2bc482e2033283ff7e8d2aeeb422a96be2f2921e669bf",
+          "components": [
+            {
+              "name": "hypc",
+              "sha256": "fe8e2344dbd902d6fc8c8cbb24114378c2de3a996b0d58f642d303c8bf30e930"
+            },
+            {
+              "name": "nsjail",
+              "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            },
+            {
+              "name": "policy",
+              "sha256": "cc2c6d14e943c9b4b9252e69c2fbf9a5a4313938cd561594a255746393baaa8c"
+            }
+          ]
+        },
+        "abi": "[{\"type\":\"function\",\"name\":\"twice\",\"stateMutability\":\"pure\",\"inputs\":[{\"name\":\"x\",\"type\":\"uint256\"}],\"outputs\":[{\"name\":\"\",\"type\":\"uint256\"}]}]",
+        "optimizationEnabled": false,
+        "optimizationRuns": 0,
+        "evmVersion": "zond",
+        "license": "MIT",
+        "verificationMethod": "full-source",
+        "sourceBundleDigest": "qrl.verified-source-bundle.v1:sha256:6fbba9a103a2b6214f7139a26a1216c63fbf855127cd403e6ded17446aedb5a8",
+        "verificationArtifactDigest": "qrl.contract-verification-artifact.v3:sha256:44f36b11994b1db5dea282d912a6066590fdddf21bdff4c97a5e95ce11c5c20e"
+      }
+    }
+  ]
+}

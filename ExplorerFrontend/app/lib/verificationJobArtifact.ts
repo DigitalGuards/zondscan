@@ -1,8 +1,10 @@
 import {
   classifyStoredVerification,
   classifyVerifiedImports,
+  requiresVerificationRecordSchemaV3,
   sourceBundleDigestV1,
   VERIFICATION_RECORD_SCHEMA_V2,
+  VERIFICATION_RECORD_SCHEMA_V3,
 } from "./storedVerification";
 import type { StoredVerificationStatus } from "./storedVerification";
 
@@ -27,6 +29,8 @@ export interface VerificationJobPayload {
   constructorArguments?: unknown;
   libraries?: unknown;
   imports?: unknown;
+  primarySourcePath?: unknown;
+  viaIR?: unknown;
   license?: unknown;
   verificationMethod?: unknown;
 }
@@ -71,9 +75,24 @@ export function classifyVerificationJobArtifact(
     return "invalid-recorded";
   }
 
+  // The backend persists the v2 record shape unless the job compiled a
+  // nested primary path or via-IR, so the job selects its schema by the same
+  // rule. Malformed field types fall through to classification, which
+  // rejects them.
+  const primarySourcePath =
+    typeof job.payload.primarySourcePath === "string" ? job.payload.primarySourcePath : "";
+  const viaIR = job.payload.viaIR === true;
+  const verificationRecordSchema = requiresVerificationRecordSchemaV3(
+    job.payload.contractName,
+    primarySourcePath,
+    viaIR,
+  )
+    ? VERIFICATION_RECORD_SCHEMA_V3
+    : VERIFICATION_RECORD_SCHEMA_V2;
+
   const imports = Object.fromEntries(importsState.files);
   return classifyStoredVerification({
-    verificationRecordSchema: VERIFICATION_RECORD_SCHEMA_V2,
+    verificationRecordSchema,
     address: job.target.address,
     creationTransaction: job.target.creationTransaction,
     creationBlockNumber: job.target.creationBlockNumber,
@@ -97,6 +116,8 @@ export function classifyVerificationJobArtifact(
     evmVersion: job.payload.evmVersion,
     constructorArguments: job.payload.constructorArguments,
     libraries: job.payload.libraries,
+    primarySourcePath: job.payload.primarySourcePath,
+    viaIR: job.payload.viaIR,
     license: job.payload.license,
     verificationMethod: job.payload.verificationMethod,
     verificationArtifactDigest: job.result.artifactDigest,

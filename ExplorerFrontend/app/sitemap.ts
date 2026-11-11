@@ -1,8 +1,9 @@
+import { siteUrl } from './lib/site';
 import type { MetadataRoute } from 'next';
 import { learnArticles } from './learn/articles';
 
 /**
- * Sitemap for ZondScan. Lists the static routes that have meaningful
+ * Sitemap of the explorer. Lists the static routes that have meaningful
  * standalone landing pages so search crawlers index the site map
  * (not every block / tx / address; those are uncacheable per-instance
  * pages that crawlers reach via internal links). Next.js App Router
@@ -12,8 +13,6 @@ import { learnArticles } from './learn/articles';
  * the deploy time (build evaluation moment).
  */
 
-const BASE = 'https://zondscan.com';
-
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
   const entry = (
@@ -21,7 +20,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     changeFrequency: MetadataRoute.Sitemap[number]['changeFrequency'],
     priority: number,
   ): MetadataRoute.Sitemap[number] => ({
-    url: `${BASE}${path}`,
+    url: siteUrl(path),
     lastModified: now,
     changeFrequency,
     priority,

@@ -78,8 +78,9 @@ func sanitizeTokenString(s string) string {
 // (verified / verificationRecordSchema / sourceCode / abi / contractName /
 // compilerVersion / compilerProvenance / optimizationEnabled /
 // optimizationRuns / evmVersion / constructorArguments / libraries / imports /
-// sourceBundleDigest / license / verificationMethod / verifiedAt). The two
-// write paths NEVER overlap.
+// primarySourcePath / viaIR / sourceBundleDigest /
+// verificationArtifactDigest / license / verificationMethod / verifiedAt).
+// The two write paths NEVER overlap.
 //
 // Previously this function did `$set: updateData` (whole-doc), which
 // re-introduced a race: if the syncer's FindOne read predated a

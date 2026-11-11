@@ -2,8 +2,12 @@
 
 import Image from 'next/image';
 
+import { BRAND } from '../lib/site';
+import ShorScanMark from './ShorScanMark';
+
 /**
- * ZondScan logo mark.
+ * Site logo mark: the ZondScan image, or the inline ShorScan mark when the
+ * site name selects it (see BRAND in lib/site.ts).
  *
  * The old video animation (webm/mp4) was composited over the legacy
  * #1a1a1a sidebar color because H.264 cannot carry an alpha channel;
@@ -29,17 +33,27 @@ export default function AnimatedLogo({
                    animate-pulse [animation-duration:4s]
                    motion-reduce:animate-none"
       />
-      <Image
-        src="/ZondScan_Logo_static.webp"
-        alt={alt}
-        fill
-        priority
-        sizes="(max-width: 768px) 50vw, 200px"
-        className="object-contain relative
-                   drop-shadow-[0_0_14px_rgba(255,167,41,0.25)]
-                   transition-[filter] duration-300
-                   group-hover:drop-shadow-[0_0_22px_rgba(255,167,41,0.45)]"
-      />
+      {BRAND.mark === 'shor' ? (
+        <ShorScanMark
+          title={alt || undefined}
+          className="relative h-full w-full
+                     drop-shadow-[0_0_14px_rgba(255,167,41,0.25)]
+                     transition-[filter] duration-300
+                     group-hover:drop-shadow-[0_0_22px_rgba(255,167,41,0.45)]"
+        />
+      ) : (
+        <Image
+          src="/ZondScan_Logo_static.webp"
+          alt={alt}
+          fill
+          priority
+          sizes="(max-width: 768px) 50vw, 200px"
+          className="object-contain relative
+                     drop-shadow-[0_0_14px_rgba(255,167,41,0.25)]
+                     transition-[filter] duration-300
+                     group-hover:drop-shadow-[0_0_22px_rgba(255,167,41,0.45)]"
+        />
+      )}
     </div>
   );
 }

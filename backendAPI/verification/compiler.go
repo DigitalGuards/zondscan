@@ -52,6 +52,16 @@ type Compiler struct {
 	sandbox  *sandboxLauncher
 }
 
+// compileArgs returns the hypc arguments for one compile: standard-JSON mode
+// with the import callback disabled. The `sources` map in the input is then
+// the compiler's complete file system: a missing import fails as an ordinary
+// "Source not found" compile error, and hypc never asks the host for a file.
+// Every configured build must accept the flag; one that rejects it fails each
+// compile closed.
+func compileArgs() []string {
+	return []string{"--standard-json", "--no-import-callback"}
+}
+
 // ErrPayloadTooLarge is returned when the standard-JSON payload exceeds
 // MaxStdin. The cap protects the compiler from being asked to compile a
 // payload so large that its mere parse exhausts heap.
@@ -172,7 +182,7 @@ func (c *Compiler) Compile(ctx context.Context, input StandardJSONInput) (*Stand
 	// Apply our per-call timeout on top of whatever the caller provided.
 	subCtx, cancel := context.WithTimeout(ctx, c.Timeout)
 	defer cancel()
-	stdout, stderr, err := c.runSnapshot(subCtx, []string{"--standard-json"}, bytes.NewReader(payload))
+	stdout, stderr, err := c.runSnapshot(subCtx, compileArgs(), bytes.NewReader(payload))
 	if err != nil {
 		if errors.Is(err, ErrCompilerOutputTooLarge) || errors.Is(err, ErrCompilerStderrTooLarge) {
 			return nil, err
@@ -188,6 +198,31 @@ func (c *Compiler) Compile(ctx context.Context, input StandardJSONInput) (*Stand
 		return nil, fmt.Errorf("hypc produced invalid JSON: %w", err)
 	}
 	return &out, nil
+}
+
+// CheckRequestSize returns an error wrapping ErrPayloadTooLarge when the
+// standard-JSON input for req would exceed this compiler's MaxStdin. The
+// verify route calls it before a job exists, so an oversized source tree is
+// rejected with 400 and never turns into a failed job. Compile keeps its own
+// check for direct callers.
+func (c *Compiler) CheckRequestSize(req VerifyRequest) error {
+	input, err := wrapStandardJSON(req)
+	if err != nil {
+		return err
+	}
+	payload, err := json.Marshal(input)
+	if err != nil {
+		return fmt.Errorf("marshal standard-JSON: %w", err)
+	}
+	if c.MaxStdin > 0 && len(payload) > c.MaxStdin {
+		return fmt.Errorf(
+			"%w: the sources make a %d-byte compiler input, above the limit of %d bytes",
+			ErrPayloadTooLarge,
+			len(payload),
+			c.MaxStdin,
+		)
+	}
+	return nil
 }
 
 // probeVersion runs the sealed compiler with --version and returns its exact

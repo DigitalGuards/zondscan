@@ -414,7 +414,7 @@ func MarkContractVerified(
 	}
 	verifiedAt := time.Now().UTC().Format(time.RFC3339Nano)
 	sourceBundleDigest := sourcebundle.Digest(result.ContractName, result.SourceCode, result.Imports)
-	artifactDigest := models.VerificationArtifactDigestV2(expected, result, sourceBundleDigest)
+	_, artifactDigest := models.DeploymentBoundVerificationRecord(expected, result, sourceBundleDigest)
 	resultRef := &models.VerificationJobResultRef{
 		Abi:                result.Abi,
 		BytecodeHash:       expected.DeployedCodeSHA256,
@@ -571,8 +571,16 @@ func contractVerificationUpdate(
 	if len(targets) == 0 {
 		unset["verificationArtifactDigest"] = ""
 	}
+	set := contractVerificationSet(result, verifiedAt, targets...)
+	for _, field := range []string{"primarySourcePath", "viaIR"} {
+		// A v2 re-verification must not inherit compile inputs from an
+		// earlier v3 record, or the stored record would misstate its input.
+		if _, written := set[field]; !written {
+			unset[field] = ""
+		}
+	}
 	return bson.M{
-		"$set":   contractVerificationSet(result, verifiedAt, targets...),
+		"$set":   set,
 		"$unset": unset,
 	}
 }
@@ -605,12 +613,27 @@ func contractVerificationSet(
 		"sourceBundleDigest":       sourceBundleDigest,
 	}
 	if len(targets) > 0 {
-		fields["verificationRecordSchema"] = models.VerificationRecordSchemaV2
-		fields["verificationArtifactDigest"] = models.VerificationArtifactDigestV2(
+		// Only deployment-bound records can carry the v3 compile inputs. The
+		// legacy v1 shape has no artifact digest to bind them, so it never
+		// persists them.
+		schema, artifactDigest := models.DeploymentBoundVerificationRecord(
 			targets[0],
 			result,
 			sourceBundleDigest,
 		)
+		fields["verificationRecordSchema"] = schema
+		fields["verificationArtifactDigest"] = artifactDigest
+		if schema == models.VerificationRecordSchemaV3 {
+			if primary := models.CanonicalPrimarySourcePath(
+				result.ContractName,
+				result.PrimarySourcePath,
+			); primary != "" {
+				fields["primarySourcePath"] = primary
+			}
+			if result.ViaIR {
+				fields["viaIR"] = true
+			}
+		}
 	}
 	if len(result.Imports) > 0 {
 		fields["imports"] = result.Imports

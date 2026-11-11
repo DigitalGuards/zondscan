@@ -1,3 +1,4 @@
+import { SITE_NAME, BRAND_SLUG } from '../../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { learnMetadata } from '../components/learn-metadata';
@@ -27,7 +28,7 @@ export default function Page(): JSX.Element {
       <p>
         This article gives you the full picture in one sitting: what QRL 2.0 is technically,
         how it relates to the legacy QRL chain that has been running since 2018, what you can
-        already do on the public testnet today, and how ZondScan, the explorer you are reading
+        already do on the public testnet today, and how {SITE_NAME}, the explorer you are reading
         this on, fits into the ecosystem.
       </p>
       <p>
@@ -88,7 +89,7 @@ export default function Page(): JSX.Element {
         </p>
         <Callout type="warning" title="Testnet coins have no monetary value">
           <p>
-            Everything you see on ZondScan today is testnet activity. Quanta on the QRL 2.0
+            Everything you see on {SITE_NAME} today is testnet activity. Quanta on the QRL 2.0
             testnet are free from the <Link href="/faucet">faucet</Link> and are worth nothing. Never
             pay anyone for testnet coins, and never send real funds to a testnet address.
           </p>
@@ -113,7 +114,7 @@ export default function Page(): JSX.Element {
           </Step>
           <Step title="Get testnet Quanta">
             <p>
-              The <Link href="/faucet">ZondScan faucet</Link> sends free testnet Quanta to any
+              The <Link href="/faucet">{SITE_NAME} faucet</Link> sends free testnet Quanta to any
               address. See <a href="/learn/get-testnet-quanta">the faucet guide</a> for the
               short walkthrough.
             </p>
@@ -130,7 +131,7 @@ export default function Page(): JSX.Element {
             <p>
               Contracts are compiled with Hyperion and deployed to the EVM compatible execution
               layer. You can <a href="/learn/deploy-and-verify-contract">deploy and verify a
-              contract</a> so its source appears on ZondScan, or{' '}
+              contract</a> so its source appears on {SITE_NAME}, or{' '}
               <a href="/learn/launch-a-qrc20">launch a QRC20 token</a> straight from your
               wallet.
             </p>
@@ -160,9 +161,9 @@ export default function Page(): JSX.Element {
         </p>
       </LearnSection>
 
-      <LearnSection id="where-zondscan-fits" title="Where ZondScan fits">
+      <LearnSection id={`where-${BRAND_SLUG}-fits`} title={`Where ${SITE_NAME} fits`}>
         <p>
-          ZondScan is the block explorer for QRL 2.0. A synchronizer reads every block from a
+          {SITE_NAME} is the block explorer for QRL 2.0. A synchronizer reads every block from a
           network node and indexes it into a database, and this site serves that data with
           search across blocks, transactions, and addresses. From here you can inspect:
         </p>

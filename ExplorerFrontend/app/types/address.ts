@@ -75,8 +75,15 @@ export interface ContractData {
   compilerVersion?: string;
   compilerProvenance?: CompilerProvenance | null;
   sourceBundleDigest?: string | null;
-  /** V2 digest binding source, ABI, compiler settings, and deployment identity. */
+  /** V2 or V3 digest binding source, ABI, compiler settings, and deployment identity. */
   verificationArtifactDigest?: string;
+  /**
+   * Repo-relative path the primary source was compiled under (schema v3).
+   * Absent means the default `<contractName>.hyp` layout.
+   */
+  primarySourcePath?: string;
+  /** True when the contract was compiled through the via-IR pipeline (schema v3). */
+  viaIR?: boolean;
   optimizationEnabled?: boolean;
   optimizationRuns?: number;
   evmVersion?: string;

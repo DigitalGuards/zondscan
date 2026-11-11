@@ -52,7 +52,7 @@ func writeFakeNativeCompiler(t *testing.T, buildID string) (string, string) {
 		"  fmt.Println(\"Version: \" + " + strconv.Quote(buildID) + ")\n" +
 		"  return\n" +
 		" }\n" +
-		" if len(os.Args) == 2 && os.Args[1] == \"--standard-json\" {\n" +
+		" if len(os.Args) == 3 && os.Args[1] == \"--standard-json\" && os.Args[2] == \"--no-import-callback\" {\n" +
 		"  _, _ = io.Copy(io.Discard, os.Stdin)\n" +
 		"  fmt.Print(`{\"contracts\":{}}`)\n" +
 		"  return\n" +
@@ -86,7 +86,7 @@ func writeBlockingFakeNativeCompiler(t *testing.T, buildID, markerPath string) (
 		"  fmt.Println(\"Version: \" + " + strconv.Quote(buildID) + ")\n" +
 		"  return\n" +
 		" }\n" +
-		" if len(os.Args) == 2 && os.Args[1] == \"--standard-json\" {\n" +
+		" if len(os.Args) == 3 && os.Args[1] == \"--standard-json\" && os.Args[2] == \"--no-import-callback\" {\n" +
 		"  _ = os.WriteFile(" + strconv.Quote(markerPath) + ", []byte(\"started\"), 0600)\n" +
 		"  time.Sleep(250 * time.Millisecond)\n" +
 		"  _, _ = io.Copy(io.Discard, os.Stdin)\n" +
@@ -127,7 +127,7 @@ func writeResourceFakeNativeCompiler(t *testing.T, buildID, behavior, markerPath
 		"  fmt.Println(\"Version: \" + " + strconv.Quote(buildID) + ")\n" +
 		"  return\n" +
 		" }\n" +
-		" if len(os.Args) == 2 && os.Args[1] == \"--standard-json\" {\n" +
+		" if len(os.Args) == 3 && os.Args[1] == \"--standard-json\" && os.Args[2] == \"--no-import-callback\" {\n" +
 		"  _, _ = io.Copy(io.Discard, os.Stdin)\n" +
 		"  switch " + strconv.Quote(behavior) + " {\n" +
 		"  case \"stdout\": fmt.Print(strings.Repeat(\"x\", 1 << 20))\n" +

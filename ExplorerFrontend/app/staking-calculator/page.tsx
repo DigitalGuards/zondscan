@@ -1,9 +1,10 @@
+import { SITE_NAME, pageTitle, canonicalUrl } from '../lib/site';
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { sharedMetadata } from '../lib/seo/metaData';
 import StakingCalculatorClient from './staking-calculator-client';
 
-const title = 'QRL Staking Calculator: Validator Rewards and APY | ZondScan';
+const title = pageTitle('QRL Staking Calculator: Validator Rewards and APY');
 const description =
   'Estimate QRL 2.0 validator rewards. Model APR, real yield after inflation, and reward payouts from live network data, using the beacon-chain reward formula.';
 
@@ -13,14 +14,14 @@ export const metadata: Metadata = {
   description,
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: 'https://zondscan.com/staking-calculator',
+    canonical: canonicalUrl('/staking-calculator'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
     title,
     description,
-    url: 'https://zondscan.com/staking-calculator',
-    siteName: 'ZondScan',
+    url: canonicalUrl('/staking-calculator'),
+    siteName: SITE_NAME,
     type: 'website',
   },
   twitter: {

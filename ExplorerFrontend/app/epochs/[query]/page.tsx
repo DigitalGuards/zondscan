@@ -1,3 +1,4 @@
+import { SITE_NAME, pageTitle, CANONICAL_ORIGIN } from '../../lib/site';
 import { parseEpochsData, type EpochsData } from '../../lib/listResponses';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
@@ -41,25 +42,25 @@ export async function generateMetadata({
 
   return {
     ...sharedMetadata,
-    title: `Epochs - Page ${pageNumber} | ZondScan`,
+    title: pageTitle(`Epochs - Page ${pageNumber}`),
     description: `View epochs on the QRL 2.0 beacon chain. Page ${pageNumber} of the epochs list.`,
     alternates: {
       ...sharedMetadata.alternates,
       // Self-referencing canonical: there is no /epochs index route (only
       // /epochs/<page>), so each paginated page canonicalizes to itself.
-      canonical: `https://zondscan.com/epochs/${pageNumber}`,
+      canonical: `${CANONICAL_ORIGIN}/epochs/${pageNumber}`,
     },
     openGraph: {
       ...sharedMetadata.openGraph,
-      title: `Epochs - Page ${pageNumber} | ZondScan`,
+      title: pageTitle(`Epochs - Page ${pageNumber}`),
       description: `View epochs on the QRL 2.0 beacon chain. Page ${pageNumber} of the epochs list.`,
-      url: `https://zondscan.com/epochs/${pageNumber}`,
-      siteName: 'ZondScan',
+      url: `${CANONICAL_ORIGIN}/epochs/${pageNumber}`,
+      siteName: SITE_NAME,
       type: 'website',
     },
     twitter: {
       ...sharedMetadata.twitter,
-      title: `Epochs - Page ${pageNumber} | ZondScan`,
+      title: pageTitle(`Epochs - Page ${pageNumber}`),
       description: `View epochs on the QRL 2.0 beacon chain. Page ${pageNumber} of the epochs list.`,
     },
   };

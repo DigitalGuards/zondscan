@@ -1,7 +1,8 @@
+import { pageTitle, SITE_NAME, SITE_ORIGIN, siteUrl, canonicalUrl } from '../lib/site';
 import { isRecord, isArray } from '../lib/guards';
 import type { Metadata } from 'next';
 import { sharedMetadata } from '../lib/seo/metaData';
-import { getTaggedEndpoints } from '../lib/openapi';
+import { getTaggedEndpoints, renderOpenApiSpec } from '../lib/openapi';
 import type { OpenApiOperation, OpenApiParameter } from '../lib/openapi';
 import CopyButton from '../components/CopyButton';
 import ApiReference from './api-reference';
@@ -12,29 +13,28 @@ const DESCRIPTION =
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'API Documentation | ZondScan',
+  title: pageTitle('API Documentation'),
   description: DESCRIPTION,
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: 'https://zondscan.com/api-explorer',
+    canonical: canonicalUrl('/api-explorer'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'API Documentation | ZondScan',
+    title: pageTitle('API Documentation'),
     description: DESCRIPTION,
-    url: 'https://zondscan.com/api-explorer',
+    url: canonicalUrl('/api-explorer'),
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'API Documentation | ZondScan',
+    title: pageTitle('API Documentation'),
     description: DESCRIPTION,
   },
 };
 
 /* ── Spec-to-card precomputation (runs on the server) ──────────────────────── */
 
-const SERVER = 'https://zondscan.com';
-const BASE_URL = 'https://zondscan.com/api';
+const BASE_URL = siteUrl('/api');
 
 // Example values reused from the spec's own response examples so curl
 // commands and Try-it links look like real traffic.
@@ -74,11 +74,11 @@ const QUERY_EXAMPLES: Record<string, string> = {
 
 /** Full curl commands for the POST endpoints (bodies vary per endpoint). */
 const POST_CURL: Record<string, string> = {
-  '/api/getBalance': `curl -s -X POST "${SERVER}/api/getBalance" --data-urlencode "address=${EXAMPLE_WALLET}"`,
-  '/api/contract/verify': `curl -s -X POST "${SERVER}/api/contract/verify" -H "Content-Type: application/json" -d '{"address":"${EXAMPLE_CONTRACT}","sourceCode":"<contract source>","contractName":"ExampleToken"}'`,
-  '/api/contract/call': `curl -s -X POST "${SERVER}/api/contract/call" -H "Content-Type: application/json" -d '{"to":"${EXAMPLE_CONTRACT}","data":"0x06fdde03"}'`,
-  '/api/contract/explain/{address}': `curl -s -X POST "${SERVER}/api/contract/explain/${EXAMPLE_CONTRACT}"`,
-  '/faucet/claim': `curl -s -X POST "${SERVER}/faucet/claim" -H "Content-Type: application/json" -d '{"address":"${EXAMPLE_WALLET}","turnstileToken":"<turnstile-token>"}'`,
+  '/api/getBalance': `curl -s -X POST "${siteUrl('/api/getBalance')}" --data-urlencode "address=${EXAMPLE_WALLET}"`,
+  '/api/contract/verify': `curl -s -X POST "${siteUrl('/api/contract/verify')}" -H "Content-Type: application/json" -d '{"address":"${EXAMPLE_CONTRACT}","sourceCode":"<contract source>","contractName":"ExampleToken"}'`,
+  '/api/contract/call': `curl -s -X POST "${siteUrl('/api/contract/call')}" -H "Content-Type: application/json" -d '{"to":"${EXAMPLE_CONTRACT}","data":"0x06fdde03"}'`,
+  '/api/contract/explain/{address}': `curl -s -X POST "${siteUrl(`/api/contract/explain/${EXAMPLE_CONTRACT}`)}"`,
+  '/faucet/claim': `curl -s -X POST "${siteUrl('/faucet/claim')}" -H "Content-Type: application/json" -d '{"address":"${EXAMPLE_WALLET}","turnstileToken":"<turnstile-token>"}'`,
 };
 
 function slugify(value: string): string {
@@ -172,12 +172,12 @@ function buildRequest(
 ): { curl: string; tryItUrl: string | null } {
   if (method === 'GET') {
     const query = exampleQuery(path, parameters);
-    const url = `${SERVER}${resolvePath(path)}${query ? `?${query}` : ''}`;
+    const url = `${siteUrl(resolvePath(path))}${query ? `?${query}` : ''}`;
     return { curl: `curl -s "${url}"`, tryItUrl: url };
   }
   const preset = POST_CURL[path];
   return {
-    curl: preset ?? `curl -s -X ${method} "${SERVER}${resolvePath(path)}"`,
+    curl: preset ?? `curl -s -X ${method} "${siteUrl(resolvePath(path))}"`,
     tryItUrl: null,
   };
 }
@@ -210,7 +210,7 @@ function toCard(
   };
 }
 
-const sections: TagSectionData[] = getTaggedEndpoints().map((group) => ({
+const sections: TagSectionData[] = getTaggedEndpoints(renderOpenApiSpec({ origin: SITE_ORIGIN, name: SITE_NAME })).map((group) => ({
   tag: group.tag,
   slug: slugify(group.tag),
   description: group.description ?? '',
@@ -267,7 +267,7 @@ function MiniNav(): JSX.Element {
 function Hero(): JSX.Element {
   return (
     <header className="mb-12">
-      <p className="eyebrow mb-3">ZondScan API</p>
+      <p className="eyebrow mb-3">{SITE_NAME} API</p>
       <h1
         id="api-docs-heading"
         className="font-display text-3xl md:text-4xl font-semibold text-text-primary tracking-tight max-w-3xl"
@@ -276,7 +276,7 @@ function Hero(): JSX.Element {
       </h1>
       <p className="mt-4 text-text-secondary max-w-2xl leading-relaxed">
         {totalEndpoints} endpoints serve blocks, transactions, addresses, tokens, validators, gas
-        data, and contract tooling for the QRL 2.0 public testnet, straight from the ZondScan
+        data, and contract tooling for the QRL 2.0 public testnet, straight from the {SITE_NAME}{' '}
         indexer. The whole surface is described by one OpenAPI 3.1 document.
       </p>
       <div className="mt-6 flex flex-wrap gap-3">
@@ -284,7 +284,7 @@ function Hero(): JSX.Element {
           OpenAPI 3.1 spec
         </a>
         <a
-          href="https://editor-next.swagger.io/?url=https://zondscan.com/openapi.json"
+          href={`https://editor-next.swagger.io/?url=${siteUrl('/openapi.json')}`}
           target="_blank"
           rel="noopener noreferrer"
           className="btn-secondary text-sm"

@@ -386,7 +386,8 @@ int main(int argc, char **argv) {
   if (n < 0) return 60;
   executable[n] = '\0';
   if (strcmp(executable, argv[0]) != 0) return 61;
-  if (argc != 6 || strcmp(argv[1], "--config") != 0 ||
+  /* One compiler argument for --version, two for a standard-JSON compile. */
+  if ((argc != 6 && argc != 7) || strcmp(argv[1], "--config") != 0 ||
       strcmp(argv[2], "/proc/self/fd/5") != 0 || strcmp(argv[3], "--") != 0 ||
       strcmp(argv[4], "/proc/self/fd/4") != 0) return 62;
   if (environ != NULL && environ[0] != NULL) return 63;

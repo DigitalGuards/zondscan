@@ -8,6 +8,7 @@ import CompilerProvenanceDetails, {
 import {
   VERIFICATION_RECORD_SCHEMA_V1,
   VERIFICATION_RECORD_SCHEMA_V2,
+  VERIFICATION_RECORD_SCHEMA_V3,
 } from "../lib/storedVerification";
 import {
   COMPILER_PROVENANCE_V2_BUILD_ID,
@@ -51,6 +52,17 @@ describe("CompilerProvenanceDetails", () => {
     }
     expect(html).toContain('aria-label="Copy execution digest"');
     expect(html).not.toContain("legacy-unrecorded");
+  });
+
+  it("surfaces digest-backed provenance on a schema-v3 record", () => {
+    const html = renderToStaticMarkup(
+      <CompilerProvenanceDetails
+        verificationRecordSchema={VERIFICATION_RECORD_SCHEMA_V3}
+        provenance={provenance}
+        compilerVersion={BUILD_ID}
+      />,
+    );
+    expect(html).toContain('data-provenance-status="digest-backed"');
   });
 
   it("labels verified historical records with no provenance as legacy-unrecorded", () => {

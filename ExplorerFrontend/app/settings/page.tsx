@@ -1,10 +1,11 @@
+import { pageTitle, canonicalUrl } from '../lib/site';
 import type { Metadata } from 'next';
 import SettingsClient from './settings-client';
 
 export const metadata: Metadata = {
-  title: 'Site Settings | ZondScan',
+  title: pageTitle('Site Settings'),
   description: 'Choose your appearance, address display, date format, and transaction preferences.',
-  alternates: { canonical: 'https://zondscan.com/settings' },
+  alternates: { canonical: canonicalUrl('/settings') },
 };
 
 export default function SettingsPage() {

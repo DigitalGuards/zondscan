@@ -103,7 +103,7 @@ describe("classifyStoredVerification", () => {
     );
   });
 
-  it.each([null, "", "qrl.contract-verification-record.v3"])(
+  it.each([null, "", "qrl.contract-verification-record.v4"])(
     "rejects a present malformed or unknown record schema: %p",
     (verificationRecordSchema) => {
       expect(

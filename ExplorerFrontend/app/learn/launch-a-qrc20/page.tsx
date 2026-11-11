@@ -1,3 +1,4 @@
+import { SITE_NAME, BRAND_SLUG } from '../../lib/site';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { learnMetadata } from '../components/learn-metadata';
@@ -26,7 +27,7 @@ export default function Page(): JSX.Element {
       </p>
       <p>
         This tutorial covers the whole path: what a QRC20 token is, what to prepare before you
-        start, every field in the creation form, and how to find your new token on ZondScan
+        start, every field in the creation form, and how to find your new token on {SITE_NAME}{' '}
         afterward, complete with its holder list and transfer history.
       </p>
       <p>
@@ -41,7 +42,7 @@ export default function Page(): JSX.Element {
           token model as other EVM chains. A QRC20 token implements the ERC20 interface:
           functions like <code>balanceOf</code>, <code>transfer</code>, <code>approve</code>,
           and <code>totalSupply</code>, plus a <code>Transfer</code> event emitted on every
-          movement. On QRL the standard is called QRC20, and ZondScan labels these contracts
+          movement. On QRL the standard is called QRC20, and {SITE_NAME} labels these contracts
           QRC-20.
         </p>
         <p>
@@ -73,7 +74,7 @@ export default function Page(): JSX.Element {
           </li>
           <li>
             <strong>Testnet Quanta for gas.</strong> Deployment is a normal transaction and
-            burns gas like any other. The <Link href="/faucet">ZondScan faucet</Link> funds a fresh
+            burns gas like any other. The <Link href="/faucet">{SITE_NAME} faucet</Link> funds a fresh
             address in under a minute; see{' '}
             <a href="/learn/get-testnet-quanta">Get testnet Quanta</a> for the walkthrough.
             The factory itself charges no fee, so gas is the entire cost.
@@ -175,9 +176,9 @@ export default function Page(): JSX.Element {
         </p>
       </Callout>
 
-      <LearnSection id="find-your-token-on-zondscan" title="Find your token on ZondScan">
+      <LearnSection id={`find-your-token-on-${BRAND_SLUG}`} title={`Find your token on ${SITE_NAME}`}>
         <p>
-          ZondScan indexes new contract deployments and token transfer events as it syncs, so
+          {SITE_NAME} indexes new contract deployments and token transfer events as it syncs, so
           your token appears without any registration step. Open the{' '}
           <Link href="/contracts">contracts page</Link> and select the{' '}
           <strong>Tokens (QRC-20)</strong> tab. You can search by token name or contract
@@ -213,7 +214,7 @@ export default function Page(): JSX.Element {
           factory token knows exactly what it can and cannot do.
         </p>
         <p>
-          ZondScan&apos;s contract pages include a code section with the bytecode and, once
+          {SITE_NAME}&apos;s contract pages include a code section with the bytecode and, once
           source is published, the verified source and a read/write interface. If you outgrow
           the factory and want custom behavior, write your own contract in Hyperion, deploy
           it, and publish the source through the{' '}
@@ -257,7 +258,7 @@ export default function Page(): JSX.Element {
             ),
           },
           {
-            q: 'Will my token show up on ZondScan automatically?',
+            q: `Will my token show up on ${SITE_NAME} automatically?`,
             a: (
               <p>
                 Yes. The explorer&apos;s synchronizer indexes contract deployments and token

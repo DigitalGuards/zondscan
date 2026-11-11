@@ -64,3 +64,42 @@ func TestContractImportsRoundTripAndLegacyEmpty(t *testing.T) {
 		t.Fatalf("AI explanation source digest = %q", got.AIExplanationSourceDigest)
 	}
 }
+
+func TestContractSourceTreeInputsRoundTripAndLegacyEmpty(t *testing.T) {
+	legacyBSON, err := bson.Marshal(bson.M{"address": "Qlegacy", "verified": true})
+	if err != nil {
+		t.Fatalf("encode legacy contract BSON: %v", err)
+	}
+	var legacy ContractInfo
+	if err := bson.Unmarshal(legacyBSON, &legacy); err != nil {
+		t.Fatalf("decode legacy contract BSON: %v", err)
+	}
+	legacyJSON, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatalf("encode legacy contract JSON: %v", err)
+	}
+	for _, field := range []string{`"primarySourcePath"`, `"viaIR"`} {
+		if strings.Contains(string(legacyJSON), field) {
+			t.Fatalf("legacy JSON unexpectedly contains %s: %s", field, legacyJSON)
+		}
+	}
+
+	encoded, err := bson.Marshal(ContractInfo{
+		Address:                  "Qcurrent",
+		Verified:                 true,
+		VerificationRecordSchema: VerificationRecordSchemaV3,
+		PrimarySourcePath:        "contracts/core/Counter.hyp",
+		ViaIR:                    true,
+	})
+	if err != nil {
+		t.Fatalf("encode v3 contract BSON: %v", err)
+	}
+	var got ContractInfo
+	if err := bson.Unmarshal(encoded, &got); err != nil {
+		t.Fatalf("decode v3 contract BSON: %v", err)
+	}
+	if got.PrimarySourcePath != "contracts/core/Counter.hyp" || !got.ViaIR ||
+		got.VerificationRecordSchema != VerificationRecordSchemaV3 {
+		t.Fatalf("v3 round trip = %+v", got)
+	}
+}

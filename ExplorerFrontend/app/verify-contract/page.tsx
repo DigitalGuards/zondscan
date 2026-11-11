@@ -1,3 +1,4 @@
+import { pageTitle, canonicalUrl } from '../lib/site';
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import VerifyContractClient from './verify-contract-client';
@@ -5,21 +6,21 @@ import { sharedMetadata } from '../lib/seo/metaData';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'Verify Contract | ZondScan',
+  title: pageTitle('Verify Contract'),
   description: 'Verify and publish a Hyperion smart contract on the QRL 2.0 network.',
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: 'https://zondscan.com/verify-contract',
+    canonical: canonicalUrl('/verify-contract'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'Verify Contract | ZondScan',
+    title: pageTitle('Verify Contract'),
     description: 'Verify and publish a Hyperion smart contract on the QRL 2.0 network.',
-    url: 'https://zondscan.com/verify-contract',
+    url: canonicalUrl('/verify-contract'),
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'Verify Contract | ZondScan',
+    title: pageTitle('Verify Contract'),
     description: 'Verify and publish a Hyperion smart contract on the QRL 2.0 network.',
   },
 };

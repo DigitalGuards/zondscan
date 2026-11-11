@@ -2,6 +2,7 @@
 
 import { QRLConnect, ConnectionStatus } from '@qrlwallet/connect';
 import type { QRLConnectProvider } from '@qrlwallet/connect';
+import { PAIRING_NAME } from './site';
 
 // Module-level singleton. The QRLConnect constructor announces itself via
 // EIP-6963 and opens a relay socket, instantiating twice would double the
@@ -35,7 +36,7 @@ export function getQrlConnect(): QRLConnectProvider {
   }
   instance = new QRLConnect({
     dappMetadata: {
-      name: 'Zondscan',
+      name: PAIRING_NAME,
       url: window.location.origin,
     },
     relayUrl: getRelayUrl(),

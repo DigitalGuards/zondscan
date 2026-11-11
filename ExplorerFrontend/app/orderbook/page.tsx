@@ -1,24 +1,25 @@
+import { pageTitle, canonicalUrl } from '../lib/site';
 import type { Metadata } from 'next';
 import { sharedMetadata } from '../lib/seo/metaData';
 import OrderBookClient from './orderbook-client';
 
 export const metadata: Metadata = {
   ...sharedMetadata,
-  title: 'QRL Order Book | ZondScan',
+  title: pageTitle('QRL Order Book'),
   description: 'Live MEXC QRL/USDT spot order book, recent trades and fund-flow analysis.',
   alternates: {
     ...sharedMetadata.alternates,
-    canonical: 'https://zondscan.com/orderbook',
+    canonical: canonicalUrl('/orderbook'),
   },
   openGraph: {
     ...sharedMetadata.openGraph,
-    title: 'QRL Order Book | ZondScan',
+    title: pageTitle('QRL Order Book'),
     description: 'MEXC QRL/USDT market depth, recent trades and fund flow.',
-    url: 'https://zondscan.com/orderbook',
+    url: canonicalUrl('/orderbook'),
   },
   twitter: {
     ...sharedMetadata.twitter,
-    title: 'QRL Order Book | ZondScan',
+    title: pageTitle('QRL Order Book'),
     description: 'MEXC QRL/USDT market depth, recent trades and fund flow.',
   },
 };

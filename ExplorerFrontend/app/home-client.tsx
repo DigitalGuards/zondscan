@@ -1,4 +1,5 @@
 'use client';
+import { BRAND, SITE_NAME } from './lib/site';
 
 import { epochAtTimestamp, type ChainTiming } from './lib/chainTiming';
 import TimeDisplay from './components/TimeDisplay';
@@ -614,7 +615,7 @@ export default function HomeClient(): JSX.Element {
             re-triggers the animation. */}
         <div className="stagger-children">
           <div className="text-center mb-8 lg:mb-10">
-            <p className="eyebrow mb-3">ZondScan · QRL 2.0 · Zond Network</p>
+            <p className="eyebrow mb-3">{SITE_NAME}{BRAND.eyebrowSuffix}</p>
             <h1
               id="home-heading"
               className="font-display text-3xl sm:text-4xl lg:text-5xl font-semibold tracking-tight text-text-primary"

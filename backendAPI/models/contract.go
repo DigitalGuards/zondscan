@@ -22,6 +22,10 @@ type AIExplanationLease struct {
 const (
 	VerificationRecordSchemaV1 = "qrl.contract-verification-record.v1"
 	VerificationRecordSchemaV2 = "qrl.contract-verification-record.v2"
+	// VerificationRecordSchemaV3 marks records whose compile input needs a
+	// primary source path other than <contractName>.hyp or the via-IR
+	// pipeline. Records without either keep the v2 shape byte for byte.
+	VerificationRecordSchemaV3 = "qrl.contract-verification-record.v3"
 )
 
 const (
@@ -112,6 +116,8 @@ type ContractInfo struct {
 	ConstructorArguments         string            `json:"constructorArguments,omitempty" bson:"constructorArguments,omitempty"`
 	Libraries                    map[string]string `json:"libraries,omitempty" bson:"libraries,omitempty"`
 	Imports                      map[string]string `json:"imports,omitempty" bson:"imports,omitempty"`
+	PrimarySourcePath            string            `json:"primarySourcePath,omitempty" bson:"primarySourcePath,omitempty"`
+	ViaIR                        bool              `json:"viaIR,omitempty" bson:"viaIR,omitempty"`
 	SourceBundleDigest           string            `json:"sourceBundleDigest,omitempty" bson:"sourceBundleDigest,omitempty"`
 	VerificationArtifactDigest   string            `json:"verificationArtifactDigest,omitempty" bson:"verificationArtifactDigest,omitempty"`
 	sourceBundleDigestSeen       bool

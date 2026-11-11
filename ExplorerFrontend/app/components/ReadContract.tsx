@@ -4,8 +4,8 @@ import { useMemo, useState } from 'react';
 import axios from 'axios';
 import * as zondAbi from '@theqrl/web3-qrl-abi';
 import type { ContractData } from '../types/address';
-import { qNormaliseAbiValue } from '../lib/helpers';
 import { assertVm64AbiSupport } from '../lib/vm64Abi';
+import { decodeContractRead, parseContractArg } from '../lib/contractCall';
 import { parseAbiFunctions, type AbiFunction, isContractCallResponse } from '../lib/contractAbi';
 import { isRecord, errorMessage, InvalidInputError } from '../lib/guards';
 import config from '../../config';
@@ -84,6 +84,7 @@ function ReadFunctionCard({ fn, address }: { fn: AbiFunction; address: string })
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reverted, setReverted] = useState(false);
+  const [rawReply, setRawReply] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -96,9 +97,10 @@ function ReadFunctionCard({ fn, address }: { fn: AbiFunction; address: string })
     setError(null);
     setResult(null);
     setReverted(false);
+    setRawReply(null);
     try {
       assertVm64AbiSupport();
-      const args = fn.inputs.map((input, i) => parseArg(values[i] ?? '', input.type));
+      const args = fn.inputs.map((input, i) => parseContractArg(values[i] ?? '', input.type));
       const data = zondAbi.encodeFunctionCall(fn, args);
 
       const resp = await axios.post<unknown>(`${config.handlerUrl}/contract/call`, {
@@ -117,13 +119,18 @@ function ReadFunctionCard({ fn, address }: { fn: AbiFunction; address: string })
         setError('No result returned by node');
         return;
       }
-      const outTypes = (fn.outputs ?? []).map((o) => o.type);
-      if (outTypes.length === 0) {
+      const outputs = fn.outputs ?? [];
+      if (outputs.length === 0) {
         setResult('(void)');
         return;
       }
-      const decoded = zondAbi.decodeParameters(outTypes, resp.data.result);
-      setResult(formatDecoded(decoded, fn.outputs ?? []));
+      const read = decodeContractRead(outputs, resp.data.result);
+      if (read.decoded) {
+        setResult(read.text);
+      } else {
+        setError(read.error);
+        setRawReply(read.raw);
+      }
     } catch (e) {
       const payload: unknown = axios.isAxiosError(e) ? e.response?.data : undefined;
       setError(
@@ -188,6 +195,11 @@ function ReadFunctionCard({ fn, address }: { fn: AbiFunction; address: string })
             >
               {reverted ? 'execution reverted: ' : ''}
               {error}
+              {rawReply !== null && (
+                <div className="mt-2 font-mono break-all text-text-secondary">
+                  Raw reply: {rawReply}
+                </div>
+              )}
             </div>
           )}
 
@@ -202,31 +214,6 @@ function ReadFunctionCard({ fn, address }: { fn: AbiFunction; address: string })
   );
 }
 
-// parseArg converts a user-typed string into the right JS shape for
-// The installed ABI codec's encodeFunctionCall. Keep this minimal, anything
-// fancy (tuples, fixed arrays) the user can express as JSON.
-function parseArg(raw: string, type: string): unknown {
-  const t = raw.trim();
-  if (t === '') {
-    if (type === 'bool') return false;
-    if (type.startsWith('uint') || type.startsWith('int')) return '0';
-    return '';
-  }
-  if (type === 'bool') return t.toLowerCase() === 'true' || t === '1';
-  if (type.endsWith(']') || type === 'tuple') {
-    try {
-      return JSON.parse(t);
-    } catch {
-      throw new Error(`expected JSON for ${type}: e.g. [1,2,3]`);
-    }
-  }
-  if (type.startsWith('uint') || type.startsWith('int')) {
-    // Hand the string through because the ABI codec accepts strings for big ints.
-    return t;
-  }
-  return t;
-}
-
 function placeholderFor(type: string): string {
   if (type === 'address') return 'Q…';
   if (type === 'bool') return 'true / false';
@@ -235,23 +222,4 @@ function placeholderFor(type: string): string {
   if (type.startsWith('bytes')) return '0x…';
   if (type.endsWith(']') || type === 'tuple') return 'JSON: [1,2,3]';
   return '';
-}
-
-// formatDecoded renders the ABI codec's decodeParameters output for
-// human consumption. The Result object carries both `0,1,…` index keys
-// and any named keys, plus a `__length__`. We flatten to a stable shape,
-// and qNormaliseAbiValue (in app/lib/helpers.ts) maps any address-typed
-// value to the canonical Q prefix used by the rest of ZondScan.
-function formatDecoded(decoded: unknown, outputs: { name: string; type: string }[]): string {
-  if (!isRecord(decoded)) throw new InvalidInputError('Invalid decoded contract response');
-  const out: Record<string, unknown> = {};
-  outputs.forEach((o, i) => {
-    const v = decoded[String(i)];
-    out[o.name && o.name !== '' ? o.name : `_${i}`] = qNormaliseAbiValue(v, o.type);
-  });
-  return JSON.stringify(out, replacer, 2);
-}
-
-function replacer(_k: string, v: unknown): unknown {
-  return typeof v === 'bigint' ? v.toString() : v;
 }
