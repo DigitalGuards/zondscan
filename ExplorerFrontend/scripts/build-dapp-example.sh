@@ -13,7 +13,7 @@ if [[ "${SKIP_DAPP_EXAMPLE:-0}" == "1" ]]; then
 fi
 
 REPO_URL="${QRL_CONNECT_REPO:-https://github.com/DigitalGuards/myqrlwallet-connect.git}"
-REF="${QRL_CONNECT_REF:-example-v3-20261005}"
+REF="${QRL_CONNECT_REF:-example-v3-20261116}"
 LOCAL_SRC="${QRL_CONNECT_LOCAL:-}"
 
 FRONTEND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -77,6 +77,13 @@ if (
 }
 NODE
 )
+
+# The example links @qrlwallet/connect-ui from the same checkout (file:../ui)
+# and imports its built entry points (wallets, extension, flow, approval), so
+# the UI package is built before the example. Its install runs the build
+# through the package's own prepare script.
+echo "[dapp-example] building the UI package"
+( cd "$CACHE_DIR/ui" && npm install --no-audit --no-fund && test -f dist/approval.mjs )
 
 echo "[dapp-example] building example with base=/dapp-example/"
 (
