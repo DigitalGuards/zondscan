@@ -47,9 +47,31 @@ describe('LiveAddressStats', () => {
     expect(html).not.toContain('No transactions were signed from this wallet yet.');
   });
 
-  it('keeps the last known balance when a poll comes back without one', () => {
+  it('falls back to the server-rendered balance when a response carries none', () => {
     const html = render({ address: { balance: 7 } }, { transactions_count: 0 });
     expect(html).toContain(balanceText(7));
+  });
+
+  it('keeps the first activity when one poll lacks the server-side range', () => {
+    // The handler answers first_seen 0 when its range lookup fails; the page
+    // rows then only reach back to the oldest row of the newest page.
+    const row: Partial<Transaction> = { TimeStamp: 1794800000 };
+    const html = render(
+      { address: { balance: 1 }, first_seen: 1700000000, last_seen: 1794800000 },
+      { address: { balance: 1 }, first_seen: 0, last_seen: 0, transactions_by_address: [row as Transaction] }
+    );
+    expect(html).toContain('time:1700000000');
+    expect(html).toContain('time:1794800000');
+  });
+
+  it('moves the last activity forward when a newer transaction is polled', () => {
+    const html = render(
+      { address: { balance: 1 }, first_seen: 1700000000, last_seen: 1794800000 },
+      { address: { balance: 2 }, first_seen: 1700000000, last_seen: 1794900000 }
+    );
+    expect(html).toContain('time:1700000000');
+    expect(html).toContain('time:1794900000');
+    expect(html).not.toContain('time:1794800000');
   });
 });
 

@@ -146,7 +146,12 @@ export default function AddressView({ addressData, addressSegment, qnsName }: Ad
 
                     {/* Stats Grid */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4 lg:gap-6">
-                        <LiveAddressStats address={addressSegment} initialAggregate={initialAggregate} />
+                        <LiveAddressStats
+                            // Same per-address reset as AddressTabs below.
+                            key={addressSegment}
+                            address={addressSegment}
+                            initialAggregate={initialAggregate}
+                        />
                     </div>
 
                     {/* Contract Information */}

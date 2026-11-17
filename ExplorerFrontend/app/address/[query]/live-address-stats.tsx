@@ -54,11 +54,23 @@ export default function LiveAddressStats({
 }: LiveAddressStatsProps): JSX.Element {
   const { data } = useAddressAggregate(address, initialAggregate);
 
-  // A poll that comes back without a balance (a handler hiccup, an address
-  // the handler has not indexed yet) keeps the last known one on screen.
+  // The handler sends a balance with every successful response. Should one
+  // arrive without it, the card falls back to the server-rendered balance.
   const polled = data.address?.balance;
   const balance = typeof polled === 'number' ? polled : (initialAggregate.address?.balance ?? 0);
-  const { firstSeen, lastSeen } = activityRange(data);
+
+  // First activity can only be as early as the earliest one ever seen, and
+  // last activity only as late as the latest. Merging the server-rendered
+  // range with the polled one keeps a single poll without the server-side
+  // range (the handler answers 0 when that lookup fails) from moving
+  // "First Activity" to the oldest row of the newest page.
+  const seeded = activityRange(initialAggregate);
+  const live = activityRange(data);
+  const firstSeen =
+    seeded.firstSeen && live.firstSeen
+      ? Math.min(seeded.firstSeen, live.firstSeen)
+      : seeded.firstSeen || live.firstSeen;
+  const lastSeen = Math.max(seeded.lastSeen, live.lastSeen);
 
   return (
     <>

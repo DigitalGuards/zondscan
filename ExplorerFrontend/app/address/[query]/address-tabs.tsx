@@ -88,9 +88,8 @@ export interface AddressAggregateResponse {
 /**
  * Keeps the address page live by polling the same /address/aggregate
  * endpoint the server rendered, so a transaction mined after the user lands
- * (e.g. one they just sent from the wallet) appears on its own instead of
- * requiring a manual page refresh, together with the balance and activity
- * range it changes.
+ * (e.g. one they just sent from the wallet) appears on its own, with no
+ * page refresh, together with the balance and activity range it changes.
  *
  * Every part of the page that shows aggregate data reads it through this
  * hook (the tab bar here, the header stats in live-address-stats). They
