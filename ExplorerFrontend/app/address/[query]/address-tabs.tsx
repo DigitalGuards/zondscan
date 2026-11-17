@@ -4,7 +4,7 @@ import { isOneOf } from '../../lib/guards';
 
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, type DefinedUseQueryResult } from '@tanstack/react-query';
 import axios from 'axios';
 import type { InternalTransaction, Transaction } from '@/app/types';
 import config from '../../../config';
@@ -72,55 +72,48 @@ const toHexQuantity = (value: string | number): string => {
   }
 };
 
-interface AddressTabsProps {
-  address: string;
-  transactions: Transaction[];
-  /** True total from `addressData.transactions_count` (CountTransactions
-   *  on the backend), independent of the paginated array length. */
-  transactionsCount: number;
-  internalt: InternalTransaction[];
-  /** True total from `addressData.internal_transactions_count`; undefined
-   *  on handlers predating the field. */
-  internalTransactionsCount?: number;
-}
-
-/** Subset of the `/address/aggregate` payload this component consumes. The
- *  server page seeds the first page via props; the client poll refetches the
- *  same fields to keep them live. */
-interface AddressAggregateResponse {
+/** Subset of the `/address/aggregate` payload the address page keeps live.
+ *  The server page seeds it via props; the client poll refetches the same
+ *  fields. */
+export interface AddressAggregateResponse {
+  address?: { balance?: number };
+  first_seen?: number;
+  last_seen?: number;
   transactions_by_address?: Transaction[];
   transactions_count?: number;
   internal_transactions_by_address?: InternalTransaction[];
   internal_transactions_count?: number;
 }
 
-export default function AddressTabs({
-  address,
-  transactions: initialTransactions,
-  transactionsCount: initialTransactionsCount,
-  internalt: initialInternalt,
-  internalTransactionsCount: initialInternalTransactionsCount,
-}: AddressTabsProps): JSX.Element {
-  const searchParams = useSearchParams();
-
-  // Keep the native-tx feed + counts live by polling the same
-  // /address/aggregate endpoint the server rendered, so a transaction mined
-  // after the user lands (e.g. one they just sent from the wallet) appears on
-  // its own instead of requiring a manual page refresh.
-  //
-  // The query owns the data: initialData seeds the cache from the server
-  // props (first paint shows server data, no flash) and the values below are
-  // derived straight from `data`, no useState mirror written inside queryFn.
-  // Visibility-aware, same TanStack Query discipline as the home/gas/
-  // validators pages (backgrounded tabs go quiet). The 15s interval sits just
-  // above the backend's 10s aggregate cache so each poll has a chance at
-  // fresh data. refetchOnMount:'always' fires one client fetch right after
-  // hydration, bypassing the page's 10s ISR to surface a tx that landed
-  // between the (possibly cached) server render and the user arriving.
-  //
-  // Per-address reset is free: the parent (address-view) passes
-  // key={addressSegment}, remounting this component on address change.
-  const { data } = useQuery<AddressAggregateResponse>({
+/**
+ * Keeps the address page live by polling the same /address/aggregate
+ * endpoint the server rendered, so a transaction mined after the user lands
+ * (e.g. one they just sent from the wallet) appears on its own instead of
+ * requiring a manual page refresh, together with the balance and activity
+ * range it changes.
+ *
+ * Every part of the page that shows aggregate data reads it through this
+ * hook (the tab bar here, the header stats in live-address-stats). They
+ * share one cache entry, keyed by the address, so the header and the
+ * transaction list always come from the same response: a new transaction
+ * can never sit under the balance from before it. Callers pass the same
+ * server-built `initialData`, so it does not matter which of them mounts
+ * first.
+ *
+ * The query owns the data: initialData seeds the cache from the server
+ * props (first paint shows server data, no flash). Visibility-aware, same
+ * TanStack Query discipline as the home/gas/validators pages (backgrounded
+ * tabs go quiet). The 15s interval sits just above the backend's 10s
+ * aggregate cache so each poll has a chance at fresh data.
+ * refetchOnMount:'always' fires one client fetch right after hydration,
+ * bypassing the page's 10s ISR to surface a tx that landed between the
+ * (possibly cached) server render and the user arriving.
+ */
+export function useAddressAggregate(
+  address: string,
+  initialData: AddressAggregateResponse
+): DefinedUseQueryResult<AddressAggregateResponse> {
+  return useQuery<AddressAggregateResponse>({
     queryKey: ['address-aggregate', address],
     queryFn: async () => {
       const res = await axios.get<AddressAggregateResponse>(
@@ -129,17 +122,35 @@ export default function AddressTabs({
       );
       return res.data ?? {};
     },
-    initialData: {
-      transactions_by_address: initialTransactions,
-      transactions_count: initialTransactionsCount,
-      internal_transactions_by_address: initialInternalt,
-      internal_transactions_count: initialInternalTransactionsCount,
-    },
+    initialData,
     refetchInterval: 15000,
     refetchIntervalInBackground: false,
     refetchOnMount: 'always',
     staleTime: 0,
   });
+}
+
+interface AddressTabsProps {
+  address: string;
+  /** The server-rendered aggregate (first page of native and internal
+   *  transactions plus their true totals); seeds the shared poll. The same
+   *  object LiveAddressStats receives. */
+  initialAggregate: AddressAggregateResponse;
+}
+
+export default function AddressTabs({
+  address,
+  initialAggregate,
+}: AddressTabsProps): JSX.Element {
+  const searchParams = useSearchParams();
+
+  // The query owns the data: the values below are derived straight from
+  // `data`, no useState mirror. See useAddressAggregate for the polling
+  // rules; the header stats read the same cache entry.
+  //
+  // Per-address reset is free: the parent (address-view) passes
+  // key={addressSegment}, remounting this component on address change.
+  const { data } = useAddressAggregate(address, initialAggregate);
 
   // Normalize gas fields to hex the same way the server page does so the CSV
   // export sees a consistent row shape. Rows that already carry a server-set

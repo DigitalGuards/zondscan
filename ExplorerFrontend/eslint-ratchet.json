@@ -11,9 +11,7 @@
     "no-restricted-syntax": 1
   },
   "app/address/[query]/address-view.tsx": {
-    "@typescript-eslint/no-unnecessary-condition": 6,
-    "@typescript-eslint/no-unnecessary-type-conversion": 1,
-    "no-restricted-syntax": 1
+    "@typescript-eslint/no-unnecessary-condition": 5
   },
   "app/address/[query]/page.tsx": {
     "@typescript-eslint/no-unnecessary-condition": 1
