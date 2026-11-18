@@ -4,7 +4,7 @@ Reviewed against npm registry releases and audit data on 2026-10-09.
 
 | Package                                 | Locked version | Update                                                                    |
 | --------------------------------------- | -------------- | ------------------------------------------------------------------------- |
-| `next`, `eslint-config-next`, `@next/*` | 16.3.8         | Security fixes; Next and its ESLint config are pinned together.           |
+| `next`, `eslint-config-next`, `@next/*` | 16.4.6         | Security fixes; Next and its ESLint config are pinned together.           |
 | `sharp`                                 | 0.35.5         | Native packages and `@img/sharp-libvips-*` 1.3.4 include the librsvg fix. |
 | `axios`                                 | 1.20.0         | Request handling security fixes.                                          |
 | `postcss`                               | 8.5.29         | Parent release requires patched `source-map-js` 1.2.2.                    |
@@ -63,3 +63,17 @@ explorer uses the HTTP provider only.
 `npm audit --omit=dev` still reports zero vulnerabilities. The full report
 lists the same 34 development packages (3 low, 31 moderate) as before the
 upgrade.
+
+## Next.js 16.4.6 (2026-11-18)
+
+`next` and `eslint-config-next` move from 16.4.3 to 16.4.6, pinned exactly.
+The lockfile changes only the twelve Next packages. `next` 16.4.6 has the same
+dependencies as 16.4.3: `sharp` stays at 0.35.5 and the `postcss` override
+still holds the tree on 8.5.29.
+
+16.4.6 closes GHSA-mfr8-8qww-v76h (moderate, 16.3.0 to 16.4.4): information
+disclosure across root params when a `'use cache'` function is called through
+`unstable_cache`. Application source uses neither, so the explorer was not
+affected and the update went out with a regular release.
+
+`npm audit --omit=dev` reports zero vulnerabilities.

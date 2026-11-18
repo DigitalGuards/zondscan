@@ -3,8 +3,8 @@ import AddressFingerprint from "../../components/AddressFingerprint";
 import QRCodeButton from "../../components/QRCodeButton";
 import ContractTabs from "../../components/ContractTabs";
 import VerifiedBadge from "../../components/VerifiedBadge";
-import BalanceDisplay from "./balance-display";
-import ActivityDisplay from "./activity-display";
+import LiveAddressStats from "./live-address-stats";
+import type { AddressAggregateResponse } from "./address-tabs";
 import AddressTabs from "./address-tabs";
 import type { AddressData } from "@/app/types";
 import Link from "next/link";
@@ -29,24 +29,25 @@ const AddressDisplay = ({ address }: { address: string }): JSX.Element => {
 };
 
 export default function AddressView({ addressData, addressSegment, qnsName }: AddressViewProps): JSX.Element {
-    const { balance } = addressData.address;
     const { rank } = addressData;
 
-    // Prefer the server-computed activity range: the tx list is paginated,
-    // so deriving the range from the loaded page reports the oldest row of
-    // the newest page as "First Activity". Fall back to the page-derived
-    // range against handlers predating first_seen/last_seen.
-    let firstSeen = addressData.first_seen ?? 0;
-    let lastSeen = addressData.last_seen ?? 0;
-    if (!firstSeen && addressData.transactions_by_address && Array.isArray(addressData.transactions_by_address) && addressData.transactions_by_address.length > 0) {
-        const timestamps = addressData.transactions_by_address
-            .map(tx => Number(tx.TimeStamp))
-            .filter(ts => !Number.isNaN(ts));
-        if (timestamps.length > 0) {
-            firstSeen = Math.min(...timestamps);
-            lastSeen = Math.max(...timestamps);
-        }
-    }
+    // One aggregate object for every client part of the page that keeps
+    // itself live (header stats and the tab bar). They poll through the same
+    // query, so they must be seeded with the same data.
+    const initialAggregate: AddressAggregateResponse = {
+        address: { balance: addressData.address.balance },
+        transactions_by_address: addressData.transactions_by_address || [],
+        transactions_count:
+            typeof addressData.transactions_count === 'number'
+                ? addressData.transactions_count
+                : (addressData.transactions_by_address?.length ?? 0),
+        internal_transactions_by_address: addressData.internal_transactions_by_address || [],
+        ...(typeof addressData.internal_transactions_count === 'number'
+            ? { internal_transactions_count: addressData.internal_transactions_count }
+            : {}),
+        ...(typeof addressData.first_seen === 'number' ? { first_seen: addressData.first_seen } : {}),
+        ...(typeof addressData.last_seen === 'number' ? { last_seen: addressData.last_seen } : {}),
+    };
 
     let addressType = "";
     let addressIcon = null;
@@ -145,8 +146,12 @@ export default function AddressView({ addressData, addressSegment, qnsName }: Ad
 
                     {/* Stats Grid */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4 lg:gap-6">
-                        <BalanceDisplay balance={balance} />
-                        <ActivityDisplay firstSeen={firstSeen} lastSeen={lastSeen} />
+                        <LiveAddressStats
+                            // Same per-address reset as AddressTabs below.
+                            key={addressSegment}
+                            address={addressSegment}
+                            initialAggregate={initialAggregate}
+                        />
                     </div>
 
                     {/* Contract Information */}
@@ -290,14 +295,7 @@ export default function AddressView({ addressData, addressSegment, qnsName }: Ad
                 // accumulator + child fetch caches start fresh per holder.
                 key={addressSegment}
                 address={addressSegment}
-                transactions={addressData.transactions_by_address || []}
-                transactionsCount={
-                    typeof addressData.transactions_count === 'number'
-                        ? addressData.transactions_count
-                        : (addressData.transactions_by_address?.length ?? 0)
-                }
-                internalt={addressData.internal_transactions_by_address || []}
-                internalTransactionsCount={addressData.internal_transactions_count}
+                initialAggregate={initialAggregate}
             />
         </main>
     );
