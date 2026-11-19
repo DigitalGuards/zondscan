@@ -13,6 +13,7 @@ import { formatNumberWithCommas, formatSummaryCount, formatSummaryStake } from '
 import SearchBar from '../../components/SearchBar';
 import StatusBadge from '../../components/StatusBadge';
 import Pagination from '../../components/Pagination';
+import { browserGcTime } from '../../lib/queryCache';
 
 const ITEMS_PER_PAGE = 15;
 
@@ -38,7 +39,7 @@ export default function EpochsClient({ initialData, initialPage }: EpochsClientP
     staleTime: 30000,
     refetchInterval: 30000,
     refetchIntervalInBackground: false,
-    gcTime: 5 * 60 * 1000,
+    gcTime: browserGcTime(5 * 60 * 1000),
     retry: 2,
     initialData,
   });

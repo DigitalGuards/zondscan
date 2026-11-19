@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { usePreferences } from './PreferencesProvider';
 import { EXCHANGE_RATES_REFRESH_MS, formatFiat, parseExchangeRates } from '../lib/currency';
+import { browserGcTime } from '../lib/queryCache';
 
 export type CurrencyStatus = 'usd' | 'ready' | 'loading' | 'unavailable';
 
@@ -23,7 +24,7 @@ export function useDisplayCurrency() {
     queryFn: fetchExchangeRates,
     enabled: requestedCurrency !== 'USD',
     staleTime: EXCHANGE_RATES_REFRESH_MS,
-    gcTime: 24 * EXCHANGE_RATES_REFRESH_MS,
+    gcTime: browserGcTime(24 * EXCHANGE_RATES_REFRESH_MS),
     refetchInterval: EXCHANGE_RATES_REFRESH_MS,
     refetchIntervalInBackground: false,
     retry: false,

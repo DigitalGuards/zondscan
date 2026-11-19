@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation';
 import { truncateHash } from '../../lib/helpers';
 import SearchBar from '../../components/SearchBar';
 import Pagination from '../../components/Pagination';
+import { browserGcTime } from '../../lib/queryCache';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -46,7 +47,7 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
     queryKey: ['blocks', initialPage],
     queryFn: () => fetchBlocks(initialPage),
     staleTime: isHead ? 0 : 60000,
-    gcTime: 5 * 60 * 1000,
+    gcTime: browserGcTime(5 * 60 * 1000),
     retry: 2,
     initialData,
     refetchInterval: isHead ? 15000 : false,
