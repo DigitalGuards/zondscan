@@ -18,7 +18,6 @@ import Badge from '../../components/Badge';
 import EmptyState from '../../components/EmptyState';
 import config from '../../../config';
 import type { TransactionsListProps, TransactionsResponse } from '@/app/types';
-import { browserGcTime } from '../../lib/queryCache';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -40,7 +39,6 @@ export default function TransactionsList({
     },
     initialData,
     staleTime: isHead ? 0 : 60000,
-    gcTime: browserGcTime(5 * 60 * 1000),
     retry: 2,
     refetchInterval: isHead ? 15000 : false,
     refetchIntervalInBackground: false,

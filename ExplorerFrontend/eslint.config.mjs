@@ -70,7 +70,8 @@ export default [
           message: 'Receive HTTP response data as unknown and validate it with runtime guards.',
         },
         {
-          selector: 'Property[key.name="gcTime"]:not([value.callee.name="browserGcTime"])',
+          selector:
+            ':matches(Property[key.name="gcTime"], Property[key.value="gcTime"]):not([value.callee.name="browserGcTime"])',
           message:
             'Set gcTime through browserGcTime() from app/lib/queryCache. A finite gcTime on the server keeps every rendered page in memory until its timer fires.',
         },
