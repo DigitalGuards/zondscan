@@ -46,7 +46,6 @@ export default function BlocksClient({ initialData, initialPage }: BlocksClientP
     queryKey: ['blocks', initialPage],
     queryFn: () => fetchBlocks(initialPage),
     staleTime: isHead ? 0 : 60000,
-    gcTime: 5 * 60 * 1000,
     retry: 2,
     initialData,
     refetchInterval: isHead ? 15000 : false,
