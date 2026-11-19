@@ -39,7 +39,6 @@ export default function TransactionsList({
     },
     initialData,
     staleTime: isHead ? 0 : 60000,
-    gcTime: 5 * 60 * 1000,
     retry: 2,
     refetchInterval: isHead ? 15000 : false,
     refetchIntervalInBackground: false,

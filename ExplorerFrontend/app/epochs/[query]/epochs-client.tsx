@@ -38,7 +38,6 @@ export default function EpochsClient({ initialData, initialPage }: EpochsClientP
     staleTime: 30000,
     refetchInterval: 30000,
     refetchIntervalInBackground: false,
-    gcTime: 5 * 60 * 1000,
     retry: 2,
     initialData,
   });
