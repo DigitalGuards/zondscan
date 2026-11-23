@@ -190,7 +190,7 @@ export default function Page(): JSX.Element {
           the same policy. The MyQRLWallet dApp pairing protocol establishes its sessions with
           ML-KEM-768, the FIPS 203 key encapsulation mechanism, and encrypts the channel with
           AES-256-GCM. Pairing a wallet to a dApp is covered in{' '}
-          <a href="/learn/connect-dapp-wallet">connecting your wallet to a dApp</a>.
+          <a href="https://myqrlwallet.com/guides/connect-dapps/" target="_blank" rel="noopener noreferrer">connecting your wallet to a dApp</a>.
         </p>
       </LearnSection>
 
@@ -202,7 +202,7 @@ export default function Page(): JSX.Element {
         <StepList>
           <Step title="Create a wallet">
             <p>
-              Follow <a href="/learn/create-a-wallet">the wallet tutorial</a> at{' '}
+              Follow <a href="https://myqrlwallet.com/guides/web-wallet/" target="_blank" rel="noopener noreferrer">the wallet guide</a> at{' '}
               <a href="https://qrlwallet.com" target="_blank" rel="noopener noreferrer">
                 qrlwallet.com
               </a>{' '}

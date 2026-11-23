@@ -257,18 +257,22 @@ export const faqs: FaqItem[] = [
           qrlwallet.com
         </a>
         , is the open source wallet for QRL 2.0. It runs in the browser, with
-        desktop and mobile apps available and a browser extension in
-        preparation. It manages
+        desktop and mobile apps and a browser extension available. It manages
         Q-prefixed accounts, sends Quanta and QRC20 tokens, and connects to
         dApps. Follow the step by step guide to{' '}
-        <Link href="/learn/create-a-wallet" className={LINK}>
+        <a
+          href="https://myqrlwallet.com/guides/web-wallet/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className={LINK}
+        >
           create a wallet
-        </Link>
+        </a>
         .
       </>
     ),
     aText:
-      'MyQRLWallet, available at qrlwallet.com, is the open source wallet for QRL 2.0. It runs in the browser, with desktop and mobile apps available and a browser extension in preparation. It manages Q-prefixed accounts, sends Quanta and QRC20 tokens, and connects to dApps.',
+      'MyQRLWallet, available at qrlwallet.com, is the open source wallet for QRL 2.0. It runs in the browser, with desktop and mobile apps and a browser extension available. It manages Q-prefixed accounts, sends Quanta and QRC20 tokens, and connects to dApps.',
   },
   {
     id: `who-builds-${BRAND_SLUG}`,
