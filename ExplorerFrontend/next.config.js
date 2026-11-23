@@ -1,3 +1,5 @@
+const { learnRedirects } = require('./learn-redirects');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   distDir: 'build',
@@ -49,6 +51,10 @@ const nextConfig = {
         ],
       },
     ];
+  },
+  // Learn articles that moved to the MyQRLWallet guides (see learn-redirects.js).
+  async redirects() {
+    return learnRedirects;
   },
   // Proxy /api/* requests to the backend API server
   async rewrites() {

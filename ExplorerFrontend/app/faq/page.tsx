@@ -93,7 +93,7 @@ export default function FAQPage(): JSX.Element {
             >
               Learn section
             </Link>{' '}
-            has step by step guides covering wallets, staking, swaps, tokens,
+            has step by step guides covering the chain, the explorer, tokens,
             and contract development.
           </p>
         </div>

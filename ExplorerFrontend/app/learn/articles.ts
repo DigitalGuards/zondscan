@@ -44,7 +44,7 @@ export const LEARN_CATEGORIES: Record<
   tutorials: {
     label: 'Hands-on tutorials',
     blurb:
-      'Step by step guides to wallets, staking, swaps, tokens, and smart contracts on the QRL 2.0 testnet.',
+      'Step by step guides to launching a token and deploying a smart contract on the QRL 2.0 testnet.',
   },
 };
 
@@ -56,7 +56,7 @@ export const learnArticles: LearnArticleMeta[] = [
       'A plain English introduction to QRL 2.0: proof of stake consensus, EVM smart contracts, ML-DSA-87 signatures, and how the new chain relates to legacy QRL.',
     category: 'basics',
     order: 1,
-    updated: '2026-08-24',
+    updated: '2026-11-23',
     readingMinutes: 6,
   },
   {
@@ -66,7 +66,7 @@ export const learnArticles: LearnArticleMeta[] = [
       "How quantum computers threaten the signatures securing today's blockchains, and how QRL answers with hash based XMSS and lattice based ML-DSA-87.",
     category: 'basics',
     order: 2,
-    updated: '2026-08-24',
+    updated: '2026-11-23',
     readingMinutes: 7,
   },
   {
@@ -106,7 +106,7 @@ export const learnArticles: LearnArticleMeta[] = [
       `How proof of stake works on QRL 2.0 and how to follow validators, epochs and rewards on ${SITE_NAME}.`,
     category: 'explorer',
     order: 2,
-    updated: '2026-08-05',
+    updated: '2026-11-23',
     readingMinutes: 7,
   },
   {
@@ -120,52 +120,12 @@ export const learnArticles: LearnArticleMeta[] = [
     readingMinutes: 4,
   },
   {
-    slug: 'create-a-wallet',
-    title: 'Create a QRL wallet with MyQRLWallet',
-    description:
-      'Set up a post-quantum wallet in the browser, back it up correctly, and open it on desktop and mobile.',
-    category: 'tutorials',
-    order: 1,
-    updated: '2026-08-05',
-    readingMinutes: 6,
-  },
-  {
-    slug: 'connect-dapp-wallet',
-    title: 'Connect your wallet to a QRL dApp',
-    description:
-      'Pair MyQRLWallet with a dApp using a QR code or the browser extension, approve requests, and disconnect cleanly.',
-    category: 'tutorials',
-    order: 2,
-    updated: '2026-08-05',
-    readingMinutes: 6,
-  },
-  {
-    slug: 'stake-with-quantapool',
-    title: 'Liquid staking with QuantaPool',
-    description:
-      `Stake Quanta through QuantaPool, receive a liquid staking token, and track your position on ${SITE_NAME}.`,
-    category: 'tutorials',
-    order: 3,
-    updated: '2026-08-05',
-    readingMinutes: 8,
-  },
-  {
-    slug: 'swap-with-quantaswap',
-    title: 'Atomic swaps with QuantaSwap',
-    description:
-      'Swap between Sepolia ETH and QRL with hash time locked contracts and no custodian in the middle.',
-    category: 'tutorials',
-    order: 4,
-    updated: '2026-08-05',
-    readingMinutes: 8,
-  },
-  {
     slug: 'launch-a-qrc20',
     title: 'Launch a QRC20 token from your wallet',
     description:
       `Create your own token on QRL 2.0 straight from MyQRLWallet and find it on ${SITE_NAME}.`,
     category: 'tutorials',
-    order: 5,
+    order: 1,
     updated: '2026-08-05',
     readingMinutes: 6,
   },
@@ -175,7 +135,7 @@ export const learnArticles: LearnArticleMeta[] = [
     description:
       `Compile with Hyperion, deploy to the QRL 2.0 testnet, and publish verified source code on ${SITE_NAME}.`,
     category: 'tutorials',
-    order: 6,
+    order: 2,
     updated: '2026-11-03',
     readingMinutes: 8,
   },

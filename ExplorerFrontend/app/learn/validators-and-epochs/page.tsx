@@ -244,10 +244,11 @@ export default async function Page(): Promise<JSX.Element> {
             Running a validator means operating a machine around the clock
             and locking a full stake. If you want staking exposure without
             that overhead, <a href="https://quantapool.com">QuantaPool</a>{' '}
-            offers liquid staking on the testnet: you stake Quanta and receive
-            a liquid staking token that represents your position. The
-            walkthrough is in{' '}
-            <a href="/learn/stake-with-quantapool">Liquid staking with QuantaPool</a>.
+            pools deposits to fund native validators, and its contracts record
+            each depositor&apos;s position. Public deposits are disabled on the
+            testnet for now. The MyQRLWallet{' '}
+            <a href="https://myqrlwallet.com/guides/staking/" target="_blank" rel="noopener noreferrer">staking guide</a>{' '}
+            explains the design and its current status.
           </p>
         </Callout>
         <Callout type="info" title="Testnet numbers">
@@ -278,10 +279,12 @@ export default async function Page(): Promise<JSX.Element> {
             q: 'Do I need to run a validator to earn staking rewards?',
             a: (
               <p>
-                No. <a href="/learn/stake-with-quantapool">QuantaPool</a>{' '}
-                provides liquid staking on the testnet: you stake Quanta
-                through the pool, receive a liquid staking token, and track
-                your position on {SITE_NAME}.
+                Today, yes. QuantaPool is designed for pooled staking:
+                deposits fund native validators and the pool contracts record
+                each depositor&apos;s position. Public deposits are disabled
+                on the testnet for now; the{' '}
+                <a href="https://myqrlwallet.com/guides/staking/" target="_blank" rel="noopener noreferrer">MyQRLWallet staking guide</a>{' '}
+                follows its status.
               </p>
             ),
           },

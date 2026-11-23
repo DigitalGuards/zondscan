@@ -72,7 +72,7 @@ describe('default site identity', () => {
   });
 
   it('keeps page metadata for every page unchanged', () => {
-    expect(Object.keys(out.pages).length).toBeGreaterThanOrEqual(39);
+    expect(Object.keys(out.pages).length).toBeGreaterThanOrEqual(35);
     expect(out.pages).toEqual(fixture.pages);
   });
 

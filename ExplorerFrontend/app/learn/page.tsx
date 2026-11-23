@@ -11,7 +11,7 @@ import {
 
 const TITLE = pageTitle('Learn QRL 2.0');
 const DESCRIPTION =
-  `Plain English guides to QRL 2.0: post-quantum signatures, proof of stake, wallets, staking, swaps, tokens, and smart contracts. Written by the team behind ${SITE_NAME} and MyQRLWallet.`;
+  `Plain English guides to QRL 2.0: post-quantum signatures, proof of stake, reading the chain, tokens, and smart contracts. Written by the team behind ${SITE_NAME} and MyQRLWallet.`;
 
 export const metadata: Metadata = {
   ...sharedMetadata,
@@ -114,10 +114,22 @@ export default function LearnIndexPage(): JSX.Element {
         </h1>
         <p className="text-text-secondary leading-relaxed">
           Plain English guides to QRL 2.0: how post-quantum signatures and proof of
-          stake work, and how to use wallets, staking, swaps, tokens, and smart
+          stake work, how to read the chain, and how to launch tokens and smart
           contracts on the network. Written by the team that builds {SITE_NAME} and
           MyQRLWallet. Every guide runs on the public testnet, where coins have no
           monetary value, so you can follow along and experiment freely.
+        </p>
+        <p className="text-text-secondary leading-relaxed mt-3">
+          Setting up or using the wallet?{' '}
+          <a
+            href="https://myqrlwallet.com/guides/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="link-accent"
+          >
+            The MyQRLWallet guides
+          </a>{' '}
+          cover it.
         </p>
       </header>
 
