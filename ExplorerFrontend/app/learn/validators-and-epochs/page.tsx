@@ -279,10 +279,12 @@ export default async function Page(): Promise<JSX.Element> {
             q: 'Do I need to run a validator to earn staking rewards?',
             a: (
               <p>
-                No. <a href="https://myqrlwallet.com/guides/staking/" target="_blank" rel="noopener noreferrer">QuantaPool</a>{' '}
-                is designed for pooled staking: deposits fund native
-                validators and the pool contracts record each depositor&apos;s
-                position. Public deposits are disabled on the testnet for now.
+                Today, yes. QuantaPool is designed for pooled staking:
+                deposits fund native validators and the pool contracts record
+                each depositor&apos;s position. Public deposits are disabled
+                on the testnet for now; the{' '}
+                <a href="https://myqrlwallet.com/guides/staking/" target="_blank" rel="noopener noreferrer">MyQRLWallet staking guide</a>{' '}
+                follows its status.
               </p>
             ),
           },

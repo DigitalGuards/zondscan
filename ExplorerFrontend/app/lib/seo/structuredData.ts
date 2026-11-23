@@ -143,7 +143,7 @@ export const structuredData = {
         {
           '@type': 'WebPage',
           name: 'Learn QRL 2.0',
-          description: 'Plain English guides to QRL 2.0, wallets, staking, and smart contracts',
+          description: 'Plain English guides to QRL 2.0, reading the chain, tokens, and smart contracts',
           url: siteUrl('/learn'),
         },
         {

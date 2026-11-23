@@ -56,7 +56,7 @@ export const learnArticles: LearnArticleMeta[] = [
       'A plain English introduction to QRL 2.0: proof of stake consensus, EVM smart contracts, ML-DSA-87 signatures, and how the new chain relates to legacy QRL.',
     category: 'basics',
     order: 1,
-    updated: '2026-08-24',
+    updated: '2026-11-23',
     readingMinutes: 6,
   },
   {
@@ -66,7 +66,7 @@ export const learnArticles: LearnArticleMeta[] = [
       "How quantum computers threaten the signatures securing today's blockchains, and how QRL answers with hash based XMSS and lattice based ML-DSA-87.",
     category: 'basics',
     order: 2,
-    updated: '2026-08-24',
+    updated: '2026-11-23',
     readingMinutes: 7,
   },
   {
@@ -106,7 +106,7 @@ export const learnArticles: LearnArticleMeta[] = [
       `How proof of stake works on QRL 2.0 and how to follow validators, epochs and rewards on ${SITE_NAME}.`,
     category: 'explorer',
     order: 2,
-    updated: '2026-08-05',
+    updated: '2026-11-23',
     readingMinutes: 7,
   },
   {
