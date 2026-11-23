@@ -108,7 +108,7 @@ export default function Page(): JSX.Element {
                 MyQRLWallet
               </a>{' '}
               runs in the browser and generates post-quantum accounts with Q-prefixed
-              addresses. The <a href="/learn/create-a-wallet">wallet guide</a> walks through
+              addresses. The <a href="https://myqrlwallet.com/guides/web-wallet/" target="_blank" rel="noopener noreferrer">wallet guide</a> walks through
               setup and, most importantly, backing up your seed.
             </p>
           </Step>
@@ -141,14 +141,15 @@ export default function Page(): JSX.Element {
               <a href="https://quantapool.com" target="_blank" rel="noopener noreferrer">
                 QuantaPool
               </a>{' '}
-              offers liquid staking: you stake Quanta and receive a liquid staking token in
-              return (<a href="/learn/stake-with-quantapool">guide</a>).{' '}
+              pools deposits to fund native validators and records each depositor&apos;s
+              position in its contracts; public deposits are disabled on the testnet for now
+              (<a href="https://myqrlwallet.com/guides/staking/" target="_blank" rel="noopener noreferrer">guide</a>).{' '}
               <a href="https://quantaswap.io" target="_blank" rel="noopener noreferrer">
                 QuantaSwap
               </a>{' '}
               runs atomic swaps between testnet Quanta and Sepolia ETH using hash time locked
               contracts, with no custodian in the middle (
-              <a href="/learn/swap-with-quantaswap">guide</a>).
+              <a href="https://myqrlwallet.com/guides/swaps/" target="_blank" rel="noopener noreferrer">guide</a>).
             </p>
           </Step>
         </StepList>

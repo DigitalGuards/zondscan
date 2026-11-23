@@ -70,7 +70,7 @@ export default function Page(): JSX.Element {
             connected through the browser extension or a paired mobile signer cannot create
             tokens yet; the form tells you so and keeps the submit button disabled. If you are
             new to MyQRLWallet, follow{' '}
-            <a href="/learn/create-a-wallet">Create a QRL wallet</a> first.
+            <a href="https://myqrlwallet.com/guides/web-wallet/" target="_blank" rel="noopener noreferrer">Create a QRL wallet</a> first.
           </li>
           <li>
             <strong>Testnet Quanta for gas.</strong> Deployment is a normal transaction and

@@ -1006,174 +1006,6 @@
         "canonical": "https://zondscan.com/gas"
       }
     },
-    "learn/connect-dapp-wallet/page.tsx": {
-      "metadataBase": "https://zondscan.com/",
-      "applicationName": "ZondScan",
-      "keywords": "QRL, QRL 2.0, Quantum Resistant Ledger, Zond, blockchain explorer, post-quantum cryptography, Proof of Stake, Web3, EVM, quantum resistant, cryptocurrency, smart contracts, validators, transactions, blocks",
-      "manifest": "/manifest.json",
-      "icons": {
-        "icon": [
-          {
-            "url": "/favis/favicon.ico"
-          },
-          {
-            "url": "/favis/favicon-16x16.png",
-            "sizes": "16x16",
-            "type": "image/png"
-          },
-          {
-            "url": "/favis/favicon-32x32.png",
-            "sizes": "32x32",
-            "type": "image/png"
-          },
-          {
-            "url": "/favis/favicon-48x48.png",
-            "sizes": "48x48",
-            "type": "image/png"
-          }
-        ],
-        "apple": [
-          {
-            "url": "/favis/apple-touch-icon.png"
-          }
-        ],
-        "other": [
-          {
-            "rel": "mask-icon",
-            "url": "/favis/safari-pinned-tab.svg"
-          }
-        ]
-      },
-      "openGraph": {
-        "type": "website",
-        "locale": "en_US",
-        "siteName": "ZondScan",
-        "images": [
-          {
-            "url": "/og-image.png",
-            "width": 1200,
-            "height": 630,
-            "alt": "ZondScan, the QRL 2.0 blockchain explorer"
-          }
-        ],
-        "title": "Connect your wallet to a QRL dApp | ZondScan Learn",
-        "description": "Pair MyQRLWallet with a dApp using a QR code or the browser extension, approve requests, and disconnect cleanly.",
-        "url": "https://zondscan.com/learn/connect-dapp-wallet"
-      },
-      "twitter": {
-        "card": "summary_large_image",
-        "creator": "@QRLedger",
-        "site": "@QRLedger",
-        "images": [
-          "/og-image.png"
-        ],
-        "title": "Connect your wallet to a QRL dApp | ZondScan Learn",
-        "description": "Pair MyQRLWallet with a dApp using a QR code or the browser extension, approve requests, and disconnect cleanly."
-      },
-      "authors": [
-        {
-          "name": "DigitalGuards",
-          "url": "https://digitalguards.nl"
-        }
-      ],
-      "robots": {
-        "index": true,
-        "follow": true,
-        "googleBot": {
-          "index": true,
-          "follow": true
-        }
-      },
-      "title": "Connect your wallet to a QRL dApp | ZondScan Learn",
-      "description": "Pair MyQRLWallet with a dApp using a QR code or the browser extension, approve requests, and disconnect cleanly.",
-      "alternates": {
-        "canonical": "https://zondscan.com/learn/connect-dapp-wallet"
-      }
-    },
-    "learn/create-a-wallet/page.tsx": {
-      "metadataBase": "https://zondscan.com/",
-      "applicationName": "ZondScan",
-      "keywords": "QRL, QRL 2.0, Quantum Resistant Ledger, Zond, blockchain explorer, post-quantum cryptography, Proof of Stake, Web3, EVM, quantum resistant, cryptocurrency, smart contracts, validators, transactions, blocks",
-      "manifest": "/manifest.json",
-      "icons": {
-        "icon": [
-          {
-            "url": "/favis/favicon.ico"
-          },
-          {
-            "url": "/favis/favicon-16x16.png",
-            "sizes": "16x16",
-            "type": "image/png"
-          },
-          {
-            "url": "/favis/favicon-32x32.png",
-            "sizes": "32x32",
-            "type": "image/png"
-          },
-          {
-            "url": "/favis/favicon-48x48.png",
-            "sizes": "48x48",
-            "type": "image/png"
-          }
-        ],
-        "apple": [
-          {
-            "url": "/favis/apple-touch-icon.png"
-          }
-        ],
-        "other": [
-          {
-            "rel": "mask-icon",
-            "url": "/favis/safari-pinned-tab.svg"
-          }
-        ]
-      },
-      "openGraph": {
-        "type": "website",
-        "locale": "en_US",
-        "siteName": "ZondScan",
-        "images": [
-          {
-            "url": "/og-image.png",
-            "width": 1200,
-            "height": 630,
-            "alt": "ZondScan, the QRL 2.0 blockchain explorer"
-          }
-        ],
-        "title": "Create a QRL wallet with MyQRLWallet | ZondScan Learn",
-        "description": "Set up a post-quantum wallet in the browser, back it up correctly, and open it on desktop and mobile.",
-        "url": "https://zondscan.com/learn/create-a-wallet"
-      },
-      "twitter": {
-        "card": "summary_large_image",
-        "creator": "@QRLedger",
-        "site": "@QRLedger",
-        "images": [
-          "/og-image.png"
-        ],
-        "title": "Create a QRL wallet with MyQRLWallet | ZondScan Learn",
-        "description": "Set up a post-quantum wallet in the browser, back it up correctly, and open it on desktop and mobile."
-      },
-      "authors": [
-        {
-          "name": "DigitalGuards",
-          "url": "https://digitalguards.nl"
-        }
-      ],
-      "robots": {
-        "index": true,
-        "follow": true,
-        "googleBot": {
-          "index": true,
-          "follow": true
-        }
-      },
-      "title": "Create a QRL wallet with MyQRLWallet | ZondScan Learn",
-      "description": "Set up a post-quantum wallet in the browser, back it up correctly, and open it on desktop and mobile.",
-      "alternates": {
-        "canonical": "https://zondscan.com/learn/create-a-wallet"
-      }
-    },
     "learn/deploy-and-verify-contract/page.tsx": {
       "metadataBase": "https://zondscan.com/",
       "applicationName": "ZondScan",
@@ -1477,7 +1309,7 @@
           }
         ],
         "title": "Learn QRL 2.0 | ZondScan",
-        "description": "Plain English guides to QRL 2.0: post-quantum signatures, proof of stake, wallets, staking, swaps, tokens, and smart contracts. Written by the team behind ZondScan and MyQRLWallet.",
+        "description": "Plain English guides to QRL 2.0: post-quantum signatures, proof of stake, reading the chain, tokens, and smart contracts. Written by the team behind ZondScan and MyQRLWallet.",
         "url": "https://zondscan.com/learn"
       },
       "twitter": {
@@ -1488,7 +1320,7 @@
           "/og-image.png"
         ],
         "title": "Learn QRL 2.0 | ZondScan",
-        "description": "Plain English guides to QRL 2.0: post-quantum signatures, proof of stake, wallets, staking, swaps, tokens, and smart contracts. Written by the team behind ZondScan and MyQRLWallet."
+        "description": "Plain English guides to QRL 2.0: post-quantum signatures, proof of stake, reading the chain, tokens, and smart contracts. Written by the team behind ZondScan and MyQRLWallet."
       },
       "authors": [
         {
@@ -1505,7 +1337,7 @@
         }
       },
       "title": "Learn QRL 2.0 | ZondScan",
-      "description": "Plain English guides to QRL 2.0: post-quantum signatures, proof of stake, wallets, staking, swaps, tokens, and smart contracts. Written by the team behind ZondScan and MyQRLWallet.",
+      "description": "Plain English guides to QRL 2.0: post-quantum signatures, proof of stake, reading the chain, tokens, and smart contracts. Written by the team behind ZondScan and MyQRLWallet.",
       "alternates": {
         "canonical": "https://zondscan.com/learn"
       }
@@ -1760,174 +1592,6 @@
       "description": "What a STARK validity proof is, why hash-based STARKs are the proofs QRL 2.0 can verify, and what QuantaStark measured for a post-quantum layer 2.",
       "alternates": {
         "canonical": "https://zondscan.com/learn/scaling-qrl-with-stark-proofs"
-      }
-    },
-    "learn/stake-with-quantapool/page.tsx": {
-      "metadataBase": "https://zondscan.com/",
-      "applicationName": "ZondScan",
-      "keywords": "QRL, QRL 2.0, Quantum Resistant Ledger, Zond, blockchain explorer, post-quantum cryptography, Proof of Stake, Web3, EVM, quantum resistant, cryptocurrency, smart contracts, validators, transactions, blocks",
-      "manifest": "/manifest.json",
-      "icons": {
-        "icon": [
-          {
-            "url": "/favis/favicon.ico"
-          },
-          {
-            "url": "/favis/favicon-16x16.png",
-            "sizes": "16x16",
-            "type": "image/png"
-          },
-          {
-            "url": "/favis/favicon-32x32.png",
-            "sizes": "32x32",
-            "type": "image/png"
-          },
-          {
-            "url": "/favis/favicon-48x48.png",
-            "sizes": "48x48",
-            "type": "image/png"
-          }
-        ],
-        "apple": [
-          {
-            "url": "/favis/apple-touch-icon.png"
-          }
-        ],
-        "other": [
-          {
-            "rel": "mask-icon",
-            "url": "/favis/safari-pinned-tab.svg"
-          }
-        ]
-      },
-      "openGraph": {
-        "type": "website",
-        "locale": "en_US",
-        "siteName": "ZondScan",
-        "images": [
-          {
-            "url": "/og-image.png",
-            "width": 1200,
-            "height": 630,
-            "alt": "ZondScan, the QRL 2.0 blockchain explorer"
-          }
-        ],
-        "title": "Liquid staking with QuantaPool | ZondScan Learn",
-        "description": "Stake Quanta through QuantaPool, receive a liquid staking token, and track your position on ZondScan.",
-        "url": "https://zondscan.com/learn/stake-with-quantapool"
-      },
-      "twitter": {
-        "card": "summary_large_image",
-        "creator": "@QRLedger",
-        "site": "@QRLedger",
-        "images": [
-          "/og-image.png"
-        ],
-        "title": "Liquid staking with QuantaPool | ZondScan Learn",
-        "description": "Stake Quanta through QuantaPool, receive a liquid staking token, and track your position on ZondScan."
-      },
-      "authors": [
-        {
-          "name": "DigitalGuards",
-          "url": "https://digitalguards.nl"
-        }
-      ],
-      "robots": {
-        "index": true,
-        "follow": true,
-        "googleBot": {
-          "index": true,
-          "follow": true
-        }
-      },
-      "title": "Liquid staking with QuantaPool | ZondScan Learn",
-      "description": "Stake Quanta through QuantaPool, receive a liquid staking token, and track your position on ZondScan.",
-      "alternates": {
-        "canonical": "https://zondscan.com/learn/stake-with-quantapool"
-      }
-    },
-    "learn/swap-with-quantaswap/page.tsx": {
-      "metadataBase": "https://zondscan.com/",
-      "applicationName": "ZondScan",
-      "keywords": "QRL, QRL 2.0, Quantum Resistant Ledger, Zond, blockchain explorer, post-quantum cryptography, Proof of Stake, Web3, EVM, quantum resistant, cryptocurrency, smart contracts, validators, transactions, blocks",
-      "manifest": "/manifest.json",
-      "icons": {
-        "icon": [
-          {
-            "url": "/favis/favicon.ico"
-          },
-          {
-            "url": "/favis/favicon-16x16.png",
-            "sizes": "16x16",
-            "type": "image/png"
-          },
-          {
-            "url": "/favis/favicon-32x32.png",
-            "sizes": "32x32",
-            "type": "image/png"
-          },
-          {
-            "url": "/favis/favicon-48x48.png",
-            "sizes": "48x48",
-            "type": "image/png"
-          }
-        ],
-        "apple": [
-          {
-            "url": "/favis/apple-touch-icon.png"
-          }
-        ],
-        "other": [
-          {
-            "rel": "mask-icon",
-            "url": "/favis/safari-pinned-tab.svg"
-          }
-        ]
-      },
-      "openGraph": {
-        "type": "website",
-        "locale": "en_US",
-        "siteName": "ZondScan",
-        "images": [
-          {
-            "url": "/og-image.png",
-            "width": 1200,
-            "height": 630,
-            "alt": "ZondScan, the QRL 2.0 blockchain explorer"
-          }
-        ],
-        "title": "Atomic swaps with QuantaSwap | ZondScan Learn",
-        "description": "Swap between Sepolia ETH and QRL with hash time locked contracts and no custodian in the middle.",
-        "url": "https://zondscan.com/learn/swap-with-quantaswap"
-      },
-      "twitter": {
-        "card": "summary_large_image",
-        "creator": "@QRLedger",
-        "site": "@QRLedger",
-        "images": [
-          "/og-image.png"
-        ],
-        "title": "Atomic swaps with QuantaSwap | ZondScan Learn",
-        "description": "Swap between Sepolia ETH and QRL with hash time locked contracts and no custodian in the middle."
-      },
-      "authors": [
-        {
-          "name": "DigitalGuards",
-          "url": "https://digitalguards.nl"
-        }
-      ],
-      "robots": {
-        "index": true,
-        "follow": true,
-        "googleBot": {
-          "index": true,
-          "follow": true
-        }
-      },
-      "title": "Atomic swaps with QuantaSwap | ZondScan Learn",
-      "description": "Swap between Sepolia ETH and QRL with hash time locked contracts and no custodian in the middle.",
-      "alternates": {
-        "canonical": "https://zondscan.com/learn/swap-with-quantaswap"
       }
     },
     "learn/validators-and-epochs/page.tsx": {
@@ -3687,30 +3351,6 @@
     },
     {
       "url": "https://zondscan.com/learn/get-testnet-quanta",
-      "lastModified": "DATE",
-      "changeFrequency": "monthly",
-      "priority": 0.6
-    },
-    {
-      "url": "https://zondscan.com/learn/create-a-wallet",
-      "lastModified": "DATE",
-      "changeFrequency": "monthly",
-      "priority": 0.6
-    },
-    {
-      "url": "https://zondscan.com/learn/connect-dapp-wallet",
-      "lastModified": "DATE",
-      "changeFrequency": "monthly",
-      "priority": 0.6
-    },
-    {
-      "url": "https://zondscan.com/learn/stake-with-quantapool",
-      "lastModified": "DATE",
-      "changeFrequency": "monthly",
-      "priority": 0.6
-    },
-    {
-      "url": "https://zondscan.com/learn/swap-with-quantaswap",
       "lastModified": "DATE",
       "changeFrequency": "monthly",
       "priority": 0.6

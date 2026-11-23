@@ -79,7 +79,7 @@ export default function Page(): JSX.Element {
           <Step title="Create or open a wallet and copy your address">
             <p>
               You need a Q-prefixed QRL 2.0 address to receive the coins. If you do not have
-              one yet, follow <a href="/learn/create-a-wallet">Create a QRL wallet</a> to set
+              one yet, follow <a href="https://myqrlwallet.com/guides/web-wallet/" target="_blank" rel="noopener noreferrer">Create a QRL wallet</a> to set
               one up in a few minutes with{' '}
               <a href="https://qrlwallet.com">MyQRLWallet</a>. Then copy your address: it
               starts with <code>Q</code> followed by 128 hexadecimal characters.
